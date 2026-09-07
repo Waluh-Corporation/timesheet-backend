@@ -15,3 +15,14 @@ var BNITemplate []byte
 //
 //go:embed mii_timesheet_template.xlsx
 var MIITemplate []byte
+
+// SDDTemplate is the raw .xlsx bytes of the built-in "SDD Timesheet" template.
+//
+//go:embed sdd_timesheet_template.xlsx
+var SDDTemplate []byte
+
+// AdidataTemplate is the raw .xlsx bytes of the built-in "Adidata Timesheet" template.
+//
+//go:embed adidata_timesheet_template.xlsx
+var AdidataTemplate []byte
+

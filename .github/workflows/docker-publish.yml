@@ -1,16 +1,17 @@
 name: Build and Publish Images
 
-# Publishes two images to GHCR on every push to main:
-#   :latest      unified production image (Go API + static frontend) — needs an
-#                external PostgreSQL; used by docker-compose.prod.yml.
-#   :dev         all-in-one dev/demo image (PostgreSQL + API + frontend in one
-#                container). Run it standalone:
-#                  docker run --rm -p 8080:8080 ghcr.io/<owner>/<repo>:dev
+# Publishes decoupled service images to GHCR:
+#   - Push tag v*    -> tags: :<v*>, :latest
+#   - Push main      -> tags: :latest, :sha-<short>
+#   - Push non-main  -> tags: :dev, :sha-<short>
+# Path-based change detection ensures only modified services are rebuilt on branch pushes.
 
 on:
   push:
     branches:
-      - main
+      - '**'
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
@@ -18,7 +19,32 @@ permissions:
   packages: write
 
 jobs:
-  build-and-push:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Path Filter
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/docker-publish.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/docker-publish.yml'
+
+  build-and-push-backend:
+    name: Build & Publish Backend Image
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.backend == 'true' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -29,49 +55,70 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GH_TOKEN }}
+          password: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # --- Production image (:latest) ---
-      - name: Metadata for production image
-        id: meta-prod
+      - name: Metadata for backend image
+        id: meta-backend
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}-backend
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=dev,enable=${{ github.ref_type == 'branch' && github.ref != 'refs/heads/main' }}
             type=sha,prefix=sha-,format=short
 
-      - name: Build and push production image
+      - name: Build and push backend image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Dockerfile
+          context: ./backend
+          file: ./backend/Dockerfile
           push: true
-          tags: ${{ steps.meta-prod.outputs.tags }}
-          labels: ${{ steps.meta-prod.outputs.labels }}
-          cache-from: type=gha,scope=prod
-          cache-to: type=gha,mode=max,scope=prod
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
 
-      # --- All-in-one dev/demo image (:dev) ---
-      - name: Metadata for dev image
-        id: meta-dev
+  build-and-push-frontend:
+    name: Build & Publish Frontend Image
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.frontend == 'true' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Metadata for frontend image
+        id: meta-frontend
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}-frontend
           tags: |
-            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,prefix=dev-,format=short
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=dev,enable=${{ github.ref_type == 'branch' && github.ref != 'refs/heads/main' }}
+            type=sha,prefix=sha-,format=short
 
-      - name: Build and push all-in-one dev image
+      - name: Build and push frontend image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./Dockerfile.aio
+          context: ./frontend
+          file: ./frontend/Dockerfile
           push: true
-          tags: ${{ steps.meta-dev.outputs.tags }}
-          labels: ${{ steps.meta-dev.outputs.labels }}
-          cache-from: type=gha,scope=dev
-          cache-to: type=gha,mode=max,scope=dev
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend

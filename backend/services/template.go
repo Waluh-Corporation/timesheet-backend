@@ -156,6 +156,10 @@ func GenerateFromTemplate(in GenerationInput) ([]byte, error) {
 	switch in.Template.Builtin {
 	case "mii":
 		return generateMII(in)
+	case "sdd":
+		return generateSDD(in)
+	case "adidata":
+		return generateAdidata(in)
 	case "bni_dev":
 		return generateBNI(in)
 	}

@@ -48,83 +48,151 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 // generation for both uses a dedicated strict-typed path keyed off
 // Template.Builtin.
 func seedDefaultTemplate(db *gorm.DB) error {
-	var count int64
-	if err := db.Model(&models.Template{}).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-
 	// MII timesheet — the default template.
 	if len(assets.MIITemplate) > 0 {
-		mii := models.Template{
-			Name:        "MII Timesheet",
-			Description: "Built-in default MII timesheet template (working hours, total-hour column, status matrix, and hardcoded project/division/department metadata).",
-			SheetName:   "Sheet1",
-			FileData:    assets.MIITemplate,
-			IsDefault:   true,
-			Builtin:     "mii",
-			CellMappings: []models.CellMapping{
-				// Header metadata (column C). C1 (project name) is hardcoded.
-				{Field: models.FieldMetaDivision, Scope: models.ScopeCell, CellRef: "C2", Fillable: false},
-				{Field: models.FieldMetaName, Scope: models.ScopeCell, CellRef: "C3", Fillable: false},
-				{Field: models.FieldMetaMiiID, Scope: models.ScopeCell, CellRef: "C4", Fillable: false},
-				{Field: models.FieldMetaSite, Scope: models.ScopeCell, CellRef: "C5", Fillable: false},
-				{Field: models.FieldMetaMonth, Scope: models.ScopeCell, CellRef: "C6", Fillable: false},
-				// Daily columns, anchored at row 9 (day 1).
-				{Field: models.FieldDate, Scope: models.ScopeDailyColumn, Column: "A", StartRow: 9, Fillable: false},
-				{Field: models.FieldTimeIn, Scope: models.ScopeDailyColumn, Column: "B", StartRow: 9, Fillable: true},
-				{Field: models.FieldTimeOut, Scope: models.ScopeDailyColumn, Column: "C", StartRow: 9, Fillable: true},
-				{Field: models.FieldTotalHour, Scope: models.ScopeDailyColumn, Column: "D", StartRow: 9, Fillable: false},
-				{Field: models.FieldStatus, Scope: models.ScopeDailyColumn, Column: "E", StartRow: 9, Fillable: true},
-				{Field: models.FieldActivity, Scope: models.ScopeDailyColumn, Column: "K", StartRow: 9, Fillable: true},
-				{Field: models.FieldProjectName, Scope: models.ScopeDailyColumn, Column: "L", StartRow: 9, Fillable: false},
-				{Field: models.FieldProjectID, Scope: models.ScopeDailyColumn, Column: "M", StartRow: 9, Fillable: false},
-				{Field: models.FieldAppImpacted, Scope: models.ScopeDailyColumn, Column: "N", StartRow: 9, Fillable: true},
-				{Field: models.FieldAIPFitur, Scope: models.ScopeDailyColumn, Column: "O", StartRow: 9, Fillable: false},
-				{Field: models.FieldDivision, Scope: models.ScopeDailyColumn, Column: "P", StartRow: 9, Fillable: false},
-				{Field: models.FieldDepartment, Scope: models.ScopeDailyColumn, Column: "Q", StartRow: 9, Fillable: false},
-				{Field: models.FieldSubDept, Scope: models.ScopeDailyColumn, Column: "R", StartRow: 9, Fillable: false},
-			},
+		var count int64
+		_ = db.Model(&models.Template{}).Where("builtin = ?", "mii").Count(&count)
+		if count == 0 {
+			mii := models.Template{
+				Name:        "MII Timesheet",
+				Description: "Built-in default MII timesheet template (working hours, total-hour column, status matrix, and hardcoded project/division/department metadata).",
+				Company:     "MII",
+				SheetName:   "Sheet1",
+				FileData:    assets.MIITemplate,
+				IsDefault:   true,
+				Builtin:     "mii",
+				CellMappings: []models.CellMapping{
+					{Field: models.FieldMetaDivision, Scope: models.ScopeCell, CellRef: "C2", Fillable: false},
+					{Field: models.FieldMetaName, Scope: models.ScopeCell, CellRef: "C3", Fillable: false},
+					{Field: models.FieldMetaMiiID, Scope: models.ScopeCell, CellRef: "C4", Fillable: false},
+					{Field: models.FieldMetaSite, Scope: models.ScopeCell, CellRef: "C5", Fillable: false},
+					{Field: models.FieldMetaMonth, Scope: models.ScopeCell, CellRef: "C6", Fillable: false},
+					{Field: models.FieldDate, Scope: models.ScopeDailyColumn, Column: "A", StartRow: 9, Fillable: false},
+					{Field: models.FieldTimeIn, Scope: models.ScopeDailyColumn, Column: "B", StartRow: 9, Fillable: true},
+					{Field: models.FieldTimeOut, Scope: models.ScopeDailyColumn, Column: "C", StartRow: 9, Fillable: true},
+					{Field: models.FieldTotalHour, Scope: models.ScopeDailyColumn, Column: "D", StartRow: 9, Fillable: false},
+					{Field: models.FieldStatus, Scope: models.ScopeDailyColumn, Column: "E", StartRow: 9, Fillable: true},
+					{Field: models.FieldActivity, Scope: models.ScopeDailyColumn, Column: "K", StartRow: 9, Fillable: true},
+					{Field: models.FieldProjectName, Scope: models.ScopeDailyColumn, Column: "L", StartRow: 9, Fillable: false},
+					{Field: models.FieldProjectID, Scope: models.ScopeDailyColumn, Column: "M", StartRow: 9, Fillable: false},
+					{Field: models.FieldAppImpacted, Scope: models.ScopeDailyColumn, Column: "N", StartRow: 9, Fillable: true},
+					{Field: models.FieldAIPFitur, Scope: models.ScopeDailyColumn, Column: "O", StartRow: 9, Fillable: false},
+					{Field: models.FieldDivision, Scope: models.ScopeDailyColumn, Column: "P", StartRow: 9, Fillable: false},
+					{Field: models.FieldDepartment, Scope: models.ScopeDailyColumn, Column: "Q", StartRow: 9, Fillable: false},
+					{Field: models.FieldSubDept, Scope: models.ScopeDailyColumn, Column: "R", StartRow: 9, Fillable: false},
+				},
+			}
+			if err := db.Create(&mii).Error; err != nil {
+				return err
+			}
+			log.Printf("[database] seeded default template '%s' (builtin mii)", mii.Name)
 		}
-		if err := db.Create(&mii).Error; err != nil {
-			return err
-		}
-		log.Printf("[database] seeded default template '%s' (builtin mii)", mii.Name)
 	}
 
-	// BNI DEV timesheet — the second company's template (non-default).
+	// SDD timesheet template.
+	if len(assets.SDDTemplate) > 0 {
+		var count int64
+		_ = db.Model(&models.Template{}).Where("builtin = ?", "sdd").Count(&count)
+		if count == 0 {
+			sdd := models.Template{
+				Name:        "SDD Timesheet",
+				Description: "Built-in SDD manual attendance timesheet template (BNI NPP, Hadir/Cuti/Izin/Sakit/Lembur checklist, working hours).",
+				Company:     "SDD",
+				SheetName:   "Juni",
+				FileData:    assets.SDDTemplate,
+				IsDefault:   false,
+				Builtin:     "sdd",
+				CellMappings: []models.CellMapping{
+					{Field: models.FieldMetaName, Scope: models.ScopeCell, CellRef: "G2", Fillable: false},
+					{Field: models.FieldMetaMiiID, Scope: models.ScopeCell, CellRef: "G3", Fillable: false},
+					{Field: models.FieldMetaDivision, Scope: models.ScopeCell, CellRef: "G4", Fillable: false},
+					{Field: models.FieldMetaMonth, Scope: models.ScopeCell, CellRef: "G7", Fillable: false},
+					{Field: models.FieldDate, Scope: models.ScopeDailyColumn, Column: "B", StartRow: 12, Fillable: false},
+					{Field: models.FieldTimeIn, Scope: models.ScopeDailyColumn, Column: "C", StartRow: 12, Fillable: true},
+					{Field: models.FieldTimeOut, Scope: models.ScopeDailyColumn, Column: "D", StartRow: 12, Fillable: true},
+					{Field: models.FieldTotalHour, Scope: models.ScopeDailyColumn, Column: "E", StartRow: 12, Fillable: false},
+					{Field: models.FieldStatus, Scope: models.ScopeDailyColumn, Column: "F", StartRow: 12, Fillable: true},
+					{Field: models.FieldProjectName, Scope: models.ScopeDailyColumn, Column: "K", StartRow: 12, Fillable: true},
+					{Field: models.FieldProjectID, Scope: models.ScopeDailyColumn, Column: "L", StartRow: 12, Fillable: true},
+					{Field: models.FieldActivity, Scope: models.ScopeDailyColumn, Column: "N", StartRow: 12, Fillable: true},
+				},
+			}
+			if err := db.Create(&sdd).Error; err != nil {
+				return err
+			}
+			log.Printf("[database] seeded template '%s' (builtin sdd)", sdd.Name)
+		}
+	}
+
+	// Adidata timesheet template.
+	if len(assets.AdidataTemplate) > 0 {
+		var count int64
+		_ = db.Model(&models.Template{}).Where("builtin = ?", "adidata").Count(&count)
+		if count == 0 {
+			adidata := models.Template{
+				Name:        "Adidata Timesheet",
+				Description: "Built-in Adidata timesheet template (TIMESHEET and SPL overtime sheets).",
+				Company:     "Adidata",
+				SheetName:   "TIMESHEET",
+				FileData:    assets.AdidataTemplate,
+				IsDefault:   false,
+				Builtin:     "adidata",
+				CellMappings: []models.CellMapping{
+					{Field: models.FieldMetaDivision, Scope: models.ScopeCell, CellRef: "C2", Fillable: false},
+					{Field: models.FieldMetaName, Scope: models.ScopeCell, CellRef: "C3", Fillable: false},
+					{Field: models.FieldMetaMiiID, Scope: models.ScopeCell, CellRef: "C4", Fillable: false},
+					{Field: models.FieldMetaMonth, Scope: models.ScopeCell, CellRef: "C5", Fillable: false},
+					{Field: models.FieldDate, Scope: models.ScopeDailyColumn, Column: "A", StartRow: 9, Fillable: false},
+					{Field: models.FieldTimeIn, Scope: models.ScopeDailyColumn, Column: "B", StartRow: 9, Fillable: true},
+					{Field: models.FieldTimeOut, Scope: models.ScopeDailyColumn, Column: "C", StartRow: 9, Fillable: true},
+					{Field: models.FieldTotalHour, Scope: models.ScopeDailyColumn, Column: "D", StartRow: 9, Fillable: false},
+					{Field: models.FieldStatus, Scope: models.ScopeDailyColumn, Column: "E", StartRow: 9, Fillable: true},
+					{Field: models.FieldActivity, Scope: models.ScopeDailyColumn, Column: "K", StartRow: 9, Fillable: true},
+					{Field: models.FieldProjectName, Scope: models.ScopeDailyColumn, Column: "L", StartRow: 9, Fillable: true},
+					{Field: models.FieldProjectID, Scope: models.ScopeDailyColumn, Column: "M", StartRow: 9, Fillable: true},
+					{Field: models.FieldAppImpacted, Scope: models.ScopeDailyColumn, Column: "N", StartRow: 9, Fillable: true},
+				},
+			}
+			if err := db.Create(&adidata).Error; err != nil {
+				return err
+			}
+			log.Printf("[database] seeded template '%s' (builtin adidata)", adidata.Name)
+		}
+	}
+
+	// BNI DEV timesheet — existing fallback.
 	if len(assets.BNITemplate) > 0 {
-		bni := models.Template{
-			Name:        "BNI DEV Timesheet",
-			Description: "Built-in BNI DEV timesheet template (strict date/time typing + status matrix).",
-			SheetName:   "Sheet1",
-			FileData:    assets.BNITemplate,
-			IsDefault:   false,
-			Builtin:     "bni_dev",
-			CellMappings: []models.CellMapping{
-				// Header metadata (column C, rows 1-6).
-				{Field: models.FieldMetaDivision, Scope: models.ScopeCell, CellRef: "C2", Fillable: false},
-				{Field: models.FieldMetaName, Scope: models.ScopeCell, CellRef: "C3", Fillable: false},
-				{Field: models.FieldMetaMiiID, Scope: models.ScopeCell, CellRef: "C4", Fillable: false},
-				{Field: models.FieldMetaSite, Scope: models.ScopeCell, CellRef: "C5", Fillable: false},
-				{Field: models.FieldMetaMonth, Scope: models.ScopeCell, CellRef: "C6", Fillable: false},
-				// Daily columns, anchored at row 9 (day 1).
-				{Field: models.FieldDate, Scope: models.ScopeDailyColumn, Column: "A", StartRow: 9, Fillable: false},
-				{Field: models.FieldTimeIn, Scope: models.ScopeDailyColumn, Column: "B", StartRow: 9, Fillable: true},
-				{Field: models.FieldTimeOut, Scope: models.ScopeDailyColumn, Column: "C", StartRow: 9, Fillable: true},
-				{Field: models.FieldStatus, Scope: models.ScopeDailyColumn, Column: "E", StartRow: 9, Fillable: true},
-				{Field: models.FieldActivity, Scope: models.ScopeDailyColumn, Column: "K", StartRow: 9, Fillable: true},
-				{Field: models.FieldProjectName, Scope: models.ScopeDailyColumn, Column: "L", StartRow: 9, Fillable: true},
-				{Field: models.FieldProjectID, Scope: models.ScopeDailyColumn, Column: "M", StartRow: 9, Fillable: true},
-				{Field: models.FieldAppImpacted, Scope: models.ScopeDailyColumn, Column: "N", StartRow: 9, Fillable: true},
-			},
+		var count int64
+		_ = db.Model(&models.Template{}).Where("builtin = ?", "bni_dev").Count(&count)
+		if count == 0 {
+			bni := models.Template{
+				Name:        "BNI DEV Timesheet",
+				Description: "Built-in BNI DEV timesheet template (strict date/time typing + status matrix).",
+				SheetName:   "Sheet1",
+				FileData:    assets.BNITemplate,
+				IsDefault:   false,
+				Builtin:     "bni_dev",
+				CellMappings: []models.CellMapping{
+					{Field: models.FieldMetaDivision, Scope: models.ScopeCell, CellRef: "C2", Fillable: false},
+					{Field: models.FieldMetaName, Scope: models.ScopeCell, CellRef: "C3", Fillable: false},
+					{Field: models.FieldMetaMiiID, Scope: models.ScopeCell, CellRef: "C4", Fillable: false},
+					{Field: models.FieldMetaSite, Scope: models.ScopeCell, CellRef: "C5", Fillable: false},
+					{Field: models.FieldMetaMonth, Scope: models.ScopeCell, CellRef: "C6", Fillable: false},
+					{Field: models.FieldDate, Scope: models.ScopeDailyColumn, Column: "A", StartRow: 9, Fillable: false},
+					{Field: models.FieldTimeIn, Scope: models.ScopeDailyColumn, Column: "B", StartRow: 9, Fillable: true},
+					{Field: models.FieldTimeOut, Scope: models.ScopeDailyColumn, Column: "C", StartRow: 9, Fillable: true},
+					{Field: models.FieldStatus, Scope: models.ScopeDailyColumn, Column: "E", StartRow: 9, Fillable: true},
+					{Field: models.FieldActivity, Scope: models.ScopeDailyColumn, Column: "K", StartRow: 9, Fillable: true},
+					{Field: models.FieldProjectName, Scope: models.ScopeDailyColumn, Column: "L", StartRow: 9, Fillable: true},
+					{Field: models.FieldProjectID, Scope: models.ScopeDailyColumn, Column: "M", StartRow: 9, Fillable: true},
+					{Field: models.FieldAppImpacted, Scope: models.ScopeDailyColumn, Column: "N", StartRow: 9, Fillable: true},
+				},
+			}
+			if err := db.Create(&bni).Error; err != nil {
+				return err
+			}
+			log.Printf("[database] seeded template '%s' (builtin bni_dev)", bni.Name)
 		}
-		if err := db.Create(&bni).Error; err != nil {
-			return err
-		}
-		log.Printf("[database] seeded template '%s' (builtin bni_dev)", bni.Name)
 	}
 	return nil
 }

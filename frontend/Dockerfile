@@ -1,39 +1,26 @@
-# Stage 1: Build the Next.js application
+# Stage 1: Build static assets using Bun
 FROM oven/bun:alpine AS builder
 
 WORKDIR /app
 
-# Copy dependency configs
-COPY package.json ./
-
-# Install dependencies using Bun
+COPY package.json bun.lock* ./
 RUN bun install
 
-# Copy application source code
 COPY . .
 
-# Set environment variables for production build
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Compile the Next.js production build
 RUN bun run build
 
-# Stage 2: Runtime image
-FROM oven/bun:alpine AS runner
+# Stage 2: Production web server using Nginx Alpine
+FROM nginx:alpine AS runner
 
-WORKDIR /app
+COPY --from=builder /app/out /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy production assets and dependencies from builder stage
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/node_modules ./node_modules
+EXPOSE 80
 
-EXPOSE 3000
-
-ENV PORT=3000
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-
-CMD ["bun", "run", "start"]
+CMD ["nginx", "-g", "daemon off;"]

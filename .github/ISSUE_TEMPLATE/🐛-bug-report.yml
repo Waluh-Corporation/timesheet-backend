@@ -1,0 +1,40 @@
+---
+name: '🐛 Bug Report'
+description: Laporkan bug atau kendala pada aplikasi Timesheet Generator
+title: "🐛 [Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    attributes:
+      label: Deskripsi Masalah
+      description: Jelaskan kendala yang dialami dengan jelas dan ringkas.
+      placeholder: Apa yang terjadi? Apa perilaku yang diharapkan?
+    validations:
+      required: true
+  - type: checkboxes
+    id: components-impacted
+    attributes:
+      label: Komponen yang Terdampak
+      options:
+        - label: Frontend UI / Form Timesheet
+        - label: Backend API / Server
+        - label: Export Excel Generator (MII / SDD / Adidata)
+        - label: Authentication / Login
+        - label: Master Data (Company / Division / Site)
+        - label: Docker / Deployment
+  - type: textarea
+    attributes:
+      label: Langkah untuk Mereproduksi (Steps to Reproduce)
+      description: Langkah-langkah untuk memicu bug tersebut.
+      placeholder: |
+        1. Buka halaman '...'
+        2. Klik tombol '...'
+        3. Lihat pesan error
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log / Error Output
+      description: Salin log backend, konsol browser, atau respon API jika tersedia.
+      render: shell
