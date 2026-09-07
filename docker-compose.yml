@@ -39,10 +39,7 @@ services:
   # 2. Backend Service (Go REST API)
   # ----------------------------------------------------------------------------
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    image: ${BACKEND_IMAGE:-ghcr.io/naufalzaid17/timesheet-generator-backend:latest}
+    image: ${BACKEND_IMAGE:-ghcr.io/naufalzaid17/timesheet-generator-backend:${IMAGE_TAG:-latest}}
     container_name: timesheet_backend
     restart: unless-stopped
     ports:
@@ -82,12 +79,7 @@ services:
   # 3. Frontend Service (Next.js SPA / Nginx)
   # ----------------------------------------------------------------------------
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
-    image: ${FRONTEND_IMAGE:-ghcr.io/naufalzaid17/timesheet-generator-frontend:latest}
+    image: ${FRONTEND_IMAGE:-ghcr.io/naufalzaid17/timesheet-generator-frontend:${IMAGE_TAG:-latest}}
     container_name: timesheet_frontend
     restart: unless-stopped
     ports:
