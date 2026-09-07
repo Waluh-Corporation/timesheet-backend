@@ -76,7 +76,8 @@ func (s *Server) WebAuthnRelatedOrigins(c *gin.Context) {
 // Me returns the currently authenticated user record.
 func (s *Server) Me(c *gin.Context) {
 	var user models.User
-	if err := s.DB.First(&user, currentUserID(c)).Error; err != nil {
+	if err := s.DB.Preload("CompanyRef").Preload("DivisionRef").Preload("SiteRef").
+		First(&user, currentUserID(c)).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}

@@ -114,6 +114,11 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/templates", s.ListTemplates)
 		authed.GET("/templates/:id/grid", s.GetTemplateGrid)
 
+		// Master data (companies, divisions, sites for cascading selection).
+		authed.GET("/companies", s.ListCompanies)
+		authed.GET("/companies/:id/divisions", s.ListDivisionsByCompany)
+		authed.GET("/companies/:id/sites", s.ListSitesByCompany)
+
 		// Web push subscription.
 		authed.POST("/push/subscribe", s.Subscribe)
 		authed.POST("/push/unsubscribe", s.Unsubscribe)
@@ -130,6 +135,15 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.DELETE("/users/:id", s.DeleteUser)
 		admin.GET("/users/:id/passkeys", s.AdminListPasskeys)
 		admin.DELETE("/users/:id/passkeys/:pid", s.AdminDeletePasskey)
+
+		// Master data management (admin only).
+		admin.POST("/companies", s.AdminCreateCompany)
+		admin.PATCH("/companies/:id", s.AdminUpdateCompany)
+		admin.DELETE("/companies/:id", s.AdminDeleteCompany)
+		admin.POST("/companies/:id/divisions", s.AdminCreateDivision)
+		admin.DELETE("/companies/:id/divisions/:divId", s.AdminDeleteDivision)
+		admin.POST("/companies/:id/sites", s.AdminCreateSite)
+		admin.DELETE("/companies/:id/sites/:siteId", s.AdminDeleteSite)
 
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)

@@ -48,10 +48,59 @@ type User struct {
 	Site     string `gorm:"size:128" json:"site"`
 	Company  string `gorm:"size:64" json:"company"`
 
+	// Master data references (single selection per user).
+	CompanyID   *uint     `gorm:"index" json:"company_id"`
+	CompanyRef  *Company  `gorm:"foreignKey:CompanyID" json:"company_ref,omitempty"`
+	DivisionID  *uint     `gorm:"index" json:"division_id"`
+	DivisionRef *Division `gorm:"foreignKey:DivisionID" json:"division_ref,omitempty"`
+	SiteID      *uint     `gorm:"index" json:"site_id"`
+	SiteRef     *Site     `gorm:"foreignKey:SiteID" json:"site_ref,omitempty"`
+
 	// Credential relations.
 	Credentials       []WebAuthnCredential   `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	PushSubscriptions []PushSubscription     `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	ProfileRequests   []ProfileChangeRequest `gorm:"constraint:OnDelete:CASCADE" json:"-"`
+}
+
+// Company represents an organization/company entity (e.g. MII, SDD, NTT, Adidata).
+type Company struct {
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	Code      string     `gorm:"uniqueIndex;size:32;not null" json:"code"`
+	Name      string     `gorm:"size:255;not null" json:"name"`
+	IsActive  bool       `gorm:"not null;default:true" json:"is_active"`
+	Divisions []Division `gorm:"constraint:OnDelete:CASCADE" json:"divisions,omitempty"`
+	Sites     []Site     `gorm:"constraint:OnDelete:CASCADE" json:"sites,omitempty"`
+}
+
+// Division represents a division within a company.
+type Division struct {
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	CompanyID uint     `gorm:"index;not null" json:"company_id"`
+	Company   *Company `gorm:"foreignKey:CompanyID" json:"company,omitempty"`
+	Code      string   `gorm:"size:64" json:"code"`
+	Name      string   `gorm:"size:255;not null" json:"name"`
+	IsActive  bool     `gorm:"not null;default:true" json:"is_active"`
+}
+
+// Site represents a work location/site associated with a company.
+type Site struct {
+	ID        uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	CompanyID uint     `gorm:"index;not null" json:"company_id"`
+	Company   *Company `gorm:"foreignKey:CompanyID" json:"company,omitempty"`
+	Name      string   `gorm:"size:128;not null" json:"name"`
+	IsActive  bool     `gorm:"not null;default:true" json:"is_active"`
 }
 
 // WebAuthnID implements webauthn.User.
@@ -238,6 +287,11 @@ type ProfileChangeRequest struct {
 	MiiID    string `gorm:"size:64" json:"mii_id"`
 	Division string `gorm:"size:255" json:"division"`
 	Site     string `gorm:"size:128" json:"site"`
+	Company  string `gorm:"size:64" json:"company"`
+
+	CompanyID  *uint `gorm:"index" json:"company_id"`
+	DivisionID *uint `gorm:"index" json:"division_id"`
+	SiteID     *uint `gorm:"index" json:"site_id"`
 
 	ReviewedBy *uint      `json:"reviewed_by"`
 	ReviewedAt *time.Time `json:"reviewed_at"`

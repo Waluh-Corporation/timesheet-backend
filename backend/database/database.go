@@ -27,6 +27,10 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 		return nil, err
 	}
 
+	if err := seedMasterData(db); err != nil {
+		log.Printf("[database] could not seed master data: %v", err)
+	}
+
 	if err := seedAdmin(db, cfg); err != nil {
 		return nil, err
 	}
@@ -128,6 +132,9 @@ func seedDefaultTemplate(db *gorm.DB) error {
 // AutoMigrate runs GORM migrations for every entity.
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
+		&models.Company{},
+		&models.Division{},
+		&models.Site{},
 		&models.User{},
 		&models.WebAuthnCredential{},
 		&models.Template{},
@@ -137,6 +144,99 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.ProfileChangeRequest{},
 		&models.PasswordResetToken{},
 	)
+}
+
+// seedMasterData populates standard companies, divisions, and sites if no company exists.
+// It also backfills existing users with matching company_id, division_id, and site_id.
+func seedMasterData(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&models.Company{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count == 0 {
+		initialCompanies := []models.Company{
+			{
+				Code:     "MII",
+				Name:     "PT Mitra Integrasi Informatika",
+				IsActive: true,
+				Divisions: []models.Division{
+					{Code: "ADD", Name: "Application Development Division", IsActive: true},
+					{Code: "WDD", Name: "Wholesale Digital Delivery", IsActive: true},
+					{Code: "WCSD", Name: "Wholesale Channel and Service Delivery", IsActive: true},
+				},
+				Sites: []models.Site{
+					{Name: "Jakarta", IsActive: true},
+					{Name: "Client On-Site", IsActive: true},
+				},
+			},
+			{
+				Code:     "SDD",
+				Name:     "PT Sinergi Digital Digital",
+				IsActive: true,
+				Divisions: []models.Division{
+					{Code: "DEV", Name: "Software Development", IsActive: true},
+				},
+				Sites: []models.Site{
+					{Name: "Jakarta", IsActive: true},
+				},
+			},
+			{
+				Code:     "NTT",
+				Name:     "PT NTT Data Indonesia",
+				IsActive: true,
+				Divisions: []models.Division{
+					{Code: "ENG", Name: "Engineering Division", IsActive: true},
+				},
+				Sites: []models.Site{
+					{Name: "Jakarta", IsActive: true},
+				},
+			},
+			{
+				Code:     "Adidata",
+				Name:     "PT Adidata Informatika",
+				IsActive: true,
+				Divisions: []models.Division{
+					{Code: "CONS", Name: "Consulting & Delivery", IsActive: true},
+				},
+				Sites: []models.Site{
+					{Name: "Jakarta", IsActive: true},
+				},
+			},
+		}
+
+		for _, comp := range initialCompanies {
+			if err := db.Create(&comp).Error; err != nil {
+				log.Printf("[database] warning: failed to seed company %s: %v", comp.Code, err)
+			}
+		}
+		log.Printf("[database] seeded default master companies, divisions, and sites")
+	}
+
+	// Backfill existing users if they have string company/division/site but no foreign key set.
+	var usersWithoutMaster []models.User
+	if err := db.Where("company_id IS NULL AND company != ''").Find(&usersWithoutMaster).Error; err == nil {
+		for _, u := range usersWithoutMaster {
+			var comp models.Company
+			if err := db.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", u.Company, "%"+u.Company+"%").First(&comp).Error; err == nil {
+				updates := map[string]interface{}{"company_id": comp.ID}
+				if u.Division != "" {
+					var div models.Division
+					if err := db.Where("company_id = ? AND (LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?))", comp.ID, u.Division, u.Division).First(&div).Error; err == nil {
+						updates["division_id"] = div.ID
+					}
+				}
+				if u.Site != "" {
+					var site models.Site
+					if err := db.Where("company_id = ? AND LOWER(name) = LOWER(?)", comp.ID, u.Site).First(&site).Error; err == nil {
+						updates["site_id"] = site.ID
+					}
+				}
+				_ = db.Model(&models.User{}).Where("id = ?", u.ID).Updates(updates)
+			}
+		}
+	}
+
+	return nil
 }
 
 // seedAdmin creates the bootstrap admin the first time the portal boots with an
