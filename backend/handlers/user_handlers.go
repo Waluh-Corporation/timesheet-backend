@@ -64,6 +64,12 @@ func (s *Server) CreateUser(c *gin.Context) {
 		Company:  req.Company,
 		IsActive: true,
 	}
+	if req.Company != "" {
+		var comp models.Company
+		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
+			user.CompanyID = &comp.ID
+		}
+	}
 	if req.Password != "" {
 		// Enforce the NIST SP 800-63B policy on any admin-supplied initial
 		// password (length + blocklist + context-specific terms).
@@ -160,6 +166,12 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	}
 	if req.Company != nil {
 		updates["company"] = *req.Company
+		var comp models.Company
+		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
+			updates["company_id"] = comp.ID
+		} else {
+			updates["company_id"] = nil
+		}
 	}
 	if len(updates) > 0 {
 		s.DB.Model(&user).Updates(updates)

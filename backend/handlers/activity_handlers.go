@@ -58,12 +58,20 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		AppImpacted: req.AppImpacted,
 	}
 
+	// Associate with normalized Project if matched by code or name
+	if req.ProjectID != "" || req.ProjectName != "" {
+		var proj models.Project
+		if err := s.DB.Where("code = ? OR LOWER(name) = LOWER(?)", req.ProjectID, req.ProjectName).First(&proj).Error; err == nil {
+			activity.ProjectRefID = &proj.ID
+		}
+	}
+
 	// Upsert on the (user_id, date) unique index.
 	err = s.DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "date"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"start_time", "end_time", "status", "activity",
-			"project_name", "project_id", "app_impacted", "updated_at",
+			"project_name", "project_id", "app_impacted", "project_ref_id", "updated_at",
 		}),
 	}).Create(&activity).Error
 	if err != nil {
@@ -290,4 +298,29 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
+
+// ListProjects returns all active projects, optionally filtered by company_id.
+func (s *Server) ListProjects(c *gin.Context) {
+	var projects []models.Project
+	query := s.DB.Where("is_active = ?", true)
+	if compID := c.Query("company_id"); compID != "" {
+		query = query.Where("company_id = ?", compID)
+	}
+	if err := query.Preload("Company").Order("name asc").Find(&projects).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, projects)
+}
+
+// ListCompanies returns all companies and their associated templates and projects.
+func (s *Server) ListCompanies(c *gin.Context) {
+	var companies []models.Company
+	if err := s.DB.Preload("Projects").Preload("Templates").Order("id asc").Find(&companies).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, companies)
+}
+
 

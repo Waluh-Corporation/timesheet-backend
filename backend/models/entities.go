@@ -52,7 +52,7 @@ type User struct {
 	Site       string   `gorm:"size:128" json:"site"`
 	Company    string   `gorm:"size:64" json:"company"`
 	CompanyID  *uint    `gorm:"index" json:"company_id"`
-	CompanyRel *Company `gorm:"foreignKey:CompanyID" json:"company_rel,omitempty"`
+	CompanyRel *Company `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
 
 	// Credential relations.
 	Credentials       []WebAuthnCredential   `gorm:"constraint:OnDelete:CASCADE" json:"-"`
@@ -66,9 +66,23 @@ type Company struct {
 	ID        uint       `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
-	Code      string     `gorm:"uniqueIndex;size:32;not null" json:"code"` // "mii", "sdd", "adidata"
+	Code      string     `gorm:"uniqueIndex;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
 	Name      string     `gorm:"size:255;not null" json:"name"`
-	Templates []Template `gorm:"foreignKey:CompanyID" json:"templates,omitempty"`
+	Templates []Template `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"templates,omitempty"`
+	Projects  []Project  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"projects,omitempty"`
+}
+
+// Project represents a billable project or initiative (e.g. BNI Direct, Core Banking).
+type Project struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Code        string    `gorm:"size:64;not null;index" json:"code"` // e.g. "P24015"
+	Name        string    `gorm:"size:255;not null" json:"name"`      // e.g. "BNI Direct"
+	AppImpacted string    `gorm:"size:255" json:"app_impacted"`       // e.g. "BNI Direct Cash"
+	CompanyID   *uint     `gorm:"index" json:"company_id"`
+	Company     *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	IsActive    bool      `gorm:"not null;default:true" json:"is_active"`
 }
 
 // OvertimeEntry records overtime activities for SPL sheet generation.
@@ -76,8 +90,8 @@ type OvertimeEntry struct {
 	ID              uint           `gorm:"primaryKey" json:"id"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
-	UserID          uint           `gorm:"index;not null" json:"user_id"`
-	DailyActivityID *uint          `gorm:"index" json:"daily_activity_id"`
+	UserID          uint           `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
+	DailyActivityID *uint          `gorm:"index;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"daily_activity_id"`
 	Date            time.Time      `gorm:"type:date;not null" json:"date"`
 	StartTime       string         `gorm:"size:8" json:"start_time"` // "17:00"
 	EndTime         string         `gorm:"size:8" json:"end_time"`   // "21:00"
@@ -129,7 +143,7 @@ func (u User) WebAuthnCredentials() []webauthn.Credential {
 type WebAuthnCredential struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
-	UserID    uint      `gorm:"index;not null" json:"user_id"`
+	UserID    uint      `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 
 	CredentialID    []byte `gorm:"uniqueIndex;not null" json:"-"`
 	PublicKey       []byte `gorm:"not null" json:"-"`
@@ -160,7 +174,7 @@ type Template struct {
 	Description string `gorm:"size:512" json:"description"`
 	Company     string `gorm:"size:64" json:"company"`
 	CompanyID   *uint  `gorm:"index" json:"company_id"`
-	CompanyRel  *Company `gorm:"foreignKey:CompanyID" json:"company_rel,omitempty"`
+	CompanyRel  *Company `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
 	// SheetName is the worksheet the mapping applies to.
 	SheetName string `gorm:"size:128;not null;default:Sheet1" json:"sheet_name"`
 	// FileData holds the raw .xlsx bytes so generation is self-contained.
@@ -238,7 +252,7 @@ type DailyActivity struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	UserID uint `gorm:"uniqueIndex:idx_user_date;not null" json:"user_id"`
+	UserID uint `gorm:"uniqueIndex:idx_user_date;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 	// Date is normalised to midnight in Asia/Jakarta.
 	Date time.Time `gorm:"uniqueIndex:idx_user_date;not null;type:date" json:"date"`
 
@@ -249,13 +263,16 @@ type DailyActivity struct {
 	ProjectName string `gorm:"size:255" json:"project_name"`
 	ProjectID   string `gorm:"size:64" json:"project_id"`
 	AppImpacted string `gorm:"size:255" json:"app_impacted"`
+
+	ProjectRefID *uint    `gorm:"index" json:"project_ref_id"`
+	ProjectRef   *Project `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
 }
 
 // PushSubscription persists a browser Web Push subscription for a user.
 type PushSubscription struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
-	UserID    uint      `gorm:"index;not null" json:"user_id"`
+	UserID    uint      `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 
 	Endpoint string `gorm:"uniqueIndex;size:512;not null" json:"endpoint"`
 	P256dh   string `gorm:"size:255;not null" json:"p256dh"`
@@ -268,7 +285,7 @@ type ProfileChangeRequest struct {
 	ID        uint          `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time     `json:"created_at"`
 	UpdatedAt time.Time     `json:"updated_at"`
-	UserID    uint          `gorm:"index;not null" json:"user_id"`
+	UserID    uint          `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 	Status    ProfileStatus `gorm:"size:16;not null;default:pending" json:"status"`
 
 	Name       string `gorm:"size:255" json:"name"`
@@ -290,7 +307,7 @@ type ProfileChangeRequest struct {
 type PasswordResetToken struct {
 	ID        uint      `gorm:"primaryKey" json:"-"`
 	CreatedAt time.Time `json:"-"`
-	UserID    uint      `gorm:"index;not null" json:"-"`
+	UserID    uint      `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
 	TokenHash string    `gorm:"uniqueIndex;size:64;not null" json:"-"`
 	ExpiresAt time.Time `gorm:"not null" json:"-"`
 	Used      bool      `gorm:"not null;default:false" json:"-"`

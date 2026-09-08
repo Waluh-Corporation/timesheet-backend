@@ -33,6 +33,9 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 		// Non-fatal: the portal still runs, admins can upload a template.
 		log.Printf("[database] could not seed default template: %v", err)
 	}
+	if err := seedDefaultProjectsAndNormalize(db); err != nil {
+		log.Printf("[database] normalization/project seeding error: %v", err)
+	}
 	return db, nil
 }
 
@@ -130,6 +133,7 @@ func seedDefaultTemplate(db *gorm.DB) error {
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&models.Company{},
+		&models.Project{},
 		&models.User{},
 		&models.WebAuthnCredential{},
 		&models.Template{},
@@ -140,6 +144,90 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.ProfileChangeRequest{},
 		&models.PasswordResetToken{},
 	)
+}
+
+// seedDefaultProjectsAndNormalize backfills missing company_id associations,
+// seeds master projects, and links existing daily_activities to projects.
+func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
+	// 1. Backfill missing company_id on users
+	_ = db.Exec(`
+		UPDATE users 
+		SET company_id = (
+			SELECT id FROM companies 
+			WHERE LOWER(companies.code) = LOWER(users.company) 
+			   OR LOWER(companies.name) LIKE '%' || LOWER(users.company) || '%' 
+			LIMIT 1
+		) 
+		WHERE (company_id IS NULL OR company_id = 0) 
+		  AND company IS NOT NULL 
+		  AND company != ''
+	`).Error
+
+	// 2. Backfill missing company_id on templates
+	_ = db.Exec(`
+		UPDATE templates 
+		SET company_id = (
+			SELECT id FROM companies 
+			WHERE LOWER(companies.code) = LOWER(templates.company) 
+			   OR LOWER(companies.name) LIKE '%' || LOWER(templates.company) || '%' 
+			LIMIT 1
+		) 
+		WHERE (company_id IS NULL OR company_id = 0) 
+		  AND company IS NOT NULL 
+		  AND company != ''
+	`).Error
+
+	// 3. Seed default projects
+	findCompanyID := func(code string) *uint {
+		var comp models.Company
+		if err := db.Where("code = ?", code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
+			return &comp.ID
+		}
+		return nil
+	}
+
+	defaultProjects := []models.Project{
+		{Code: "P24015", Name: "BNI Direct", AppImpacted: "BNI Direct Cash", CompanyID: findCompanyID("mii"), IsActive: true},
+		{Code: "P24016", Name: "BNI Direct Overseas", AppImpacted: "BNI Direct Overseas", CompanyID: findCompanyID("mii"), IsActive: true},
+		{Code: "P24017", Name: "BNI Direct Bisnis", AppImpacted: "BNI Direct Bisnis", CompanyID: findCompanyID("mii"), IsActive: true},
+		{Code: "P24015", Name: "BNI Direct", AppImpacted: "BNI Direct", CompanyID: findCompanyID("ntt"), IsActive: true},
+		{Code: "SDD-01", Name: "Core Banking Development", AppImpacted: "Core Banking", CompanyID: findCompanyID("sdd"), IsActive: true},
+		{Code: "ADI-01", Name: "BNI Direct Maintenance", AppImpacted: "BNI Direct", CompanyID: findCompanyID("adidata"), IsActive: true},
+	}
+	for _, p := range defaultProjects {
+		var cnt int64
+		_ = db.Model(&models.Project{}).Where("code = ? AND (company_id = ? OR (company_id IS NULL AND ? IS NULL))", p.Code, p.CompanyID, p.CompanyID).Count(&cnt).Error
+		if cnt == 0 {
+			_ = db.Create(&p).Error
+		}
+	}
+
+	// 4. Backfill daily_activities.project_ref_id
+	_ = db.Exec(`
+		UPDATE daily_activities 
+		SET project_ref_id = (
+			SELECT id FROM projects 
+			WHERE projects.code = daily_activities.project_id 
+			LIMIT 1
+		) 
+		WHERE project_ref_id IS NULL 
+		  AND project_id IS NOT NULL 
+		  AND project_id != ''
+	`).Error
+
+	_ = db.Exec(`
+		UPDATE daily_activities 
+		SET project_ref_id = (
+			SELECT id FROM projects 
+			WHERE LOWER(projects.name) = LOWER(daily_activities.project_name) 
+			LIMIT 1
+		) 
+		WHERE project_ref_id IS NULL 
+		  AND project_name IS NOT NULL 
+		  AND project_name != ''
+	`).Error
+
+	return nil
 }
 
 // seedAdmin creates the bootstrap admin the first time the portal boots with an
