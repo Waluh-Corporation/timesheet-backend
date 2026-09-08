@@ -455,8 +455,6 @@ func dailyValue(field models.MappingFieldType, act models.DailyActivity, hasActi
 	if !hasActivity {
 		if isWeekend || holiday != "" {
 			switch field {
-			case models.FieldStatus:
-				return "X"
 			case models.FieldActivity:
 				if holiday != "" {
 					return holiday
