@@ -196,12 +196,45 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheetTS, cell, cell, st.BoldCenterStyle)
 	}
 
-	// 7. Signature Area (Row 44)
-	if in.User.Name != "" {
-		_ = f.MergeCell(sheetTS, "A44", "C44")
-		_ = f.SetCellValue(sheetTS, "A44", "( "+in.User.Name+" )")
-		_ = f.SetCellStyle(sheetTS, "A44", "C44", st.BoldCenterStyle)
+	// 7. Signature Area (Rows 42-49) matching official Adidata template
+	// Headers (Row 42)
+	styleMergedRange(f, sheetTS, "A42", "C42", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheetTS, "A42", "TTD PEGAWAI,")
+
+	styleMergedRange(f, sheetTS, "D42", "F42", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheetTS, "D42", "DIPERIKSA OLEH,")
+
+	styleMergedRange(f, sheetTS, "G42", "J42", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheetTS, "G42", "DISETUJUI OLEH,")
+
+	// Empty Signature Spaces with Borders (Rows 43-47)
+	styleMergedRange(f, sheetTS, "A43", "C47", st.DataCenterStyle)
+	styleMergedRange(f, sheetTS, "D43", "F47", st.DataCenterStyle)
+	styleMergedRange(f, sheetTS, "G43", "J47", st.DataCenterStyle)
+
+	// Names (Row 48)
+	styleMergedRange(f, sheetTS, "A48", "C48", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheetTS, "A48", "( "+in.User.Name+" )")
+
+	styleMergedRange(f, sheetTS, "D48", "F48", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheetTS, "D48", "( Daniel Harry Hasudungan Simbolon )")
+
+	styleMergedRange(f, sheetTS, "G48", "J48", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheetTS, "G48", "( M. Yohan Muchori )")
+
+	// Positions (Row 49)
+	posTitle := in.User.Position
+	if posTitle == "" {
+		posTitle = "Junior Programmer"
 	}
+	styleMergedRange(f, sheetTS, "A49", "C49", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheetTS, "A49", posTitle)
+
+	styleMergedRange(f, sheetTS, "D49", "F49", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheetTS, "D49", "TEAM LEADER")
+
+	styleMergedRange(f, sheetTS, "G49", "J49", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheetTS, "G49", "DEPARTEMEN HEAD")
 
 	// 8. Build SPL (Surat Perintah Lembur) sheets if overtime records exist
 	for i, ot := range in.Overtimes {

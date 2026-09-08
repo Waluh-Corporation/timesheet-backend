@@ -225,10 +225,31 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
 	}
 
-	// 9. Signatures Block (Row 52)
-	_ = f.MergeCell(sheet, "C52", "G52")
-	_ = f.SetCellValue(sheet, "C52", "( "+in.User.Name+" )")
-	_ = f.SetCellStyle(sheet, "C52", "G52", st.BoldCenterStyle)
+	// 9. Signatures Area (Rows 46-52) matching official SDD template
+	// Headers (Row 46)
+	styleMergedRange(f, sheet, "C46", "G46", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "C46", "Pemohon")
+
+	styleMergedRange(f, sheet, "H46", "K46", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "H46", "Diperiksa,")
+
+	styleMergedRange(f, sheet, "L46", "M46", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "L46", "Disetujui,")
+
+	// Empty Signature Boxes with Borders (Rows 47-51)
+	styleMergedRange(f, sheet, "C47", "G51", st.DataCenterStyle)
+	styleMergedRange(f, sheet, "H47", "K51", st.DataCenterStyle)
+	styleMergedRange(f, sheet, "L47", "M51", st.DataCenterStyle)
+
+	// Names (Row 52)
+	styleMergedRange(f, sheet, "C52", "G52", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "C52", "Nama : "+in.User.Name)
+
+	styleMergedRange(f, sheet, "H52", "K52", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "H52", "Nama : ")
+
+	styleMergedRange(f, sheet, "L52", "M52", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "L52", "Nama : ")
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {

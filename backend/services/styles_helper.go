@@ -1,6 +1,8 @@
 package services
 
 import (
+	_ "image/jpeg"
+	_ "image/png"
 	"strings"
 
 	"github.com/xuri/excelize/v2"
@@ -147,4 +149,10 @@ func addHeaderLogo(f *excelize.File, sheet, cell string, imgData []byte, ext str
 
 func strPtr(s string) *string {
 	return &s
+}
+
+// styleMergedRange merges topCell to botCell and applies styleID to all cells in the rectangular range.
+func styleMergedRange(f *excelize.File, sheet, topCell, botCell string, styleID int) {
+	_ = f.MergeCell(sheet, topCell, botCell)
+	_ = f.SetCellStyle(sheet, topCell, botCell, styleID)
 }

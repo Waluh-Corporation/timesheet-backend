@@ -270,6 +270,37 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
 	}
 
+	// 8. Signatures Area (Rows 53-55) matching official NTT template
+	// Headers (Row 53)
+	styleMergedRange(f, sheet, "B53", "E53", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "B53", "TTD PEGAWAI,")
+
+	styleMergedRange(f, sheet, "F53", "I53", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "F53", "DI PERIKSA OLEH,")
+
+	styleMergedRange(f, sheet, "J53", "L53", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "J53", "DISETUJUI OLEH,")
+
+	// Names (Row 54)
+	styleMergedRange(f, sheet, "B54", "E54", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "B54", "( "+in.User.Name+" )")
+
+	styleMergedRange(f, sheet, "F54", "I54", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "F54", "( Manager )")
+
+	styleMergedRange(f, sheet, "J54", "L54", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "J54", "( Pimkel )")
+
+	// Date Rows (Row 55)
+	styleMergedRange(f, sheet, "B55", "E55", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "B55", "DATE: ")
+
+	styleMergedRange(f, sheet, "F55", "I55", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "F55", "DATE: ")
+
+	styleMergedRange(f, sheet, "J55", "L55", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "J55", "DATE: ")
+
 	buf, err := f.WriteToBuffer()
 	if err != nil {
 		return nil, err

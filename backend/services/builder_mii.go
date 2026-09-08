@@ -226,12 +226,36 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
 	}
 
-	// 7. Employee Signature Area (Row 43)
-	if name != "" {
-		_ = f.MergeCell(sheet, "A43", "C43")
-		_ = f.SetCellValue(sheet, "A43", "( "+name+" )")
-		_ = f.SetCellStyle(sheet, "A43", "C43", st.BoldCenterStyle)
-	}
+	// 7. Signature Area (Rows 42-47) matching official MII template
+	// Headers (Row 42)
+	styleMergedRange(f, sheet, "A42", "C42", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "A42", "TTD PEGAWAI,")
+
+	styleMergedRange(f, sheet, "D42", "F42", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "D42", "DIPERIKSA OLEH,")
+
+	styleMergedRange(f, sheet, "G42", "J42", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "G42", "DISETUJUI OLEH,")
+
+	// Signature Boxes with Names (Rows 43-46)
+	styleMergedRange(f, sheet, "A43", "C46", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "A43", in.User.Name)
+
+	styleMergedRange(f, sheet, "D43", "F46", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "D43", "Daniel Harry Hasudungan Simbolon")
+
+	styleMergedRange(f, sheet, "G43", "J46", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "G43", "Machfud Yohan Muchori")
+
+	// Date Rows (Row 47)
+	styleMergedRange(f, sheet, "A47", "C47", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "A47", "DATE : ")
+
+	styleMergedRange(f, sheet, "D47", "F47", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "D47", "DATE : ")
+
+	styleMergedRange(f, sheet, "G47", "J47", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "G47", "DATE : ")
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {
