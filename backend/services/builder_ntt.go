@@ -276,7 +276,7 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 	_ = f.SetCellValue(sheet, "B53", "TTD PEGAWAI,")
 
 	styleMergedRange(f, sheet, "F53", "I53", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "F53", "DI PERIKSA OLEH,")
+	_ = f.SetCellValue(sheet, "F53", "DIPERIKSA OLEH,")
 
 	styleMergedRange(f, sheet, "J53", "L53", st.BoldCenterStyle)
 	_ = f.SetCellValue(sheet, "J53", "DISETUJUI OLEH,")
