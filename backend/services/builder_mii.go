@@ -237,15 +237,20 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	styleMergedRange(f, sheet, "G42", "J42", st.BoldCenterStyle)
 	_ = f.SetCellValue(sheet, "G42", "DISETUJUI OLEH,")
 
-	// Signature Boxes with Names (Rows 43-46)
-	styleMergedRange(f, sheet, "A43", "C46", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "A43", in.User.Name)
+	// Empty Signature Boxes with Borders (Rows 43-45)
+	styleMergedRange(f, sheet, "A43", "C45", st.DataCenterStyle)
+	styleMergedRange(f, sheet, "D43", "F45", st.DataCenterStyle)
+	styleMergedRange(f, sheet, "G43", "J45", st.DataCenterStyle)
 
-	styleMergedRange(f, sheet, "D43", "F46", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "D43", "Daniel Harry Hasudungan Simbolon")
+	// Names (Row 46)
+	styleMergedRange(f, sheet, "A46", "C46", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "A46", in.User.Name)
 
-	styleMergedRange(f, sheet, "G43", "J46", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "G43", "Machfud Yohan Muchori")
+	styleMergedRange(f, sheet, "D46", "F46", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "D46", "Daniel Harry Hasudungan Simbolon")
+
+	styleMergedRange(f, sheet, "G46", "J46", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "G46", "Machfud Yohan Muchori")
 
 	// Date Rows (Row 47)
 	styleMergedRange(f, sheet, "A47", "C47", st.DataLeftStyle)
@@ -256,6 +261,14 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 
 	styleMergedRange(f, sheet, "G47", "J47", st.DataLeftStyle)
 	_ = f.SetCellValue(sheet, "G47", "DATE : ")
+
+	// Set row heights for visual balance
+	_ = f.SetRowHeight(sheet, 42, 20)
+	_ = f.SetRowHeight(sheet, 43, 16)
+	_ = f.SetRowHeight(sheet, 44, 16)
+	_ = f.SetRowHeight(sheet, 45, 18)
+	_ = f.SetRowHeight(sheet, 46, 22)
+	_ = f.SetRowHeight(sheet, 47, 18)
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {

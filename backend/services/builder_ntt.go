@@ -270,7 +270,7 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
 	}
 
-	// 8. Signatures Area (Rows 53-55) matching official NTT template
+	// 8. Signatures Area (Rows 53-58) matching official NTT template
 	// Headers (Row 53)
 	styleMergedRange(f, sheet, "B53", "E53", st.BoldCenterStyle)
 	_ = f.SetCellValue(sheet, "B53", "TTD PEGAWAI,")
@@ -281,25 +281,38 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 	styleMergedRange(f, sheet, "J53", "L53", st.BoldCenterStyle)
 	_ = f.SetCellValue(sheet, "J53", "DISETUJUI OLEH,")
 
-	// Names (Row 54)
-	styleMergedRange(f, sheet, "B54", "E54", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "B54", "( "+in.User.Name+" )")
+	// Empty Signature Boxes with Borders (Rows 54-56)
+	styleMergedRange(f, sheet, "B54", "E56", st.DataCenterStyle)
+	styleMergedRange(f, sheet, "F54", "I56", st.DataCenterStyle)
+	styleMergedRange(f, sheet, "J54", "L56", st.DataCenterStyle)
 
-	styleMergedRange(f, sheet, "F54", "I54", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "F54", "( Manager )")
+	// Names (Row 57)
+	styleMergedRange(f, sheet, "B57", "E57", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "B57", in.User.Name)
 
-	styleMergedRange(f, sheet, "J54", "L54", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "J54", "( Pimkel )")
+	styleMergedRange(f, sheet, "F57", "I57", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "F57", "Daniel Harry Hasudungan Simbolon")
 
-	// Date Rows (Row 55)
-	styleMergedRange(f, sheet, "B55", "E55", st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "B55", "DATE: ")
+	styleMergedRange(f, sheet, "J57", "L57", st.BoldCenterStyle)
+	_ = f.SetCellValue(sheet, "J57", "Machfud Yohan Muchori")
 
-	styleMergedRange(f, sheet, "F55", "I55", st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "F55", "DATE: ")
+	// Date Rows (Row 58)
+	styleMergedRange(f, sheet, "B58", "E58", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "B58", "DATE: ")
 
-	styleMergedRange(f, sheet, "J55", "L55", st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "J55", "DATE: ")
+	styleMergedRange(f, sheet, "F58", "I58", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "F58", "DATE: ")
+
+	styleMergedRange(f, sheet, "J58", "L58", st.DataLeftStyle)
+	_ = f.SetCellValue(sheet, "J58", "DATE: ")
+
+	// Set row heights for visual balance
+	_ = f.SetRowHeight(sheet, 53, 20)
+	_ = f.SetRowHeight(sheet, 54, 16)
+	_ = f.SetRowHeight(sheet, 55, 16)
+	_ = f.SetRowHeight(sheet, 56, 18)
+	_ = f.SetRowHeight(sheet, 57, 22)
+	_ = f.SetRowHeight(sheet, 58, 18)
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {
