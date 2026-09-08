@@ -1,6 +1,8 @@
 package services
 
 import (
+	"bytes"
+	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"strings"
@@ -208,6 +210,21 @@ func addHeaderLogo(f *excelize.File, sheet, cell string, imgData []byte, ext str
 			ScaleY: scaleY,
 		},
 	})
+}
+
+// addHeaderLogoWithCM attaches a logo image at the given cell location sized to the given width and height in centimeters.
+func addHeaderLogoWithCM(f *excelize.File, sheet, cell string, imgData []byte, ext string, widthCM, heightCM float64) error {
+	if len(imgData) == 0 {
+		return nil
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(imgData))
+	if err != nil || cfg.Width == 0 || cfg.Height == 0 {
+		return addHeaderLogo(f, sheet, cell, imgData, ext, 0.545, 0.522)
+	}
+	pxPerCM := 96.0 / 2.54
+	scaleX := widthCM / (float64(cfg.Width) / pxPerCM)
+	scaleY := heightCM / (float64(cfg.Height) / pxPerCM)
+	return addHeaderLogo(f, sheet, cell, imgData, ext, scaleX, scaleY)
 }
 
 func strPtr(s string) *string {

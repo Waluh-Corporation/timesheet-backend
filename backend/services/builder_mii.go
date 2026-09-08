@@ -34,9 +34,9 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetColWidth(sheet, col, col, w)
 	}
 
-	// 2. Attach Header Logo (K1 - top right header)
+	// 2. Attach Header Logo (K1 - top right header: 2.5 cm height x 3.52 cm width)
 	if len(assets.MIILogo) > 0 {
-		_ = addHeaderLogo(f, sheet, "K1", assets.MIILogo, ".png", 0.7, 0.7)
+		_ = addHeaderLogoWithCM(f, sheet, "K1", assets.MIILogo, ".png", 3.52, 2.5)
 	}
 
 	// 3. Metadata Header (Rows 1-6)
