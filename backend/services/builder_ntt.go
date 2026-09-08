@@ -172,7 +172,6 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheet, "M"+rs, projCode)
 			_ = f.SetCellValue(sheet, "N"+rs, act.AppImpacted)
 		} else if isWeekend || holiday != "" {
-			status = "X"
 			if holiday != "" {
 				_ = f.SetCellValue(sheet, "K"+rs, holiday)
 			} else {

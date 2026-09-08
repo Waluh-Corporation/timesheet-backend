@@ -54,9 +54,10 @@ func seedDefaultTemplate(db *gorm.DB) error {
 		{Code: "ntt", Name: "PT NTT Data Indonesia"},
 	}
 	for _, c := range companies {
-		var existing models.Company
-		if err := db.Where("code = ?", c.Code).First(&existing).Error; err != nil {
-			_ = db.Create(&c)
+		var cnt int64
+		_ = db.Model(&models.Company{}).Where("code = ?", c.Code).Count(&cnt).Error
+		if cnt == 0 {
+			_ = db.Create(&c).Error
 		}
 	}
 
@@ -71,7 +72,7 @@ func seedDefaultTemplate(db *gorm.DB) error {
 	// Helper to find company ID
 	findCompanyID := func(code string) *uint {
 		var comp models.Company
-		if err := db.Where("code = ?", code).First(&comp).Error; err == nil {
+		if err := db.Where("code = ?", code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
 			return &comp.ID
 		}
 		return nil

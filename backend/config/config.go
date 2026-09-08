@@ -110,8 +110,35 @@ func parseOrigins(v string) []string {
 	return origins
 }
 
+func loadDotEnv(filenames ...string) {
+	for _, fn := range filenames {
+		data, err := os.ReadFile(fn)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				k := strings.TrimSpace(parts[0])
+				v := strings.TrimSpace(parts[1])
+				v = strings.Trim(v, `"'`)
+				if _, exists := os.LookupEnv(k); !exists {
+					_ = os.Setenv(k, v)
+				}
+			}
+		}
+	}
+}
+
 // Load reads configuration from the environment.
 func Load() *Config {
+	loadDotEnv(".env", "../.env")
+
 	cfg := &Config{
 		Port:        getEnv("PORT", "8080"),
 		DatabaseURL: getEnv("DATABASE_URL", "host=localhost user=timesheet password=timesheet dbname=timesheet port=5432 sslmode=disable TimeZone=Asia/Jakarta"),

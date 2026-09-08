@@ -165,7 +165,6 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheetTS, "M"+rs, act.ProjectID)
 			_ = f.SetCellValue(sheetTS, "N"+rs, act.AppImpacted)
 		} else if isWeekend || holiday != "" {
-			status = "X"
 			if holiday != "" {
 				_ = f.SetCellValue(sheetTS, "K"+rs, holiday)
 			} else {

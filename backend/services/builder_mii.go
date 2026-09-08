@@ -194,7 +194,6 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheet, "P"+rs, miiDivision)
 			_ = f.SetCellValue(sheet, "Q"+rs, miiDepartment)
 		} else if isWeekend || holiday != "" {
-			status = "X"
 			if holiday != "" {
 				_ = f.SetCellValue(sheet, "K"+rs, holiday)
 			} else {

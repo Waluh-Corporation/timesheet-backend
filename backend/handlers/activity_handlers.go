@@ -166,10 +166,15 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 
 	filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitize(user.Username), req.Month, req.Year)
 
+	companyName := tmpl.Company
+	if companyName == "" {
+		companyName = user.Company
+	}
+
 	// Email a copy asynchronously so the download isn't blocked on SMTP.
-	go func(to, fn string, data []byte) {
-		_ = s.Mailer.SendTimesheetEmail(to, fn, data)
-	}(user.Email, filename, out)
+	go func(to, comp, fn string, data []byte) {
+		_ = s.Mailer.SendTimesheetEmail(to, comp, fn, data)
+	}(user.Email, companyName, filename, out)
 
 	c.Header("Content-Disposition", "attachment; filename="+filename)
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)

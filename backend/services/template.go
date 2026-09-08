@@ -407,7 +407,6 @@ func generateMII(in GenerationInput) ([]byte, error) {
 			setStr("Q"+rs, miiDepartment)
 			setStr("R"+rs, "") // Sub Departement (blank)
 		} else if isWeekend || holiday != "" {
-			status = "X"
 			if holiday != "" {
 				setStr("K"+rs, holiday)
 			} else {
@@ -534,7 +533,6 @@ func generateBNI(in GenerationInput) ([]byte, error) {
 				setStr("P"+rs, in.User.Division)
 			}
 		} else if isWeekend || holiday != "" {
-			status = "X"
 			if holiday != "" {
 				setStr("K"+rs, holiday)
 			} else {
