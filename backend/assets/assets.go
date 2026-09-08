@@ -24,3 +24,6 @@ var SDDLogo []byte
 
 //go:embed images/adidata_logo.png
 var AdidataLogo []byte
+
+//go:embed images/ntt_logo.png
+var NTTLogo []byte

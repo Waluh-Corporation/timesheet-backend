@@ -258,3 +258,77 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 		t.Errorf("SPL H12 = %q, want 'WIT BNIdirect bisnis - SME FINANCING'", valTask)
 	}
 }
+
+func TestBuildNTTWorkbook(t *testing.T) {
+	user := &models.User{
+		Name:       "Dewi Lestari",
+		Division:   "Wholesale Digital Delivery",
+		EmployeeID: "NTT-777",
+	}
+
+	act := models.DailyActivity{
+		Date:        time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+		StartTime:   "08:00",
+		EndTime:     "17:00",
+		Status:      "P",
+		Activity:    "Sprint Planning",
+		ProjectName: "BNI Direct",
+		ProjectID:   "P24015",
+		AppImpacted: "Cash",
+	}
+
+	in := GenerationInput{
+		Template:   &models.Template{Builtin: "ntt"},
+		User:       user,
+		Month:      9,
+		Year:       2026,
+		Activities: []models.DailyActivity{act},
+		Holidays:   map[int]string{},
+	}
+
+	out, err := GenerateFromTemplate(in)
+	if err != nil {
+		t.Fatalf("GenerateFromTemplate(ntt): %v", err)
+	}
+
+	f, err := excelize.OpenReader(bytes.NewReader(out))
+	if err != nil {
+		t.Fatalf("Open output workbook: %v", err)
+	}
+	defer f.Close()
+
+	const sheet = "Timesheet"
+
+	// Validate metadata
+	valB4, _ := f.GetCellValue(sheet, "B4")
+	if valB4 != ": BNIdirect" {
+		t.Errorf("B4 = %q, want ': BNIdirect'", valB4)
+	}
+	valB6, _ := f.GetCellValue(sheet, "B6")
+	if valB6 != ": Dewi Lestari" {
+		t.Errorf("B6 = %q, want ': Dewi Lestari'", valB6)
+	}
+	valB7, _ := f.GetCellValue(sheet, "B7")
+	if valB7 != ": NTT-777" {
+		t.Errorf("B7 = %q, want ': NTT-777'", valB7)
+	}
+
+	// Validate Day 1 (Row 11)
+	valE11, _ := f.GetCellValue(sheet, "E11")
+	if valE11 != "P" {
+		t.Errorf("E11 = %q, want 'P'", valE11)
+	}
+
+	// Validate NTT Formula: IF(C11>B11,(C11-B11),C11-B11+1)
+	formulaD11, _ := f.GetCellFormula(sheet, "D11")
+	if formulaD11 != "IF(C11>B11,(C11-B11),C11-B11+1)" {
+		t.Errorf("D11 formula = %q, want 'IF(C11>B11,(C11-B11),C11-B11+1)'", formulaD11)
+	}
+
+	// Validate COUNTA formula in Row 42
+	formulaE42, _ := f.GetCellFormula(sheet, "E42")
+	if formulaE42 != `COUNTA(E11:E41)` {
+		t.Errorf("E42 formula = %q, want 'COUNTA(E11:E41)'", formulaE42)
+	}
+}
+

@@ -51,6 +51,7 @@ func seedDefaultTemplate(db *gorm.DB) error {
 		{Code: "mii", Name: "PT Mitra Integrasi Informatika"},
 		{Code: "sdd", Name: "PT Swadharma Duta Data"},
 		{Code: "adidata", Name: "PT Adidata Informatics"},
+		{Code: "ntt", Name: "PT NTT Data Indonesia"},
 	}
 	for _, c := range companies {
 		var existing models.Company
@@ -114,6 +115,19 @@ func seedDefaultTemplate(db *gorm.DB) error {
 	}
 	_ = db.Create(&adidata)
 	log.Printf("[database] seeded template '%s' (builtin adidata)", adidata.Name)
+
+	// 4. NTT timesheet — pure programmatic builder.
+	ntt := models.Template{
+		Name:        "NTT Timesheet",
+		Description: "Built-in NTT timesheet template (pure programmatic builder with N2 header logo).",
+		SheetName:   "Timesheet",
+		Company:     "NTT",
+		CompanyID:   findCompanyID("ntt"),
+		IsDefault:   false,
+		Builtin:     "ntt",
+	}
+	_ = db.Create(&ntt)
+	log.Printf("[database] seeded template '%s' (builtin ntt)", ntt.Name)
 
 	// 4. BNI DEV timesheet
 	if len(assets.BNITemplate) > 0 {

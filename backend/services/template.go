@@ -161,6 +161,8 @@ func GenerateFromTemplate(in GenerationInput) ([]byte, error) {
 		return buildSDDWorkbook(in)
 	case "adidata":
 		return buildAdidataWorkbook(in)
+	case "ntt":
+		return buildNTTWorkbook(in)
 	case "bni_dev":
 		return generateBNI(in)
 	}
