@@ -119,9 +119,10 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"} {
 			_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
 		}
-		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, st.DataLeftStyle)
+		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
 
 		if day > daysInMonth {
+			_ = f.SetRowHeight(sheet, row, 15)
 			continue
 		}
 
@@ -171,12 +172,16 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheet, "L"+rs, projName)
 			_ = f.SetCellValue(sheet, "M"+rs, projCode)
 			_ = f.SetCellValue(sheet, "N"+rs, act.AppImpacted)
+
+			h := calculateRowHeight(act.Activity, projName, projCode, act.AppImpacted, "", "")
+			_ = f.SetRowHeight(sheet, row, h)
 		} else if isWeekend || holiday != "" {
 			if holiday != "" {
 				_ = f.SetCellValue(sheet, "K"+rs, holiday)
 			} else {
 				_ = f.SetCellValue(sheet, "K"+rs, "Weekend")
 			}
+			_ = f.SetRowHeight(sheet, row, 15)
 		}
 
 		for _, col := range matrixCols {

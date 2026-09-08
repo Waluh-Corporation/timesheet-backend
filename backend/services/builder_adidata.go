@@ -120,9 +120,10 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"} {
 			_ = f.SetCellStyle(sheetTS, col+rs, col+rs, st.DataCenterStyle)
 		}
-		_ = f.SetCellStyle(sheetTS, "K"+rs, "K"+rs, st.DataLeftStyle)
+		_ = f.SetCellStyle(sheetTS, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
 
 		if day > daysInMonth {
+			_ = f.SetRowHeight(sheetTS, row, 15)
 			continue
 		}
 
@@ -164,12 +165,16 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheetTS, "L"+rs, act.ProjectName)
 			_ = f.SetCellValue(sheetTS, "M"+rs, act.ProjectID)
 			_ = f.SetCellValue(sheetTS, "N"+rs, act.AppImpacted)
+
+			h := calculateRowHeight(act.Activity, act.ProjectName, act.ProjectID, act.AppImpacted, "", "")
+			_ = f.SetRowHeight(sheetTS, row, h)
 		} else if isWeekend || holiday != "" {
 			if holiday != "" {
 				_ = f.SetCellValue(sheetTS, "K"+rs, holiday)
 			} else {
 				_ = f.SetCellValue(sheetTS, "K"+rs, "Weekend")
 			}
+			_ = f.SetRowHeight(sheetTS, row, 15)
 		}
 
 		for _, col := range matrixCols {
@@ -322,7 +327,7 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 
 		_ = f.MergeCell(splSheet, "H12", "O12")
 		_ = f.SetCellValue(splSheet, "H12", ot.TaskDescription)
-		_ = f.SetCellStyle(splSheet, "H12", "O12", st.DataLeftStyle)
+		_ = f.SetCellStyle(splSheet, "H12", "O12", st.DataCenterWrapStyle)
 
 		// Signatures (Row 21-22)
 		_ = f.MergeCell(splSheet, "C21", "E21")

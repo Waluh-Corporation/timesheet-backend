@@ -144,12 +144,13 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"} {
 			_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
 		}
-		_ = f.SetCellStyle(sheet, "N"+rs, "N"+rs, st.DataLeftStyle)
+		_ = f.SetCellStyle(sheet, "N"+rs, "N"+rs, st.DataCenterWrapStyle)
 
 		_ = f.SetCellValue(sheet, "A"+rs, day)
 
 		if day > daysInMonth {
 			// Days beyond month length are left blank with borders
+			_ = f.SetRowHeight(sheet, row, 15)
 			continue
 		}
 
@@ -201,12 +202,16 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheet, "K"+rs, act.ProjectName)
 			_ = f.SetCellValue(sheet, "L"+rs, act.ProjectID)
 			_ = f.SetCellValue(sheet, "N"+rs, act.Activity)
+
+			h := calculateRowHeight(act.Activity, act.ProjectName, act.ProjectID, "", "", "")
+			_ = f.SetRowHeight(sheet, row, h)
 		} else if isWeekend || holiday != "" {
 			if holiday != "" {
 				_ = f.SetCellValue(sheet, "N"+rs, holiday)
 			} else {
 				_ = f.SetCellValue(sheet, "N"+rs, "Weekend")
 			}
+			_ = f.SetRowHeight(sheet, row, 15)
 		}
 	}
 

@@ -146,10 +146,12 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"} {
 			_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
 		}
-		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, st.DataLeftStyle)
+		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
+		_ = f.SetCellStyle(sheet, "Q"+rs, "Q"+rs, st.DataCenterWrapStyle)
 
 		if day > daysInMonth {
 			// Days beyond month length are left blank with border intact
+			_ = f.SetRowHeight(sheet, row, 15)
 			continue
 		}
 
@@ -193,12 +195,16 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheet, "N"+rs, NormalizeMIIAppImpacted(act.AppImpacted))
 			_ = f.SetCellValue(sheet, "P"+rs, miiDivision)
 			_ = f.SetCellValue(sheet, "Q"+rs, miiDepartment)
+
+			h := calculateRowHeight(act.Activity, miiProjectName, miiProjectID, act.AppImpacted, miiDivision, miiDepartment)
+			_ = f.SetRowHeight(sheet, row, h)
 		} else if isWeekend || holiday != "" {
 			if holiday != "" {
 				_ = f.SetCellValue(sheet, "K"+rs, holiday)
 			} else {
 				_ = f.SetCellValue(sheet, "K"+rs, "Weekend")
 			}
+			_ = f.SetRowHeight(sheet, row, 15)
 		}
 
 		// Clear matrix row before marking

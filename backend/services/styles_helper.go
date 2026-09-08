@@ -12,15 +12,16 @@ import (
 type BuilderStyles struct {
 	HeaderStyle     int
 	HeaderGreyStyle int
-	DataCenterStyle int
-	DataLeftStyle   int
-	DateStyle       int
-	TimeStyle       int
-	DecimalStyle    int
-	BoldCenterStyle int
-	BoldLeftStyle   int
-	MetaLabelStyle  int
-	MetaValueStyle  int
+	DataCenterStyle     int
+	DataCenterWrapStyle int
+	DataLeftStyle       int
+	DateStyle           int
+	TimeStyle           int
+	DecimalStyle        int
+	BoldCenterStyle     int
+	BoldLeftStyle       int
+	MetaLabelStyle      int
+	MetaValueStyle      int
 }
 
 // NewBuilderStyles registers reusable Excel styles on the workbook.
@@ -52,6 +53,12 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 	dataCenterStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Size: 9, Family: "Calibri"},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border:    thinBorder,
+	})
+
+	dataCenterWrapStyle, _ := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 9, Family: "Calibri"},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
 		Border:    thinBorder,
 	})
 
@@ -101,21 +108,22 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 
 	metaValueStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Size: 10, Family: "Calibri"},
-		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center", WrapText: true},
 	})
 
 	return &BuilderStyles{
-		HeaderStyle:     headerStyle,
-		HeaderGreyStyle: headerGreyStyle,
-		DataCenterStyle: dataCenterStyle,
-		DataLeftStyle:   dataLeftStyle,
-		DateStyle:       dateStyle,
-		TimeStyle:       timeStyle,
-		DecimalStyle:    decimalStyle,
-		BoldCenterStyle: boldCenterStyle,
-		BoldLeftStyle:   boldLeftStyle,
-		MetaLabelStyle:  metaLabelStyle,
-		MetaValueStyle:  metaValueStyle,
+		HeaderStyle:         headerStyle,
+		HeaderGreyStyle:     headerGreyStyle,
+		DataCenterStyle:     dataCenterStyle,
+		DataCenterWrapStyle: dataCenterWrapStyle,
+		DataLeftStyle:       dataLeftStyle,
+		DateStyle:           dateStyle,
+		TimeStyle:           timeStyle,
+		DecimalStyle:        decimalStyle,
+		BoldCenterStyle:     boldCenterStyle,
+		BoldLeftStyle:       boldLeftStyle,
+		MetaLabelStyle:      metaLabelStyle,
+		MetaValueStyle:      metaValueStyle,
 	}, nil
 }
 
