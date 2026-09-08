@@ -4,12 +4,6 @@ package assets
 
 import _ "embed"
 
-// BNITemplate is the raw .xlsx bytes of the built-in "BNI DEV Timesheet"
-// template (the second-company layout), seeded as a non-default template.
-//
-//go:embed bni_dev_timesheet_template.xlsx
-var BNITemplate []byte
-
 // MIITemplate is the raw .xlsx bytes of the built-in "MII Timesheet" template,
 // seeded as the default template on first boot.
 //

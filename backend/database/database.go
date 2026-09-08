@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"timesheet-backend/assets"
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
 	"timesheet-backend/models"
@@ -37,14 +36,8 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// seedDefaultTemplate installs the two bundled company templates on first boot
-// (when no template exists yet): the MII timesheet as the default, and the
-// BNI DEV timesheet as a second, non-default template. Each ships with a
-// representative cell mapping so the admin builder reflects its structure;
-// generation for both uses a dedicated strict-typed path keyed off
-// Template.Builtin.
 // seedDefaultTemplate installs the bundled company templates on first boot
-// (when no template exists yet): MII, SDD, Adidata, and BNI DEV.
+// (when no template exists yet): MII, SDD, Adidata, and NTT.
 func seedDefaultTemplate(db *gorm.DB) error {
 	// Seed companies first
 	companies := []models.Company{
@@ -130,20 +123,6 @@ func seedDefaultTemplate(db *gorm.DB) error {
 	_ = db.Create(&ntt)
 	log.Printf("[database] seeded template '%s' (builtin ntt)", ntt.Name)
 
-	// 4. BNI DEV timesheet
-	if len(assets.BNITemplate) > 0 {
-		bni := models.Template{
-			Name:        "BNI DEV Timesheet",
-			Description: "Built-in BNI DEV timesheet template (strict date/time typing + status matrix).",
-			SheetName:   "Sheet1",
-			FileData:    assets.BNITemplate,
-			Company:     "BNI",
-			IsDefault:   false,
-			Builtin:     "bni_dev",
-		}
-		_ = db.Create(&bni)
-		log.Printf("[database] seeded template '%s' (builtin bni_dev)", bni.Name)
-	}
 	return nil
 }
 
