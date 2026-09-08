@@ -117,23 +117,42 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 		row := firstRow + (day - 1)
 		rs := fmt.Sprintf("%d", row)
 
-		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"} {
-			_ = f.SetCellStyle(sheetTS, col+rs, col+rs, st.DataCenterStyle)
-		}
-		_ = f.SetCellStyle(sheetTS, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
-
 		if day > daysInMonth {
+			for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"} {
+				_ = f.SetCellStyle(sheetTS, col+rs, col+rs, st.DataCenterStyle)
+			}
+			_ = f.SetCellStyle(sheetTS, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
 			_ = f.SetRowHeight(sheetTS, row, 15)
 			continue
 		}
 
 		date := time.Date(in.Year, time.Month(in.Month), day, 0, 0, 0, 0, time.UTC)
-		_ = f.SetCellValue(sheetTS, "A"+rs, date)
-		_ = f.SetCellStyle(sheetTS, "A"+rs, "A"+rs, st.DateStyle)
-
 		isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
 		holiday := in.Holidays[day]
 		act, hasAct := byDay[day]
+
+		isHolidayOrWeekend := isWeekend || holiday != ""
+
+		centerStyle := st.DataCenterStyle
+		centerWrapStyle := st.DataCenterWrapStyle
+		dateStyle := st.DateStyle
+		timeStyle := st.TimeStyle
+		decimalStyle := st.DecimalStyle
+		if isHolidayOrWeekend {
+			centerStyle = st.GreyCenterStyle
+			centerWrapStyle = st.GreyCenterWrapStyle
+			dateStyle = st.GreyDateStyle
+			timeStyle = st.GreyTimeStyle
+			decimalStyle = st.GreyDecimalStyle
+		}
+
+		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"} {
+			_ = f.SetCellStyle(sheetTS, col+rs, col+rs, centerStyle)
+		}
+		_ = f.SetCellStyle(sheetTS, "K"+rs, "K"+rs, centerWrapStyle)
+
+		_ = f.SetCellValue(sheetTS, "A"+rs, date)
+		_ = f.SetCellStyle(sheetTS, "A"+rs, "A"+rs, dateStyle)
 
 		status := ""
 		if hasAct {
@@ -143,14 +162,14 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 			if act.StartTime != "" {
 				if frac, ferr := parseTimeToExcelFraction(act.StartTime); ferr == nil {
 					_ = f.SetCellValue(sheetTS, "B"+rs, frac)
-					_ = f.SetCellStyle(sheetTS, "B"+rs, "B"+rs, st.TimeStyle)
+					_ = f.SetCellStyle(sheetTS, "B"+rs, "B"+rs, timeStyle)
 					hasStart = true
 				}
 			}
 			if act.EndTime != "" {
 				if frac, ferr := parseTimeToExcelFraction(act.EndTime); ferr == nil {
 					_ = f.SetCellValue(sheetTS, "C"+rs, frac)
-					_ = f.SetCellStyle(sheetTS, "C"+rs, "C"+rs, st.TimeStyle)
+					_ = f.SetCellStyle(sheetTS, "C"+rs, "C"+rs, timeStyle)
 					hasEnd = true
 				}
 			}
@@ -158,7 +177,7 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 			// Formula Adidata: Total hour = (C - B) * 24 (Decimal formatted as 0.00)
 			if hasStart && hasEnd {
 				_ = f.SetCellFormula(sheetTS, "D"+rs, fmt.Sprintf("(C%s-B%s)*24", rs, rs))
-				_ = f.SetCellStyle(sheetTS, "D"+rs, "D"+rs, st.DecimalStyle)
+				_ = f.SetCellStyle(sheetTS, "D"+rs, "D"+rs, decimalStyle)
 			}
 
 			_ = f.SetCellValue(sheetTS, "K"+rs, act.Activity)
@@ -168,7 +187,7 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 
 			h := calculateRowHeight(act.Activity, act.ProjectName, act.ProjectID, act.AppImpacted, "", "")
 			_ = f.SetRowHeight(sheetTS, row, h)
-		} else if isWeekend || holiday != "" {
+		} else if isHolidayOrWeekend {
 			if holiday != "" {
 				_ = f.SetCellValue(sheetTS, "K"+rs, holiday)
 			} else {

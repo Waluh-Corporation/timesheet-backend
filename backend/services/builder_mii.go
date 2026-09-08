@@ -78,7 +78,10 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	setMeta("A4", "MII ID", "C4", ": "+empID)
 
 	_ = f.MergeCell(sheet, "A5", "B5")
+	_ = f.MergeCell(sheet, "C5", "F5")
 	setMeta("A5", "SITE", "C5", ": "+site)
+
+	_ = f.SetCellStyle(sheet, "G5", "G5", st.HolidayLegendStyle)
 
 	_ = f.MergeCell(sheet, "H5", "I5")
 	_ = f.SetCellValue(sheet, "H5", ": Holiday")
@@ -142,26 +145,44 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		row := firstRow + (day - 1)
 		rs := fmt.Sprintf("%d", row)
 
-		// Border initialization across all columns
-		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"} {
-			_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
-		}
-		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
-		_ = f.SetCellStyle(sheet, "Q"+rs, "Q"+rs, st.DataCenterWrapStyle)
-
 		if day > daysInMonth {
 			// Days beyond month length are left blank with border intact
+			for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"} {
+				_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
+			}
+			_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
+			_ = f.SetCellStyle(sheet, "Q"+rs, "Q"+rs, st.DataCenterWrapStyle)
 			_ = f.SetRowHeight(sheet, row, 15)
 			continue
 		}
 
 		date := time.Date(in.Year, time.Month(in.Month), day, 0, 0, 0, 0, time.UTC)
-		_ = f.SetCellValue(sheet, "A"+rs, date)
-		_ = f.SetCellStyle(sheet, "A"+rs, "A"+rs, st.DateStyle)
-
 		isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
 		holiday := in.Holidays[day]
 		act, hasAct := byDay[day]
+
+		isHolidayOrWeekend := isWeekend || holiday != ""
+
+		centerStyle := st.DataCenterStyle
+		centerWrapStyle := st.DataCenterWrapStyle
+		dateStyle := st.DateStyle
+		timeStyle := st.TimeStyle
+		if isHolidayOrWeekend {
+			centerStyle = st.GreyCenterStyle
+			centerWrapStyle = st.GreyCenterWrapStyle
+			dateStyle = st.GreyDateStyle
+			timeStyle = st.GreyTimeStyle
+		}
+
+		// Border & background initialization across all columns
+		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"} {
+			_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
+		}
+		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, centerWrapStyle)
+		_ = f.SetCellStyle(sheet, "Q"+rs, "Q"+rs, centerWrapStyle)
+
+		_ = f.SetCellValue(sheet, "A"+rs, date)
+		_ = f.SetCellStyle(sheet, "A"+rs, "A"+rs, dateStyle)
 
 		status := ""
 		if hasAct {
@@ -171,14 +192,14 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 			if act.StartTime != "" {
 				if frac, ferr := parseTimeToExcelFraction(act.StartTime); ferr == nil {
 					_ = f.SetCellValue(sheet, "B"+rs, frac)
-					_ = f.SetCellStyle(sheet, "B"+rs, "B"+rs, st.TimeStyle)
+					_ = f.SetCellStyle(sheet, "B"+rs, "B"+rs, timeStyle)
 					hasStart = true
 				}
 			}
 			if act.EndTime != "" {
 				if frac, ferr := parseTimeToExcelFraction(act.EndTime); ferr == nil {
 					_ = f.SetCellValue(sheet, "C"+rs, frac)
-					_ = f.SetCellStyle(sheet, "C"+rs, "C"+rs, st.TimeStyle)
+					_ = f.SetCellStyle(sheet, "C"+rs, "C"+rs, timeStyle)
 					hasEnd = true
 				}
 			}
@@ -186,7 +207,7 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 			// Formula total hour = C - B
 			if hasStart && hasEnd {
 				_ = f.SetCellFormula(sheet, "D"+rs, fmt.Sprintf("C%s-B%s", rs, rs))
-				_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, st.TimeStyle)
+				_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, timeStyle)
 			}
 
 			_ = f.SetCellValue(sheet, "K"+rs, act.Activity)
@@ -198,7 +219,7 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 
 			h := calculateRowHeight(act.Activity, miiProjectName, miiProjectID, act.AppImpacted, miiDivision, miiDepartment)
 			_ = f.SetRowHeight(sheet, row, h)
-		} else if isWeekend || holiday != "" {
+		} else if isHolidayOrWeekend {
 			if holiday != "" {
 				_ = f.SetCellValue(sheet, "K"+rs, holiday)
 			} else {

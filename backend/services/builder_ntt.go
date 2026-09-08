@@ -116,23 +116,40 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 		row := firstRow + (day - 1)
 		rs := fmt.Sprintf("%d", row)
 
-		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"} {
-			_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
-		}
-		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
-
 		if day > daysInMonth {
+			for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"} {
+				_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
+			}
+			_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
 			_ = f.SetRowHeight(sheet, row, 15)
 			continue
 		}
 
 		date := time.Date(in.Year, time.Month(in.Month), day, 0, 0, 0, 0, time.UTC)
-		_ = f.SetCellValue(sheet, "A"+rs, date)
-		_ = f.SetCellStyle(sheet, "A"+rs, "A"+rs, st.DateStyle)
-
 		isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
 		holiday := in.Holidays[day]
 		act, hasAct := byDay[day]
+
+		isHolidayOrWeekend := isWeekend || holiday != ""
+
+		centerStyle := st.DataCenterStyle
+		centerWrapStyle := st.DataCenterWrapStyle
+		dateStyle := st.DateStyle
+		timeStyle := st.TimeStyle
+		if isHolidayOrWeekend {
+			centerStyle = st.GreyCenterStyle
+			centerWrapStyle = st.GreyCenterWrapStyle
+			dateStyle = st.GreyDateStyle
+			timeStyle = st.GreyTimeStyle
+		}
+
+		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"} {
+			_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
+		}
+		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, centerWrapStyle)
+
+		_ = f.SetCellValue(sheet, "A"+rs, date)
+		_ = f.SetCellStyle(sheet, "A"+rs, "A"+rs, dateStyle)
 
 		status := ""
 		if hasAct {
@@ -142,14 +159,14 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 			if act.StartTime != "" {
 				if frac, ferr := parseTimeToExcelFraction(act.StartTime); ferr == nil {
 					_ = f.SetCellValue(sheet, "B"+rs, frac)
-					_ = f.SetCellStyle(sheet, "B"+rs, "B"+rs, st.TimeStyle)
+					_ = f.SetCellStyle(sheet, "B"+rs, "B"+rs, timeStyle)
 					hasStart = true
 				}
 			}
 			if act.EndTime != "" {
 				if frac, ferr := parseTimeToExcelFraction(act.EndTime); ferr == nil {
 					_ = f.SetCellValue(sheet, "C"+rs, frac)
-					_ = f.SetCellStyle(sheet, "C"+rs, "C"+rs, st.TimeStyle)
+					_ = f.SetCellStyle(sheet, "C"+rs, "C"+rs, timeStyle)
 					hasEnd = true
 				}
 			}
@@ -157,7 +174,7 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 			// Formula NTT: IF(C11>B11,(C11-B11),C11-B11+1)
 			if hasStart && hasEnd {
 				_ = f.SetCellFormula(sheet, "D"+rs, fmt.Sprintf("IF(C%s>B%s,(C%s-B%s),C%s-B%s+1)", rs, rs, rs, rs, rs, rs))
-				_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, st.TimeStyle)
+				_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, timeStyle)
 			}
 
 			_ = f.SetCellValue(sheet, "K"+rs, act.Activity)
@@ -175,7 +192,7 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 
 			h := calculateRowHeight(act.Activity, projName, projCode, act.AppImpacted, "", "")
 			_ = f.SetRowHeight(sheet, row, h)
-		} else if isWeekend || holiday != "" {
+		} else if isHolidayOrWeekend {
 			if holiday != "" {
 				_ = f.SetCellValue(sheet, "K"+rs, holiday)
 			} else {
