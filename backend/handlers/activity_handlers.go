@@ -134,6 +134,9 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	var activities []models.DailyActivity
 	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).Find(&activities)
 
+	var overtimes []models.OvertimeEntry
+	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).Order("date asc").Find(&overtimes)
+
 	// Fetch public holidays for the month so weekends/holidays are reflected in
 	// the generated sheet (best-effort; generation still proceeds on failure).
 	holidays := map[int]string{}
@@ -153,6 +156,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		Month:      req.Month,
 		Year:       req.Year,
 		Activities: activities,
+		Overtimes:  overtimes,
 		Holidays:   holidays,
 	})
 	if err != nil {
@@ -205,3 +209,80 @@ func sanitize(s string) string {
 	}
 	return string(out)
 }
+
+// OvertimeRequest carries data to create/update an overtime entry.
+type OvertimeRequest struct {
+	ID              uint   `json:"id"`
+	Date            string `json:"date" binding:"required"` // YYYY-MM-DD
+	StartTime       string `json:"start_time" binding:"required"`
+	EndTime         string `json:"end_time" binding:"required"`
+	TaskDescription string `json:"task_description" binding:"required"`
+	TeamLeader      string `json:"team_leader"`
+	DepartmentHead  string `json:"department_head"`
+}
+
+// UpsertOvertime creates or updates an overtime entry for the authenticated user.
+func (s *Server) UpsertOvertime(c *gin.Context) {
+	var req OvertimeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	date, err := time.ParseInLocation("2006-01-02", req.Date, jakarta())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, expected YYYY-MM-DD"})
+		return
+	}
+
+	entry := models.OvertimeEntry{
+		ID:              req.ID,
+		UserID:          currentUserID(c),
+		Date:            date,
+		StartTime:       req.StartTime,
+		EndTime:         req.EndTime,
+		TaskDescription: req.TaskDescription,
+		TeamLeader:      req.TeamLeader,
+		DepartmentHead:  req.DepartmentHead,
+	}
+
+	if entry.ID != 0 {
+		if err := s.DB.Where("id = ? AND user_id = ?", entry.ID, entry.UserID).Updates(&entry).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	} else {
+		if err := s.DB.Create(&entry).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	c.JSON(http.StatusOK, entry)
+}
+
+// ListMonthlyOvertimes returns the current user's overtime records for a month.
+func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
+	year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
+	month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
+
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
+	end := start.AddDate(0, 1, 0)
+
+	var overtimes []models.OvertimeEntry
+	if err := s.DB.Where("user_id = ? AND date >= ? AND date < ?", currentUserID(c), start, end).
+		Order("date asc").Find(&overtimes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, overtimes)
+}
+
+// DeleteOvertime deletes an overtime entry by ID.
+func (s *Server) DeleteOvertime(c *gin.Context) {
+	id := c.Param("id")
+	if err := s.DB.Where("id = ? AND user_id = ?", id, currentUserID(c)).Delete(&models.OvertimeEntry{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+

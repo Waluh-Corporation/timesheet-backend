@@ -143,6 +143,7 @@ type GenerationInput struct {
 	Month      int
 	Year       int
 	Activities []models.DailyActivity
+	Overtimes  []models.OvertimeEntry
 	// Holidays maps day-of-month to a public-holiday name for the month.
 	Holidays map[int]string
 }
@@ -152,10 +153,14 @@ type GenerationInput struct {
 // beyond the month's length are cleared so client templates that ship with a
 // fixed 31-row block are trimmed to the correct length.
 func GenerateFromTemplate(in GenerationInput) ([]byte, error) {
-	// Built-in templates with a fixed layout use a dedicated strict-typed path.
+	// Built-in templates use dedicated programmatic builders.
 	switch in.Template.Builtin {
 	case "mii":
-		return generateMII(in)
+		return buildMIIWorkbook(in)
+	case "sdd":
+		return buildSDDWorkbook(in)
+	case "adidata":
+		return buildAdidataWorkbook(in)
 	case "bni_dev":
 		return generateBNI(in)
 	}

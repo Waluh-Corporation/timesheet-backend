@@ -107,6 +107,9 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		// Daily activity entry + monthly view + generation.
 		authed.POST("/activities", s.UpsertDailyActivity)
 		authed.GET("/activities", s.ListMonthlyActivities)
+		authed.POST("/overtimes", s.UpsertOvertime)
+		authed.GET("/overtimes", s.ListMonthlyOvertimes)
+		authed.DELETE("/overtimes/:id", s.DeleteOvertime)
 		authed.POST("/timesheet/generate", s.GenerateTimesheet)
 		authed.GET("/holidays", s.GetHolidays)
 

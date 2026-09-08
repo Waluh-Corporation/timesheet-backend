@@ -43,7 +43,22 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 // representative cell mapping so the admin builder reflects its structure;
 // generation for both uses a dedicated strict-typed path keyed off
 // Template.Builtin.
+// seedDefaultTemplate installs the bundled company templates on first boot
+// (when no template exists yet): MII, SDD, Adidata, and BNI DEV.
 func seedDefaultTemplate(db *gorm.DB) error {
+	// Seed companies first
+	companies := []models.Company{
+		{Code: "mii", Name: "PT Mitra Integrasi Informatika"},
+		{Code: "sdd", Name: "PT Swadharma Duta Data"},
+		{Code: "adidata", Name: "PT Adidata Informatics"},
+	}
+	for _, c := range companies {
+		var existing models.Company
+		if err := db.Where("code = ?", c.Code).First(&existing).Error; err != nil {
+			_ = db.Create(&c)
+		}
+	}
+
 	var count int64
 	if err := db.Model(&models.Template{}).Count(&count).Error; err != nil {
 		return err
@@ -52,74 +67,66 @@ func seedDefaultTemplate(db *gorm.DB) error {
 		return nil
 	}
 
-	// MII timesheet — the default template.
-	if len(assets.MIITemplate) > 0 {
-		mii := models.Template{
-			Name:        "MII Timesheet",
-			Description: "Built-in default MII timesheet template (working hours, total-hour column, status matrix, and hardcoded project/division/department metadata).",
-			SheetName:   "Sheet1",
-			FileData:    assets.MIITemplate,
-			IsDefault:   true,
-			Builtin:     "mii",
-			CellMappings: []models.CellMapping{
-				// Header metadata (column C). C1 (project name) is hardcoded.
-				{Field: models.FieldMetaDivision, Scope: models.ScopeCell, CellRef: "C2", Fillable: false},
-				{Field: models.FieldMetaName, Scope: models.ScopeCell, CellRef: "C3", Fillable: false},
-				{Field: models.FieldMetaMiiID, Scope: models.ScopeCell, CellRef: "C4", Fillable: false},
-				{Field: models.FieldMetaSite, Scope: models.ScopeCell, CellRef: "C5", Fillable: false},
-				{Field: models.FieldMetaMonth, Scope: models.ScopeCell, CellRef: "C6", Fillable: false},
-				// Daily columns, anchored at row 9 (day 1).
-				{Field: models.FieldDate, Scope: models.ScopeDailyColumn, Column: "A", StartRow: 9, Fillable: false},
-				{Field: models.FieldTimeIn, Scope: models.ScopeDailyColumn, Column: "B", StartRow: 9, Fillable: true},
-				{Field: models.FieldTimeOut, Scope: models.ScopeDailyColumn, Column: "C", StartRow: 9, Fillable: true},
-				{Field: models.FieldTotalHour, Scope: models.ScopeDailyColumn, Column: "D", StartRow: 9, Fillable: false},
-				{Field: models.FieldStatus, Scope: models.ScopeDailyColumn, Column: "E", StartRow: 9, Fillable: true},
-				{Field: models.FieldActivity, Scope: models.ScopeDailyColumn, Column: "K", StartRow: 9, Fillable: true},
-				{Field: models.FieldProjectName, Scope: models.ScopeDailyColumn, Column: "L", StartRow: 9, Fillable: false},
-				{Field: models.FieldProjectID, Scope: models.ScopeDailyColumn, Column: "M", StartRow: 9, Fillable: false},
-				{Field: models.FieldAppImpacted, Scope: models.ScopeDailyColumn, Column: "N", StartRow: 9, Fillable: true},
-				{Field: models.FieldAIPFitur, Scope: models.ScopeDailyColumn, Column: "O", StartRow: 9, Fillable: false},
-				{Field: models.FieldDivision, Scope: models.ScopeDailyColumn, Column: "P", StartRow: 9, Fillable: false},
-				{Field: models.FieldDepartment, Scope: models.ScopeDailyColumn, Column: "Q", StartRow: 9, Fillable: false},
-				{Field: models.FieldSubDept, Scope: models.ScopeDailyColumn, Column: "R", StartRow: 9, Fillable: false},
-			},
+	// Helper to find company ID
+	findCompanyID := func(code string) *uint {
+		var comp models.Company
+		if err := db.Where("code = ?", code).First(&comp).Error; err == nil {
+			return &comp.ID
 		}
-		if err := db.Create(&mii).Error; err != nil {
-			return err
-		}
-		log.Printf("[database] seeded default template '%s' (builtin mii)", mii.Name)
+		return nil
 	}
 
-	// BNI DEV timesheet — the second company's template (non-default).
+	// 1. MII timesheet — the default template.
+	mii := models.Template{
+		Name:        "MII Timesheet",
+		Description: "Built-in MII timesheet template (pure programmatic builder with K1 header logo).",
+		SheetName:   "Sheet1",
+		Company:     "MII",
+		CompanyID:   findCompanyID("mii"),
+		IsDefault:   true,
+		Builtin:     "mii",
+	}
+	_ = db.Create(&mii)
+	log.Printf("[database] seeded default template '%s' (builtin mii)", mii.Name)
+
+	// 2. SDD timesheet — pure programmatic builder.
+	sdd := models.Template{
+		Name:        "SDD Timesheet",
+		Description: "Built-in SDD timesheet template (pure programmatic builder with A2 header logo).",
+		SheetName:   "Juni",
+		Company:     "SDD",
+		CompanyID:   findCompanyID("sdd"),
+		IsDefault:   false,
+		Builtin:     "sdd",
+	}
+	_ = db.Create(&sdd)
+	log.Printf("[database] seeded template '%s' (builtin sdd)", sdd.Name)
+
+	// 3. Adidata timesheet — pure programmatic builder with SPL.
+	adidata := models.Template{
+		Name:        "Adidata Timesheet",
+		Description: "Built-in Adidata timesheet template (pure programmatic builder with N2 header logo & SPL support).",
+		SheetName:   "TIMESHEET",
+		Company:     "Adidata",
+		CompanyID:   findCompanyID("adidata"),
+		IsDefault:   false,
+		Builtin:     "adidata",
+	}
+	_ = db.Create(&adidata)
+	log.Printf("[database] seeded template '%s' (builtin adidata)", adidata.Name)
+
+	// 4. BNI DEV timesheet
 	if len(assets.BNITemplate) > 0 {
 		bni := models.Template{
 			Name:        "BNI DEV Timesheet",
 			Description: "Built-in BNI DEV timesheet template (strict date/time typing + status matrix).",
 			SheetName:   "Sheet1",
 			FileData:    assets.BNITemplate,
+			Company:     "BNI",
 			IsDefault:   false,
 			Builtin:     "bni_dev",
-			CellMappings: []models.CellMapping{
-				// Header metadata (column C, rows 1-6).
-				{Field: models.FieldMetaDivision, Scope: models.ScopeCell, CellRef: "C2", Fillable: false},
-				{Field: models.FieldMetaName, Scope: models.ScopeCell, CellRef: "C3", Fillable: false},
-				{Field: models.FieldMetaMiiID, Scope: models.ScopeCell, CellRef: "C4", Fillable: false},
-				{Field: models.FieldMetaSite, Scope: models.ScopeCell, CellRef: "C5", Fillable: false},
-				{Field: models.FieldMetaMonth, Scope: models.ScopeCell, CellRef: "C6", Fillable: false},
-				// Daily columns, anchored at row 9 (day 1).
-				{Field: models.FieldDate, Scope: models.ScopeDailyColumn, Column: "A", StartRow: 9, Fillable: false},
-				{Field: models.FieldTimeIn, Scope: models.ScopeDailyColumn, Column: "B", StartRow: 9, Fillable: true},
-				{Field: models.FieldTimeOut, Scope: models.ScopeDailyColumn, Column: "C", StartRow: 9, Fillable: true},
-				{Field: models.FieldStatus, Scope: models.ScopeDailyColumn, Column: "E", StartRow: 9, Fillable: true},
-				{Field: models.FieldActivity, Scope: models.ScopeDailyColumn, Column: "K", StartRow: 9, Fillable: true},
-				{Field: models.FieldProjectName, Scope: models.ScopeDailyColumn, Column: "L", StartRow: 9, Fillable: true},
-				{Field: models.FieldProjectID, Scope: models.ScopeDailyColumn, Column: "M", StartRow: 9, Fillable: true},
-				{Field: models.FieldAppImpacted, Scope: models.ScopeDailyColumn, Column: "N", StartRow: 9, Fillable: true},
-			},
 		}
-		if err := db.Create(&bni).Error; err != nil {
-			return err
-		}
+		_ = db.Create(&bni)
 		log.Printf("[database] seeded template '%s' (builtin bni_dev)", bni.Name)
 	}
 	return nil
@@ -128,11 +135,13 @@ func seedDefaultTemplate(db *gorm.DB) error {
 // AutoMigrate runs GORM migrations for every entity.
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
+		&models.Company{},
 		&models.User{},
 		&models.WebAuthnCredential{},
 		&models.Template{},
 		&models.CellMapping{},
 		&models.DailyActivity{},
+		&models.OvertimeEntry{},
 		&models.PushSubscription{},
 		&models.ProfileChangeRequest{},
 		&models.PasswordResetToken{},

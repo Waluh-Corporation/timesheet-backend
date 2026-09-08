@@ -42,17 +42,52 @@ type User struct {
 	IsActive     bool   `gorm:"not null;default:true" json:"is_active"`
 
 	// Profile fields (the "approved" / live values).
-	Name     string `gorm:"size:255" json:"name"`
-	MiiID    string `gorm:"size:64" json:"mii_id"`
-	Division string `gorm:"size:255" json:"division"`
-	Site     string `gorm:"size:128" json:"site"`
-	Company  string `gorm:"size:64" json:"company"`
+	Name       string   `gorm:"size:255" json:"name"`
+	MiiID      string   `gorm:"size:64" json:"mii_id"`
+	EmployeeID string   `gorm:"size:64" json:"employee_id"` // NPP or MII ID
+	Division   string   `gorm:"size:255" json:"division"`
+	Department string   `gorm:"size:255" json:"department"`
+	GroupName  string   `gorm:"size:255" json:"group_name"` // Kelompok (SDD)
+	Position   string   `gorm:"size:128" json:"position"`
+	Site       string   `gorm:"size:128" json:"site"`
+	Company    string   `gorm:"size:64" json:"company"`
+	CompanyID  *uint    `gorm:"index" json:"company_id"`
+	CompanyRel *Company `gorm:"foreignKey:CompanyID" json:"company_rel,omitempty"`
 
 	// Credential relations.
 	Credentials       []WebAuthnCredential   `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	PushSubscriptions []PushSubscription     `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	ProfileRequests   []ProfileChangeRequest `gorm:"constraint:OnDelete:CASCADE" json:"-"`
+	Overtimes         []OvertimeEntry        `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 }
+
+// Company represents a vendor/organization (e.g. MII, SDD, Adidata).
+type Company struct {
+	ID        uint       `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	Code      string     `gorm:"uniqueIndex;size:32;not null" json:"code"` // "mii", "sdd", "adidata"
+	Name      string     `gorm:"size:255;not null" json:"name"`
+	Templates []Template `gorm:"foreignKey:CompanyID" json:"templates,omitempty"`
+}
+
+// OvertimeEntry records overtime activities for SPL sheet generation.
+type OvertimeEntry struct {
+	ID              uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	UserID          uint           `gorm:"index;not null" json:"user_id"`
+	DailyActivityID *uint          `gorm:"index" json:"daily_activity_id"`
+	Date            time.Time      `gorm:"type:date;not null" json:"date"`
+	StartTime       string         `gorm:"size:8" json:"start_time"` // "17:00"
+	EndTime         string         `gorm:"size:8" json:"end_time"`   // "21:00"
+	TaskDescription string         `gorm:"type:text;not null" json:"task_description"`
+	TeamLeader      string         `gorm:"size:128" json:"team_leader"`
+	DepartmentHead  string         `gorm:"size:128" json:"department_head"`
+
+	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+
 
 // WebAuthnID implements webauthn.User.
 func (u User) WebAuthnID() []byte {
@@ -124,6 +159,8 @@ type Template struct {
 	Name        string `gorm:"size:255;not null" json:"name"`
 	Description string `gorm:"size:512" json:"description"`
 	Company     string `gorm:"size:64" json:"company"`
+	CompanyID   *uint  `gorm:"index" json:"company_id"`
+	CompanyRel  *Company `gorm:"foreignKey:CompanyID" json:"company_rel,omitempty"`
 	// SheetName is the worksheet the mapping applies to.
 	SheetName string `gorm:"size:128;not null;default:Sheet1" json:"sheet_name"`
 	// FileData holds the raw .xlsx bytes so generation is self-contained.
@@ -234,10 +271,14 @@ type ProfileChangeRequest struct {
 	UserID    uint          `gorm:"index;not null" json:"user_id"`
 	Status    ProfileStatus `gorm:"size:16;not null;default:pending" json:"status"`
 
-	Name     string `gorm:"size:255" json:"name"`
-	MiiID    string `gorm:"size:64" json:"mii_id"`
-	Division string `gorm:"size:255" json:"division"`
-	Site     string `gorm:"size:128" json:"site"`
+	Name       string `gorm:"size:255" json:"name"`
+	MiiID      string `gorm:"size:64" json:"mii_id"`
+	EmployeeID string `gorm:"size:64" json:"employee_id"`
+	Division   string `gorm:"size:255" json:"division"`
+	Department string `gorm:"size:255" json:"department"`
+	GroupName  string `gorm:"size:255" json:"group_name"`
+	Position   string `gorm:"size:128" json:"position"`
+	Site       string `gorm:"size:128" json:"site"`
 
 	ReviewedBy *uint      `json:"reviewed_by"`
 	ReviewedAt *time.Time `json:"reviewed_at"`
