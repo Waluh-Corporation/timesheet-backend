@@ -51,6 +51,12 @@ func main() {
 		log.Fatalf("database connection failed: %v", err)
 	}
 
+	if cfg.RunMigrations {
+		if err := database.Setup(db, cfg); err != nil {
+			log.Fatalf("database setup failed: %v", err)
+		}
+	}
+
 	if *migrateOnlyFlag {
 		log.Println("database migrations completed successfully")
 		return
