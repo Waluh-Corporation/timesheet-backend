@@ -68,8 +68,8 @@ func TestEmbeddedMigrationsAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read embedded migrations dir: %v", err)
 	}
-	if len(entries) < 14 {
-		t.Errorf("expected at least 14 migration files (7 up, 7 down), got %d", len(entries))
+	if len(entries) < 16 {
+		t.Errorf("expected at least 16 migration files (8 up, 8 down), got %d", len(entries))
 	}
 }
 
@@ -123,5 +123,16 @@ func TestRunMigrationsOnDB(t *testing.T) {
 	}
 	if !hasTLID {
 		t.Errorf("overtime_entries.team_leader_id FK column should exist")
+	}
+
+	// 4. Verify approvers table exists after migration 000008
+	var hasApproversTable, hasApproverRoleType bool
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'approvers')`).Scan(&hasApproversTable)
+	if !hasApproversTable {
+		t.Errorf("table approvers should exist after migration 000008")
+	}
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'approvers' AND column_name = 'role_type')`).Scan(&hasApproverRoleType)
+	if !hasApproverRoleType {
+		t.Errorf("approvers.role_type column should exist")
 	}
 }

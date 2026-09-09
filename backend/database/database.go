@@ -48,6 +48,9 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	if err := seedDefaultCompanies(db); err != nil {
 		log.Printf("[database] could not seed default companies: %v", err)
 	}
+	if err := seedDefaultApprovers(db); err != nil {
+		log.Printf("[database] could not seed default approvers: %v", err)
+	}
 	if err := seedDefaultProjectsAndNormalize(db); err != nil {
 		log.Printf("[database] normalization/project seeding error: %v", err)
 	}
@@ -78,8 +81,8 @@ func AutoMigrate(db *gorm.DB) error {
 	_ = db.Exec(`UPDATE profile_change_requests SET reviewed_by = NULL WHERE reviewed_by IS NOT NULL AND reviewed_by NOT IN (SELECT id FROM users)`).Error
 	_ = db.Exec(`UPDATE daily_activities SET project_ref_id = NULL WHERE project_ref_id IS NOT NULL AND project_ref_id NOT IN (SELECT id FROM projects)`).Error
 	_ = db.Exec(`UPDATE overtime_entries SET daily_activity_id = NULL WHERE daily_activity_id IS NOT NULL AND daily_activity_id NOT IN (SELECT id FROM daily_activities)`).Error
-	_ = db.Exec(`UPDATE overtime_entries SET team_leader_id = NULL WHERE team_leader_id IS NOT NULL AND team_leader_id NOT IN (SELECT id FROM users)`).Error
-	_ = db.Exec(`UPDATE overtime_entries SET department_head_id = NULL WHERE department_head_id IS NOT NULL AND department_head_id NOT IN (SELECT id FROM users)`).Error
+	_ = db.Exec(`UPDATE overtime_entries SET team_leader_id = NULL WHERE team_leader_id IS NOT NULL AND team_leader_id NOT IN (SELECT id FROM approvers)`).Error
+	_ = db.Exec(`UPDATE overtime_entries SET department_head_id = NULL WHERE department_head_id IS NOT NULL AND department_head_id NOT IN (SELECT id FROM approvers)`).Error
 
 	return db.AutoMigrate(
 		&models.Company{},
@@ -88,6 +91,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Holiday{},
 		&models.Project{},
 		&models.User{},
+		&models.Approver{},
 		&models.WebAuthnCredential{},
 		&models.DailyActivity{},
 		&models.OvertimeEntry{},
@@ -287,6 +291,107 @@ func seedAdmin(db *gorm.DB, cfg *config.Config) error {
 		log.Printf("[database] ^ capture this now and change it after first login; it will not be shown again")
 	} else {
 		log.Printf("[database] seeded bootstrap admin '%s' (%s) using BOOTSTRAP_ADMIN_PASSWORD", cfg.AdminUsername, cfg.AdminEmail)
+	}
+	return nil
+}
+
+// seedDefaultApprovers seeds initial Team Leaders and Department Heads for companies if not present.
+func seedDefaultApprovers(db *gorm.DB) error {
+	findCompanyID := func(code string) *uint {
+		var comp models.Company
+		if err := db.Where("code = ?", code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
+			return &comp.ID
+		}
+		return nil
+	}
+
+	approvers := []models.Approver{
+		// MII
+		{
+			CompanyID:  findCompanyID("mii"),
+			Name:       "Eko Prasetyo",
+			EmployeeID: "MII-TL-001",
+			RoleType:   models.ApproverRoleTeamLeader,
+			Title:      "Team Leader Enterprise Solutions",
+			Email:      "eko.prasetyo@mii.co.id",
+			IsActive:   true,
+		},
+		{
+			CompanyID:  findCompanyID("mii"),
+			Name:       "Bambang Suryono",
+			EmployeeID: "MII-DH-001",
+			RoleType:   models.ApproverRoleDepartmentHead,
+			Title:      "Head of Wholesale Delivery",
+			Email:      "bambang.suryono@mii.co.id",
+			IsActive:   true,
+		},
+		// SDD
+		{
+			CompanyID:  findCompanyID("sdd"),
+			Name:       "Hendra Wijaya",
+			EmployeeID: "SDD-TL-002",
+			RoleType:   models.ApproverRoleTeamLeader,
+			Title:      "Team Leader Switching & Core",
+			Email:      "hendra.wijaya@sdd.co.id",
+			IsActive:   true,
+		},
+		{
+			CompanyID:  findCompanyID("sdd"),
+			Name:       "Irwan Santoso",
+			EmployeeID: "SDD-DH-002",
+			RoleType:   models.ApproverRoleDepartmentHead,
+			Title:      "Department Head Banking Operations",
+			Email:      "irwan.santoso@sdd.co.id",
+			IsActive:   true,
+		},
+		// Adidata
+		{
+			CompanyID:  findCompanyID("adidata"),
+			Name:       "Rudy Hermawan",
+			EmployeeID: "ADI-TL-003",
+			RoleType:   models.ApproverRoleTeamLeader,
+			Title:      "Team Leader Integration",
+			Email:      "rudy.hermawan@adidata.co.id",
+			IsActive:   true,
+		},
+		{
+			CompanyID:  findCompanyID("adidata"),
+			Name:       "Agus Setiawan",
+			EmployeeID: "ADI-DH-003",
+			RoleType:   models.ApproverRoleDepartmentHead,
+			Title:      "Department Head Enterprise Systems",
+			Email:      "agus.setiawan@adidata.co.id",
+			IsActive:   true,
+		},
+		// NTT
+		{
+			CompanyID:  findCompanyID("ntt"),
+			Name:       "David Tanuwidjaja",
+			EmployeeID: "NTT-TL-004",
+			RoleType:   models.ApproverRoleTeamLeader,
+			Title:      "Lead Technical Architect",
+			Email:      "david.tan@nttdata.com",
+			IsActive:   true,
+		},
+		{
+			CompanyID:  findCompanyID("ntt"),
+			Name:       "Siti Rahmawati",
+			EmployeeID: "NTT-DH-004",
+			RoleType:   models.ApproverRoleDepartmentHead,
+			Title:      "Director of Delivery",
+			Email:      "siti.rahmawati@nttdata.com",
+			IsActive:   true,
+		},
+	}
+
+	for _, a := range approvers {
+		var cnt int64
+		_ = db.Model(&models.Approver{}).
+			Where("name = ? AND role_type = ?", a.Name, a.RoleType).
+			Count(&cnt).Error
+		if cnt == 0 {
+			_ = db.Create(&a).Error
+		}
 	}
 	return nil
 }

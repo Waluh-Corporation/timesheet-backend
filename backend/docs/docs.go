@@ -678,6 +678,66 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/approvers": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves active approvers (Team Leaders, Department Heads), optionally filtered by company_id, department_id, or role_type.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Master Data"
+                ],
+                "summary": "List active approvers",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Company ID filter",
+                        "name": "company_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Department ID filter",
+                        "name": "department_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Role type filter (team_leader, department_head)",
+                        "name": "role_type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.Approver"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/forgot-password": {
             "post": {
                 "description": "Generates a password reset token and sends an email with the reset link. Always returns 200 to prevent user enumeration.",
@@ -1937,6 +1997,67 @@ const docTemplate = `{
                 }
             }
         },
+        "models.Approver": {
+            "type": "object",
+            "properties": {
+                "company": {
+                    "$ref": "#/definitions/models.Company"
+                },
+                "company_id": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "department": {
+                    "$ref": "#/definitions/models.Department"
+                },
+                "department_id": {
+                    "type": "integer"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "employee_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "role_type": {
+                    "$ref": "#/definitions/models.ApproverRoleType"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/models.User"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.ApproverRoleType": {
+            "type": "string",
+            "enum": [
+                "team_leader",
+                "department_head"
+            ],
+            "x-enum-varnames": [
+                "ApproverRoleTeamLeader",
+                "ApproverRoleDepartmentHead"
+            ]
+        },
         "models.BeginPasskeyLoginRequest": {
             "type": "object",
             "properties": {
@@ -2145,9 +2266,17 @@ const docTemplate = `{
         "models.DeleteResponse": {
             "type": "object",
             "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
                 "deleted": {
                     "type": "boolean",
                     "example": true
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
                 }
             }
         },
@@ -2189,9 +2318,21 @@ const docTemplate = `{
         "models.ErrorResponse": {
             "type": "object",
             "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 400
+                },
                 "error": {
                     "type": "string",
                     "example": "invalid request or unauthorized"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "invalid request or unauthorized"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "error"
                 }
             }
         },
@@ -2300,9 +2441,17 @@ const docTemplate = `{
         "models.MessageResponse": {
             "type": "object",
             "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
                 "message": {
                     "type": "string",
                     "example": "operation successful"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
                 }
             }
         },
@@ -2336,7 +2485,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "department_head": {
-                    "$ref": "#/definitions/models.User"
+                    "$ref": "#/definitions/models.Approver"
                 },
                 "department_head_id": {
                     "type": "integer"
@@ -2356,7 +2505,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "team_leader": {
-                    "$ref": "#/definitions/models.User"
+                    "$ref": "#/definitions/models.Approver"
                 },
                 "team_leader_id": {
                     "type": "integer"

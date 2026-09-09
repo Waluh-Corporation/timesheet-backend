@@ -18,7 +18,7 @@ import (
 // @Success 200 {object} models.VAPIDKeyResponse
 // @Router /api/v1/push/vapid-public-key [get]
 func (s *Server) GetVAPIDKey(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"public_key": s.Push.PublicKey()})
+	RespondSuccess(c, http.StatusOK, gin.H{"public_key": s.Push.PublicKey()})
 }
 
 // Subscribe godoc
@@ -37,7 +37,7 @@ func (s *Server) GetVAPIDKey(c *gin.Context) {
 func (s *Server) Subscribe(c *gin.Context) {
 	var req models.SubscribeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	sub := models.PushSubscription{
@@ -52,10 +52,10 @@ func (s *Server) Subscribe(c *gin.Context) {
 		DoUpdates: clause.AssignmentColumns([]string{"user_id", "p256dh", "auth"}),
 	}).Create(&sub).Error
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"message": "subscribed"})
+	RespondMessage(c, http.StatusCreated, "subscribed")
 }
 
 // Unsubscribe godoc
@@ -78,10 +78,10 @@ func (s *Server) Unsubscribe(c *gin.Context) {
 		q = q.Where("endpoint = ?", req.Endpoint)
 	}
 	if err := q.Delete(&models.PushSubscription{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "unsubscribed"})
+	RespondMessage(c, http.StatusOK, "unsubscribed")
 }
 
 // SendTestPush godoc
@@ -99,5 +99,5 @@ func (s *Server) SendTestPush(c *gin.Context) {
 		Body:  "Waktunya isi timesheet hari ini!",
 		URL:   "/activity",
 	})
-	c.JSON(http.StatusOK, gin.H{"message": "test notification dispatched"})
+	RespondMessage(c, http.StatusOK, "test notification dispatched")
 }

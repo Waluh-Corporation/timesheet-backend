@@ -45,6 +45,47 @@ definitions:
       sort_order:
         type: integer
     type: object
+  models.Approver:
+    properties:
+      company:
+        $ref: '#/definitions/models.Company'
+      company_id:
+        type: integer
+      created_at:
+        type: string
+      department:
+        $ref: '#/definitions/models.Department'
+      department_id:
+        type: integer
+      email:
+        type: string
+      employee_id:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      role_type:
+        $ref: '#/definitions/models.ApproverRoleType'
+      title:
+        type: string
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+    type: object
+  models.ApproverRoleType:
+    enum:
+    - team_leader
+    - department_head
+    type: string
+    x-enum-varnames:
+    - ApproverRoleTeamLeader
+    - ApproverRoleDepartmentHead
   models.BeginPasskeyLoginRequest:
     properties:
       identifier:
@@ -190,9 +231,15 @@ definitions:
     type: object
   models.DeleteResponse:
     properties:
+      code:
+        example: 200
+        type: integer
       deleted:
         example: true
         type: boolean
+      status:
+        example: success
+        type: string
     type: object
   models.Department:
     properties:
@@ -220,8 +267,17 @@ definitions:
     type: object
   models.ErrorResponse:
     properties:
+      code:
+        example: 400
+        type: integer
       error:
         example: invalid request or unauthorized
+        type: string
+      message:
+        example: invalid request or unauthorized
+        type: string
+      status:
+        example: error
         type: string
     type: object
   models.ForgotRequest:
@@ -296,8 +352,14 @@ definitions:
     type: object
   models.MessageResponse:
     properties:
+      code:
+        example: 200
+        type: integer
       message:
         example: operation successful
+        type: string
+      status:
+        example: success
         type: string
     type: object
   models.OriginsResponse:
@@ -320,7 +382,7 @@ definitions:
       date:
         type: string
       department_head:
-        $ref: '#/definitions/models.User'
+        $ref: '#/definitions/models.Approver'
       department_head_id:
         type: integer
       end_time:
@@ -334,7 +396,7 @@ definitions:
       task_description:
         type: string
       team_leader:
-        $ref: '#/definitions/models.User'
+        $ref: '#/definitions/models.Approver'
       team_leader_id:
         type: integer
       updated_at:
@@ -1038,6 +1100,45 @@ paths:
       summary: Delete a passkey for a user (Admin)
       tags:
       - Admin
+  /api/v1/approvers:
+    get:
+      description: Retrieves active approvers (Team Leaders, Department Heads), optionally
+        filtered by company_id, department_id, or role_type.
+      parameters:
+      - description: Company ID filter
+        in: query
+        name: company_id
+        type: integer
+      - description: Department ID filter
+        in: query
+        name: department_id
+        type: integer
+      - description: Role type filter (team_leader, department_head)
+        in: query
+        name: role_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Approver'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List active approvers
+      tags:
+      - Master Data
   /api/v1/auth/forgot-password:
     post:
       consumes:

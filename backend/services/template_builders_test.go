@@ -182,8 +182,8 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 		ProjectName: "BNI Direct",
 	}
 
-	tl := models.User{Name: "Daniel Harry Hasudungan Simbolon"}
-	dh := models.User{Name: "M. Yohan Muchori"}
+	tl := models.Approver{Name: "Daniel Harry Hasudungan Simbolon"}
+	dh := models.Approver{Name: "M. Yohan Muchori"}
 	ot := models.OvertimeEntry{
 		Date:            time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC),
 		StartTime:       "17:00",

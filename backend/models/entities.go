@@ -121,6 +121,33 @@ type Project struct {
 	IsActive    bool      `gorm:"not null;default:true" json:"is_active"`
 }
 
+// ApproverRoleType enumerates the functional role of an approver.
+type ApproverRoleType string
+
+const (
+	ApproverRoleTeamLeader     ApproverRoleType = "team_leader"
+	ApproverRoleDepartmentHead ApproverRoleType = "department_head"
+)
+
+// Approver represents an authorized manager/supervisor who approves timesheet and overtime reports.
+type Approver struct {
+	ID           uint             `gorm:"primaryKey" json:"id"`
+	CreatedAt    time.Time        `json:"created_at"`
+	UpdatedAt    time.Time        `json:"updated_at"`
+	CompanyID    *uint            `gorm:"index" json:"company_id"`
+	Company      *Company         `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	DepartmentID *uint            `gorm:"index" json:"department_id"`
+	Department   *Department      `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department,omitempty"`
+	UserID       *uint            `gorm:"index" json:"user_id"`
+	User         *User            `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"user,omitempty"`
+	Name         string           `gorm:"size:255;not null" json:"name"`
+	EmployeeID   string           `gorm:"size:64" json:"employee_id"`
+	RoleType     ApproverRoleType `gorm:"size:32;not null;index" json:"role_type"`
+	Title        string           `gorm:"size:128" json:"title"`
+	Email        string           `gorm:"size:255" json:"email"`
+	IsActive     bool             `gorm:"not null;default:true" json:"is_active"`
+}
+
 // OvertimeEntry records overtime activities for SPL sheet generation.
 type OvertimeEntry struct {
 	ID               uint           `gorm:"primaryKey" json:"id"`
@@ -137,8 +164,8 @@ type OvertimeEntry struct {
 
 	User           User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
 	DailyActivity  *DailyActivity `gorm:"foreignKey:DailyActivityID" json:"daily_activity,omitempty"`
-	TeamLeader     *User          `gorm:"foreignKey:TeamLeaderID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"team_leader,omitempty"`
-	DepartmentHead *User          `gorm:"foreignKey:DepartmentHeadID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_head,omitempty"`
+	TeamLeader     *Approver      `gorm:"foreignKey:TeamLeaderID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"team_leader,omitempty"`
+	DepartmentHead *Approver      `gorm:"foreignKey:DepartmentHeadID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_head,omitempty"`
 }
 
 

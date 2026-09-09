@@ -53,12 +53,17 @@ export async function api<T = any>(
     if (contentType.includes("application/json")) {
       const data = await res.json().catch(() => null);
       if (data?.error) message = data.error;
+      else if (data?.message) message = data.message;
     }
     throw new Error(message);
   }
 
   if (contentType.includes("application/json")) {
-    return res.json() as Promise<T>;
+    const json = await res.json();
+    if (json && typeof json === "object" && "data" in json && "code" in json) {
+      return json.data as T;
+    }
+    return json as T;
   }
   // Non-JSON (e.g. file downloads) returned as blob.
   return res.blob() as unknown as T;
@@ -84,7 +89,7 @@ export async function downloadFile(
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(data.error || "download failed");
+    throw new Error(data.error || data.message || "download failed");
   }
 
   const disposition = res.headers.get("content-disposition") || "";

@@ -34,10 +34,10 @@ func isSelf(c *gin.Context, id string) bool {
 func (s *Server) ListUsers(c *gin.Context) {
 	var users []models.User
 	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").Order("created_at desc").Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, users)
+	RespondSuccess(c, http.StatusOK, users)
 }
 
 // CreateUser godoc
@@ -58,7 +58,7 @@ func (s *Server) ListUsers(c *gin.Context) {
 func (s *Server) CreateUser(c *gin.Context) {
 	var req models.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -119,19 +119,19 @@ func (s *Server) CreateUser(c *gin.Context) {
 		// Enforce the NIST SP 800-63B policy on any admin-supplied initial
 		// password (length + blocklist + context-specific terms).
 		if err := auth.ValidatePassword(req.Password, req.Username, req.Email); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			RespondError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		hash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+			RespondError(c, http.StatusInternalServerError, "could not hash password")
 			return
 		}
 		user.PasswordHash = hash
 	}
 
 	if err := s.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "username or email already exists"})
+		RespondError(c, http.StatusConflict, "username or email already exists")
 		return
 	}
 
@@ -150,7 +150,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	}
 
 	_ = s.DB.Preload("CompanyRel").Preload("DepartmentRel").First(&user, user.ID)
-	c.JSON(http.StatusCreated, user)
+	RespondSuccess(c, http.StatusCreated, user)
 }
 
 // UpdateUser godoc
@@ -172,13 +172,13 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	id := c.Param("id")
 	var user models.User
 	if err := s.DB.First(&user, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
 
 	var req models.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -186,11 +186,11 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	// update path either — both are self-lockout vectors.
 	if isSelf(c, id) {
 		if req.IsActive != nil && !*req.IsActive {
-			c.JSON(http.StatusForbidden, gin.H{"error": "you cannot deactivate your own account"})
+			RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
 			return
 		}
 		if req.Role != nil && *req.Role != models.RoleAdmin {
-			c.JSON(http.StatusForbidden, gin.H{"error": "you cannot remove your own admin role"})
+			RespondError(c, http.StatusForbidden, "you cannot remove your own admin role")
 			return
 		}
 	}
@@ -236,7 +236,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 		s.DB.Model(&user).Updates(updates)
 	}
 	s.DB.Preload("CompanyRel").Preload("DepartmentRel").First(&user, id)
-	c.JSON(http.StatusOK, user)
+	RespondSuccess(c, http.StatusOK, user)
 }
 
 // DeleteUser godoc
@@ -257,20 +257,20 @@ func (s *Server) DeleteUser(c *gin.Context) {
 	// An admin may never deactivate/delete their own account — doing so could
 	// lock the last administrator out of the portal.
 	if isSelf(c, id) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "you cannot deactivate your own account"})
+		RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
 		return
 	}
 	var user models.User
 	if err := s.DB.First(&user, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
 	if err := s.DB.Model(&user).Update("is_active", false).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	s.DB.First(&user, id)
-	c.JSON(http.StatusOK, user)
+	RespondSuccess(c, http.StatusOK, user)
 }
 
 // --- Profile approval flow ---
@@ -291,7 +291,7 @@ func (s *Server) DeleteUser(c *gin.Context) {
 func (s *Server) SubmitProfileChange(c *gin.Context) {
 	var req models.ProfileChangeRequestDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	change := models.ProfileChangeRequest{
@@ -306,10 +306,10 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 		CompanyID:    req.CompanyID,
 	}
 	if err := s.DB.Create(&change).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusCreated, change)
+	RespondSuccess(c, http.StatusCreated, change)
 }
 
 // MyProfileChanges godoc
@@ -327,10 +327,10 @@ func (s *Server) MyProfileChanges(c *gin.Context) {
 	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").
 		Where("user_id = ?", currentUserID(c)).
 		Order("created_at desc").Find(&changes).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, changes)
+	RespondSuccess(c, http.StatusOK, changes)
 }
 
 // ListProfileChanges godoc
@@ -352,10 +352,10 @@ func (s *Server) ListProfileChanges(c *gin.Context) {
 		q = q.Where("status = ?", status)
 	}
 	if err := q.Find(&changes).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, changes)
+	RespondSuccess(c, http.StatusOK, changes)
 }
 
 // ReviewProfileChange godoc
@@ -379,11 +379,11 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 
 	var change models.ProfileChangeRequest
 	if err := s.DB.First(&change, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+		RespondError(c, http.StatusNotFound, "request not found")
 		return
 	}
 	if change.Status != models.ProfilePending {
-		c.JSON(http.StatusConflict, gin.H{"error": "request already reviewed"})
+		RespondError(c, http.StatusConflict, "request already reviewed")
 		return
 	}
 
@@ -416,5 +416,5 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	s.DB.Save(&change)
 
 	_ = s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").First(&change, change.ID)
-	c.JSON(http.StatusOK, change)
+	RespondSuccess(c, http.StatusOK, change)
 }

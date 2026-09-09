@@ -38,12 +38,12 @@ func jakarta() *time.Location {
 func (s *Server) UpsertDailyActivity(c *gin.Context) {
 	var req models.DailyActivityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	date, err := time.ParseInLocation("2006-01-02", req.Date, jakarta())
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, expected YYYY-MM-DD"})
+		RespondError(c, http.StatusBadRequest, "invalid date format, expected YYYY-MM-DD")
 		return
 	}
 
@@ -94,13 +94,13 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		}),
 	}).Create(&activity).Error
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	// Preload associations before returning
 	_ = s.DB.Preload("ProjectRef").Preload("StatusRef").First(&activity, activity.ID)
-	c.JSON(http.StatusOK, activity)
+	RespondSuccess(c, http.StatusOK, activity)
 }
 
 // ListMonthlyActivities godoc
@@ -126,10 +126,10 @@ func (s *Server) ListMonthlyActivities(c *gin.Context) {
 	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").
 		Where("user_id = ? AND date >= ? AND date < ?", currentUserID(c), start, end).
 		Order("date asc").Find(&activities).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, activities)
+	RespondSuccess(c, http.StatusOK, activities)
 }
 
 // GenerateTimesheet godoc
@@ -149,13 +149,13 @@ func (s *Server) ListMonthlyActivities(c *gin.Context) {
 func (s *Server) GenerateTimesheet(c *gin.Context) {
 	var req models.GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var user models.User
 	if err := s.DB.First(&user, currentUserID(c)).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
 
@@ -174,7 +174,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		companyName = user.Company
 	}
 	if companyCode == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user has no company assigned. Ask an admin to assign a company (MII, SDD, NTT, or Adidata) to your account."})
+		RespondError(c, http.StatusBadRequest, "user has no company assigned. Ask an admin to assign a company (MII, SDD, NTT, or Adidata) to your account.")
 		return
 	}
 
@@ -210,7 +210,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		Holidays:    holidays,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "generation failed: " + err.Error()})
+		RespondError(c, http.StatusInternalServerError, "generation failed: "+err.Error())
 		return
 	}
 
@@ -254,7 +254,7 @@ func (s *Server) GetHolidays(c *gin.Context) {
 				}).Error
 			}
 		}
-		c.JSON(http.StatusOK, holidays)
+		RespondSuccess(c, http.StatusOK, holidays)
 		return
 	}
 
@@ -270,11 +270,11 @@ func (s *Server) GetHolidays(c *gin.Context) {
 				"description": dh.Description,
 			})
 		}
-		c.JSON(http.StatusOK, resp)
+		RespondSuccess(c, http.StatusOK, resp)
 		return
 	}
 
-	c.JSON(http.StatusOK, []models.HolidayDTO{})
+	RespondSuccess(c, http.StatusOK, []models.HolidayDTO{})
 }
 
 func queryIntDefault(c *gin.Context, key string, def int) int {
@@ -324,12 +324,12 @@ type OvertimeRequest struct {
 func (s *Server) UpsertOvertime(c *gin.Context) {
 	var req OvertimeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	date, err := time.ParseInLocation("2006-01-02", req.Date, jakarta())
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid date format, expected YYYY-MM-DD"})
+		RespondError(c, http.StatusBadRequest, "invalid date format, expected YYYY-MM-DD")
 		return
 	}
 
@@ -346,17 +346,17 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 
 	if entry.ID != 0 {
 		if err := s.DB.Where("id = ? AND user_id = ?", entry.ID, entry.UserID).Updates(&entry).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			RespondError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 	} else {
 		if err := s.DB.Create(&entry).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			RespondError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
 	_ = s.DB.Preload("TeamLeader").Preload("DepartmentHead").First(&entry, entry.ID)
-	c.JSON(http.StatusOK, entry)
+	RespondSuccess(c, http.StatusOK, entry)
 }
 
 // ListMonthlyOvertimes godoc
@@ -382,10 +382,10 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 	if err := s.DB.Where("user_id = ? AND date >= ? AND date < ?", currentUserID(c), start, end).
 		Preload("TeamLeader").Preload("DepartmentHead").
 		Order("date asc").Find(&overtimes).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, overtimes)
+	RespondSuccess(c, http.StatusOK, overtimes)
 }
 
 // DeleteOvertime godoc
@@ -402,10 +402,10 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 func (s *Server) DeleteOvertime(c *gin.Context) {
 	id := c.Param("id")
 	if err := s.DB.Where("id = ? AND user_id = ?", id, currentUserID(c)).Delete(&models.OvertimeEntry{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"deleted": true})
+	RespondDelete(c, http.StatusOK)
 }
 
 // ListProjects godoc
@@ -426,10 +426,10 @@ func (s *Server) ListProjects(c *gin.Context) {
 		query = query.Where("company_id = ?", compID)
 	}
 	if err := query.Preload("Company").Order("name asc").Find(&projects).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, projects)
+	RespondSuccess(c, http.StatusOK, projects)
 }
 
 // ListCompanies godoc
@@ -445,10 +445,10 @@ func (s *Server) ListProjects(c *gin.Context) {
 func (s *Server) ListCompanies(c *gin.Context) {
 	var companies []models.Company
 	if err := s.DB.Preload("Projects").Preload("Templates").Preload("Departments").Order("id asc").Find(&companies).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, companies)
+	RespondSuccess(c, http.StatusOK, companies)
 }
 
 // ListDepartments godoc
@@ -469,10 +469,10 @@ func (s *Server) ListDepartments(c *gin.Context) {
 		query = query.Where("company_id = ?", compID)
 	}
 	if err := query.Preload("Company").Order("name asc").Find(&depts).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, depts)
+	RespondSuccess(c, http.StatusOK, depts)
 }
 
 // ListActivityStatuses godoc
@@ -488,10 +488,10 @@ func (s *Server) ListDepartments(c *gin.Context) {
 func (s *Server) ListActivityStatuses(c *gin.Context) {
 	var statuses []models.ActivityStatus
 	if err := s.DB.Order("sort_order asc").Find(&statuses).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, statuses)
+	RespondSuccess(c, http.StatusOK, statuses)
 }
 
 // ListHolidays godoc
@@ -520,10 +520,43 @@ func (s *Server) ListHolidays(c *gin.Context) {
 		}
 	}
 	if err := query.Find(&holidays).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, holidays)
+	RespondSuccess(c, http.StatusOK, holidays)
 }
+
+// ListApprovers godoc
+// @Summary List active approvers
+// @Description Retrieves active approvers (Team Leaders, Department Heads), optionally filtered by company_id, department_id, or role_type.
+// @Tags Master Data
+// @Security BearerAuth
+// @Produce json
+// @Param company_id query int false "Company ID filter"
+// @Param department_id query int false "Department ID filter"
+// @Param role_type query string false "Role type filter (team_leader, department_head)"
+// @Success 200 {array} models.Approver
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/approvers [get]
+func (s *Server) ListApprovers(c *gin.Context) {
+	var approvers []models.Approver
+	q := s.DB.Where("is_active = ?", true)
+	if compID := c.Query("company_id"); compID != "" {
+		q = q.Where("company_id = ? OR company_id IS NULL", compID)
+	}
+	if deptID := c.Query("department_id"); deptID != "" {
+		q = q.Where("department_id = ? OR department_id IS NULL", deptID)
+	}
+	if roleType := c.Query("role_type"); roleType != "" {
+		q = q.Where("role_type = ?", roleType)
+	}
+	if err := q.Preload("Company").Preload("Department").Order("name asc").Find(&approvers).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, approvers)
+}
+
 
 

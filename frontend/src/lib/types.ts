@@ -98,3 +98,31 @@ export interface ProfileChangeRequest {
   created_at: string;
   user?: User;
 }
+
+export interface Approver {
+  id: number;
+  company_id?: number;
+  department_id?: number;
+  user_id?: number;
+  name: string;
+  employee_id?: string;
+  role_type: "team_leader" | "department_head";
+  title?: string;
+  email?: string;
+  is_active: boolean;
+}
+
+export interface OvertimeEntry {
+  id?: number;
+  user_id?: number;
+  daily_activity_id?: number;
+  date: string;
+  start_time: string;
+  end_time: string;
+  task_description: string;
+  team_leader_id?: number;
+  department_head_id?: number;
+  team_leader?: Approver;
+  department_head?: Approver;
+}
+
