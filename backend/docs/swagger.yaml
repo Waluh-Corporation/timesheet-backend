@@ -53,14 +53,6 @@ definitions:
         type: integer
       created_at:
         type: string
-      department:
-        $ref: '#/definitions/models.Department'
-      department_id:
-        type: integer
-      email:
-        type: string
-      employee_id:
-        type: string
       id:
         type: integer
       is_active:
@@ -73,10 +65,6 @@ definitions:
         type: string
       updated_at:
         type: string
-      user:
-        $ref: '#/definitions/models.User'
-      user_id:
-        type: integer
     type: object
   models.ApproverRoleType:
     enum:
@@ -1103,15 +1091,11 @@ paths:
   /api/v1/approvers:
     get:
       description: Retrieves active approvers (Team Leaders, Department Heads), optionally
-        filtered by company_id, department_id, or role_type.
+        filtered by company_id or role_type.
       parameters:
       - description: Company ID filter
         in: query
         name: company_id
-        type: integer
-      - description: Department ID filter
-        in: query
-        name: department_id
         type: integer
       - description: Role type filter (team_leader, department_head)
         in: query

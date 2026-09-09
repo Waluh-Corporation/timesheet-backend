@@ -685,7 +685,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves active approvers (Team Leaders, Department Heads), optionally filtered by company_id, department_id, or role_type.",
+                "description": "Retrieves active approvers (Team Leaders, Department Heads), optionally filtered by company_id or role_type.",
                 "produces": [
                     "application/json"
                 ],
@@ -698,12 +698,6 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "Company ID filter",
                         "name": "company_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Department ID filter",
-                        "name": "department_id",
                         "in": "query"
                     },
                     {
@@ -2009,18 +2003,6 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
-                "department": {
-                    "$ref": "#/definitions/models.Department"
-                },
-                "department_id": {
-                    "type": "integer"
-                },
-                "email": {
-                    "type": "string"
-                },
-                "employee_id": {
-                    "type": "string"
-                },
                 "id": {
                     "type": "integer"
                 },
@@ -2038,12 +2020,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                },
-                "user": {
-                    "$ref": "#/definitions/models.User"
-                },
-                "user_id": {
-                    "type": "integer"
                 }
             }
         },

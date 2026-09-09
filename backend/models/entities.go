@@ -131,21 +131,15 @@ const (
 
 // Approver represents an authorized manager/supervisor who approves timesheet and overtime reports.
 type Approver struct {
-	ID           uint             `gorm:"primaryKey" json:"id"`
-	CreatedAt    time.Time        `json:"created_at"`
-	UpdatedAt    time.Time        `json:"updated_at"`
-	CompanyID    *uint            `gorm:"index" json:"company_id"`
-	Company      *Company         `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
-	DepartmentID *uint            `gorm:"index" json:"department_id"`
-	Department   *Department      `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department,omitempty"`
-	UserID       *uint            `gorm:"index" json:"user_id"`
-	User         *User            `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"user,omitempty"`
-	Name         string           `gorm:"size:255;not null" json:"name"`
-	EmployeeID   string           `gorm:"size:64" json:"employee_id"`
-	RoleType     ApproverRoleType `gorm:"size:32;not null;index" json:"role_type"`
-	Title        string           `gorm:"size:128" json:"title"`
-	Email        string           `gorm:"size:255" json:"email"`
-	IsActive     bool             `gorm:"not null;default:true" json:"is_active"`
+	ID        uint             `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	CompanyID *uint            `gorm:"index" json:"company_id"`
+	Company   *Company         `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	Name      string           `gorm:"size:255;not null" json:"name"`
+	RoleType  ApproverRoleType `gorm:"size:32;not null;index" json:"role_type"`
+	Title     string           `gorm:"size:128" json:"title"`
+	IsActive  bool             `gorm:"not null;default:true" json:"is_active"`
 }
 
 // OvertimeEntry records overtime activities for SPL sheet generation.

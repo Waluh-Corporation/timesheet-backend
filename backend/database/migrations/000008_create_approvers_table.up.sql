@@ -7,48 +7,46 @@ CREATE TABLE IF NOT EXISTS approvers (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     company_id BIGINT REFERENCES companies(id) ON UPDATE CASCADE ON DELETE SET NULL,
-    department_id BIGINT REFERENCES departments(id) ON UPDATE CASCADE ON DELETE SET NULL,
-    user_id BIGINT REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL,
     name VARCHAR(255) NOT NULL,
-    employee_id VARCHAR(64),
     role_type VARCHAR(32) NOT NULL, -- 'team_leader', 'department_head'
     title VARCHAR(128),
-    email VARCHAR(255),
     is_active BOOLEAN NOT NULL DEFAULT true
 );
 
 -- 2. Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_approvers_company_role ON approvers(company_id, role_type) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_approvers_department_id ON approvers(department_id);
-CREATE INDEX IF NOT EXISTS idx_approvers_user_id ON approvers(user_id);
 
 -- 3. Backfill any existing approvers from users referenced in overtime_entries
 DO $$
 BEGIN
     -- Backfill team leaders
-    INSERT INTO approvers (user_id, company_id, department_id, name, employee_id, role_type, email, is_active)
-    SELECT DISTINCT u.id, u.company_id, u.department_id, COALESCE(NULLIF(u.name, ''), u.username), u.employee_id, 'team_leader', u.email, true
+    INSERT INTO approvers (company_id, name, role_type, is_active)
+    SELECT DISTINCT u.company_id, COALESCE(NULLIF(u.name, ''), u.username), 'team_leader', true
     FROM overtime_entries oe
     JOIN users u ON oe.team_leader_id = u.id
     WHERE oe.team_leader_id IS NOT NULL;
 
     -- Backfill department heads
-    INSERT INTO approvers (user_id, company_id, department_id, name, employee_id, role_type, email, is_active)
-    SELECT DISTINCT u.id, u.company_id, u.department_id, COALESCE(NULLIF(u.name, ''), u.username), u.employee_id, 'department_head', u.email, true
+    INSERT INTO approvers (company_id, name, role_type, is_active)
+    SELECT DISTINCT u.company_id, COALESCE(NULLIF(u.name, ''), u.username), 'department_head', true
     FROM overtime_entries oe
     JOIN users u ON oe.department_head_id = u.id
     WHERE oe.department_head_id IS NOT NULL;
 
-    -- Remap foreign key values in overtime_entries from user.id to approver.id
+    -- Remap foreign key values in overtime_entries
     UPDATE overtime_entries oe
     SET team_leader_id = a.id
-    FROM approvers a
-    WHERE a.user_id = oe.team_leader_id AND a.role_type = 'team_leader';
+    FROM users u, approvers a
+    WHERE oe.team_leader_id = u.id
+      AND a.name = COALESCE(NULLIF(u.name, ''), u.username)
+      AND a.role_type = 'team_leader';
 
     UPDATE overtime_entries oe
     SET department_head_id = a.id
-    FROM approvers a
-    WHERE a.user_id = oe.department_head_id AND a.role_type = 'department_head';
+    FROM users u, approvers a
+    WHERE oe.department_head_id = u.id
+      AND a.name = COALESCE(NULLIF(u.name, ''), u.username)
+      AND a.role_type = 'department_head';
 END $$;
 
 -- 4. Re-point Foreign Key constraints to approvers(id)

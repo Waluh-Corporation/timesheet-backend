@@ -102,13 +102,9 @@ export interface ProfileChangeRequest {
 export interface Approver {
   id: number;
   company_id?: number;
-  department_id?: number;
-  user_id?: number;
   name: string;
-  employee_id?: string;
   role_type: "team_leader" | "department_head";
   title?: string;
-  email?: string;
   is_active: boolean;
 }
 
