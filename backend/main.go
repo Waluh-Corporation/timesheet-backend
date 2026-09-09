@@ -9,9 +9,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
 	"timesheet-backend/database"
+	_ "timesheet-backend/docs"
 	"timesheet-backend/handlers"
 	"timesheet-backend/mailer"
 	"timesheet-backend/push"
@@ -20,8 +24,16 @@ import (
 
 // @title Timesheet Automation Portal API
 // @version 2.0
-// @description Phase 2 portal: RBAC, passkeys, dynamic templates, web push, SMTP delivery.
+// @description High-performance RESTful backend API for the Timesheet Automation Portal, built with Go (Gin Engine) and PostgreSQL.
+// @termsOfService https://github.com/naufalzaid17/timesheet-generator
+// @contact.name API Support
+// @license.name MIT
+// @host localhost:8080
 // @BasePath /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter JWT token with format "Bearer {token}".
 
 func main() {
 	cfg := config.Load()
@@ -70,7 +82,13 @@ func main() {
 
 // registerRoutes wires the full Phase 2 API surface.
 func registerRoutes(r *gin.Engine, s *handlers.Server) {
-	api := r.Group("/api")
+	// Swagger documentation UI
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/swagger", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+	})
+
+	api := r.Group("/api/v1")
 
 	// --- Public auth routes (NO public sign-up) ---
 	authGroup := api.Group("/auth")
@@ -170,8 +188,8 @@ func spaHandler(staticRoot string) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		// Never serve HTML for an unmatched API route.
-		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+		// Never serve HTML for an unmatched API or Swagger route.
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.HasPrefix(c.Request.URL.Path, "/swagger/") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}

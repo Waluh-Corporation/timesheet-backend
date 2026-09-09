@@ -79,10 +79,10 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const [acts, tmpls, hols] = await Promise.all([
-        api<DailyActivity[]>(`/api/activities?year=${year}&month=${month}`),
-        api<Template[]>("/api/templates").catch(() => []),
+        api<DailyActivity[]>(`/api/v1/activities?year=${year}&month=${month}`),
+        api<Template[]>("/api/v1/templates").catch(() => []),
         api<{ date: string; description: string }[]>(
-          `/api/holidays?year=${year}&month=${month}`
+          `/api/v1/holidays?year=${year}&month=${month}`
         ).catch(() => []),
       ]);
       setActivities(acts || []);
@@ -205,7 +205,7 @@ export default function DashboardPage() {
           app_impacted: row[5] || "",
         };
         try {
-          await api("/api/activities", { method: "POST", body: JSON.stringify(payload) });
+          await api("/api/v1/activities", { method: "POST", body: JSON.stringify(payload) });
         } catch (err: any) {
           notify(err.message, "error");
         }
@@ -219,7 +219,7 @@ export default function DashboardPage() {
     try {
       const def = templates.find((t) => t.is_default) || templates[0];
       await downloadFile(
-        "/api/timesheet/generate",
+        "/api/v1/timesheet/generate",
         { template_id: def?.id || 0, month, year },
         `Timesheet_${month}_${year}.xlsx`
       );

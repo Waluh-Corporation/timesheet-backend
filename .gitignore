@@ -2,9 +2,7 @@
 node_modules/
 backend/tmp/
 backend/main
-backend/docs/docs.go
-backend/docs/swagger.json
-backend/docs/swagger.yaml
+*.exe
 
 # Next.js build and cache
 .next/

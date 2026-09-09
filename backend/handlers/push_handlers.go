@@ -10,24 +10,32 @@ import (
 	"timesheet-backend/push"
 )
 
-// GetVAPIDKey returns the public application server key for the frontend to
-// subscribe with.
+// GetVAPIDKey godoc
+// @Summary Get VAPID public key
+// @Description Returns the application server public key for browser Web Push subscription.
+// @Tags Push Notification
+// @Produce json
+// @Success 200 {object} models.VAPIDKeyResponse
+// @Router /api/v1/push/vapid-public-key [get]
 func (s *Server) GetVAPIDKey(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"public_key": s.Push.PublicKey()})
 }
 
-// subscribeRequest mirrors the browser PushSubscription JSON shape.
-type subscribeRequest struct {
-	Endpoint string `json:"endpoint" binding:"required"`
-	Keys     struct {
-		P256dh string `json:"p256dh" binding:"required"`
-		Auth   string `json:"auth" binding:"required"`
-	} `json:"keys"`
-}
-
-// Subscribe stores a Web Push subscription for the current user.
+// Subscribe godoc
+// @Summary Subscribe to Web Push notifications
+// @Description Registers or updates browser push notification subscription for the authenticated user.
+// @Tags Push Notification
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body models.SubscribeRequest true "Push subscription payload"
+// @Success 201 {object} models.MessageResponse
+// @Failure 400 {object} models.ErrorResponse "Invalid payload"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/push/subscribe [post]
 func (s *Server) Subscribe(c *gin.Context) {
-	var req subscribeRequest
+	var req models.SubscribeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -50,16 +58,20 @@ func (s *Server) Subscribe(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "subscribed"})
 }
 
-// unsubscribeRequest carries the endpoint to remove (optional: empty removes
-// all of the caller's subscriptions).
-type unsubscribeRequest struct {
-	Endpoint string `json:"endpoint"`
-}
-
-// Unsubscribe removes the current user's push subscription(s), turning off the
-// daily reminder for this browser.
+// Unsubscribe godoc
+// @Summary Unsubscribe from Web Push notifications
+// @Description Removes active push subscription for the browser, silencing timesheet reminder notifications.
+// @Tags Push Notification
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body models.UnsubscribeRequest false "Optional endpoint filter"
+// @Success 200 {object} models.MessageResponse
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/push/unsubscribe [post]
 func (s *Server) Unsubscribe(c *gin.Context) {
-	var req unsubscribeRequest
+	var req models.UnsubscribeRequest
 	_ = c.ShouldBindJSON(&req)
 	q := s.DB.Where("user_id = ?", currentUserID(c))
 	if req.Endpoint != "" {
@@ -72,8 +84,15 @@ func (s *Server) Unsubscribe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "unsubscribed"})
 }
 
-// SendTestPush pushes a test notification to the current user (helps verify the
-// service worker wiring without waiting for 17:00 WIB).
+// SendTestPush godoc
+// @Summary Send test push notification
+// @Description Dispatches an immediate test push notification to verify browser notification display.
+// @Tags Push Notification
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} models.MessageResponse
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Router /api/v1/push/test [post]
 func (s *Server) SendTestPush(c *gin.Context) {
 	s.Push.SendToUser(currentUserID(c), push.Payload{
 		Title: "Timesheet Portal",

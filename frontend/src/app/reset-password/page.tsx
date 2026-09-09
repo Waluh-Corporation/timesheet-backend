@@ -30,7 +30,7 @@ function ResetPasswordInner() {
     }
     setBusy(true);
     try {
-      await api("/api/auth/reset-password", {
+      await api("/api/v1/auth/reset-password", {
         method: "POST",
         auth: false,
         body: JSON.stringify({ token, password }),

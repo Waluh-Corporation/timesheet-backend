@@ -37,7 +37,7 @@ function ActivityInner() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api("/api/activities", { method: "POST", body: JSON.stringify(form) });
+      await api("/api/v1/activities", { method: "POST", body: JSON.stringify(form) });
       notify("Activity saved", "success");
       router.push("/dashboard");
     } catch (err: any) {

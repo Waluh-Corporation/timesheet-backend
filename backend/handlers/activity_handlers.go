@@ -21,22 +21,21 @@ func jakarta() *time.Location {
 	return loc
 }
 
-// dailyActivityRequest is a single day's entry from the daily modal or grid.
-type dailyActivityRequest struct {
-	Date         string `json:"date" binding:"required"` // YYYY-MM-DD
-	StartTime    string `json:"start_time"`
-	EndTime      string `json:"end_time"`
-	Status       string `json:"status"`
-	Activity     string `json:"activity"`
-	ProjectName  string `json:"project_name"`
-	ProjectID    string `json:"project_id"`
-	AppImpacted  string `json:"app_impacted"`
-	ProjectRefID *uint  `json:"project_ref_id"`
-}
-
-// UpsertDailyActivity creates or updates the current user's entry for one day.
+// UpsertDailyActivity godoc
+// @Summary Upsert daily timesheet activity
+// @Description Creates or updates a daily activity record for the authenticated user on a given date.
+// @Tags Activity
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body models.DailyActivityRequest true "Daily activity payload"
+// @Success 200 {object} models.DailyActivity
+// @Failure 400 {object} models.ErrorResponse "Invalid date format or payload"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/activities [post]
 func (s *Server) UpsertDailyActivity(c *gin.Context) {
-	var req dailyActivityRequest
+	var req models.DailyActivityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -103,7 +102,18 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 	c.JSON(http.StatusOK, activity)
 }
 
-// ListMonthlyActivities returns the current user's entries for a month.
+// ListMonthlyActivities godoc
+// @Summary List monthly activities
+// @Description Retrieves all daily activities for the authenticated user for a specific month and year.
+// @Tags Activity
+// @Security BearerAuth
+// @Produce json
+// @Param year query int false "Year (defaults to current year)"
+// @Param month query int false "Month 1-12 (defaults to current month)"
+// @Success 200 {array} models.DailyActivity
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/activities [get]
 func (s *Server) ListMonthlyActivities(c *gin.Context) {
 	year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
 	month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
@@ -121,17 +131,22 @@ func (s *Server) ListMonthlyActivities(c *gin.Context) {
 	c.JSON(http.StatusOK, activities)
 }
 
-// generateRequest selects the template, month and year to render.
-type generateRequest struct {
-	TemplateID uint `json:"template_id"`
-	Month      int  `json:"month" binding:"required,min=1,max=12"`
-	Year       int  `json:"year" binding:"required,min=2000,max=9999"`
-}
-
-// GenerateTimesheet renders the user's month into the mapped template, streams
-// the .xlsx back for download, and emails a copy to the user (requirement 5).
+// GenerateTimesheet godoc
+// @Summary Generate timesheet spreadsheet
+// @Description Renders monthly activities and overtimes into an Excel (.xlsx) workbook, initiates download, and dispatches an email copy.
+// @Tags Timesheet
+// @Security BearerAuth
+// @Accept json
+// @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+// @Param request body models.GenerateRequest true "Generation parameters"
+// @Success 200 {file} binary "Generated Excel workbook (.xlsx)"
+// @Failure 400 {object} models.ErrorResponse "Template or company mapping missing"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 404 {object} models.ErrorResponse "User not found"
+// @Failure 500 {object} models.ErrorResponse "Generation failed"
+// @Router /api/v1/timesheet/generate [post]
 func (s *Server) GenerateTimesheet(c *gin.Context) {
-	var req generateRequest
+	var req models.GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -219,8 +234,17 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
 }
 
-// GetHolidays returns Indonesian public holidays for a month so the frontend
-// grid can gray out and label weekends/holidays, backed by database caching and fallback.
+// GetHolidays godoc
+// @Summary Get monthly Indonesian public holidays
+// @Description Returns public holidays for the specified month and year with database cache fallback.
+// @Tags Holiday
+// @Security BearerAuth
+// @Produce json
+// @Param year query int false "Year (defaults to current year)"
+// @Param month query int false "Month 1-12 (defaults to current month)"
+// @Success 200 {array} models.HolidayDTO
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Router /api/v1/holidays [get]
 func (s *Server) GetHolidays(c *gin.Context) {
 	now := time.Now().In(jakarta())
 	year := queryIntDefault(c, "year", now.Year())
@@ -284,16 +308,28 @@ func sanitize(s string) string {
 
 // OvertimeRequest carries data to create/update an overtime entry.
 type OvertimeRequest struct {
-	ID              uint   `json:"id"`
-	Date            string `json:"date" binding:"required"` // YYYY-MM-DD
-	StartTime       string `json:"start_time" binding:"required"`
-	EndTime         string `json:"end_time" binding:"required"`
-	TaskDescription string `json:"task_description" binding:"required"`
-	TeamLeader      string `json:"team_leader"`
-	DepartmentHead  string `json:"department_head"`
+	ID              uint   `json:"id" example:"1"`
+	Date            string `json:"date" binding:"required" example:"2026-09-01"` // YYYY-MM-DD
+	StartTime       string `json:"start_time" binding:"required" example:"17:00"`
+	EndTime         string `json:"end_time" binding:"required" example:"21:00"`
+	TaskDescription string `json:"task_description" binding:"required" example:"Production bug fixing and system deployment"`
+	TeamLeader      string `json:"team_leader" example:"Team Lead Name"`
+	DepartmentHead  string `json:"department_head" example:"Dept Head Name"`
 }
 
-// UpsertOvertime creates or updates an overtime entry for the authenticated user.
+// UpsertOvertime godoc
+// @Summary Create or update overtime record
+// @Description Upserts an overtime entry for the authenticated user for SPL reporting.
+// @Tags Overtime
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body handlers.OvertimeRequest true "Overtime entry data"
+// @Success 200 {object} models.OvertimeEntry
+// @Failure 400 {object} models.ErrorResponse "Invalid payload or date format"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/overtimes [post]
 func (s *Server) UpsertOvertime(c *gin.Context) {
 	var req OvertimeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -331,7 +367,18 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 	c.JSON(http.StatusOK, entry)
 }
 
-// ListMonthlyOvertimes returns the current user's overtime records for a month.
+// ListMonthlyOvertimes godoc
+// @Summary List monthly overtime records
+// @Description Retrieves all overtime records for the authenticated user for a specific month and year.
+// @Tags Overtime
+// @Security BearerAuth
+// @Produce json
+// @Param year query int false "Year (defaults to current year)"
+// @Param month query int false "Month 1-12 (defaults to current month)"
+// @Success 200 {array} models.OvertimeEntry
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/overtimes [get]
 func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 	year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
 	month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
@@ -348,7 +395,17 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 	c.JSON(http.StatusOK, overtimes)
 }
 
-// DeleteOvertime deletes an overtime entry by ID.
+// DeleteOvertime godoc
+// @Summary Delete overtime record
+// @Description Removes a specific overtime entry belonging to the authenticated user.
+// @Tags Overtime
+// @Security BearerAuth
+// @Produce json
+// @Param id path int true "Overtime Entry ID"
+// @Success 200 {object} models.DeleteResponse
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/overtimes/{id} [delete]
 func (s *Server) DeleteOvertime(c *gin.Context) {
 	id := c.Param("id")
 	if err := s.DB.Where("id = ? AND user_id = ?", id, currentUserID(c)).Delete(&models.OvertimeEntry{}).Error; err != nil {
@@ -358,7 +415,17 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
-// ListProjects returns all active projects, optionally filtered by company_id.
+// ListProjects godoc
+// @Summary List active projects
+// @Description Returns all active projects, optionally filtered by company_id.
+// @Tags Master Data
+// @Security BearerAuth
+// @Produce json
+// @Param company_id query int false "Company ID filter"
+// @Success 200 {array} models.Project
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/projects [get]
 func (s *Server) ListProjects(c *gin.Context) {
 	var projects []models.Project
 	query := s.DB.Where("is_active = ?", true)
@@ -372,7 +439,16 @@ func (s *Server) ListProjects(c *gin.Context) {
 	c.JSON(http.StatusOK, projects)
 }
 
-// ListCompanies returns all companies and their associated templates and projects.
+// ListCompanies godoc
+// @Summary List all companies
+// @Description Returns all companies with their associated projects, templates, and departments.
+// @Tags Master Data
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {array} models.Company
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/companies [get]
 func (s *Server) ListCompanies(c *gin.Context) {
 	var companies []models.Company
 	if err := s.DB.Preload("Projects").Preload("Templates").Preload("Departments").Order("id asc").Find(&companies).Error; err != nil {
@@ -382,7 +458,17 @@ func (s *Server) ListCompanies(c *gin.Context) {
 	c.JSON(http.StatusOK, companies)
 }
 
-// ListDepartments returns departments, optionally filtered by company_id.
+// ListDepartments godoc
+// @Summary List active departments
+// @Description Returns active departments, optionally filtered by company_id.
+// @Tags Master Data
+// @Security BearerAuth
+// @Produce json
+// @Param company_id query int false "Company ID filter"
+// @Success 200 {array} models.Department
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/departments [get]
 func (s *Server) ListDepartments(c *gin.Context) {
 	var depts []models.Department
 	query := s.DB.Where("is_active = ?", true)
@@ -396,7 +482,16 @@ func (s *Server) ListDepartments(c *gin.Context) {
 	c.JSON(http.StatusOK, depts)
 }
 
-// ListActivityStatuses returns all normalized activity status options.
+// ListActivityStatuses godoc
+// @Summary List activity status options
+// @Description Returns all normalized activity status options (e.g. Present, Sick, Vacation).
+// @Tags Master Data
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {array} models.ActivityStatus
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/activity-statuses [get]
 func (s *Server) ListActivityStatuses(c *gin.Context) {
 	var statuses []models.ActivityStatus
 	if err := s.DB.Order("sort_order asc").Find(&statuses).Error; err != nil {
@@ -406,7 +501,18 @@ func (s *Server) ListActivityStatuses(c *gin.Context) {
 	c.JSON(http.StatusOK, statuses)
 }
 
-// ListHolidays returns holidays, optionally filtered by year or company_id.
+// ListHolidays godoc
+// @Summary List holidays
+// @Description Returns holidays, optionally filtered by year or company_id.
+// @Tags Holiday
+// @Security BearerAuth
+// @Produce json
+// @Param company_id query int false "Company ID filter"
+// @Param year query int false "Year filter"
+// @Success 200 {array} models.Holiday
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/holidays/all [get]
 func (s *Server) ListHolidays(c *gin.Context) {
 	var holidays []models.Holiday
 	query := s.DB.Order("date asc")

@@ -33,9 +33,10 @@ Phase 2 turns the generator into a full internal portal. See
 Mailpit (`:8025`), Go API (`:8080`), Next.js (`:3000`). On first boot the
 bootstrap admin (`admin`) is created with a **random password printed to the
 backend logs** — grab it from `docker compose logs backend` and change it after
-signing in, or set `BOOTSTRAP_ADMIN_PASSWORD` to choose your own. In production
-(`GIN_MODE=release`) the API refuses to start unless a strong `JWT_SECRET` is
-set.
+**Interactive Swagger Documentation**:
+The backend serves full OpenAPI 2.0 / Swagger UI documentation at:
+- `http://localhost:8080/swagger/index.html` (or redirect via `http://localhost:8080/swagger`)
+- Raw JSON spec: `http://localhost:8080/swagger/doc.json`
 
 ---
 

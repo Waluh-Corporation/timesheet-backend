@@ -1,7 +1,7 @@
 // Thin fetch wrapper around the Go backend API.
 //
 // The base URL is configurable via NEXT_PUBLIC_API_URL (baked at build time).
-// When unset it defaults to "" — i.e. same-origin, relative "/api/..." paths —
+// When unset it defaults to "" — i.e. same-origin, relative "/api/v1/..." paths —
 // which is exactly what the single unified image needs, since the Go server
 // serves this frontend and the API from the same host. For local `bun run dev`
 // against a separately-running backend, set NEXT_PUBLIC_API_URL=http://localhost:8080

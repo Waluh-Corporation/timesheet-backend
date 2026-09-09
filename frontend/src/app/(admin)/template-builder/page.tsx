@@ -233,7 +233,7 @@ export default function TemplateBuilderPage() {
 
   const loadTemplates = useCallback(async () => {
     try {
-      const list = await api<Template[]>("/api/templates");
+      const list = await api<Template[]>("/api/v1/templates");
       setTemplates(list);
       if (list.length && activeId === null) setActiveId(list[0].id);
     } catch (err: any) {
@@ -256,8 +256,8 @@ export default function TemplateBuilderPage() {
             grid: any[][];
             merges?: { row: number; col: number; rowspan: number; colspan: number }[];
             col_widths?: number[];
-          }>(`/api/templates/${activeId}/grid`),
-          api<Template[]>("/api/templates").then((all) => all.find((t) => t.id === activeId)),
+          }>(`/api/v1/templates/${activeId}/grid`),
+          api<Template[]>("/api/v1/templates").then((all) => all.find((t) => t.id === activeId)),
         ]);
         setGrid(gridRes.grid || []);
         setMerges(gridRes.merges || []);
@@ -333,7 +333,7 @@ export default function TemplateBuilderPage() {
     if (activeId === null) return;
     setSaving(true);
     try {
-      await api(`/api/admin/templates/${activeId}/mappings`, {
+      await api(`/api/v1/admin/templates/${activeId}/mappings`, {
         method: "POST",
         body: JSON.stringify({ mappings }),
       });
@@ -354,7 +354,7 @@ export default function TemplateBuilderPage() {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("name", file.name.replace(/\.xlsx$/i, ""));
-      const res = await fetch(`${API_BASE}/api/admin/templates`, {
+      const res = await fetch(`${API_BASE}/api/v1/admin/templates`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}` },
         body: fd,
@@ -497,7 +497,7 @@ export default function TemplateBuilderPage() {
               <button
                 onClick={async () => {
                   try {
-                    await api(`/api/admin/templates/${activeId}/default`, {
+                    await api(`/api/v1/admin/templates/${activeId}/default`, {
                       method: "POST",
                       body: JSON.stringify({}),
                     });
@@ -518,7 +518,7 @@ export default function TemplateBuilderPage() {
               const t = templates.find((x) => x.id === activeId);
               if (!t || !confirm(`Delete template "${t.name}"? This removes its mappings too.`)) return;
               try {
-                await api(`/api/admin/templates/${activeId}`, { method: "DELETE" });
+                await api(`/api/v1/admin/templates/${activeId}`, { method: "DELETE" });
                 notify("Template deleted", "success");
                 setActiveId(null);
                 loadTemplates();

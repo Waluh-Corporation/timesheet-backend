@@ -65,6 +65,10 @@ CREATE INDEX IF NOT EXISTS idx_profile_change_requests_company_id ON profile_cha
 CREATE INDEX IF NOT EXISTS idx_profile_change_requests_department_id ON profile_change_requests(department_id);
 
 -- 6. Add FK constraints on templates.created_by and profile_change_requests.reviewed_by if not already present
+-- Clean up any dangling references first to ensure referential integrity
+UPDATE templates SET created_by = NULL WHERE created_by IS NOT NULL AND created_by NOT IN (SELECT id FROM users);
+UPDATE profile_change_requests SET reviewed_by = NULL WHERE reviewed_by IS NOT NULL AND reviewed_by NOT IN (SELECT id FROM users);
+
 DO $$
 BEGIN
     IF NOT EXISTS (
