@@ -140,8 +140,10 @@ func (s *Server) CreateUser(c *gin.Context) {
 	if err == nil {
 		s.DB.Create(&models.PasswordResetToken{
 			UserID:    user.ID,
+			TokenType: "account_setup",
 			TokenHash: hash,
 			ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+			CreatedIP: c.ClientIP(),
 		})
 		link := s.publicBaseURL(c) + "/reset-password?token=" + raw
 		_ = s.Mailer.SendSetupEmail(user.Email, user.Username, link)

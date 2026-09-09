@@ -117,10 +117,18 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 	if err := s.DB.Where("email = ?", req.Email).First(&user).Error; err == nil {
 		raw, hash, err := auth.GenerateResetToken()
 		if err == nil {
+			now := time.Now()
+			// Invalidate any previously unconsumed active tokens for this user
+			s.DB.Model(&models.PasswordResetToken{}).
+				Where("user_id = ? AND used_at IS NULL", user.ID).
+				Update("used_at", now)
+
 			s.DB.Create(&models.PasswordResetToken{
 				UserID:    user.ID,
+				TokenType: "password_reset",
 				TokenHash: hash,
-				ExpiresAt: time.Now().Add(s.Cfg.ResetTokenTTL),
+				ExpiresAt: now.Add(s.Cfg.ResetTokenTTL),
+				CreatedIP: c.ClientIP(),
 			})
 			link := s.publicBaseURL(c) + "/reset-password?token=" + raw
 			_ = s.Mailer.SendResetEmail(user.Email, link)
@@ -148,7 +156,7 @@ func (s *Server) ResetPassword(c *gin.Context) {
 	}
 
 	var token models.PasswordResetToken
-	err := s.DB.Where("token_hash = ? AND used = ? AND expires_at > ?", auth.HashToken(req.Token), false, time.Now()).First(&token).Error
+	err := s.DB.Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", auth.HashToken(req.Token), time.Now()).First(&token).Error
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired token"})
 		return
@@ -170,8 +178,12 @@ func (s *Server) ResetPassword(c *gin.Context) {
 		return
 	}
 
+	now := time.Now()
 	s.DB.Model(&models.User{}).Where("id = ?", token.UserID).Update("password_hash", hash)
-	s.DB.Model(&token).Update("used", true)
+	s.DB.Model(&token).Updates(map[string]interface{}{
+		"used_at": now,
+		"used_ip": c.ClientIP(),
+	})
 
 	c.JSON(http.StatusOK, gin.H{"message": "password updated"})
 }

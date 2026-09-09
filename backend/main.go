@@ -131,10 +131,6 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.POST("/timesheet/generate", s.GenerateTimesheet)
 		authed.GET("/holidays", s.GetHolidays)
 
-		// Templates are readable by users (to fill the grid), writable by admins.
-		authed.GET("/templates", s.ListTemplates)
-		authed.GET("/templates/:id/grid", s.GetTemplateGrid)
-
 		// Master data (normalized projects, companies, departments, activity-statuses).
 		authed.GET("/projects", s.ListProjects)
 		authed.GET("/companies", s.ListCompanies)
@@ -160,11 +156,6 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)
-
-		admin.POST("/templates", s.UploadTemplate)
-		admin.POST("/templates/:id/mappings", s.SaveTemplateMappings)
-		admin.POST("/templates/:id/default", s.SetDefaultTemplate)
-		admin.DELETE("/templates/:id", s.DeleteTemplate)
 	}
 }
 

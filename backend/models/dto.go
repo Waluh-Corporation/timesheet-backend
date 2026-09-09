@@ -37,10 +37,6 @@ type PasskeySessionResponse struct {
 	Options   interface{} `json:"options"`
 }
 
-// SaveMappingsResponse returns the saved cell mappings for a template.
-type SaveMappingsResponse struct {
-	Mappings []CellMapping `json:"mappings"`
-}
 
 // LoginRequest is the username/email and password authentication payload.
 type LoginRequest struct {
@@ -120,9 +116,8 @@ type DailyActivityRequest struct {
 
 // GenerateRequest specifies parameters to render and download a timesheet workbook.
 type GenerateRequest struct {
-	TemplateID uint `json:"template_id" example:"1"`
-	Month      int  `json:"month" binding:"required,min=1,max=12" example:"9"`
-	Year       int  `json:"year" binding:"required,min=2000,max=9999" example:"2026"`
+	Month int `json:"month" binding:"required,min=1,max=12" example:"9"`
+	Year  int `json:"year" binding:"required,min=2000,max=9999" example:"2026"`
 }
 
 // PushKeyPayload carries the browser push subscription keys.
@@ -142,7 +137,3 @@ type UnsubscribeRequest struct {
 	Endpoint string `json:"endpoint" example:"https://fcm.googleapis.com/fcm/send/..."`
 }
 
-// SaveMappingsRequest wraps an array of cell mappings for a template.
-type SaveMappingsRequest struct {
-	Mappings []CellMapping `json:"mappings"`
-}

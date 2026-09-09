@@ -60,49 +60,6 @@ export interface User {
   created_at: string;
 }
 
-export type MappingScope = "cell" | "daily_column";
-
-export type MappingField =
-  | "date"
-  | "time_in"
-  | "time_out"
-  | "status"
-  | "activity"
-  | "project_name"
-  | "project_id"
-  | "app_impacted"
-  | "meta_name"
-  | "meta_mii_id"
-  | "meta_division"
-  | "meta_site"
-  | "meta_month"
-  | "meta_year";
-
-export interface CellMapping {
-  id?: number;
-  template_id?: number;
-  field: MappingField;
-  scope: MappingScope;
-  cell_ref?: string;
-  column?: string;
-  start_row?: number;
-  fillable: boolean;
-}
-
-export interface Template {
-  id: number;
-  name: string;
-  description: string;
-  sheet_name: string;
-  company?: string;
-  company_id?: number;
-  company_rel?: Company;
-  is_default: boolean;
-  created_by?: number;
-  cell_mappings: CellMapping[];
-  created_at: string;
-}
-
 export interface DailyActivity {
   id?: number;
   date: string; // YYYY-MM-DD

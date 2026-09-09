@@ -11,6 +11,13 @@ import (
 	"timesheet-backend/models"
 )
 
+const (
+	miiProjectName = "BNI Direct"
+	miiProjectID   = "P24015"
+	miiDivision    = "Wholesale Digital Delivery"
+	miiDepartment  = "Wholesale Channel and Service Delivery"
+)
+
 // buildMIIWorkbook generates the MII timesheet Excel document purely from code.
 func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	f := excelize.NewFile()

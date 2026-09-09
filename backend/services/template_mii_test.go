@@ -28,7 +28,7 @@ func TestGenerateMII(t *testing.T) {
 	}
 
 	in := GenerationInput{
-		Template:   &models.Template{Builtin: "mii", SheetName: "Sheet1", FileData: assets.MIITemplate},
+		CompanyCode: "mii",
 		User:       user,
 		Month:      5,
 		Year:       2026,
@@ -76,7 +76,7 @@ func TestGenerateMII(t *testing.T) {
 
 func TestGenerateMIITrimsShortMonth(t *testing.T) {
 	in := GenerationInput{
-		Template:   &models.Template{Builtin: "mii", SheetName: "Sheet1", FileData: assets.MIITemplate},
+		CompanyCode: "mii",
 		User:       &models.User{Name: "X"},
 		Month:      4, // April has 30 days -> day 31 (row 39) must be cleared
 		Year:       2026,

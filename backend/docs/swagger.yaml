@@ -6,9 +6,9 @@ definitions:
         description: YYYY-MM-DD
         example: "2026-09-01"
         type: string
-      department_head:
-        example: Dept Head Name
-        type: string
+      department_head_id:
+        example: 3
+        type: integer
       end_time:
         example: "21:00"
         type: string
@@ -21,9 +21,9 @@ definitions:
       task_description:
         example: Production bug fixing and system deployment
         type: string
-      team_leader:
-        example: Team Lead Name
-        type: string
+      team_leader_id:
+        example: 2
+        type: integer
     required:
     - date
     - end_time
@@ -51,31 +51,6 @@ definitions:
         example: faisal
         type: string
     type: object
-  models.CellMapping:
-    properties:
-      cell_ref:
-        description: 'For ScopeCell: absolute address, e.g. "C4".'
-        type: string
-      column:
-        description: |-
-          For ScopeDailyColumn: the column letter (e.g. "K") and the row where the
-          first day of the month is written.
-        type: string
-      field:
-        $ref: '#/definitions/models.MappingFieldType'
-      fillable:
-        description: Fillable marks whether users may edit this field in the monthly
-          grid.
-        type: boolean
-      id:
-        type: integer
-      scope:
-        $ref: '#/definitions/models.MappingScope'
-      start_row:
-        type: integer
-      template_id:
-        type: integer
-    type: object
   models.Company:
     properties:
       code:
@@ -94,10 +69,6 @@ definitions:
       projects:
         items:
           $ref: '#/definitions/models.Project'
-        type: array
-      templates:
-        items:
-          $ref: '#/definitions/models.Template'
         type: array
       updated_at:
         type: string
@@ -268,9 +239,6 @@ definitions:
         maximum: 12
         minimum: 1
         type: integer
-      template_id:
-        example: 1
-        type: integer
       year:
         example: 2026
         maximum: 9999
@@ -326,80 +294,6 @@ definitions:
       user:
         $ref: '#/definitions/models.User'
     type: object
-  models.MappingFieldType:
-    enum:
-    - date
-    - time_in
-    - time_out
-    - status
-    - activity
-    - project_name
-    - project_id
-    - app_impacted
-    - total_hour
-    - division
-    - department
-    - sub_department
-    - aip_fitur
-    - meta_name
-    - meta_mii_id
-    - meta_division
-    - meta_site
-    - meta_month
-    - meta_year
-    type: string
-    x-enum-comments:
-      FieldDepartment: per-day departement column
-      FieldDivision: per-day divisi column
-      FieldTotalHour: End - Start (computed)
-    x-enum-descriptions:
-    - ""
-    - ""
-    - ""
-    - ""
-    - ""
-    - ""
-    - ""
-    - ""
-    - End - Start (computed)
-    - per-day divisi column
-    - per-day departement column
-    - ""
-    - ""
-    - ""
-    - ""
-    - ""
-    - ""
-    - ""
-    - ""
-    x-enum-varnames:
-    - FieldDate
-    - FieldTimeIn
-    - FieldTimeOut
-    - FieldStatus
-    - FieldActivity
-    - FieldProjectName
-    - FieldProjectID
-    - FieldAppImpacted
-    - FieldTotalHour
-    - FieldDivision
-    - FieldDepartment
-    - FieldSubDept
-    - FieldAIPFitur
-    - FieldMetaName
-    - FieldMetaMiiID
-    - FieldMetaDivision
-    - FieldMetaSite
-    - FieldMetaMonth
-    - FieldMetaYear
-  models.MappingScope:
-    enum:
-    - cell
-    - daily_column
-    type: string
-    x-enum-varnames:
-    - ScopeCell
-    - ScopeDailyColumn
   models.MessageResponse:
     properties:
       message:
@@ -419,12 +313,16 @@ definitions:
     properties:
       created_at:
         type: string
+      daily_activity:
+        $ref: '#/definitions/models.DailyActivity'
       daily_activity_id:
         type: integer
       date:
         type: string
       department_head:
-        type: string
+        $ref: '#/definitions/models.User'
+      department_head_id:
+        type: integer
       end_time:
         description: '"21:00"'
         type: string
@@ -436,7 +334,9 @@ definitions:
       task_description:
         type: string
       team_leader:
-        type: string
+        $ref: '#/definitions/models.User'
+      team_leader_id:
+        type: integer
       updated_at:
         type: string
       user:
@@ -583,20 +483,6 @@ definitions:
     x-enum-varnames:
     - RoleAdmin
     - RoleUser
-  models.SaveMappingsRequest:
-    properties:
-      mappings:
-        items:
-          $ref: '#/definitions/models.CellMapping'
-        type: array
-    type: object
-  models.SaveMappingsResponse:
-    properties:
-      mappings:
-        items:
-          $ref: '#/definitions/models.CellMapping'
-        type: array
-    type: object
   models.SubscribeRequest:
     properties:
       endpoint:
@@ -607,44 +493,6 @@ definitions:
     required:
     - endpoint
     - keys
-    type: object
-  models.Template:
-    properties:
-      builtin:
-        description: |-
-          Builtin, when set (e.g. "bni_dev"), marks a first-class bundled template
-          whose fixed layout is rendered by a dedicated strict-typed generator rather
-          than the generic cell-mapping engine.
-        type: string
-      cell_mappings:
-        items:
-          $ref: '#/definitions/models.CellMapping'
-        type: array
-      company:
-        type: string
-      company_id:
-        type: integer
-      company_rel:
-        $ref: '#/definitions/models.Company'
-      created_at:
-        type: string
-      created_by:
-        type: integer
-      creator:
-        $ref: '#/definitions/models.User'
-      description:
-        type: string
-      id:
-        type: integer
-      is_default:
-        type: boolean
-      name:
-        type: string
-      sheet_name:
-        description: SheetName is the worksheet the mapping applies to.
-        type: string
-      updated_at:
-        type: string
     type: object
   models.UnsubscribeRequest:
     properties:
@@ -748,50 +596,12 @@ definitions:
       user_id:
         type: integer
     type: object
-  services.MergeRegion:
-    properties:
-      col:
-        type: integer
-      colspan:
-        type: integer
-      row:
-        type: integer
-      rowspan:
-        type: integer
-    type: object
-  services.SheetLayout:
-    properties:
-      col_widths:
-        description: pixels, per column
-        items:
-          type: integer
-        type: array
-      grid:
-        items:
-          items:
-            type: string
-          type: array
-        type: array
-      merges:
-        items:
-          $ref: '#/definitions/services.MergeRegion'
-        type: array
-      sheet_name:
-        type: string
-    type: object
 host: localhost:8080
 info:
   contact:
     name: API Support
-  description: |-
-    High-performance RESTful backend API for the Timesheet Automation Portal, built with Go (Gin Engine) and PostgreSQL.
-    - Automated Timesheet Generator: Multi-company Excel (.xlsx) and PDF generation (MII, SDD, Adidata, NTT) with day-fraction calculations, dynamic day trimming, formula preservation, and async SMTP delivery.
-    - Dynamic Template Engine: Dedicated programmatic template builders alongside visual cell-mapping coordinate parsers integrated with Handsontable.
-    - Dual Authentication & Security: JWT sessions with NIST SP 800-63B compliant Argon2id password hashing and WebAuthn FIDO2 Passkeys (biometric & hardware-bound).
-    - Role-Based Access Control (RBAC): Admin and User role segregation, centralized account administration, and profile change approval workflows.
-    - Web Push Notifications: Daily reminder scheduler pinned to 17:00 WIB (Asia/Jakarta) notifying active users via VAPID.
-    - 3NF Relational Master Data: Normalized PostgreSQL database schema (Companies, Departments, Projects, Holidays, Activity Statuses) with foreign keys and automated SQL migrations.
-    - API Versioning: Standardized RESTful endpoints routed under the `/api/v1/*` namespace.
+  description: High-performance RESTful backend API for the Timesheet Automation Portal,
+    built with Go (Gin Engine) and PostgreSQL.
   license:
     name: MIT
   termsOfService: https://github.com/naufalzaid17/timesheet-generator
@@ -991,187 +801,6 @@ paths:
       security:
       - BearerAuth: []
       summary: Review profile change request (Admin)
-      tags:
-      - Admin
-  /api/v1/admin/templates:
-    post:
-      consumes:
-      - multipart/form-data
-      description: Ingests an admin-uploaded .xlsx workbook template for timesheet
-        generation.
-      parameters:
-      - description: Excel .xlsx template file
-        in: formData
-        name: file
-        required: true
-        type: file
-      - description: Template display name
-        in: formData
-        name: name
-        type: string
-      - description: Template description
-        in: formData
-        name: description
-        type: string
-      - description: Associated company code or name
-        in: formData
-        name: company
-        type: string
-      - description: Target worksheet name
-        in: formData
-        name: sheet_name
-        type: string
-      - description: Set as default template (true/false)
-        in: formData
-        name: is_default
-        type: string
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/models.Template'
-        "400":
-          description: Invalid file or parameters
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "403":
-          description: Admin only
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Upload template workbook (Admin)
-      tags:
-      - Admin
-  /api/v1/admin/templates/{id}:
-    delete:
-      description: Removes a template and its mappings (admin only).
-      parameters:
-      - description: Template ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.MessageResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "403":
-          description: Admin only
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete template (Admin)
-      tags:
-      - Admin
-  /api/v1/admin/templates/{id}/default:
-    post:
-      description: Marks a template as the default used for generation when a user
-        doesn't pick one (admin only).
-      parameters:
-      - description: Template ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.MessageResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "403":
-          description: Admin only
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "404":
-          description: Template not found
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Set default template (Admin)
-      tags:
-      - Admin
-  /api/v1/admin/templates/{id}/mappings:
-    post:
-      consumes:
-      - application/json
-      description: Replaces all cell mappings for a template with the admin-specified
-        configuration.
-      parameters:
-      - description: Template ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Cell mappings list
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/models.SaveMappingsRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.SaveMappingsResponse'
-        "400":
-          description: Invalid template ID or payload
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "403":
-          description: Admin only
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "404":
-          description: Template not found
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Save template cell mappings (Admin)
       tags:
       - Admin
   /api/v1/admin/users:
@@ -2145,65 +1774,6 @@ paths:
       summary: Get VAPID public key
       tags:
       - Push Notification
-  /api/v1/templates:
-    get:
-      description: Retrieves all uploaded timesheet templates with their cell mappings.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/models.Template'
-            type: array
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List templates
-      tags:
-      - Template
-  /api/v1/templates/{id}/grid:
-    get:
-      description: Returns the parsed 2-D cell grid and merged cells for Handsontable
-        rendering.
-      parameters:
-      - description: Template ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/services.SheetLayout'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "404":
-          description: Template not found
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/models.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get template grid layout
-      tags:
-      - Template
   /api/v1/timesheet/generate:
     post:
       consumes:

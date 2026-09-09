@@ -28,7 +28,7 @@ func TestBuildMIIWorkbook(t *testing.T) {
 	}
 
 	in := GenerationInput{
-		Template:   &models.Template{Builtin: "mii"},
+		CompanyCode: "mii",
 		User:       user,
 		Month:      6,
 		Year:       2026,
@@ -108,7 +108,7 @@ func TestBuildSDDWorkbook(t *testing.T) {
 	}
 
 	in := GenerationInput{
-		Template:   &models.Template{Builtin: "sdd"},
+		CompanyCode: "sdd",
 		User:       user,
 		Month:      6,
 		Year:       2026,
@@ -182,17 +182,19 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 		ProjectName: "BNI Direct",
 	}
 
+	tl := models.User{Name: "Daniel Harry Hasudungan Simbolon"}
+	dh := models.User{Name: "M. Yohan Muchori"}
 	ot := models.OvertimeEntry{
 		Date:            time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC),
 		StartTime:       "17:00",
 		EndTime:         "21:00",
 		TaskDescription: "WIT BNIdirect bisnis - SME FINANCING",
-		TeamLeader:      "Daniel Harry Hasudungan Simbolon",
-		DepartmentHead:  "M. Yohan Muchori",
+		TeamLeader:      &tl,
+		DepartmentHead:  &dh,
 	}
 
 	in := GenerationInput{
-		Template:   &models.Template{Builtin: "adidata"},
+		CompanyCode: "adidata",
 		User:       user,
 		Month:      6,
 		Year:       2026,
@@ -278,7 +280,7 @@ func TestBuildNTTWorkbook(t *testing.T) {
 	}
 
 	in := GenerationInput{
-		Template:   &models.Template{Builtin: "ntt"},
+		CompanyCode: "ntt",
 		User:       user,
 		Month:      9,
 		Year:       2026,

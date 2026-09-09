@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -158,27 +159,21 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		return
 	}
 
-	// Resolve the template: explicit id, or strictly by user's assigned company (relational first, then string fallback).
-	var tmpl models.Template
-	if req.TemplateID != 0 {
-		if err := s.DB.Preload("CellMappings").Where("id = ?", req.TemplateID).First(&tmpl).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "template not found"})
-			return
+	// Resolve the company: relational first (CompanyID), then string fallback.
+	var companyCode string
+	var companyName string
+	if user.CompanyID != nil && *user.CompanyID != 0 {
+		var comp models.Company
+		if err := s.DB.First(&comp, *user.CompanyID).Error; err == nil {
+			companyCode = strings.ToLower(comp.Code)
+			companyName = comp.Name
 		}
-	} else if user.CompanyID != nil && *user.CompanyID != 0 {
-		if err := s.DB.Preload("CellMappings").Where("company_id = ?", *user.CompanyID).First(&tmpl).Error; err != nil {
-			// Fallback to name/string matching if company_id template is not flagged
-			if err2 := s.DB.Preload("CellMappings").Where("LOWER(company) = LOWER(?) OR LOWER(name) LIKE LOWER(?) OR LOWER(builtin) = LOWER(?)", user.Company, "%"+user.Company+"%", user.Company).First(&tmpl).Error; err2 != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "no template available for company: " + user.Company + ". Please ask an admin to upload a template for " + user.Company})
-				return
-			}
-		}
-	} else if user.Company != "" {
-		if err := s.DB.Preload("CellMappings").Where("LOWER(company) = LOWER(?) OR LOWER(name) LIKE LOWER(?) OR LOWER(builtin) = LOWER(?)", user.Company, "%"+user.Company+"%", user.Company).First(&tmpl).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no template available for company: " + user.Company + ". Please ask an admin to upload a template for " + user.Company})
-			return
-		}
-	} else {
+	}
+	if companyCode == "" && user.Company != "" {
+		companyCode = strings.ToLower(user.Company)
+		companyName = user.Company
+	}
+	if companyCode == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "user has no company assigned. Ask an admin to assign a company (MII, SDD, NTT, or Adidata) to your account."})
 		return
 	}
@@ -189,7 +184,9 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).Find(&activities)
 
 	var overtimes []models.OvertimeEntry
-	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).Order("date asc").Find(&overtimes)
+	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).
+		Preload("TeamLeader").Preload("DepartmentHead").
+		Order("date asc").Find(&overtimes)
 
 	// Fetch public holidays for the month so weekends/holidays are reflected in
 	// the generated sheet (best-effort; generation still proceeds on failure).
@@ -204,14 +201,13 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	}
 
 	out, err := services.GenerateFromTemplate(services.GenerationInput{
-		Template:   &tmpl,
-		Mappings:   tmpl.CellMappings,
-		User:       &user,
-		Month:      req.Month,
-		Year:       req.Year,
-		Activities: activities,
-		Overtimes:  overtimes,
-		Holidays:   holidays,
+		CompanyCode: companyCode,
+		User:        &user,
+		Month:       req.Month,
+		Year:        req.Year,
+		Activities:  activities,
+		Overtimes:   overtimes,
+		Holidays:    holidays,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "generation failed: " + err.Error()})
@@ -219,11 +215,6 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	}
 
 	filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitize(user.Username), req.Month, req.Year)
-
-	companyName := tmpl.Company
-	if companyName == "" {
-		companyName = user.Company
-	}
 
 	// Email a copy asynchronously so the download isn't blocked on SMTP.
 	go func(to, comp, fn string, data []byte) {
@@ -308,13 +299,13 @@ func sanitize(s string) string {
 
 // OvertimeRequest carries data to create/update an overtime entry.
 type OvertimeRequest struct {
-	ID              uint   `json:"id" example:"1"`
-	Date            string `json:"date" binding:"required" example:"2026-09-01"` // YYYY-MM-DD
-	StartTime       string `json:"start_time" binding:"required" example:"17:00"`
-	EndTime         string `json:"end_time" binding:"required" example:"21:00"`
-	TaskDescription string `json:"task_description" binding:"required" example:"Production bug fixing and system deployment"`
-	TeamLeader      string `json:"team_leader" example:"Team Lead Name"`
-	DepartmentHead  string `json:"department_head" example:"Dept Head Name"`
+	ID               uint   `json:"id" example:"1"`
+	Date             string `json:"date" binding:"required" example:"2026-09-01"` // YYYY-MM-DD
+	StartTime        string `json:"start_time" binding:"required" example:"17:00"`
+	EndTime          string `json:"end_time" binding:"required" example:"21:00"`
+	TaskDescription  string `json:"task_description" binding:"required" example:"Production bug fixing and system deployment"`
+	TeamLeaderID     *uint  `json:"team_leader_id" example:"2"`
+	DepartmentHeadID *uint  `json:"department_head_id" example:"3"`
 }
 
 // UpsertOvertime godoc
@@ -343,14 +334,14 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 	}
 
 	entry := models.OvertimeEntry{
-		ID:              req.ID,
-		UserID:          currentUserID(c),
-		Date:            date,
-		StartTime:       req.StartTime,
-		EndTime:         req.EndTime,
-		TaskDescription: req.TaskDescription,
-		TeamLeader:      req.TeamLeader,
-		DepartmentHead:  req.DepartmentHead,
+		ID:               req.ID,
+		UserID:           currentUserID(c),
+		Date:             date,
+		StartTime:        req.StartTime,
+		EndTime:          req.EndTime,
+		TaskDescription:  req.TaskDescription,
+		TeamLeaderID:     req.TeamLeaderID,
+		DepartmentHeadID: req.DepartmentHeadID,
 	}
 
 	if entry.ID != 0 {
@@ -364,6 +355,7 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 			return
 		}
 	}
+	_ = s.DB.Preload("TeamLeader").Preload("DepartmentHead").First(&entry, entry.ID)
 	c.JSON(http.StatusOK, entry)
 }
 
@@ -388,6 +380,7 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 
 	var overtimes []models.OvertimeEntry
 	if err := s.DB.Where("user_id = ? AND date >= ? AND date < ?", currentUserID(c), start, end).
+		Preload("TeamLeader").Preload("DepartmentHead").
 		Order("date asc").Find(&overtimes).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

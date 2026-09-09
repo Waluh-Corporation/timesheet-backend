@@ -45,9 +45,8 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	if err := seedAdmin(db, cfg); err != nil {
 		return nil, err
 	}
-	if err := seedDefaultTemplate(db); err != nil {
-		// Non-fatal: the portal still runs, admins can upload a template.
-		log.Printf("[database] could not seed default template: %v", err)
+	if err := seedDefaultCompanies(db); err != nil {
+		log.Printf("[database] could not seed default companies: %v", err)
 	}
 	if err := seedDefaultProjectsAndNormalize(db); err != nil {
 		log.Printf("[database] normalization/project seeding error: %v", err)
@@ -55,10 +54,8 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// seedDefaultTemplate installs the bundled company templates on first boot
-// (when no template exists yet): MII, SDD, Adidata, and NTT.
-func seedDefaultTemplate(db *gorm.DB) error {
-	// Seed companies first
+// seedDefaultCompanies seeds the primary companies on first boot: MII, SDD, Adidata, and NTT.
+func seedDefaultCompanies(db *gorm.DB) error {
 	companies := []models.Company{
 		{Code: "mii", Name: "PT Mitra Integrasi Informatika"},
 		{Code: "sdd", Name: "PT Swadharma Duta Data"},
@@ -72,86 +69,17 @@ func seedDefaultTemplate(db *gorm.DB) error {
 			_ = db.Create(&c).Error
 		}
 	}
-
-	var count int64
-	if err := db.Model(&models.Template{}).Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-
-	// Helper to find company ID
-	findCompanyID := func(code string) *uint {
-		var comp models.Company
-		if err := db.Where("code = ?", code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
-			return &comp.ID
-		}
-		return nil
-	}
-
-	// 1. MII timesheet — the default template.
-	mii := models.Template{
-		Name:        "MII Timesheet",
-		Description: "Built-in MII timesheet template (pure programmatic builder with K1 header logo).",
-		SheetName:   "Sheet1",
-		Company:     "MII",
-		CompanyID:   findCompanyID("mii"),
-		IsDefault:   true,
-		Builtin:     "mii",
-	}
-	_ = db.Create(&mii)
-	log.Printf("[database] seeded default template '%s' (builtin mii)", mii.Name)
-
-	// 2. SDD timesheet — pure programmatic builder.
-	sdd := models.Template{
-		Name:        "SDD Timesheet",
-		Description: "Built-in SDD timesheet template (pure programmatic builder with A2 header logo).",
-		SheetName:   "Juni",
-		Company:     "SDD",
-		CompanyID:   findCompanyID("sdd"),
-		IsDefault:   false,
-		Builtin:     "sdd",
-	}
-	_ = db.Create(&sdd)
-	log.Printf("[database] seeded template '%s' (builtin sdd)", sdd.Name)
-
-	// 3. Adidata timesheet — pure programmatic builder with SPL.
-	adidata := models.Template{
-		Name:        "Adidata Timesheet",
-		Description: "Built-in Adidata timesheet template (pure programmatic builder with N2 header logo & SPL support).",
-		SheetName:   "TIMESHEET",
-		Company:     "Adidata",
-		CompanyID:   findCompanyID("adidata"),
-		IsDefault:   false,
-		Builtin:     "adidata",
-	}
-	_ = db.Create(&adidata)
-	log.Printf("[database] seeded template '%s' (builtin adidata)", adidata.Name)
-
-	// 4. NTT timesheet — pure programmatic builder.
-	ntt := models.Template{
-		Name:        "NTT Timesheet",
-		Description: "Built-in NTT timesheet template (pure programmatic builder with N2 header logo).",
-		SheetName:   "Timesheet",
-		Company:     "NTT",
-		CompanyID:   findCompanyID("ntt"),
-		IsDefault:   false,
-		Builtin:     "ntt",
-	}
-	_ = db.Create(&ntt)
-	log.Printf("[database] seeded template '%s' (builtin ntt)", ntt.Name)
-
 	return nil
 }
 
 // AutoMigrate runs GORM migrations for every entity.
 func AutoMigrate(db *gorm.DB) error {
 	// Clean up any dangling foreign key references that would prevent constraint creation
-	_ = db.Exec(`UPDATE templates SET created_by = NULL WHERE created_by IS NOT NULL AND created_by NOT IN (SELECT id FROM users)`).Error
 	_ = db.Exec(`UPDATE profile_change_requests SET reviewed_by = NULL WHERE reviewed_by IS NOT NULL AND reviewed_by NOT IN (SELECT id FROM users)`).Error
 	_ = db.Exec(`UPDATE daily_activities SET project_ref_id = NULL WHERE project_ref_id IS NOT NULL AND project_ref_id NOT IN (SELECT id FROM projects)`).Error
 	_ = db.Exec(`UPDATE overtime_entries SET daily_activity_id = NULL WHERE daily_activity_id IS NOT NULL AND daily_activity_id NOT IN (SELECT id FROM daily_activities)`).Error
+	_ = db.Exec(`UPDATE overtime_entries SET team_leader_id = NULL WHERE team_leader_id IS NOT NULL AND team_leader_id NOT IN (SELECT id FROM users)`).Error
+	_ = db.Exec(`UPDATE overtime_entries SET department_head_id = NULL WHERE department_head_id IS NOT NULL AND department_head_id NOT IN (SELECT id FROM users)`).Error
 
 	return db.AutoMigrate(
 		&models.Company{},
@@ -161,8 +89,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Project{},
 		&models.User{},
 		&models.WebAuthnCredential{},
-		&models.Template{},
-		&models.CellMapping{},
 		&models.DailyActivity{},
 		&models.OvertimeEntry{},
 		&models.PushSubscription{},
@@ -196,20 +122,6 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 		  AND company != ''
 	`).Error
 
-	// 2. Backfill missing company_id on templates
-	_ = db.Exec(`
-		UPDATE templates 
-		SET company_id = (
-			SELECT id FROM companies 
-			WHERE LOWER(companies.code) = LOWER(templates.company) 
-			   OR LOWER(companies.name) LIKE '%' || LOWER(templates.company) || '%' 
-			LIMIT 1
-		) 
-		WHERE (company_id IS NULL OR company_id = 0) 
-		  AND company IS NOT NULL 
-		  AND company != ''
-	`).Error
-
 	// 3. Seed default projects
 	defaultProjects := []models.Project{
 		{Code: "P24015", Name: "BNI Direct", AppImpacted: "BNI Direct Cash", CompanyID: findCompanyID("mii"), IsActive: true},
@@ -221,7 +133,13 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	}
 	for _, p := range defaultProjects {
 		var cnt int64
-		_ = db.Model(&models.Project{}).Where("code = ? AND (company_id = ? OR (company_id IS NULL AND ? IS NULL))", p.Code, p.CompanyID, p.CompanyID).Count(&cnt).Error
+		q := db.Model(&models.Project{}).Where("code = ?", p.Code)
+		if p.CompanyID == nil {
+			q = q.Where("company_id IS NULL")
+		} else {
+			q = q.Where("company_id = ?", *p.CompanyID)
+		}
+		_ = q.Count(&cnt).Error
 		if cnt == 0 {
 			_ = db.Create(&p).Error
 		}
@@ -290,7 +208,13 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	}
 	for _, d := range defaultDepartments {
 		var cnt int64
-		_ = db.Model(&models.Department{}).Where("code = ? AND (company_id = ? OR (company_id IS NULL AND ? IS NULL))", d.Code, d.CompanyID, d.CompanyID).Count(&cnt).Error
+		q := db.Model(&models.Department{}).Where("code = ?", d.Code)
+		if d.CompanyID == nil {
+			q = q.Where("company_id IS NULL")
+		} else {
+			q = q.Where("company_id = ?", *d.CompanyID)
+		}
+		_ = q.Count(&cnt).Error
 		if cnt == 0 {
 			_ = db.Create(&d).Error
 		}
@@ -308,14 +232,6 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 		) 
 		WHERE (department_id IS NULL OR department_id = 0) 
 		  AND ((department IS NOT NULL AND department != '') OR (division IS NOT NULL AND division != ''))
-	`).Error
-
-	// 8. Backfill templates.created_by to admin user if null
-	_ = db.Exec(`
-		UPDATE templates 
-		SET created_by = (SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1) 
-		WHERE (created_by IS NULL OR created_by = 0)
-		  AND EXISTS (SELECT 1 FROM users WHERE role = 'admin')
 	`).Error
 
 	return nil

@@ -7,7 +7,6 @@ import ThemeToggle from "@/components/ThemeToggle";
 import {
   LayoutDashboard,
   Users,
-  LayoutTemplate,
   LogOut,
   CalendarCheck,
   UserRound,
@@ -22,7 +21,6 @@ interface NavItem {
 
 const adminNav: NavItem[] = [
   { href: "/users", label: "Users", icon: Users },
-  { href: "/template-builder", label: "Template Builder", icon: LayoutTemplate },
   { href: "/profile", label: "Profile", icon: UserRound },
 ];
 

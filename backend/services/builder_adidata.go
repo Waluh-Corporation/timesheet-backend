@@ -357,7 +357,10 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellValue(splSheet, "C22", pos)
 		_ = f.SetCellStyle(splSheet, "C22", "E22", st.DataCenterStyle)
 
-		tl := ot.TeamLeader
+		tl := ""
+		if ot.TeamLeader != nil && ot.TeamLeader.Name != "" {
+			tl = ot.TeamLeader.Name
+		}
 		if tl == "" {
 			tl = "Daniel Harry Hasudungan Simbolon"
 		}
@@ -369,7 +372,10 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellValue(splSheet, "G22", "TEAM LEADER")
 		_ = f.SetCellStyle(splSheet, "G22", "J22", st.DataCenterStyle)
 
-		dh := ot.DepartmentHead
+		dh := ""
+		if ot.DepartmentHead != nil && ot.DepartmentHead.Name != "" {
+			dh = ot.DepartmentHead.Name
+		}
 		if dh == "" {
 			dh = "M. Yohan Muchori"
 		}

@@ -319,283 +319,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/admin/templates": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Ingests an admin-uploaded .xlsx workbook template for timesheet generation.",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin"
-                ],
-                "summary": "Upload template workbook (Admin)",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "Excel .xlsx template file",
-                        "name": "file",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Template display name",
-                        "name": "name",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Template description",
-                        "name": "description",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Associated company code or name",
-                        "name": "company",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Target worksheet name",
-                        "name": "sheet_name",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Set as default template (true/false)",
-                        "name": "is_default",
-                        "in": "formData"
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/models.Template"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid file or parameters",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Admin only",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/admin/templates/{id}": {
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Removes a template and its mappings (admin only).",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin"
-                ],
-                "summary": "Delete template (Admin)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Template ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Admin only",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/admin/templates/{id}/default": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Marks a template as the default used for generation when a user doesn't pick one (admin only).",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin"
-                ],
-                "summary": "Set default template (Admin)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Template ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Admin only",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Template not found",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/admin/templates/{id}/mappings": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Replaces all cell mappings for a template with the admin-specified configuration.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Admin"
-                ],
-                "summary": "Save template cell mappings (Admin)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Template ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Cell mappings list",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.SaveMappingsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.SaveMappingsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid template ID or payload",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Admin only",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Template not found",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/admin/users": {
             "get": {
                 "security": [
@@ -2087,98 +1810,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/templates": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieves all uploaded timesheet templates with their cell mappings.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Template"
-                ],
-                "summary": "List templates",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Template"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/templates/{id}/grid": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns the parsed 2-D cell grid and merged cells for Handsontable rendering.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Template"
-                ],
-                "summary": "Get template grid layout",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Template ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/services.SheetLayout"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Template not found",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/timesheet/generate": {
             "post": {
                 "security": [
@@ -2258,9 +1889,9 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2026-09-01"
                 },
-                "department_head": {
-                    "type": "string",
-                    "example": "Dept Head Name"
+                "department_head_id": {
+                    "type": "integer",
+                    "example": 3
                 },
                 "end_time": {
                     "type": "string",
@@ -2278,9 +1909,9 @@ const docTemplate = `{
                     "type": "string",
                     "example": "Production bug fixing and system deployment"
                 },
-                "team_leader": {
-                    "type": "string",
-                    "example": "Team Lead Name"
+                "team_leader_id": {
+                    "type": "integer",
+                    "example": 2
                 }
             }
         },
@@ -2315,38 +1946,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.CellMapping": {
-            "type": "object",
-            "properties": {
-                "cell_ref": {
-                    "description": "For ScopeCell: absolute address, e.g. \"C4\".",
-                    "type": "string"
-                },
-                "column": {
-                    "description": "For ScopeDailyColumn: the column letter (e.g. \"K\") and the row where the\nfirst day of the month is written.",
-                    "type": "string"
-                },
-                "field": {
-                    "$ref": "#/definitions/models.MappingFieldType"
-                },
-                "fillable": {
-                    "description": "Fillable marks whether users may edit this field in the monthly grid.",
-                    "type": "boolean"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "scope": {
-                    "$ref": "#/definitions/models.MappingScope"
-                },
-                "start_row": {
-                    "type": "integer"
-                },
-                "template_id": {
-                    "type": "integer"
-                }
-            }
-        },
         "models.Company": {
             "type": "object",
             "properties": {
@@ -2373,12 +1972,6 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.Project"
-                    }
-                },
-                "templates": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Template"
                     }
                 },
                 "updated_at": {
@@ -2627,10 +2220,6 @@ const docTemplate = `{
                     "minimum": 1,
                     "example": 9
                 },
-                "template_id": {
-                    "type": "integer",
-                    "example": 1
-                },
                 "year": {
                     "type": "integer",
                     "maximum": 9999,
@@ -2708,88 +2297,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.MappingFieldType": {
-            "type": "string",
-            "enum": [
-                "date",
-                "time_in",
-                "time_out",
-                "status",
-                "activity",
-                "project_name",
-                "project_id",
-                "app_impacted",
-                "total_hour",
-                "division",
-                "department",
-                "sub_department",
-                "aip_fitur",
-                "meta_name",
-                "meta_mii_id",
-                "meta_division",
-                "meta_site",
-                "meta_month",
-                "meta_year"
-            ],
-            "x-enum-comments": {
-                "FieldDepartment": "per-day departement column",
-                "FieldDivision": "per-day divisi column",
-                "FieldTotalHour": "End - Start (computed)"
-            },
-            "x-enum-descriptions": [
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "End - Start (computed)",
-                "per-day divisi column",
-                "per-day departement column",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                "",
-                ""
-            ],
-            "x-enum-varnames": [
-                "FieldDate",
-                "FieldTimeIn",
-                "FieldTimeOut",
-                "FieldStatus",
-                "FieldActivity",
-                "FieldProjectName",
-                "FieldProjectID",
-                "FieldAppImpacted",
-                "FieldTotalHour",
-                "FieldDivision",
-                "FieldDepartment",
-                "FieldSubDept",
-                "FieldAIPFitur",
-                "FieldMetaName",
-                "FieldMetaMiiID",
-                "FieldMetaDivision",
-                "FieldMetaSite",
-                "FieldMetaMonth",
-                "FieldMetaYear"
-            ]
-        },
-        "models.MappingScope": {
-            "type": "string",
-            "enum": [
-                "cell",
-                "daily_column"
-            ],
-            "x-enum-varnames": [
-                "ScopeCell",
-                "ScopeDailyColumn"
-            ]
-        },
         "models.MessageResponse": {
             "type": "object",
             "properties": {
@@ -2819,6 +2326,9 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "daily_activity": {
+                    "$ref": "#/definitions/models.DailyActivity"
+                },
                 "daily_activity_id": {
                     "type": "integer"
                 },
@@ -2826,7 +2336,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "department_head": {
-                    "type": "string"
+                    "$ref": "#/definitions/models.User"
+                },
+                "department_head_id": {
+                    "type": "integer"
                 },
                 "end_time": {
                     "description": "\"21:00\"",
@@ -2843,7 +2356,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "team_leader": {
-                    "type": "string"
+                    "$ref": "#/definitions/models.User"
+                },
+                "team_leader_id": {
+                    "type": "integer"
                 },
                 "updated_at": {
                     "type": "string"
@@ -3057,28 +2573,6 @@ const docTemplate = `{
                 "RoleUser"
             ]
         },
-        "models.SaveMappingsRequest": {
-            "type": "object",
-            "properties": {
-                "mappings": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.CellMapping"
-                    }
-                }
-            }
-        },
-        "models.SaveMappingsResponse": {
-            "type": "object",
-            "properties": {
-                "mappings": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.CellMapping"
-                    }
-                }
-            }
-        },
         "models.SubscribeRequest": {
             "type": "object",
             "required": [
@@ -3092,58 +2586,6 @@ const docTemplate = `{
                 },
                 "keys": {
                     "$ref": "#/definitions/models.PushKeyPayload"
-                }
-            }
-        },
-        "models.Template": {
-            "type": "object",
-            "properties": {
-                "builtin": {
-                    "description": "Builtin, when set (e.g. \"bni_dev\"), marks a first-class bundled template\nwhose fixed layout is rendered by a dedicated strict-typed generator rather\nthan the generic cell-mapping engine.",
-                    "type": "string"
-                },
-                "cell_mappings": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.CellMapping"
-                    }
-                },
-                "company": {
-                    "type": "string"
-                },
-                "company_id": {
-                    "type": "integer"
-                },
-                "company_rel": {
-                    "$ref": "#/definitions/models.Company"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "created_by": {
-                    "type": "integer"
-                },
-                "creator": {
-                    "$ref": "#/definitions/models.User"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "is_default": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "sheet_name": {
-                    "description": "SheetName is the worksheet the mapping applies to.",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
                 }
             }
         },
@@ -3295,53 +2737,6 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
-                }
-            }
-        },
-        "services.MergeRegion": {
-            "type": "object",
-            "properties": {
-                "col": {
-                    "type": "integer"
-                },
-                "colspan": {
-                    "type": "integer"
-                },
-                "row": {
-                    "type": "integer"
-                },
-                "rowspan": {
-                    "type": "integer"
-                }
-            }
-        },
-        "services.SheetLayout": {
-            "type": "object",
-            "properties": {
-                "col_widths": {
-                    "description": "pixels, per column",
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "grid": {
-                    "type": "array",
-                    "items": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "merges": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/services.MergeRegion"
-                    }
-                },
-                "sheet_name": {
-                    "type": "string"
                 }
             }
         }

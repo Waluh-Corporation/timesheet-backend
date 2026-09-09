@@ -124,6 +124,10 @@ func TestAPIRouteVersioningTable(t *testing.T) {
 		if strings.HasPrefix(route.Path, "/api/v1/") {
 			foundV1 = true
 		}
+		// Verify templates routes are removed
+		if strings.Contains(route.Path, "templates") {
+			t.Errorf("templates route should be removed, but found: %s %s", route.Method, route.Path)
+		}
 	}
 
 	if !foundV1 {
@@ -137,5 +141,14 @@ func TestAPIRouteVersioningTable(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404 for unversioned route /api/push/vapid-public-key, got %d", w.Code)
+	}
+
+	// Verify that calling deleted template route returns 404
+	reqTmpl := httptest.NewRequest(http.MethodGet, "/api/v1/templates", nil)
+	wTmpl := httptest.NewRecorder()
+	r.ServeHTTP(wTmpl, reqTmpl)
+
+	if wTmpl.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404 for deleted route /api/v1/templates, got %d", wTmpl.Code)
 	}
 }
