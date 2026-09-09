@@ -69,7 +69,7 @@ type Company struct {
 	ID          uint         `gorm:"primaryKey" json:"id"`
 	CreatedAt   time.Time    `json:"created_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`
-	Code        string       `gorm:"uniqueIndex;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
+	Code        string       `gorm:"unique;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
 	Name        string       `gorm:"size:255;not null" json:"name"`
 	Projects    []Project    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"projects,omitempty"`
 	Departments []Department `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"departments,omitempty"`

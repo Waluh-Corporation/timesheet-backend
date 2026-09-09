@@ -48,6 +48,10 @@ type Config struct {
 	AdminEmail    string
 	AdminUsername string
 	AdminPassword string
+
+	// RunMigrations controls whether versioned schema migrations and seeders run.
+	// Defaults to false so starting the server (e.g. go run .) does not run DDLs.
+	RunMigrations bool
 }
 
 func getEnv(key, fallback string) string {
@@ -61,6 +65,15 @@ func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
+		}
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
 		}
 	}
 	return fallback
@@ -169,6 +182,8 @@ func Load() *Config {
 		AdminEmail:    getEnv("BOOTSTRAP_ADMIN_EMAIL", "admin@timesheet.local"),
 		AdminUsername: getEnv("BOOTSTRAP_ADMIN_USERNAME", "admin"),
 		AdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", ""),
+
+		RunMigrations: getEnvBool("RUN_MIGRATIONS", false),
 	}
 
 	cfg.validateSecrets()

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -13,8 +14,8 @@ import (
 	"timesheet-backend/models"
 )
 
-// Connect opens the PostgreSQL connection, runs migrations, and seeds the
-// bootstrap admin account.
+// Connect opens the PostgreSQL connection, configures pooling, and optionally
+// runs migrations and initial seeding when cfg.RunMigrations is true.
 func Connect(cfg *config.Config) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
@@ -33,27 +34,26 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	sqlDB.SetConnMaxLifetime(1 * time.Hour)
 	sqlDB.SetConnMaxIdleTime(15 * time.Minute)
 
-	// Run versioned SQL migrations first
-	if err := RunMigrations(db); err != nil {
-		log.Printf("[database] warning: migration runner: %v", err)
+	if cfg.RunMigrations {
+		log.Println("[database] running database migrations...")
+		if err := RunMigrations(db); err != nil {
+			return nil, fmt.Errorf("migration runner: %w", err)
+		}
+
+		if err := seedAdmin(db, cfg); err != nil {
+			return nil, err
+		}
+		if err := seedDefaultCompanies(db); err != nil {
+			log.Printf("[database] could not seed default companies: %v", err)
+		}
+		if err := seedDefaultApprovers(db); err != nil {
+			log.Printf("[database] could not seed default approvers: %v", err)
+		}
+		if err := seedDefaultProjectsAndNormalize(db); err != nil {
+			log.Printf("[database] normalization/project seeding error: %v", err)
+		}
 	}
 
-	if err := AutoMigrate(db); err != nil {
-		return nil, err
-	}
-
-	if err := seedAdmin(db, cfg); err != nil {
-		return nil, err
-	}
-	if err := seedDefaultCompanies(db); err != nil {
-		log.Printf("[database] could not seed default companies: %v", err)
-	}
-	if err := seedDefaultApprovers(db); err != nil {
-		log.Printf("[database] could not seed default approvers: %v", err)
-	}
-	if err := seedDefaultProjectsAndNormalize(db); err != nil {
-		log.Printf("[database] normalization/project seeding error: %v", err)
-	}
 	return db, nil
 }
 

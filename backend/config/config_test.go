@@ -26,3 +26,31 @@ func TestParseOrigins(t *testing.T) {
 		})
 	}
 }
+
+func TestGetEnvBool(t *testing.T) {
+	cases := []struct {
+		envKey   string
+		envVal   string
+		setEnv   bool
+		fallback bool
+		want     bool
+	}{
+		{"TEST_BOOL_1", "true", true, false, true},
+		{"TEST_BOOL_2", "1", true, false, true},
+		{"TEST_BOOL_3", "false", true, true, false},
+		{"TEST_BOOL_4", "0", true, true, false},
+		{"TEST_BOOL_5", "invalid", true, true, true},
+		{"TEST_BOOL_6", "", false, false, false},
+		{"TEST_BOOL_7", "", false, true, true},
+	}
+
+	for _, tc := range cases {
+		if tc.setEnv {
+			t.Setenv(tc.envKey, tc.envVal)
+		}
+		got := getEnvBool(tc.envKey, tc.fallback)
+		if got != tc.want {
+			t.Errorf("getEnvBool(%q, %v) with val %q = %v; want %v", tc.envKey, tc.fallback, tc.envVal, got, tc.want)
+		}
+	}
+}

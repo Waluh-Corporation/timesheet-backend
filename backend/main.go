@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -36,11 +37,23 @@ import (
 // @description Enter JWT token with format "Bearer {token}".
 
 func main() {
+	migrateFlag := flag.Bool("migrate", false, "run database migrations before starting the server")
+	migrateOnlyFlag := flag.Bool("migrate-only", false, "run database migrations and exit")
+	flag.Parse()
+
 	cfg := config.Load()
+	if *migrateFlag || *migrateOnlyFlag {
+		cfg.RunMigrations = true
+	}
 
 	db, err := database.Connect(cfg)
 	if err != nil {
 		log.Fatalf("database connection failed: %v", err)
+	}
+
+	if *migrateOnlyFlag {
+		log.Println("database migrations completed successfully")
+		return
 	}
 
 	authSvc := auth.NewService(cfg.JWTSecret, cfg.JWTExpiry)
