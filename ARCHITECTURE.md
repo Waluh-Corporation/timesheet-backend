@@ -24,22 +24,28 @@ daily entry, SMTP delivery, and daily Web Push reminders.
                      (GORM)             (email)          (browser vendors)
 ```
 
-## 1. Database schema (GORM)
+## 1. Database schema (GORM & 3NF Normalization)
 
-Defined in `backend/models/entities.go`:
+Defined in `backend/models/entities.go` and managed via versioned SQL migrations in `backend/database/migrations/`:
 
 | Model                  | Purpose                                                              |
 | ---------------------- | ------------------------------------------------------------------- |
-| `User`                 | Account + live (approved) profile, RBAC role, implements `webauthn.User`. |
+| `User`                 | Account + live profile, RBAC role, linked to `Company` & `Department`. |
+| `Company`              | Master company/vendor table (e.g. MII, SDD, Adidata, NTT).           |
+| `Department`           | Master organizational unit linked to `Company`.                     |
+| `Project`              | Master billable project / app impacted linked to `Company`.          |
+| `ActivityStatus`       | Master daily timesheet activity status codes (`P`, `S`, `PM`, etc.). |
+| `Holiday`              | Calendar holidays & joint leave with optional `Company` scope.       |
 | `WebAuthnCredential`   | One stored passkey per row (credential id, public key, sign count). |
-| `Template`             | Admin-uploaded `.xlsx` (raw bytes stored), one may be `is_default`. |
-| `CellMapping`          | Maps a semantic field → a physical cell or per-day column in a template. |
-| `DailyActivity`        | One user's entry for one calendar day (unique on `user_id + date`). |
+| `Template`             | Admin-uploaded `.xlsx` or built-in, linked to `Company`.             |
+| `CellMapping`          | Maps a semantic field → a physical cell or per-day column.          |
+| `DailyActivity`        | User's entry per day (unique on `user_id + date`), FKs to status & project. |
+| `OvertimeEntry`        | Overtime task entries for SPL generation, FKs to user & daily entry. |
 | `PushSubscription`     | Browser Web Push subscription (endpoint + keys).                    |
 | `ProfileChangeRequest` | Pending self-service profile edit awaiting admin approval.          |
 | `PasswordResetToken`   | Hashed token backing setup-link + forgot-password flows.            |
 
-Migrations and the bootstrap-admin seed run in `backend/database/database.go`.
+Versioned migrations run automatically via `RunMigrations(db)` in `backend/database/migrator.go`, followed by connection pool tuning (100 max connections, 25 idle) and master data seeding. Full normalization details, ERD diagram, and backup runbooks are documented in [`docs/DATABASE_ADMINISTRATION.md`](file:///docs/DATABASE_ADMINISTRATION.md).
 
 ## 2. Authentication & RBAC
 

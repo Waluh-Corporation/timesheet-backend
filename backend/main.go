@@ -117,9 +117,11 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/templates", s.ListTemplates)
 		authed.GET("/templates/:id/grid", s.GetTemplateGrid)
 
-		// Master data (normalized projects & companies).
+		// Master data (normalized projects, companies, departments, activity-statuses).
 		authed.GET("/projects", s.ListProjects)
 		authed.GET("/companies", s.ListCompanies)
+		authed.GET("/departments", s.ListDepartments)
+		authed.GET("/activity-statuses", s.ListActivityStatuses)
 
 		// Web push subscription.
 		authed.POST("/push/subscribe", s.Subscribe)

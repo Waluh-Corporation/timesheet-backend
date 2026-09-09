@@ -12,7 +12,7 @@ import (
 )
 
 // FetchHolidays performs an HTTP GET request to fetch Indonesia public holidays
-func FetchHolidays(year, month int) ([]models.Holiday, error) {
+func FetchHolidays(year, month int) ([]models.HolidayDTO, error) {
 	url := fmt.Sprintf("https://api-hari-libur.vercel.app/api?year=%d", year)
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
@@ -30,7 +30,7 @@ func FetchHolidays(year, month int) ([]models.Holiday, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return []models.Holiday{}, nil
+		return []models.HolidayDTO{}, nil
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -44,7 +44,7 @@ func FetchHolidays(year, month int) ([]models.Holiday, error) {
 
 	// Filter holidays that match the requested month
 	prefix := fmt.Sprintf("%04d-%02d-", year, month)
-	var filtered []models.Holiday
+	var filtered []models.HolidayDTO
 	for _, hol := range holidayResp.Data {
 		if strings.HasPrefix(hol.Date, prefix) {
 			filtered = append(filtered, hol)

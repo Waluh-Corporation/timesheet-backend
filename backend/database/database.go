@@ -2,6 +2,7 @@ package database
 
 import (
 	"log"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -20,6 +21,21 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Configure connection pooling for reliability and sub-second performance
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxIdleConns(25)
+	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetConnMaxLifetime(1 * time.Hour)
+	sqlDB.SetConnMaxIdleTime(15 * time.Minute)
+
+	// Run versioned SQL migrations first
+	if err := RunMigrations(db); err != nil {
+		log.Printf("[database] warning: migration runner: %v", err)
 	}
 
 	if err := AutoMigrate(db); err != nil {
@@ -133,6 +149,9 @@ func seedDefaultTemplate(db *gorm.DB) error {
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&models.Company{},
+		&models.Department{},
+		&models.ActivityStatus{},
+		&models.Holiday{},
 		&models.Project{},
 		&models.User{},
 		&models.WebAuthnCredential{},
@@ -146,9 +165,17 @@ func AutoMigrate(db *gorm.DB) error {
 	)
 }
 
-// seedDefaultProjectsAndNormalize backfills missing company_id associations,
-// seeds master projects, and links existing daily_activities to projects.
+// seedDefaultProjectsAndNormalize backfills missing associations,
+// seeds master statuses/projects/departments, and links existing data.
 func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
+	findCompanyID := func(code string) *uint {
+		var comp models.Company
+		if err := db.Where("code = ?", code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
+			return &comp.ID
+		}
+		return nil
+	}
+
 	// 1. Backfill missing company_id on users
 	_ = db.Exec(`
 		UPDATE users 
@@ -178,14 +205,6 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	`).Error
 
 	// 3. Seed default projects
-	findCompanyID := func(code string) *uint {
-		var comp models.Company
-		if err := db.Where("code = ?", code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
-			return &comp.ID
-		}
-		return nil
-	}
-
 	defaultProjects := []models.Project{
 		{Code: "P24015", Name: "BNI Direct", AppImpacted: "BNI Direct Cash", CompanyID: findCompanyID("mii"), IsActive: true},
 		{Code: "P24016", Name: "BNI Direct Overseas", AppImpacted: "BNI Direct Overseas", CompanyID: findCompanyID("mii"), IsActive: true},
@@ -225,6 +244,72 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 		WHERE project_ref_id IS NULL 
 		  AND project_name IS NOT NULL 
 		  AND project_name != ''
+	`).Error
+
+	// 5. Seed default activity statuses
+	defaultStatuses := []models.ActivityStatus{
+		{Code: "P", Name: "Present", Description: "Hadir bekerja normal", IsWorkingDay: true, SortOrder: 1},
+		{Code: "BT", Name: "Business Trip", Description: "Perjalanan dinas", IsWorkingDay: true, SortOrder: 2},
+		{Code: "S", Name: "Sick", Description: "Sakit", IsWorkingDay: false, SortOrder: 3},
+		{Code: "PM", Name: "Permission", Description: "Izin", IsWorkingDay: false, SortOrder: 4},
+		{Code: "V", Name: "Leave", Description: "Cuti / Vacation", IsWorkingDay: false, SortOrder: 5},
+		{Code: "X", Name: "Off", Description: "Libur / Off", IsWorkingDay: false, SortOrder: 6},
+	}
+	for _, s := range defaultStatuses {
+		var cnt int64
+		_ = db.Model(&models.ActivityStatus{}).Where("code = ?", s.Code).Count(&cnt).Error
+		if cnt == 0 {
+			_ = db.Create(&s).Error
+		}
+	}
+
+	// Standardize daily_activities.status to uppercase and map unmapped to 'P'
+	_ = db.Exec(`
+		UPDATE daily_activities 
+		SET status = UPPER(TRIM(status)) 
+		WHERE status IS NOT NULL AND status != ''
+	`).Error
+	_ = db.Exec(`
+		UPDATE daily_activities 
+		SET status = 'P' 
+		WHERE status IS NULL OR status = '' OR status NOT IN (SELECT code FROM activity_statuses)
+	`).Error
+
+	// 6. Seed default departments
+	defaultDepartments := []models.Department{
+		{Code: "WCSD", Name: "Wholesale Channel and Service Delivery", Division: "Wholesale Digital Delivery", CompanyID: findCompanyID("mii"), IsActive: true},
+		{Code: "SDD-DEV1", Name: "Kelompok Pengembangan 1", Division: "Application Development Division", CompanyID: findCompanyID("sdd"), IsActive: true},
+		{Code: "IT-BANK", Name: "IT Banking Application", Division: "IT Banking", CompanyID: findCompanyID("ntt"), IsActive: true},
+		{Code: "ADI-TS", Name: "Technical Support & Dev", Division: "Application Development", CompanyID: findCompanyID("adidata"), IsActive: true},
+	}
+	for _, d := range defaultDepartments {
+		var cnt int64
+		_ = db.Model(&models.Department{}).Where("code = ? AND (company_id = ? OR (company_id IS NULL AND ? IS NULL))", d.Code, d.CompanyID, d.CompanyID).Count(&cnt).Error
+		if cnt == 0 {
+			_ = db.Create(&d).Error
+		}
+	}
+
+	// 7. Backfill users.department_id
+	_ = db.Exec(`
+		UPDATE users 
+		SET department_id = (
+			SELECT id FROM departments 
+			WHERE LOWER(departments.name) = LOWER(users.department) 
+			   OR LOWER(departments.code) = LOWER(users.department) 
+			   OR (users.department IS NULL AND LOWER(departments.division) = LOWER(users.division))
+			LIMIT 1
+		) 
+		WHERE (department_id IS NULL OR department_id = 0) 
+		  AND ((department IS NOT NULL AND department != '') OR (division IS NOT NULL AND division != ''))
+	`).Error
+
+	// 8. Backfill templates.created_by to admin user if null
+	_ = db.Exec(`
+		UPDATE templates 
+		SET created_by = (SELECT id FROM users WHERE role = 'admin' ORDER BY id ASC LIMIT 1) 
+		WHERE (created_by IS NULL OR created_by = 0)
+		  AND EXISTS (SELECT 1 FROM users WHERE role = 'admin')
 	`).Error
 
 	return nil

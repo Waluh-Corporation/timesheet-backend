@@ -45,14 +45,16 @@ type User struct {
 	Name       string   `gorm:"size:255" json:"name"`
 	MiiID      string   `gorm:"size:64" json:"mii_id"`
 	EmployeeID string   `gorm:"size:64" json:"employee_id"` // NPP or MII ID
-	Division   string   `gorm:"size:255" json:"division"`
-	Department string   `gorm:"size:255" json:"department"`
-	GroupName  string   `gorm:"size:255" json:"group_name"` // Kelompok (SDD)
-	Position   string   `gorm:"size:128" json:"position"`
-	Site       string   `gorm:"size:128" json:"site"`
-	Company    string   `gorm:"size:64" json:"company"`
-	CompanyID  *uint    `gorm:"index" json:"company_id"`
-	CompanyRel *Company `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
+	Division      string      `gorm:"size:255" json:"division"`
+	Department    string      `gorm:"size:255" json:"department"`
+	DepartmentID  *uint       `gorm:"index" json:"department_id"`
+	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
+	GroupName     string      `gorm:"size:255" json:"group_name"` // Kelompok (SDD)
+	Position      string      `gorm:"size:128" json:"position"`
+	Site          string      `gorm:"size:128" json:"site"`
+	Company       string      `gorm:"size:64" json:"company"`
+	CompanyID     *uint       `gorm:"index" json:"company_id"`
+	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
 
 	// Credential relations.
 	Credentials       []WebAuthnCredential   `gorm:"constraint:OnDelete:CASCADE" json:"-"`
@@ -63,13 +65,48 @@ type User struct {
 
 // Company represents a vendor/organization (e.g. MII, SDD, Adidata).
 type Company struct {
-	ID        uint       `gorm:"primaryKey" json:"id"`
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	Code      string     `gorm:"uniqueIndex;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
-	Name      string     `gorm:"size:255;not null" json:"name"`
-	Templates []Template `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"templates,omitempty"`
-	Projects  []Project  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"projects,omitempty"`
+	ID          uint         `gorm:"primaryKey" json:"id"`
+	CreatedAt   time.Time    `json:"created_at"`
+	UpdatedAt   time.Time    `json:"updated_at"`
+	Code        string       `gorm:"uniqueIndex;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
+	Name        string       `gorm:"size:255;not null" json:"name"`
+	Templates   []Template   `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"templates,omitempty"`
+	Projects    []Project    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"projects,omitempty"`
+	Departments []Department `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"departments,omitempty"`
+}
+
+// Department represents an organizational department or unit within a company.
+type Department struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	CompanyID *uint     `gorm:"index" json:"company_id"`
+	Company   *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	Code      string    `gorm:"size:64;index" json:"code"` // e.g. "WCSD", "DEV-01"
+	Name      string    `gorm:"size:255;not null" json:"name"` // e.g. "Wholesale Channel and Service Delivery"
+	Division  string    `gorm:"size:255" json:"division"`      // e.g. "Wholesale Digital Delivery"
+	IsActive  bool      `gorm:"not null;default:true" json:"is_active"`
+}
+
+// ActivityStatus represents a normalized status option for daily timesheet activity.
+type ActivityStatus struct {
+	Code         string `gorm:"primaryKey;size:8" json:"code"` // "P", "S", "PM", "V", "BT", "X"
+	Name         string `gorm:"size:64;not null" json:"name"`  // "Present", "Sick", etc.
+	Description  string `gorm:"size:255" json:"description"`
+	IsWorkingDay bool   `gorm:"not null;default:true" json:"is_working_day"`
+	SortOrder    int    `gorm:"not null;default:0" json:"sort_order"`
+}
+
+// Holiday represents a national, regional, or company-specific holiday or joint leave.
+type Holiday struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	Date         time.Time `gorm:"type:date;uniqueIndex;not null" json:"date"`
+	Description  string    `gorm:"size:255;not null" json:"description"`
+	CompanyID    *uint     `gorm:"index" json:"company_id"`
+	Company      *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	IsJointLeave bool      `gorm:"not null;default:false" json:"is_joint_leave"`
 }
 
 // Project represents a billable project or initiative (e.g. BNI Direct, Core Banking).
@@ -180,7 +217,8 @@ type Template struct {
 	// FileData holds the raw .xlsx bytes so generation is self-contained.
 	FileData  []byte `gorm:"type:bytea" json:"-"`
 	IsDefault bool   `gorm:"not null;default:false" json:"is_default"`
-	CreatedBy uint   `json:"created_by"`
+	CreatedBy *uint  `gorm:"index" json:"created_by"`
+	Creator   *User  `gorm:"foreignKey:CreatedBy;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"creator,omitempty"`
 	// Builtin, when set (e.g. "bni_dev"), marks a first-class bundled template
 	// whose fixed layout is rendered by a dedicated strict-typed generator rather
 	// than the generic cell-mapping engine.
@@ -264,8 +302,9 @@ type DailyActivity struct {
 	ProjectID   string `gorm:"size:64" json:"project_id"`
 	AppImpacted string `gorm:"size:255" json:"app_impacted"`
 
-	ProjectRefID *uint    `gorm:"index" json:"project_ref_id"`
-	ProjectRef   *Project `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
+	ProjectRefID *uint           `gorm:"index" json:"project_ref_id"`
+	ProjectRef   *Project        `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
+	StatusRef    *ActivityStatus `gorm:"foreignKey:Status;references:Code;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"status_ref,omitempty"`
 }
 
 // PushSubscription persists a browser Web Push subscription for a user.
@@ -288,17 +327,22 @@ type ProfileChangeRequest struct {
 	UserID    uint          `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 	Status    ProfileStatus `gorm:"size:16;not null;default:pending" json:"status"`
 
-	Name       string `gorm:"size:255" json:"name"`
-	MiiID      string `gorm:"size:64" json:"mii_id"`
-	EmployeeID string `gorm:"size:64" json:"employee_id"`
-	Division   string `gorm:"size:255" json:"division"`
-	Department string `gorm:"size:255" json:"department"`
-	GroupName  string `gorm:"size:255" json:"group_name"`
-	Position   string `gorm:"size:128" json:"position"`
-	Site       string `gorm:"size:128" json:"site"`
+	Name          string      `gorm:"size:255" json:"name"`
+	MiiID         string      `gorm:"size:64" json:"mii_id"`
+	EmployeeID    string      `gorm:"size:64" json:"employee_id"`
+	Division      string      `gorm:"size:255" json:"division"`
+	Department    string      `gorm:"size:255" json:"department"`
+	DepartmentID  *uint       `gorm:"index" json:"department_id"`
+	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
+	GroupName     string      `gorm:"size:255" json:"group_name"`
+	Position      string      `gorm:"size:128" json:"position"`
+	Site          string      `gorm:"size:128" json:"site"`
+	CompanyID     *uint       `gorm:"index" json:"company_id"`
+	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
 
-	ReviewedBy *uint      `json:"reviewed_by"`
+	ReviewedBy *uint      `gorm:"index" json:"reviewed_by"`
 	ReviewedAt *time.Time `json:"reviewed_at"`
+	Reviewer   *User      `gorm:"foreignKey:ReviewedBy;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"reviewer,omitempty"`
 
 	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
 }

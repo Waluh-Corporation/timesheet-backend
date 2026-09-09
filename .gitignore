@@ -37,3 +37,4 @@ sshpass.py
 # Keep these scripts tracked despite the blanket *.sh ignore above.
 !deploy_and_commit.sh
 !docker/aio-entrypoint.sh
+!scripts/*.sh

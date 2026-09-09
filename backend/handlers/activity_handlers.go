@@ -23,14 +23,15 @@ func jakarta() *time.Location {
 
 // dailyActivityRequest is a single day's entry from the daily modal or grid.
 type dailyActivityRequest struct {
-	Date        string `json:"date" binding:"required"` // YYYY-MM-DD
-	StartTime   string `json:"start_time"`
-	EndTime     string `json:"end_time"`
-	Status      string `json:"status"`
-	Activity    string `json:"activity"`
-	ProjectName string `json:"project_name"`
-	ProjectID   string `json:"project_id"`
-	AppImpacted string `json:"app_impacted"`
+	Date         string `json:"date" binding:"required"` // YYYY-MM-DD
+	StartTime    string `json:"start_time"`
+	EndTime      string `json:"end_time"`
+	Status       string `json:"status"`
+	Activity     string `json:"activity"`
+	ProjectName  string `json:"project_name"`
+	ProjectID    string `json:"project_id"`
+	AppImpacted  string `json:"app_impacted"`
+	ProjectRefID *uint  `json:"project_ref_id"`
 }
 
 // UpsertDailyActivity creates or updates the current user's entry for one day.
@@ -47,22 +48,40 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 	}
 
 	activity := models.DailyActivity{
-		UserID:      currentUserID(c),
-		Date:        date,
-		StartTime:   req.StartTime,
-		EndTime:     req.EndTime,
-		Status:      req.Status,
-		Activity:    req.Activity,
-		ProjectName: req.ProjectName,
-		ProjectID:   req.ProjectID,
-		AppImpacted: req.AppImpacted,
+		UserID:       currentUserID(c),
+		Date:         date,
+		StartTime:    req.StartTime,
+		EndTime:      req.EndTime,
+		Status:       req.Status,
+		Activity:     req.Activity,
+		ProjectName:  req.ProjectName,
+		ProjectID:    req.ProjectID,
+		AppImpacted:  req.AppImpacted,
+		ProjectRefID: req.ProjectRefID,
 	}
 
-	// Associate with normalized Project if matched by code or name
-	if req.ProjectID != "" || req.ProjectName != "" {
+	// Associate with normalized Project if matched by ID, code, or name
+	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
+		var proj models.Project
+		if err := s.DB.First(&proj, *req.ProjectRefID).Error; err == nil {
+			activity.ProjectRefID = &proj.ID
+			if activity.ProjectName == "" {
+				activity.ProjectName = proj.Name
+			}
+			if activity.ProjectID == "" {
+				activity.ProjectID = proj.Code
+			}
+			if activity.AppImpacted == "" {
+				activity.AppImpacted = proj.AppImpacted
+			}
+		}
+	} else if req.ProjectID != "" || req.ProjectName != "" {
 		var proj models.Project
 		if err := s.DB.Where("code = ? OR LOWER(name) = LOWER(?)", req.ProjectID, req.ProjectName).First(&proj).Error; err == nil {
 			activity.ProjectRefID = &proj.ID
+			if activity.AppImpacted == "" && proj.AppImpacted != "" {
+				activity.AppImpacted = proj.AppImpacted
+			}
 		}
 	}
 
@@ -78,6 +97,9 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Preload associations before returning
+	_ = s.DB.Preload("ProjectRef").Preload("StatusRef").First(&activity, activity.ID)
 	c.JSON(http.StatusOK, activity)
 }
 
@@ -90,7 +112,8 @@ func (s *Server) ListMonthlyActivities(c *gin.Context) {
 	end := start.AddDate(0, 1, 0)
 
 	var activities []models.DailyActivity
-	if err := s.DB.Where("user_id = ? AND date >= ? AND date < ?", currentUserID(c), start, end).
+	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").
+		Where("user_id = ? AND date >= ? AND date < ?", currentUserID(c), start, end).
 		Order("date asc").Find(&activities).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -120,12 +143,20 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		return
 	}
 
-	// Resolve the template: explicit id, or strictly by user's assigned company.
+	// Resolve the template: explicit id, or strictly by user's assigned company (relational first, then string fallback).
 	var tmpl models.Template
 	if req.TemplateID != 0 {
 		if err := s.DB.Preload("CellMappings").Where("id = ?", req.TemplateID).First(&tmpl).Error; err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "template not found"})
 			return
+		}
+	} else if user.CompanyID != nil && *user.CompanyID != 0 {
+		if err := s.DB.Preload("CellMappings").Where("company_id = ?", *user.CompanyID).First(&tmpl).Error; err != nil {
+			// Fallback to name/string matching if company_id template is not flagged
+			if err2 := s.DB.Preload("CellMappings").Where("LOWER(company) = LOWER(?) OR LOWER(name) LIKE LOWER(?) OR LOWER(builtin) = LOWER(?)", user.Company, "%"+user.Company+"%", user.Company).First(&tmpl).Error; err2 != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "no template available for company: " + user.Company + ". Please ask an admin to upload a template for " + user.Company})
+				return
+			}
 		}
 	} else if user.Company != "" {
 		if err := s.DB.Preload("CellMappings").Where("LOWER(company) = LOWER(?) OR LOWER(name) LIKE LOWER(?) OR LOWER(builtin) = LOWER(?)", user.Company, "%"+user.Company+"%", user.Company).First(&tmpl).Error; err != nil {
@@ -189,18 +220,46 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 }
 
 // GetHolidays returns Indonesian public holidays for a month so the frontend
-// grid can gray out and label weekends/holidays.
+// grid can gray out and label weekends/holidays, backed by database caching and fallback.
 func (s *Server) GetHolidays(c *gin.Context) {
 	now := time.Now().In(jakarta())
 	year := queryIntDefault(c, "year", now.Year())
 	month := queryIntDefault(c, "month", int(now.Month()))
 	holidays, err := services.FetchHolidays(year, month)
-	if err != nil {
-		// Non-fatal: return an empty set so the grid still renders.
-		c.JSON(http.StatusOK, []models.Holiday{})
+	if err == nil && len(holidays) > 0 {
+		// Cache fetched holidays into database for resilience
+		for _, h := range holidays {
+			if t, parseErr := time.Parse("2006-01-02", h.Date); parseErr == nil {
+				_ = s.DB.Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "date"}},
+					DoUpdates: clause.AssignmentColumns([]string{"description", "updated_at"}),
+				}).Create(&models.Holiday{
+					Date:        t,
+					Description: h.Description,
+				}).Error
+			}
+		}
+		c.JSON(http.StatusOK, holidays)
 		return
 	}
-	c.JSON(http.StatusOK, holidays)
+
+	// Fallback to relational database if external API is unreachable
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	var dbHolidays []models.Holiday
+	if err := s.DB.Where("date >= ? AND date < ?", start, end).Order("date asc").Find(&dbHolidays).Error; err == nil && len(dbHolidays) > 0 {
+		resp := make([]map[string]string, 0, len(dbHolidays))
+		for _, dh := range dbHolidays {
+			resp = append(resp, map[string]string{
+				"date":        dh.Date.Format("2006-01-02"),
+				"description": dh.Description,
+			})
+		}
+		c.JSON(http.StatusOK, resp)
+		return
+	}
+
+	c.JSON(http.StatusOK, []models.HolidayDTO{})
 }
 
 func queryIntDefault(c *gin.Context, key string, def int) int {
@@ -316,11 +375,56 @@ func (s *Server) ListProjects(c *gin.Context) {
 // ListCompanies returns all companies and their associated templates and projects.
 func (s *Server) ListCompanies(c *gin.Context) {
 	var companies []models.Company
-	if err := s.DB.Preload("Projects").Preload("Templates").Order("id asc").Find(&companies).Error; err != nil {
+	if err := s.DB.Preload("Projects").Preload("Templates").Preload("Departments").Order("id asc").Find(&companies).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, companies)
+}
+
+// ListDepartments returns departments, optionally filtered by company_id.
+func (s *Server) ListDepartments(c *gin.Context) {
+	var depts []models.Department
+	query := s.DB.Where("is_active = ?", true)
+	if compID := c.Query("company_id"); compID != "" {
+		query = query.Where("company_id = ?", compID)
+	}
+	if err := query.Preload("Company").Order("name asc").Find(&depts).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, depts)
+}
+
+// ListActivityStatuses returns all normalized activity status options.
+func (s *Server) ListActivityStatuses(c *gin.Context) {
+	var statuses []models.ActivityStatus
+	if err := s.DB.Order("sort_order asc").Find(&statuses).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, statuses)
+}
+
+// ListHolidays returns holidays, optionally filtered by year or company_id.
+func (s *Server) ListHolidays(c *gin.Context) {
+	var holidays []models.Holiday
+	query := s.DB.Order("date asc")
+	if compID := c.Query("company_id"); compID != "" {
+		query = query.Where("company_id = ? OR company_id IS NULL", compID)
+	}
+	if yearStr := c.Query("year"); yearStr != "" {
+		if y, err := time.Parse("2006", yearStr); err == nil {
+			start := time.Date(y.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+			end := start.AddDate(1, 0, 0)
+			query = query.Where("date >= ? AND date < ?", start, end)
+		}
+	}
+	if err := query.Find(&holidays).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, holidays)
 }
 
 

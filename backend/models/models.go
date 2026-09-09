@@ -30,16 +30,16 @@ type TimesheetRequest struct {
 	DailyEntries      []DailyEntry `json:"daily_entries" binding:"required"`
 }
 
-// Holiday represents a holiday from the external API
-type Holiday struct {
+// HolidayDTO represents a holiday from the external API
+type HolidayDTO struct {
 	Date        string `json:"date"`
 	Description string `json:"description"`
 }
 
 // HolidayResponse represents the response format of the public holiday API
 type HolidayResponse struct {
-	Status  string    `json:"status"`
-	Code    int       `json:"code"`
-	Data    []Holiday `json:"data"`
-	Message string    `json:"message"`
+	Status  string       `json:"status"`
+	Code    int          `json:"code"`
+	Data    []HolidayDTO `json:"data"`
+	Message string       `json:"message"`
 }

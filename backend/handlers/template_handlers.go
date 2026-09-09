@@ -15,7 +15,7 @@ import (
 // ListTemplates returns all templates with their mappings.
 func (s *Server) ListTemplates(c *gin.Context) {
 	var templates []models.Template
-	if err := s.DB.Preload("CellMappings").Order("created_at desc").Find(&templates).Error; err != nil {
+	if err := s.DB.Preload("CellMappings").Preload("CompanyRel").Preload("Creator").Order("created_at desc").Find(&templates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -54,6 +54,7 @@ func (s *Server) UploadTemplate(c *gin.Context) {
 		return
 	}
 
+	createdBy := currentUserID(c)
 	tmpl := models.Template{
 		Name:        name,
 		Description: c.PostForm("description"),
@@ -61,8 +62,16 @@ func (s *Server) UploadTemplate(c *gin.Context) {
 		SheetName:   sheet,
 		FileData:    data,
 		IsDefault:   c.PostForm("is_default") == "true",
-		CreatedBy:   currentUserID(c),
+		CreatedBy:   &createdBy,
 	}
+
+	if tmpl.Company != "" {
+		var comp models.Company
+		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", tmpl.Company, "%"+tmpl.Company+"%").First(&comp).Error; err == nil {
+			tmpl.CompanyID = &comp.ID
+		}
+	}
+
 	if tmpl.IsDefault {
 		s.DB.Model(&models.Template{}).Where("is_default = ?", true).Update("is_default", false)
 	}
@@ -70,6 +79,7 @@ func (s *Server) UploadTemplate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	_ = s.DB.Preload("CompanyRel").Preload("Creator").First(&tmpl, tmpl.ID)
 	c.JSON(http.StatusCreated, tmpl)
 }
 
