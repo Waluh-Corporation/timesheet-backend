@@ -78,6 +78,7 @@ func seedDefaultCompanies(db *gorm.DB) error {
 // AutoMigrate runs GORM migrations for every entity.
 func AutoMigrate(db *gorm.DB) error {
 	// Clean up any dangling foreign key references that would prevent constraint creation
+	_ = db.Exec(`DELETE FROM daily_activities WHERE user_id NOT IN (SELECT id FROM users)`).Error
 	_ = db.Exec(`UPDATE profile_change_requests SET reviewed_by = NULL WHERE reviewed_by IS NOT NULL AND reviewed_by NOT IN (SELECT id FROM users)`).Error
 	_ = db.Exec(`UPDATE daily_activities SET project_ref_id = NULL WHERE project_ref_id IS NOT NULL AND project_ref_id NOT IN (SELECT id FROM projects)`).Error
 	_ = db.Exec(`UPDATE overtime_entries SET daily_activity_id = NULL WHERE daily_activity_id IS NOT NULL AND daily_activity_id NOT IN (SELECT id FROM daily_activities)`).Error

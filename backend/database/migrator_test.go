@@ -68,8 +68,8 @@ func TestEmbeddedMigrationsAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read embedded migrations dir: %v", err)
 	}
-	if len(entries) < 16 {
-		t.Errorf("expected at least 16 migration files (8 up, 8 down), got %d", len(entries))
+	if len(entries) < 18 {
+		t.Errorf("expected at least 18 migration files (9 up, 9 down), got %d", len(entries))
 	}
 }
 
@@ -127,12 +127,25 @@ func TestRunMigrationsOnDB(t *testing.T) {
 
 	// 4. Verify approvers table exists after migration 000008
 	var hasApproversTable, hasApproverRoleType bool
-	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'approvers')`).Scan(&hasApproversTable)
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?)` , "approvers").Scan(&hasApproversTable)
 	if !hasApproversTable {
 		t.Errorf("table approvers should exist after migration 000008")
 	}
 	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'approvers' AND column_name = 'role_type')`).Scan(&hasApproverRoleType)
 	if !hasApproverRoleType {
 		t.Errorf("approvers.role_type column should exist")
+	}
+
+	// 5. Verify daily_activities user foreign key constraint after migration 000009
+	var hasFKUser bool
+	_ = db.Raw(`
+		SELECT EXISTS (
+			SELECT 1 FROM pg_constraint 
+			WHERE conrelid = 'daily_activities'::regclass 
+			  AND (conname = 'fk_daily_activities_user' OR pg_get_constraintdef(oid) LIKE '%FOREIGN KEY (user_id) REFERENCES users(id)%')
+		)
+	`).Scan(&hasFKUser)
+	if !hasFKUser {
+		t.Errorf("expected foreign key from daily_activities(user_id) to users(id) to exist")
 	}
 }

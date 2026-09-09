@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,6 +48,18 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		return
 	}
 
+	// Default status to 'P' if not provided
+	if req.Status == "" {
+		req.Status = "P"
+	}
+
+	// Validate status against activity_statuses to return 400 instead of foreign key constraint 500
+	var statusCount int64
+	if err := s.DB.Model(&models.ActivityStatus{}).Where("code = ?", req.Status).Count(&statusCount).Error; err != nil || statusCount == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid status code: must be a valid activity status (e.g. P, BT, S, PM, V, X)")
+		return
+	}
+
 	activity := models.DailyActivity{
 		UserID:       currentUserID(c),
 		Date:         date,
@@ -63,7 +76,7 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 	// Associate with normalized Project if matched by ID, code, or name
 	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
 		var proj models.Project
-		if err := s.DB.First(&proj, *req.ProjectRefID).Error; err == nil {
+		if err := s.DB.Limit(1).Find(&proj, *req.ProjectRefID).Error; err == nil && proj.ID != 0 {
 			activity.ProjectRefID = &proj.ID
 			if activity.ProjectName == "" {
 				activity.ProjectName = proj.Name
@@ -77,10 +90,29 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		}
 	} else if req.ProjectID != "" || req.ProjectName != "" {
 		var proj models.Project
-		if err := s.DB.Where("code = ? OR LOWER(name) = LOWER(?)", req.ProjectID, req.ProjectName).First(&proj).Error; err == nil {
+		query := s.DB.Model(&models.Project{})
+		if idNum, err := strconv.Atoi(req.ProjectID); err == nil && idNum > 0 {
+			query = query.Where("id = ? OR code = ?", idNum, req.ProjectID)
+		} else if req.ProjectID != "" {
+			query = query.Where("code = ?", req.ProjectID)
+		}
+		if req.ProjectName != "" {
+			if req.ProjectID != "" {
+				query = s.DB.Model(&models.Project{}).Where("(code = ? OR LOWER(name) = LOWER(?))", req.ProjectID, req.ProjectName)
+			} else {
+				query = query.Where("LOWER(name) = LOWER(?)", req.ProjectName)
+			}
+		}
+		if err := query.Limit(1).Find(&proj).Error; err == nil && proj.ID != 0 {
 			activity.ProjectRefID = &proj.ID
 			if activity.AppImpacted == "" && proj.AppImpacted != "" {
 				activity.AppImpacted = proj.AppImpacted
+			}
+			if activity.ProjectName == "" {
+				activity.ProjectName = proj.Name
+			}
+			if activity.ProjectID == "" {
+				activity.ProjectID = proj.Code
 			}
 		}
 	}
@@ -434,7 +466,7 @@ func (s *Server) ListProjects(c *gin.Context) {
 
 // ListCompanies godoc
 // @Summary List all companies
-// @Description Returns all companies with their associated projects, templates, and departments.
+// @Description Returns all companies with their associated projects and departments.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
@@ -444,7 +476,7 @@ func (s *Server) ListProjects(c *gin.Context) {
 // @Router /api/v1/companies [get]
 func (s *Server) ListCompanies(c *gin.Context) {
 	var companies []models.Company
-	if err := s.DB.Preload("Projects").Preload("Templates").Preload("Departments").Order("id asc").Find(&companies).Error; err != nil {
+	if err := s.DB.Preload("Projects").Preload("Departments").Order("id asc").Find(&companies).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -1290,8 +1290,7 @@ paths:
       - Auth
   /api/v1/companies:
     get:
-      description: Returns all companies with their associated projects, templates,
-        and departments.
+      description: Returns all companies with their associated projects and departments.
       produces:
       - application/json
       responses:

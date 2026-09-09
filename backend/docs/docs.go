@@ -984,7 +984,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns all companies with their associated projects, templates, and departments.",
+                "description": "Returns all companies with their associated projects and departments.",
                 "produces": [
                     "application/json"
                 ],

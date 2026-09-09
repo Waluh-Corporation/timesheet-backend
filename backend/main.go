@@ -130,6 +130,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.DELETE("/overtimes/:id", s.DeleteOvertime)
 		authed.POST("/timesheet/generate", s.GenerateTimesheet)
 		authed.GET("/holidays", s.GetHolidays)
+		authed.GET("/holidays/all", s.ListHolidays)
 
 		// Master data (normalized projects, companies, departments, activity-statuses, approvers).
 		authed.GET("/projects", s.ListProjects)
