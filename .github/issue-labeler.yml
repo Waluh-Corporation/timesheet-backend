@@ -1,0 +1,8 @@
+- bug:
+    - bug
+    - weird
+    - caseSensitive: false
+- enhancement:
+    - enhancement
+    - improvement
+    - caseSensitive: false

@@ -29,6 +29,10 @@ next-env.d.ts
 
 # Temp files and logs
 *.log
+coverage
+coverage.out
+backend/coverage
+*.out
 scratch/
 sshpass.py
 *.sh

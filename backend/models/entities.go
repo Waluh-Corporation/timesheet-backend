@@ -56,6 +56,14 @@ type User struct {
 	CompanyID     *uint       `gorm:"index" json:"company_id"`
 	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
 
+	// Master data references (single selection per user).
+	CompanyID   *uint     `gorm:"index" json:"company_id"`
+	CompanyRef  *Company  `gorm:"foreignKey:CompanyID" json:"company_ref,omitempty"`
+	DivisionID  *uint     `gorm:"index" json:"division_id"`
+	DivisionRef *Division `gorm:"foreignKey:DivisionID" json:"division_ref,omitempty"`
+	SiteID      *uint     `gorm:"index" json:"site_id"`
+	SiteRef     *Site     `gorm:"foreignKey:SiteID" json:"site_ref,omitempty"`
+
 	// Credential relations.
 	Credentials       []WebAuthnCredential   `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	PushSubscriptions []PushSubscription     `gorm:"constraint:OnDelete:CASCADE" json:"-"`

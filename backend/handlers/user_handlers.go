@@ -232,6 +232,63 @@ func (s *Server) UpdateUser(c *gin.Context) {
 			updates["company_id"] = nil
 		}
 	}
+
+	targetCompanyID := user.CompanyID
+	if req.CompanyID != nil {
+		if *req.CompanyID > 0 {
+			var comp models.Company
+			if err := s.DB.First(&comp, *req.CompanyID).Error; err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "selected company not found"})
+				return
+			}
+			updates["company_id"] = comp.ID
+			updates["company"] = comp.Code
+			targetCompanyID = &comp.ID
+		} else {
+			updates["company_id"] = nil
+			updates["company"] = ""
+			targetCompanyID = nil
+		}
+	}
+
+	if req.DivisionID != nil {
+		if *req.DivisionID > 0 {
+			var div models.Division
+			if err := s.DB.First(&div, *req.DivisionID).Error; err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "selected division not found"})
+				return
+			}
+			if targetCompanyID != nil && div.CompanyID != *targetCompanyID {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "division does not belong to selected company"})
+				return
+			}
+			updates["division_id"] = div.ID
+			updates["division"] = div.Name
+		} else {
+			updates["division_id"] = nil
+			updates["division"] = ""
+		}
+	}
+
+	if req.SiteID != nil {
+		if *req.SiteID > 0 {
+			var site models.Site
+			if err := s.DB.First(&site, *req.SiteID).Error; err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "selected site not found"})
+				return
+			}
+			if targetCompanyID != nil && site.CompanyID != *targetCompanyID {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "site does not belong to selected company"})
+				return
+			}
+			updates["site_id"] = site.ID
+			updates["site"] = site.Name
+		} else {
+			updates["site_id"] = nil
+			updates["site"] = ""
+		}
+	}
+
 	if len(updates) > 0 {
 		s.DB.Model(&user).Updates(updates)
 	}
@@ -305,6 +362,19 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 		Site:         req.Site,
 		CompanyID:    req.CompanyID,
 	}
+	if req.DivisionID != nil && *req.DivisionID > 0 {
+		var div models.Division
+		if err := s.DB.First(&div, *req.DivisionID).Error; err == nil {
+			change.Division = div.Name
+		}
+	}
+	if req.SiteID != nil && *req.SiteID > 0 {
+		var site models.Site
+		if err := s.DB.First(&site, *req.SiteID).Error; err == nil {
+			change.Site = site.Name
+		}
+	}
+
 	if err := s.DB.Create(&change).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
