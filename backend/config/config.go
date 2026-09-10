@@ -48,6 +48,10 @@ type Config struct {
 	AdminEmail    string
 	AdminUsername string
 	AdminPassword string
+
+	// RunMigrations controls whether versioned schema migrations and seeders run.
+	// Defaults to false so starting the server (e.g. go run .) does not run DDLs.
+	RunMigrations bool
 }
 
 func getEnv(key, fallback string) string {
@@ -61,6 +65,15 @@ func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			return n
+		}
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
 		}
 	}
 	return fallback
@@ -110,8 +123,35 @@ func parseOrigins(v string) []string {
 	return origins
 }
 
+func loadDotEnv(filenames ...string) {
+	for _, fn := range filenames {
+		data, err := os.ReadFile(fn)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				k := strings.TrimSpace(parts[0])
+				v := strings.TrimSpace(parts[1])
+				v = strings.Trim(v, `"'`)
+				if _, exists := os.LookupEnv(k); !exists {
+					_ = os.Setenv(k, v)
+				}
+			}
+		}
+	}
+}
+
 // Load reads configuration from the environment.
 func Load() *Config {
+	loadDotEnv(".env", "../.env")
+
 	cfg := &Config{
 		Port:        getEnv("PORT", "8080"),
 		DatabaseURL: getEnv("DATABASE_URL", "host=localhost user=timesheet password=timesheet dbname=timesheet port=5432 sslmode=disable TimeZone=Asia/Jakarta"),
@@ -142,6 +182,8 @@ func Load() *Config {
 		AdminEmail:    getEnv("BOOTSTRAP_ADMIN_EMAIL", "admin@timesheet.local"),
 		AdminUsername: getEnv("BOOTSTRAP_ADMIN_USERNAME", "admin"),
 		AdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", ""),
+
+		RunMigrations: getEnvBool("RUN_MIGRATIONS", false),
 	}
 
 	cfg.validateSecrets()

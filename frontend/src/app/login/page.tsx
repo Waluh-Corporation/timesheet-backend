@@ -84,7 +84,7 @@ export default function LoginPage() {
     e.preventDefault();
     setBusy(true);
     try {
-      await api("/api/auth/forgot-password", {
+      await api("/api/v1/auth/forgot-password", {
         method: "POST",
         auth: false,
         body: JSON.stringify({ email: forgotEmail }),

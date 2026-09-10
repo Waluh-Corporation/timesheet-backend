@@ -36,8 +36,8 @@ export default function ProfilePage() {
     setLoading(true);
     try {
       const [ch, pk] = await Promise.all([
-        api<ProfileChangeRequest[]>("/api/profile/changes").catch(() => []),
-        api<Passkey[]>("/api/passkeys").catch(() => []),
+        api<ProfileChangeRequest[]>("/api/v1/profile/changes").catch(() => []),
+        api<Passkey[]>("/api/v1/passkeys").catch(() => []),
       ]);
       setChanges(ch || []);
       setPasskeys(pk || []);
@@ -56,7 +56,7 @@ export default function ProfilePage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await api("/api/profile/change", { method: "POST", body: JSON.stringify(form) });
+      await api("/api/v1/profile/change", { method: "POST", body: JSON.stringify(form) });
       notify("Change requested — waiting for admin approval.", "success");
       load();
       refresh();
@@ -88,7 +88,7 @@ export default function ProfilePage() {
   const removePasskey = async (pk: Passkey) => {
     if (!confirm(`Remove passkey "${pk.friendly_name || "Passkey"}"?`)) return;
     try {
-      await api(`/api/passkeys/${pk.id}`, { method: "DELETE" });
+      await api(`/api/v1/passkeys/${pk.id}`, { method: "DELETE" });
       notify("Passkey removed", "success");
       load();
     } catch (err: any) {

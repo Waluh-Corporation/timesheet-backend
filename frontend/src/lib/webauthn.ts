@@ -29,7 +29,7 @@ export function passkeysSupported(): boolean {
 // registerPasskey runs a registration ceremony for the logged-in user.
 export async function registerPasskey(friendlyName = "My device") {
   const { session_id, options } = await api<{ session_id: string; options: any }>(
-    "/api/passkey/register/begin",
+    "/api/v1/passkey/register/begin",
     { method: "POST", body: JSON.stringify({}) }
   );
 
@@ -57,7 +57,7 @@ export async function registerPasskey(friendlyName = "My device") {
   };
 
   await api(
-    `/api/passkey/register/finish?session_id=${session_id}&name=${encodeURIComponent(friendlyName)}`,
+    `/api/v1/passkey/register/finish?session_id=${session_id}&name=${encodeURIComponent(friendlyName)}`,
     { method: "POST", body: JSON.stringify(body) }
   );
 }
@@ -67,7 +67,7 @@ export async function registerPasskey(friendlyName = "My device") {
 // the browser offers whatever resident passkey it holds for this site.
 export async function loginWithPasskey(identifier = ""): Promise<User> {
   const { session_id, options } = await api<{ session_id: string; options: any }>(
-    "/api/auth/passkey/login/begin",
+    "/api/v1/auth/passkey/login/begin",
     { method: "POST", auth: false, body: JSON.stringify({ identifier }) }
   );
 
@@ -96,7 +96,7 @@ export async function loginWithPasskey(identifier = ""): Promise<User> {
   };
 
   const res = await api<{ token: string; user: User }>(
-    `/api/auth/passkey/login/finish?session_id=${session_id}`,
+    `/api/v1/auth/passkey/login/finish?session_id=${session_id}`,
     { method: "POST", auth: false, body: JSON.stringify(body) }
   );
   setToken(res.token);

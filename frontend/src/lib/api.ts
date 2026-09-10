@@ -1,7 +1,7 @@
 // Thin fetch wrapper around the Go backend API.
 //
 // The base URL is configurable via NEXT_PUBLIC_API_URL (baked at build time).
-// When unset it defaults to "" — i.e. same-origin, relative "/api/..." paths —
+// When unset it defaults to "" — i.e. same-origin, relative "/api/v1/..." paths —
 // which is exactly what the single unified image needs, since the Go server
 // serves this frontend and the API from the same host. For local `bun run dev`
 // against a separately-running backend, set NEXT_PUBLIC_API_URL=http://localhost:8080
@@ -53,12 +53,17 @@ export async function api<T = any>(
     if (contentType.includes("application/json")) {
       const data = await res.json().catch(() => null);
       if (data?.error) message = data.error;
+      else if (data?.message) message = data.message;
     }
     throw new Error(message);
   }
 
   if (contentType.includes("application/json")) {
-    return res.json() as Promise<T>;
+    const json = await res.json();
+    if (json && typeof json === "object" && "data" in json && "code" in json) {
+      return json.data as T;
+    }
+    return json as T;
   }
   // Non-JSON (e.g. file downloads) returned as blob.
   return res.blob() as unknown as T;
@@ -84,7 +89,7 @@ export async function downloadFile(
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(data.error || "download failed");
+    throw new Error(data.error || data.message || "download failed");
   }
 
   const disposition = res.headers.get("content-disposition") || "";

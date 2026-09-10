@@ -78,13 +78,13 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" || !strings.HasPrefix(header, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing bearer token"})
+			RespondAbortError(c, http.StatusUnauthorized, "missing bearer token")
 			return
 		}
 		token := strings.TrimPrefix(header, "Bearer ")
 		claims, err := s.Auth.ParseToken(token)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			RespondAbortError(c, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
 		c.Set(ctxUserID, claims.UserID)
@@ -98,7 +98,7 @@ func (s *Server) AdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, _ := c.Get(ctxRole)
 		if role != models.RoleAdmin {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin privileges required"})
+			RespondAbortError(c, http.StatusForbidden, "admin privileges required")
 			return
 		}
 		c.Next()
@@ -162,3 +162,58 @@ func CORSMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// RespondSuccess sends a 2xx JSON response wrapped in the unified envelope.
+func RespondSuccess(c *gin.Context, code int, data interface{}) {
+	c.JSON(code, gin.H{
+		"code":   code,
+		"status": "success",
+		"data":   data,
+	})
+}
+
+// RespondMessage sends a 2xx JSON message response wrapped in the unified envelope.
+func RespondMessage(c *gin.Context, code int, message string) {
+	c.JSON(code, gin.H{
+		"code":    code,
+		"status":  "success",
+		"message": message,
+	})
+}
+
+// RespondDelete sends a 2xx JSON deletion confirmation wrapped in the unified envelope.
+func RespondDelete(c *gin.Context, code int) {
+	c.JSON(code, gin.H{
+		"code":    code,
+		"status":  "success",
+		"deleted": true,
+	})
+}
+
+// RespondError sends a 4xx/5xx JSON error response with status code and error message.
+func RespondError(c *gin.Context, code int, message string) {
+	c.JSON(code, gin.H{
+		"code":    code,
+		"status":  "error",
+		"error":   message,
+		"message": message,
+	})
+}
+
+// RespondAbortError aborts the context with a 4xx/5xx JSON error response.
+func RespondAbortError(c *gin.Context, code int, message string) {
+	c.AbortWithStatusJSON(code, gin.H{
+		"code":    code,
+		"status":  "error",
+		"error":   message,
+		"message": message,
+	})
+}
+
+// Convenience methods on Server
+func (s *Server) RespondSuccess(c *gin.Context, code int, data interface{}) { RespondSuccess(c, code, data) }
+func (s *Server) RespondMessage(c *gin.Context, code int, message string)     { RespondMessage(c, code, message) }
+func (s *Server) RespondDelete(c *gin.Context, code int)                      { RespondDelete(c, code) }
+func (s *Server) RespondError(c *gin.Context, code int, message string)       { RespondError(c, code, message) }
+func (s *Server) RespondAbortError(c *gin.Context, code int, message string)  { RespondAbortError(c, code, message) }
+

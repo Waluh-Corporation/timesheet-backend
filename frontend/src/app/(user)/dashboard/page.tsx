@@ -22,7 +22,7 @@ import {
   registerServiceWorker,
 } from "@/lib/push";
 import { registerPasskey, passkeysSupported } from "@/lib/webauthn";
-import type { DailyActivity, Template } from "@/lib/types";
+import type { DailyActivity } from "@/lib/types";
 
 const HotGrid = dynamic(() => import("@/components/HotGrid"), { ssr: false });
 
@@ -40,13 +40,26 @@ const GRID_COLUMNS: { key: keyof DailyActivity; label: string; field: string }[]
   { key: "activity", label: "Activity", field: "activity" },
   { key: "app_impacted", label: "App Impacted", field: "app_impacted" },
 ];
-
 // Allowed values for the "Aplikasi Terdampak" (app impacted) column.
 const APP_IMPACTED_OPTIONS = ["Bisnis", "Cash", "Overseas"];
 
 function daysInMonth(year: number, month: number) {
   return new Date(year, month, 0).getDate();
 }
+
+// Columns available in the monthly Handsontable grid.
+const GRID_COLUMNS = [
+  { field: "day", title: "Day", readOnly: true, width: 55 },
+  { field: "date", title: "Date", readOnly: true, width: 95 },
+  { field: "day_name", title: "Day Name", readOnly: true, width: 85 },
+  { field: "start_time", title: "Start", readOnly: false, width: 70 },
+  { field: "end_time", title: "End", readOnly: false, width: 70 },
+  { field: "status", title: "Status", readOnly: false, width: 65 },
+  { field: "activity", title: "Activity", readOnly: false, width: 220 },
+  { field: "project_name", title: "Project", readOnly: false, width: 140 },
+  { field: "project_id", title: "Project ID", readOnly: false, width: 100 },
+  { field: "app_impacted", title: "App Impacted", readOnly: false, width: 120 },
+] as const;
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -57,36 +70,25 @@ export default function DashboardPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1-based
   const [activities, setActivities] = useState<DailyActivity[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
   const [holidays, setHolidays] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushOn, setPushOn] = useState(false);
 
-  // Fillable fields come from the default template's mapping.
-  const fillableFields = useMemo(() => {
-    const def = templates.find((t) => t.is_default) || templates[0];
-    if (!def) return new Set(GRID_COLUMNS.map((c) => c.field)); // permissive fallback
-    const set = new Set<string>();
-    def.cell_mappings?.forEach((m) => {
-      if (m.scope === "daily_column" && m.fillable) set.add(m.field);
-    });
-    return set;
-  }, [templates]);
+  // All columns are fillable in the interactive grid
+  const fillableFields = useMemo(() => new Set(GRID_COLUMNS.map((c) => c.field)), []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [acts, tmpls, hols] = await Promise.all([
-        api<DailyActivity[]>(`/api/activities?year=${year}&month=${month}`),
-        api<Template[]>("/api/templates").catch(() => []),
+      const [acts, hols] = await Promise.all([
+        api<DailyActivity[]>(`/api/v1/activities?year=${year}&month=${month}`),
         api<{ date: string; description: string }[]>(
-          `/api/holidays?year=${year}&month=${month}`
+          `/api/v1/holidays?year=${year}&month=${month}`
         ).catch(() => []),
       ]);
       setActivities(acts || []);
-      setTemplates(tmpls || []);
       const hmap: Record<number, string> = {};
       (hols || []).forEach((h) => {
         const d = parseInt(h.date.split("-")[2], 10);
@@ -205,7 +207,7 @@ export default function DashboardPage() {
           app_impacted: row[5] || "",
         };
         try {
-          await api("/api/activities", { method: "POST", body: JSON.stringify(payload) });
+          await api("/api/v1/activities", { method: "POST", body: JSON.stringify(payload) });
         } catch (err: any) {
           notify(err.message, "error");
         }
@@ -217,10 +219,9 @@ export default function DashboardPage() {
   const generate = async () => {
     setGenerating(true);
     try {
-      const def = templates.find((t) => t.is_default) || templates[0];
       await downloadFile(
-        "/api/timesheet/generate",
-        { template_id: def?.id || 0, month, year },
+        "/api/v1/timesheet/generate",
+        { month, year },
         `Timesheet_${month}_${year}.xlsx`
       );
       notify("Timesheet downloaded & emailed to you 📧", "success");
@@ -375,12 +376,6 @@ export default function DashboardPage() {
             </select>
           </div>
         </div>
-
-        {fillableFields.size === 0 && templates.length > 0 && (
-          <p className="mb-3 border-2 border-mr-ink bg-mr-yellow px-4 py-2 text-sm font-semibold text-mr-ink">
-            No fillable columns are configured yet — ask an admin to map the template.
-          </p>
-        )}
 
         {loading ? (
           <div className="flex justify-center py-12">

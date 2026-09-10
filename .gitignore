@@ -2,9 +2,7 @@
 node_modules/
 backend/tmp/
 backend/main
-backend/docs/docs.go
-backend/docs/swagger.json
-backend/docs/swagger.yaml
+*.exe
 
 # Next.js build and cache
 .next/
@@ -41,3 +39,4 @@ sshpass.py
 # Keep these scripts tracked despite the blanket *.sh ignore above.
 !deploy_and_commit.sh
 !docker/aio-entrypoint.sh
+!scripts/*.sh

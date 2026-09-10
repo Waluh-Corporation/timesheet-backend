@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 
 	gomail "gopkg.in/gomail.v2"
 
@@ -70,11 +71,16 @@ func (m *Mailer) SendResetEmail(to, resetLink string) error {
 
 // SendTimesheetEmail attaches the generated timesheet file and sends it to the
 // user's registered address.
-func (m *Mailer) SendTimesheetEmail(to, filename string, data []byte) error {
+func (m *Mailer) SendTimesheetEmail(to, company, filename string, data []byte) error {
 	msg := gomail.NewMessage()
 	msg.SetHeader("From", m.cfg.MailFrom)
 	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", "Your generated timesheet")
+
+	subject := "Your Timesheet is Ready"
+	if trimmed := strings.TrimSpace(company); trimmed != "" {
+		subject = fmt.Sprintf("Your %s Timesheet is Ready", trimmed)
+	}
+	msg.SetHeader("Subject", subject)
 	msg.SetBody("text/html", "<p>Attached is your generated timesheet. A copy has also been downloaded in your browser.</p>")
 	msg.Attach(filename, gomail.SetCopyFunc(func(w io.Writer) error {
 		_, err := w.Write(data)

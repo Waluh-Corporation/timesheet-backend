@@ -38,7 +38,7 @@ export async function enablePush(): Promise<boolean> {
   }
 
   const { public_key } = await api<{ public_key: string }>(
-    "/api/push/vapid-public-key",
+    "/api/v1/push/vapid-public-key",
     { auth: false }
   );
   if (!public_key) throw new Error("Server has no VAPID key configured");
@@ -51,7 +51,7 @@ export async function enablePush(): Promise<boolean> {
       applicationServerKey: urlBase64ToUint8Array(public_key) as BufferSource,
     }));
 
-  await api("/api/push/subscribe", {
+  await api("/api/v1/push/subscribe", {
     method: "POST",
     body: JSON.stringify(subscription.toJSON()),
   });
@@ -59,7 +59,7 @@ export async function enablePush(): Promise<boolean> {
 }
 
 export async function sendTestPush() {
-  await api("/api/push/test", { method: "POST", body: JSON.stringify({}) });
+  await api("/api/v1/push/test", { method: "POST", body: JSON.stringify({}) });
 }
 
 // disablePush unsubscribes this browser and tells the backend to drop the
@@ -78,7 +78,7 @@ export async function disablePush(): Promise<void> {
       /* ignore — still tell the backend to drop our subscriptions */
     }
   }
-  await api("/api/push/unsubscribe", {
+  await api("/api/v1/push/unsubscribe", {
     method: "POST",
     body: JSON.stringify({ endpoint }),
   });

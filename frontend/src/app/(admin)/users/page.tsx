@@ -47,8 +47,8 @@ export default function UsersPage() {
     setLoading(true);
     try {
       const [u, c] = await Promise.all([
-        api<User[]>("/api/admin/users"),
-        api<ProfileChangeRequest[]>("/api/admin/profile-changes?status=pending"),
+        api<User[]>("/api/v1/admin/users"),
+        api<ProfileChangeRequest[]>("/api/v1/admin/profile-changes?status=pending"),
       ]);
       setUsers(u);
       setChanges(c || []);
@@ -67,7 +67,7 @@ export default function UsersPage() {
     e.preventDefault();
     setCreating(true);
     try {
-      await api("/api/admin/users", { method: "POST", body: JSON.stringify(form) });
+      await api("/api/v1/admin/users", { method: "POST", body: JSON.stringify(form) });
       notify("User created — a setup email has been sent.", "success");
       setForm(emptyForm);
       load();
@@ -80,7 +80,7 @@ export default function UsersPage() {
 
   const toggleActive = async (u: User) => {
     try {
-      await api(`/api/admin/users/${u.id}`, {
+      await api(`/api/v1/admin/users/${u.id}`, {
         method: "PATCH",
         body: JSON.stringify({ is_active: !u.is_active }),
       });
@@ -93,7 +93,7 @@ export default function UsersPage() {
   const deactivateUser = async (u: User) => {
     if (!confirm(`Deactivate ${u.username}? They keep their history and can be reactivated later.`)) return;
     try {
-      await api(`/api/admin/users/${u.id}`, { method: "DELETE" });
+      await api(`/api/v1/admin/users/${u.id}`, { method: "DELETE" });
       notify("User deactivated", "success");
       load();
     } catch (err: any) {
@@ -109,7 +109,7 @@ export default function UsersPage() {
     setPasskeysFor(u.id);
     setPkLoading(true);
     try {
-      const pk = await api<Passkey[]>(`/api/admin/users/${u.id}/passkeys`);
+      const pk = await api<Passkey[]>(`/api/v1/admin/users/${u.id}/passkeys`);
       setUserPasskeys(pk || []);
     } catch (err: any) {
       notify(err.message, "error");
@@ -122,9 +122,9 @@ export default function UsersPage() {
   const removeUserPasskey = async (u: User, pk: Passkey) => {
     if (!confirm(`Remove ${u.username}'s passkey "${pk.friendly_name || "Passkey"}"?`)) return;
     try {
-      await api(`/api/admin/users/${u.id}/passkeys/${pk.id}`, { method: "DELETE" });
+      await api(`/api/v1/admin/users/${u.id}/passkeys/${pk.id}`, { method: "DELETE" });
       notify("Passkey removed", "success");
-      const pks = await api<Passkey[]>(`/api/admin/users/${u.id}/passkeys`);
+      const pks = await api<Passkey[]>(`/api/v1/admin/users/${u.id}/passkeys`);
       setUserPasskeys(pks || []);
     } catch (err: any) {
       notify(err.message, "error");
@@ -133,7 +133,7 @@ export default function UsersPage() {
 
   const review = async (c: ProfileChangeRequest, action: "approve" | "reject") => {
     try {
-      await api(`/api/admin/profile-changes/${c.id}/review?action=${action}`, {
+      await api(`/api/v1/admin/profile-changes/${c.id}/review?action=${action}`, {
         method: "POST",
         body: JSON.stringify({}),
       });
@@ -309,7 +309,7 @@ export default function UsersPage() {
                             onChange={async (e) => {
                               const newComp = e.target.value;
                               try {
-                                await api(`/api/admin/users/${u.id}`, {
+                                await api(`/api/v1/admin/users/${u.id}`, {
                                   method: "PATCH",
                                   body: JSON.stringify({ company: newComp }),
                                 });

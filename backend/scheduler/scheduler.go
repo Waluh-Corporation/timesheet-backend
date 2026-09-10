@@ -38,6 +38,10 @@ func (s *Scheduler) Start() {
 		log.Printf("[scheduler] failed to register daily reminder: %v", err)
 		return
 	}
+	// "0 2 * * *" => every day at 02:00 in the scheduler's location (WIB) for token housekeeping.
+	if _, err := s.cron.AddFunc("0 2 * * *", s.cleanupExpiredTokens); err != nil {
+		log.Printf("[scheduler] failed to register token housekeeping: %v", err)
+	}
 	s.cron.Start()
 	log.Printf("[scheduler] daily timesheet reminder armed for 17:00 %s", s.loc.String())
 }
@@ -77,5 +81,19 @@ func (s *Scheduler) sendDailyReminders() {
 			Body:  "Waktunya isi timesheet hari ini!",
 			URL:   "/activity",
 		})
+	}
+}
+
+// cleanupExpiredTokens performs DBA housekeeping on password_reset_tokens to prevent table bloat.
+func (s *Scheduler) cleanupExpiredTokens() {
+	now := time.Now()
+	// Delete tokens that expired more than 7 days ago, or were used more than 30 days ago.
+	res := s.db.Where("expires_at < ?", now.AddDate(0, 0, -7)).
+		Or("used_at IS NOT NULL AND created_at < ?", now.AddDate(0, 0, -30)).
+		Delete(&models.PasswordResetToken{})
+	if res.Error != nil {
+		log.Printf("[scheduler] token housekeeping error: %v", res.Error)
+	} else if res.RowsAffected > 0 {
+		log.Printf("[scheduler] token housekeeping purged %d stale tokens", res.RowsAffected)
 	}
 }

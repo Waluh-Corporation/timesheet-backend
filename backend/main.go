@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -9,9 +10,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
 	"timesheet-backend/database"
+	_ "timesheet-backend/docs"
 	"timesheet-backend/handlers"
 	"timesheet-backend/mailer"
 	"timesheet-backend/push"
@@ -20,15 +25,41 @@ import (
 
 // @title Timesheet Automation Portal API
 // @version 2.0
-// @description Phase 2 portal: RBAC, passkeys, dynamic templates, web push, SMTP delivery.
+// @description High-performance RESTful backend API for the Timesheet Automation Portal, built with Go (Gin Engine) and PostgreSQL.
+// @termsOfService https://github.com/naufalzaid17/timesheet-generator
+// @contact.name API Support
+// @license.name MIT
+// @host localhost:8080
 // @BasePath /
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Enter JWT token with format "Bearer {token}".
 
 func main() {
+	migrateFlag := flag.Bool("migrate", false, "run database migrations before starting the server")
+	migrateOnlyFlag := flag.Bool("migrate-only", false, "run database migrations and exit")
+	flag.Parse()
+
 	cfg := config.Load()
+	if *migrateFlag || *migrateOnlyFlag {
+		cfg.RunMigrations = true
+	}
 
 	db, err := database.Connect(cfg)
 	if err != nil {
 		log.Fatalf("database connection failed: %v", err)
+	}
+
+	if cfg.RunMigrations {
+		if err := database.Setup(db, cfg); err != nil {
+			log.Fatalf("database setup failed: %v", err)
+		}
+	}
+
+	if *migrateOnlyFlag {
+		log.Println("database migrations completed successfully")
+		return
 	}
 
 	authSvc := auth.NewService(cfg.JWTSecret, cfg.JWTExpiry)
@@ -70,7 +101,20 @@ func main() {
 
 // registerRoutes wires the full Phase 2 API surface.
 func registerRoutes(r *gin.Engine, s *handlers.Server) {
-	api := r.Group("/api")
+	// Swagger documentation UI
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	r.GET("/swagger", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+	})
+
+	api := r.Group("/api/v1")
+
+	// --- Public setup / onboarding wizard routes ---
+	setupGroup := api.Group("/setup")
+	{
+		setupGroup.GET("/status", s.GetSetupStatus)
+		setupGroup.POST("/init", s.InitSetup)
+	}
 
 	// --- Public auth routes (NO public sign-up) ---
 	authGroup := api.Group("/auth")
@@ -107,12 +151,19 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		// Daily activity entry + monthly view + generation.
 		authed.POST("/activities", s.UpsertDailyActivity)
 		authed.GET("/activities", s.ListMonthlyActivities)
+		authed.POST("/overtimes", s.UpsertOvertime)
+		authed.GET("/overtimes", s.ListMonthlyOvertimes)
+		authed.DELETE("/overtimes/:id", s.DeleteOvertime)
 		authed.POST("/timesheet/generate", s.GenerateTimesheet)
 		authed.GET("/holidays", s.GetHolidays)
+		authed.GET("/holidays/all", s.ListHolidays)
 
-		// Templates are readable by users (to fill the grid), writable by admins.
-		authed.GET("/templates", s.ListTemplates)
-		authed.GET("/templates/:id/grid", s.GetTemplateGrid)
+		// Master data (normalized projects, companies, departments, activity-statuses, approvers).
+		authed.GET("/projects", s.ListProjects)
+		authed.GET("/companies", s.ListCompanies)
+		authed.GET("/departments", s.ListDepartments)
+		authed.GET("/activity-statuses", s.ListActivityStatuses)
+		authed.GET("/approvers", s.ListApprovers)
 
 		// Master data (companies, divisions, sites for cascading selection).
 		authed.GET("/companies", s.ListCompanies)
@@ -148,10 +199,14 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)
 
-		admin.POST("/templates", s.UploadTemplate)
-		admin.POST("/templates/:id/mappings", s.SaveTemplateMappings)
-		admin.POST("/templates/:id/default", s.SetDefaultTemplate)
-		admin.DELETE("/templates/:id", s.DeleteTemplate)
+		// Master data management (approvers & companies)
+		admin.POST("/approvers", s.CreateApprover)
+		admin.PATCH("/approvers/:id", s.UpdateApprover)
+		admin.DELETE("/approvers/:id", s.DeleteApprover)
+
+		admin.POST("/companies", s.CreateCompany)
+		admin.PATCH("/companies/:id", s.UpdateCompany)
+		admin.DELETE("/companies/:id", s.DeleteCompany)
 	}
 }
 
@@ -175,8 +230,8 @@ func spaHandler(staticRoot string) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
-		// Never serve HTML for an unmatched API route.
-		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+		// Never serve HTML for an unmatched API or Swagger route.
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.HasPrefix(c.Request.URL.Path, "/swagger/") {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}

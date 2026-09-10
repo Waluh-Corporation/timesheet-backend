@@ -40,7 +40,7 @@ export default function DailyModal({
     e.preventDefault();
     setSaving(true);
     try {
-      await api("/api/activities", { method: "POST", body: JSON.stringify(form) });
+      await api("/api/v1/activities", { method: "POST", body: JSON.stringify(form) });
       notify("Saved today's activity 🎉", "success");
       onSaved();
       onClose();

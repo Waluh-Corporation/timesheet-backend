@@ -42,11 +42,19 @@ type User struct {
 	IsActive     bool   `gorm:"not null;default:true" json:"is_active"`
 
 	// Profile fields (the "approved" / live values).
-	Name     string `gorm:"size:255" json:"name"`
-	MiiID    string `gorm:"size:64" json:"mii_id"`
-	Division string `gorm:"size:255" json:"division"`
-	Site     string `gorm:"size:128" json:"site"`
-	Company  string `gorm:"size:64" json:"company"`
+	Name       string   `gorm:"size:255" json:"name"`
+	MiiID      string   `gorm:"size:64" json:"mii_id"`
+	EmployeeID string   `gorm:"size:64" json:"employee_id"` // NPP or MII ID
+	Division      string      `gorm:"size:255" json:"division"`
+	Department    string      `gorm:"size:255" json:"department"`
+	DepartmentID  *uint       `gorm:"index" json:"department_id"`
+	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
+	GroupName     string      `gorm:"size:255" json:"group_name"` // Kelompok (SDD)
+	Position      string      `gorm:"size:128" json:"position"`
+	Site          string      `gorm:"size:128" json:"site"`
+	Company       string      `gorm:"size:64" json:"company"`
+	CompanyID     *uint       `gorm:"index" json:"company_id"`
+	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
 
 	// Master data references (single selection per user).
 	CompanyID   *uint     `gorm:"index" json:"company_id"`
@@ -60,48 +68,109 @@ type User struct {
 	Credentials       []WebAuthnCredential   `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	PushSubscriptions []PushSubscription     `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	ProfileRequests   []ProfileChangeRequest `gorm:"constraint:OnDelete:CASCADE" json:"-"`
+	Overtimes         []OvertimeEntry        `gorm:"constraint:OnDelete:CASCADE" json:"-"`
+	DailyActivities   []DailyActivity        `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
 }
 
-// Company represents an organization/company entity (e.g. MII, SDD, NTT, Adidata).
+// Company represents a vendor/organization (e.g. MII, SDD, Adidata).
 type Company struct {
-	ID        uint           `gorm:"primaryKey" json:"id"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-
-	Code      string     `gorm:"uniqueIndex;size:32;not null" json:"code"`
-	Name      string     `gorm:"size:255;not null" json:"name"`
-	IsActive  bool       `gorm:"not null;default:true" json:"is_active"`
-	Divisions []Division `gorm:"constraint:OnDelete:CASCADE" json:"divisions,omitempty"`
-	Sites     []Site     `gorm:"constraint:OnDelete:CASCADE" json:"sites,omitempty"`
+	ID          uint         `gorm:"primaryKey" json:"id"`
+	CreatedAt   time.Time    `json:"created_at"`
+	UpdatedAt   time.Time    `json:"updated_at"`
+	Code        string       `gorm:"unique;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
+	Name        string       `gorm:"size:255;not null" json:"name"`
+	Projects    []Project    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"projects,omitempty"`
+	Departments []Department `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"departments,omitempty"`
 }
 
-// Division represents a division within a company.
-type Division struct {
-	ID        uint           `gorm:"primaryKey" json:"id"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-
-	CompanyID uint     `gorm:"index;not null" json:"company_id"`
-	Company   *Company `gorm:"foreignKey:CompanyID" json:"company,omitempty"`
-	Code      string   `gorm:"size:64" json:"code"`
-	Name      string   `gorm:"size:255;not null" json:"name"`
-	IsActive  bool     `gorm:"not null;default:true" json:"is_active"`
+// Department represents an organizational department or unit within a company.
+type Department struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	CompanyID *uint     `gorm:"index" json:"company_id"`
+	Company   *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	Code      string    `gorm:"size:64;index" json:"code"` // e.g. "WCSD", "DEV-01"
+	Name      string    `gorm:"size:255;not null" json:"name"` // e.g. "Wholesale Channel and Service Delivery"
+	Division  string    `gorm:"size:255" json:"division"`      // e.g. "Wholesale Digital Delivery"
+	IsActive  bool      `gorm:"not null;default:true" json:"is_active"`
 }
 
-// Site represents a work location/site associated with a company.
-type Site struct {
-	ID        uint           `gorm:"primaryKey" json:"id"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-
-	CompanyID uint     `gorm:"index;not null" json:"company_id"`
-	Company   *Company `gorm:"foreignKey:CompanyID" json:"company,omitempty"`
-	Name      string   `gorm:"size:128;not null" json:"name"`
-	IsActive  bool     `gorm:"not null;default:true" json:"is_active"`
+// ActivityStatus represents a normalized status option for daily timesheet activity.
+type ActivityStatus struct {
+	Code         string `gorm:"primaryKey;size:8" json:"code"` // "P", "S", "PM", "V", "BT", "X"
+	Name         string `gorm:"size:64;not null" json:"name"`  // "Present", "Sick", etc.
+	Description  string `gorm:"size:255" json:"description"`
+	IsWorkingDay bool   `gorm:"not null;default:true" json:"is_working_day"`
+	SortOrder    int    `gorm:"not null;default:0" json:"sort_order"`
 }
+
+// Holiday represents a national, regional, or company-specific holiday or joint leave.
+type Holiday struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	Date         time.Time `gorm:"type:date;uniqueIndex;not null" json:"date"`
+	Description  string    `gorm:"size:255;not null" json:"description"`
+	CompanyID    *uint     `gorm:"index" json:"company_id"`
+	Company      *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	IsJointLeave bool      `gorm:"not null;default:false" json:"is_joint_leave"`
+}
+
+// Project represents a billable project or initiative (e.g. BNI Direct, Core Banking).
+type Project struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Code        string    `gorm:"size:64;not null;index" json:"code"` // e.g. "P24015"
+	Name        string    `gorm:"size:255;not null" json:"name"`      // e.g. "BNI Direct"
+	AppImpacted string    `gorm:"size:255" json:"app_impacted"`       // e.g. "BNI Direct Cash"
+	CompanyID   *uint     `gorm:"index" json:"company_id"`
+	Company     *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	IsActive    bool      `gorm:"not null;default:true" json:"is_active"`
+}
+
+// ApproverRoleType enumerates the functional role of an approver.
+type ApproverRoleType string
+
+const (
+	ApproverRoleTeamLeader     ApproverRoleType = "team_leader"
+	ApproverRoleDepartmentHead ApproverRoleType = "department_head"
+)
+
+// Approver represents an authorized manager/supervisor who approves timesheet and overtime reports.
+type Approver struct {
+	ID        uint             `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	CompanyID *uint            `gorm:"index" json:"company_id"`
+	Company   *Company         `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	Name      string           `gorm:"size:255;not null" json:"name"`
+	RoleType  ApproverRoleType `gorm:"size:32;not null;index" json:"role_type"`
+	Title     string           `gorm:"size:128" json:"title"`
+	IsActive  bool             `gorm:"not null;default:true" json:"is_active"`
+}
+
+// OvertimeEntry records overtime activities for SPL sheet generation.
+type OvertimeEntry struct {
+	ID               uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	UserID           uint           `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
+	DailyActivityID  *uint          `gorm:"index;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"daily_activity_id"`
+	Date             time.Time      `gorm:"type:date;not null" json:"date"`
+	StartTime        string         `gorm:"size:8" json:"start_time"` // "17:00"
+	EndTime          string         `gorm:"size:8" json:"end_time"`   // "21:00"
+	TaskDescription  string         `gorm:"type:text;not null" json:"task_description"`
+	TeamLeaderID     *uint          `gorm:"index" json:"team_leader_id"`
+	DepartmentHeadID *uint          `gorm:"index" json:"department_head_id"`
+
+	User           User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	DailyActivity  *DailyActivity `gorm:"foreignKey:DailyActivityID" json:"daily_activity,omitempty"`
+	TeamLeader     *Approver      `gorm:"foreignKey:TeamLeaderID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"team_leader,omitempty"`
+	DepartmentHead *Approver      `gorm:"foreignKey:DepartmentHeadID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_head,omitempty"`
+}
+
 
 // WebAuthnID implements webauthn.User.
 func (u User) WebAuthnID() []byte {
@@ -143,7 +212,7 @@ func (u User) WebAuthnCredentials() []webauthn.Credential {
 type WebAuthnCredential struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
-	UserID    uint      `gorm:"index;not null" json:"user_id"`
+	UserID    uint      `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 
 	CredentialID    []byte `gorm:"uniqueIndex;not null" json:"-"`
 	PublicKey       []byte `gorm:"not null" json:"-"`
@@ -162,87 +231,6 @@ type WebAuthnCredential struct {
 	FriendlyName string         `gorm:"size:128" json:"friendly_name"`
 }
 
-// Template is an admin-uploaded .xlsx timesheet template. Multiple client
-// templates are supported; exactly one may be flagged as the default.
-type Template struct {
-	ID        uint           `gorm:"primaryKey" json:"id"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-
-	Name        string `gorm:"size:255;not null" json:"name"`
-	Description string `gorm:"size:512" json:"description"`
-	Company     string `gorm:"size:64" json:"company"`
-	// SheetName is the worksheet the mapping applies to.
-	SheetName string `gorm:"size:128;not null;default:Sheet1" json:"sheet_name"`
-	// FileData holds the raw .xlsx bytes so generation is self-contained.
-	FileData  []byte `gorm:"type:bytea" json:"-"`
-	IsDefault bool   `gorm:"not null;default:false" json:"is_default"`
-	CreatedBy uint   `json:"created_by"`
-	// Builtin, when set (e.g. "bni_dev"), marks a first-class bundled template
-	// whose fixed layout is rendered by a dedicated strict-typed generator rather
-	// than the generic cell-mapping engine.
-	Builtin string `gorm:"size:32" json:"builtin"`
-
-	CellMappings []CellMapping `gorm:"constraint:OnDelete:CASCADE" json:"cell_mappings"`
-}
-
-// MappingFieldType enumerates the semantic purpose an admin can assign to a
-// cell or column region when building a template mapping.
-type MappingFieldType string
-
-const (
-	FieldDate        MappingFieldType = "date"
-	FieldTimeIn      MappingFieldType = "time_in"
-	FieldTimeOut     MappingFieldType = "time_out"
-	FieldStatus      MappingFieldType = "status"
-	FieldActivity    MappingFieldType = "activity"
-	FieldProjectName MappingFieldType = "project_name"
-	FieldProjectID   MappingFieldType = "project_id"
-	FieldAppImpacted MappingFieldType = "app_impacted"
-	// Additional per-day columns used by the MII layout.
-	FieldTotalHour  MappingFieldType = "total_hour" // End - Start (computed)
-	FieldDivision   MappingFieldType = "division"   // per-day divisi column
-	FieldDepartment MappingFieldType = "department" // per-day departement column
-	FieldSubDept    MappingFieldType = "sub_department"
-	FieldAIPFitur   MappingFieldType = "aip_fitur"
-	// Static header/metadata single cells.
-	FieldMetaName     MappingFieldType = "meta_name"
-	FieldMetaMiiID    MappingFieldType = "meta_mii_id"
-	FieldMetaDivision MappingFieldType = "meta_division"
-	FieldMetaSite     MappingFieldType = "meta_site"
-	FieldMetaMonth    MappingFieldType = "meta_month"
-	FieldMetaYear     MappingFieldType = "meta_year"
-)
-
-// MappingScope describes whether a mapping addresses a single fixed cell or a
-// repeating column whose row grows one-per-day of the month.
-type MappingScope string
-
-const (
-	// ScopeCell addresses a single absolute cell (e.g. header metadata).
-	ScopeCell MappingScope = "cell"
-	// ScopeDailyColumn addresses a column whose rows repeat per calendar day,
-	// anchored at StartRow (day 1) and incrementing downward.
-	ScopeDailyColumn MappingScope = "daily_column"
-)
-
-// CellMapping links a semantic field to a physical location in the template.
-type CellMapping struct {
-	ID         uint             `gorm:"primaryKey" json:"id"`
-	TemplateID uint             `gorm:"index;not null" json:"template_id"`
-	Field      MappingFieldType `gorm:"size:32;not null" json:"field"`
-	Scope      MappingScope     `gorm:"size:16;not null;default:cell" json:"scope"`
-
-	// For ScopeCell: absolute address, e.g. "C4".
-	CellRef string `gorm:"size:16" json:"cell_ref"`
-	// For ScopeDailyColumn: the column letter (e.g. "K") and the row where the
-	// first day of the month is written.
-	Column   string `gorm:"size:4" json:"column"`
-	StartRow int    `json:"start_row"`
-	// Fillable marks whether users may edit this field in the monthly grid.
-	Fillable bool `gorm:"not null;default:true" json:"fillable"`
-}
 
 // DailyActivity stores one user's timesheet entry for a single calendar day.
 type DailyActivity struct {
@@ -250,7 +238,7 @@ type DailyActivity struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	UserID uint `gorm:"uniqueIndex:idx_user_date;not null" json:"user_id"`
+	UserID uint `gorm:"uniqueIndex:idx_user_date;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 	// Date is normalised to midnight in Asia/Jakarta.
 	Date time.Time `gorm:"uniqueIndex:idx_user_date;not null;type:date" json:"date"`
 
@@ -261,13 +249,18 @@ type DailyActivity struct {
 	ProjectName string `gorm:"size:255" json:"project_name"`
 	ProjectID   string `gorm:"size:64" json:"project_id"`
 	AppImpacted string `gorm:"size:255" json:"app_impacted"`
+
+	ProjectRefID *uint           `gorm:"index" json:"project_ref_id"`
+	ProjectRef   *Project        `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
+	StatusRef    *ActivityStatus `gorm:"foreignKey:Status;references:Code;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"status_ref,omitempty"`
+	User         *User           `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user,omitempty"`
 }
 
 // PushSubscription persists a browser Web Push subscription for a user.
 type PushSubscription struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
-	UserID    uint      `gorm:"index;not null" json:"user_id"`
+	UserID    uint      `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 
 	Endpoint string `gorm:"uniqueIndex;size:512;not null" json:"endpoint"`
 	P256dh   string `gorm:"size:255;not null" json:"p256dh"`
@@ -280,31 +273,38 @@ type ProfileChangeRequest struct {
 	ID        uint          `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time     `json:"created_at"`
 	UpdatedAt time.Time     `json:"updated_at"`
-	UserID    uint          `gorm:"index;not null" json:"user_id"`
+	UserID    uint          `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 	Status    ProfileStatus `gorm:"size:16;not null;default:pending" json:"status"`
 
-	Name     string `gorm:"size:255" json:"name"`
-	MiiID    string `gorm:"size:64" json:"mii_id"`
-	Division string `gorm:"size:255" json:"division"`
-	Site     string `gorm:"size:128" json:"site"`
-	Company  string `gorm:"size:64" json:"company"`
+	Name          string      `gorm:"size:255" json:"name"`
+	MiiID         string      `gorm:"size:64" json:"mii_id"`
+	EmployeeID    string      `gorm:"size:64" json:"employee_id"`
+	Division      string      `gorm:"size:255" json:"division"`
+	Department    string      `gorm:"size:255" json:"department"`
+	DepartmentID  *uint       `gorm:"index" json:"department_id"`
+	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
+	GroupName     string      `gorm:"size:255" json:"group_name"`
+	Position      string      `gorm:"size:128" json:"position"`
+	Site          string      `gorm:"size:128" json:"site"`
+	CompanyID     *uint       `gorm:"index" json:"company_id"`
+	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
 
-	CompanyID  *uint `gorm:"index" json:"company_id"`
-	DivisionID *uint `gorm:"index" json:"division_id"`
-	SiteID     *uint `gorm:"index" json:"site_id"`
-
-	ReviewedBy *uint      `json:"reviewed_by"`
+	ReviewedBy *uint      `gorm:"index" json:"reviewed_by"`
 	ReviewedAt *time.Time `json:"reviewed_at"`
+	Reviewer   *User      `gorm:"foreignKey:ReviewedBy;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"reviewer,omitempty"`
 
 	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
 }
 
-// PasswordResetToken backs the forgot/reset-password email flow.
+// PasswordResetToken backs the forgot/reset-password and account setup email flows.
 type PasswordResetToken struct {
-	ID        uint      `gorm:"primaryKey" json:"-"`
-	CreatedAt time.Time `json:"-"`
-	UserID    uint      `gorm:"index;not null" json:"-"`
-	TokenHash string    `gorm:"uniqueIndex;size:64;not null" json:"-"`
-	ExpiresAt time.Time `gorm:"not null" json:"-"`
-	Used      bool      `gorm:"not null;default:false" json:"-"`
+	ID        uint       `gorm:"primaryKey" json:"-"`
+	CreatedAt time.Time  `json:"-"`
+	UserID    uint       `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
+	TokenType string     `gorm:"size:32;not null;default:'password_reset'" json:"-"`
+	TokenHash string     `gorm:"uniqueIndex;size:64;not null" json:"-"`
+	ExpiresAt time.Time  `gorm:"index;not null" json:"-"`
+	UsedAt    *time.Time `json:"-"`
+	CreatedIP string     `gorm:"size:45" json:"-"`
+	UsedIP    string     `gorm:"size:45" json:"-"`
 }

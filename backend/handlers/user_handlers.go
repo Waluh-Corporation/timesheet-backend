@@ -20,110 +20,118 @@ func isSelf(c *gin.Context, id string) bool {
 	return uint(target) == currentUserID(c)
 }
 
-// createUserRequest is the admin-only account creation payload.
-type createUserRequest struct {
-	Username   string      `json:"username" binding:"required,min=3,max=64"`
-	Email      string      `json:"email" binding:"required,email"`
-	Role       models.Role `json:"role" binding:"required,oneof=admin user"`
-	Name       string      `json:"name"`
-	MiiID      string      `json:"mii_id"`
-	Division   string      `json:"division"`
-	Site       string      `json:"site"`
-	Company    string      `json:"company"`
-	CompanyID  *uint       `json:"company_id"`
-	DivisionID *uint       `json:"division_id"`
-	SiteID     *uint       `json:"site_id"`
-	// Password is optional; when omitted the user completes setup via email link.
-	Password string `json:"password"`
-}
-
-// ListUsers returns all users (admin only).
+// ListUsers godoc
+// @Summary List all users (Admin)
+// @Description Retrieves all registered user accounts with company and department associations (admin only).
+// @Tags Admin
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {array} models.User
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Admin only"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/users [get]
 func (s *Server) ListUsers(c *gin.Context) {
 	var users []models.User
-	if err := s.DB.Preload("CompanyRef").Preload("DivisionRef").Preload("SiteRef").
-		Order("created_at desc").Find(&users).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").Order("created_at desc").Find(&users).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, users)
+	RespondSuccess(c, http.StatusOK, users)
 }
 
-// CreateUser provisions a new account (admin only) and emails a setup link.
-// This is the sole registration path — there is no public sign-up.
+// CreateUser godoc
+// @Summary Provision new user account (Admin)
+// @Description Creates a new user account and emails an account setup invitation link (admin only).
+// @Tags Admin
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body models.CreateUserRequest true "User provisioning payload"
+// @Success 201 {object} models.User
+// @Failure 400 {object} models.ErrorResponse "Invalid payload or password policy failure"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Admin only"
+// @Failure 409 {object} models.ErrorResponse "Username or email already exists"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/users [post]
 func (s *Server) CreateUser(c *gin.Context) {
-	var req createUserRequest
+	var req models.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	user := models.User{
-		Username: req.Username,
-		Email:    req.Email,
-		Role:     req.Role,
-		Name:     req.Name,
-		MiiID:    req.MiiID,
-		Division: req.Division,
-		Site:     req.Site,
-		Company:  req.Company,
-		IsActive: true,
+		Username:     req.Username,
+		Email:        req.Email,
+		Role:         req.Role,
+		Name:         req.Name,
+		MiiID:        req.MiiID,
+		Division:     req.Division,
+		Department:   req.Department,
+		DepartmentID: req.DepartmentID,
+		Site:         req.Site,
+		Company:      req.Company,
+		CompanyID:    req.CompanyID,
+		IsActive:     true,
 	}
 
-	if req.CompanyID != nil && *req.CompanyID > 0 {
+	// Resolve Company
+	if req.CompanyID != nil && *req.CompanyID != 0 {
 		var comp models.Company
-		if err := s.DB.First(&comp, *req.CompanyID).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "selected company not found"})
-			return
+		if err := s.DB.First(&comp, *req.CompanyID).Error; err == nil {
+			user.CompanyID = &comp.ID
+			if user.Company == "" {
+				user.Company = comp.Name
+			}
 		}
-		user.CompanyID = &comp.ID
-		user.Company = comp.Code
+	} else if req.Company != "" {
+		var comp models.Company
+		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
+			user.CompanyID = &comp.ID
+		}
 	}
 
-	if req.DivisionID != nil && *req.DivisionID > 0 {
-		var div models.Division
-		if err := s.DB.First(&div, *req.DivisionID).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "selected division not found"})
-			return
+	// Resolve Department
+	if req.DepartmentID != nil && *req.DepartmentID != 0 {
+		var dept models.Department
+		if err := s.DB.First(&dept, *req.DepartmentID).Error; err == nil {
+			user.DepartmentID = &dept.ID
+			if user.Department == "" {
+				user.Department = dept.Name
+			}
+			if user.Division == "" {
+				user.Division = dept.Division
+			}
 		}
-		if user.CompanyID != nil && div.CompanyID != *user.CompanyID {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "division does not belong to selected company"})
-			return
+	} else if req.Department != "" {
+		var dept models.Department
+		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", req.Department, "%"+req.Department+"%").First(&dept).Error; err == nil {
+			user.DepartmentID = &dept.ID
+			if user.Division == "" && dept.Division != "" {
+				user.Division = dept.Division
+			}
 		}
-		user.DivisionID = &div.ID
-		user.Division = div.Name
-	}
-
-	if req.SiteID != nil && *req.SiteID > 0 {
-		var site models.Site
-		if err := s.DB.First(&site, *req.SiteID).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "selected site not found"})
-			return
-		}
-		if user.CompanyID != nil && site.CompanyID != *user.CompanyID {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "site does not belong to selected company"})
-			return
-		}
-		user.SiteID = &site.ID
-		user.Site = site.Name
 	}
 
 	if req.Password != "" {
 		// Enforce the NIST SP 800-63B policy on any admin-supplied initial
 		// password (length + blocklist + context-specific terms).
 		if err := auth.ValidatePassword(req.Password, req.Username, req.Email); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			RespondError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		hash, err := auth.HashPassword(req.Password)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not hash password"})
+			RespondError(c, http.StatusInternalServerError, "could not hash password")
 			return
 		}
 		user.PasswordHash = hash
 	}
 
 	if err := s.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "username or email already exists"})
+		RespondError(c, http.StatusConflict, "username or email already exists")
 		return
 	}
 
@@ -132,44 +140,45 @@ func (s *Server) CreateUser(c *gin.Context) {
 	if err == nil {
 		s.DB.Create(&models.PasswordResetToken{
 			UserID:    user.ID,
+			TokenType: "account_setup",
 			TokenHash: hash,
 			ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+			CreatedIP: c.ClientIP(),
 		})
 		link := s.publicBaseURL(c) + "/reset-password?token=" + raw
 		_ = s.Mailer.SendSetupEmail(user.Email, user.Username, link)
 	}
 
-	s.DB.Preload("CompanyRef").Preload("DivisionRef").Preload("SiteRef").First(&user, user.ID)
-	c.JSON(http.StatusCreated, user)
+	_ = s.DB.Preload("CompanyRel").Preload("DepartmentRel").First(&user, user.ID)
+	RespondSuccess(c, http.StatusCreated, user)
 }
 
-// updateUserRequest lets admins toggle role/active state.
-type updateUserRequest struct {
-	Role       *models.Role `json:"role"`
-	IsActive   *bool        `json:"is_active"`
-	Name       *string      `json:"name"`
-	MiiID      *string      `json:"mii_id"`
-	Division   *string      `json:"division"`
-	Site       *string      `json:"site"`
-	Company    *string      `json:"company"`
-	CompanyID  *uint        `json:"company_id"`
-	DivisionID *uint        `json:"division_id"`
-	SiteID     *uint        `json:"site_id"`
-}
-
-// UpdateUser edits a user directly (admin only). Admin edits are applied
-// immediately, bypassing the approval flow that governs self-service edits.
+// UpdateUser godoc
+// @Summary Update user attributes (Admin)
+// @Description Updates user profile information, role, or active status directly (admin only).
+// @Tags Admin
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Param request body models.UpdateUserRequest true "Update payload"
+// @Success 200 {object} models.User
+// @Failure 400 {object} models.ErrorResponse "Invalid payload"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Admin only or self-demotion forbidden"
+// @Failure 404 {object} models.ErrorResponse "User not found"
+// @Router /api/v1/admin/users/{id} [patch]
 func (s *Server) UpdateUser(c *gin.Context) {
 	id := c.Param("id")
 	var user models.User
 	if err := s.DB.First(&user, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
 
-	var req updateUserRequest
+	var req models.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -177,11 +186,11 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	// update path either — both are self-lockout vectors.
 	if isSelf(c, id) {
 		if req.IsActive != nil && !*req.IsActive {
-			c.JSON(http.StatusForbidden, gin.H{"error": "you cannot deactivate your own account"})
+			RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
 			return
 		}
 		if req.Role != nil && *req.Role != models.RoleAdmin {
-			c.JSON(http.StatusForbidden, gin.H{"error": "you cannot remove your own admin role"})
+			RespondError(c, http.StatusForbidden, "you cannot remove your own admin role")
 			return
 		}
 	}
@@ -202,11 +211,26 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	if req.Division != nil {
 		updates["division"] = *req.Division
 	}
+	if req.Department != nil {
+		updates["department"] = *req.Department
+	}
+	if req.DepartmentID != nil {
+		updates["department_id"] = *req.DepartmentID
+	}
 	if req.Site != nil {
 		updates["site"] = *req.Site
 	}
+	if req.CompanyID != nil {
+		updates["company_id"] = *req.CompanyID
+	}
 	if req.Company != nil {
 		updates["company"] = *req.Company
+		var comp models.Company
+		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
+			updates["company_id"] = comp.ID
+		} else {
+			updates["company_id"] = nil
+		}
 	}
 
 	targetCompanyID := user.CompanyID
@@ -268,74 +292,75 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	if len(updates) > 0 {
 		s.DB.Model(&user).Updates(updates)
 	}
-	s.DB.Preload("CompanyRef").Preload("DivisionRef").Preload("SiteRef").First(&user, id)
-	c.JSON(http.StatusOK, user)
+	s.DB.Preload("CompanyRel").Preload("DepartmentRel").First(&user, id)
+	RespondSuccess(c, http.StatusOK, user)
 }
 
-// DeleteUser deactivates a user (admin only). This is a soft action — the
-// account is set inactive but stays in the users list and can be reactivated;
-// it is never hard-deleted, preserving their timesheet history.
+// DeleteUser godoc
+// @Summary Soft deactivate user (Admin)
+// @Description Deactivates a user account (admin only). The account is not hard-deleted to preserve timesheet audit logs.
+// @Tags Admin
+// @Security BearerAuth
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} models.User
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Admin only or self-deactivation forbidden"
+// @Failure 404 {object} models.ErrorResponse "User not found"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/users/{id} [delete]
 func (s *Server) DeleteUser(c *gin.Context) {
 	id := c.Param("id")
 	// An admin may never deactivate/delete their own account — doing so could
 	// lock the last administrator out of the portal.
 	if isSelf(c, id) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "you cannot deactivate your own account"})
+		RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
 		return
 	}
 	var user models.User
 	if err := s.DB.First(&user, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
 	if err := s.DB.Model(&user).Update("is_active", false).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	s.DB.First(&user, id)
-	c.JSON(http.StatusOK, user)
+	RespondSuccess(c, http.StatusOK, user)
 }
 
 // --- Profile approval flow ---
 
-// profileChangeRequest is a user's self-service profile edit request.
-type profileChangeRequest struct {
-	Name       string `json:"name"`
-	MiiID      string `json:"mii_id"`
-	Division   string `json:"division"`
-	Site       string `json:"site"`
-	Company    string `json:"company"`
-	CompanyID  *uint  `json:"company_id"`
-	DivisionID *uint  `json:"division_id"`
-	SiteID     *uint  `json:"site_id"`
-}
-
-// SubmitProfileChange records a pending profile change for the current user.
-// The live profile is not modified until an admin approves the request.
+// SubmitProfileChange godoc
+// @Summary Submit self-service profile update request
+// @Description Submits a user's profile change request for administrator review and approval.
+// @Tags User
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body models.ProfileChangeRequestDTO true "Profile update fields"
+// @Success 201 {object} models.ProfileChangeRequest
+// @Failure 400 {object} models.ErrorResponse "Invalid payload"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/profile/change [post]
 func (s *Server) SubmitProfileChange(c *gin.Context) {
-	var req profileChangeRequest
+	var req models.ProfileChangeRequestDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	change := models.ProfileChangeRequest{
-		UserID:     currentUserID(c),
-		Status:     models.ProfilePending,
-		Name:       req.Name,
-		MiiID:      req.MiiID,
-		Division:   req.Division,
-		Site:       req.Site,
-		Company:    req.Company,
-		CompanyID:  req.CompanyID,
-		DivisionID: req.DivisionID,
-		SiteID:     req.SiteID,
-	}
-
-	if req.CompanyID != nil && *req.CompanyID > 0 {
-		var comp models.Company
-		if err := s.DB.First(&comp, *req.CompanyID).Error; err == nil {
-			change.Company = comp.Code
-		}
+		UserID:       currentUserID(c),
+		Status:       models.ProfilePending,
+		Name:         req.Name,
+		MiiID:        req.MiiID,
+		Division:     req.Division,
+		Department:   req.Department,
+		DepartmentID: req.DepartmentID,
+		Site:         req.Site,
+		CompanyID:    req.CompanyID,
 	}
 	if req.DivisionID != nil && *req.DivisionID > 0 {
 		var div models.Division
@@ -351,51 +376,84 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 	}
 
 	if err := s.DB.Create(&change).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusCreated, change)
+	RespondSuccess(c, http.StatusCreated, change)
 }
 
-// MyProfileChanges returns the current user's own profile change requests so
-// the profile page can show pending/approved/rejected status.
+// MyProfileChanges godoc
+// @Summary List current user's profile change requests
+// @Description Returns the profile change requests submitted by the currently authenticated user.
+// @Tags User
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {array} models.ProfileChangeRequest
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/profile/changes [get]
 func (s *Server) MyProfileChanges(c *gin.Context) {
 	var changes []models.ProfileChangeRequest
-	if err := s.DB.Where("user_id = ?", currentUserID(c)).
+	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").
+		Where("user_id = ?", currentUserID(c)).
 		Order("created_at desc").Find(&changes).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, changes)
+	RespondSuccess(c, http.StatusOK, changes)
 }
 
-// ListProfileChanges returns pending profile change requests (admin only).
+// ListProfileChanges godoc
+// @Summary List all profile change requests (Admin)
+// @Description Retrieves submitted profile change requests with optional status filtering (admin only).
+// @Tags Admin
+// @Security BearerAuth
+// @Produce json
+// @Param status query string false "Filter by review status (pending, approved, rejected)"
+// @Success 200 {array} models.ProfileChangeRequest
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Admin only"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/profile-changes [get]
 func (s *Server) ListProfileChanges(c *gin.Context) {
 	var changes []models.ProfileChangeRequest
-	q := s.DB.Preload("User").Order("created_at desc")
+	q := s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").Order("created_at desc")
 	if status := c.Query("status"); status != "" {
 		q = q.Where("status = ?", status)
 	}
 	if err := q.Find(&changes).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, changes)
+	RespondSuccess(c, http.StatusOK, changes)
 }
 
-// ReviewProfileChange approves or rejects a pending profile change (admin only).
-// On approval the requested values are copied onto the live user record.
+// ReviewProfileChange godoc
+// @Summary Review profile change request (Admin)
+// @Description Approves or rejects a submitted profile change request (admin only).
+// @Tags Admin
+// @Security BearerAuth
+// @Produce json
+// @Param id path int true "Request ID"
+// @Param action query string true "Review action" Enums(approve, reject)
+// @Success 200 {object} models.ProfileChangeRequest
+// @Failure 400 {object} models.ErrorResponse "Invalid action"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Admin only"
+// @Failure 404 {object} models.ErrorResponse "Request not found"
+// @Failure 409 {object} models.ErrorResponse "Request already reviewed"
+// @Router /api/v1/admin/profile-changes/{id}/review [post]
 func (s *Server) ReviewProfileChange(c *gin.Context) {
 	id := c.Param("id")
 	action := c.Query("action") // "approve" or "reject"
 
 	var change models.ProfileChangeRequest
 	if err := s.DB.First(&change, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "request not found"})
+		RespondError(c, http.StatusNotFound, "request not found")
 		return
 	}
 	if change.Status != models.ProfilePending {
-		c.JSON(http.StatusConflict, gin.H{"error": "request already reviewed"})
+		RespondError(c, http.StatusConflict, "request already reviewed")
 		return
 	}
 
@@ -409,17 +467,14 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 			"division": change.Division,
 			"site":     change.Site,
 		}
-		if change.Company != "" {
-			updates["company"] = change.Company
+		if change.Department != "" {
+			updates["department"] = change.Department
+		}
+		if change.DepartmentID != nil {
+			updates["department_id"] = change.DepartmentID
 		}
 		if change.CompanyID != nil {
 			updates["company_id"] = change.CompanyID
-		}
-		if change.DivisionID != nil {
-			updates["division_id"] = change.DivisionID
-		}
-		if change.SiteID != nil {
-			updates["site_id"] = change.SiteID
 		}
 		s.DB.Model(&models.User{}).Where("id = ?", change.UserID).Updates(updates)
 		change.Status = models.ProfileApproved
@@ -430,5 +485,6 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	change.ReviewedAt = &now
 	s.DB.Save(&change)
 
-	c.JSON(http.StatusOK, change)
+	_ = s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").First(&change, change.ID)
+	RespondSuccess(c, http.StatusOK, change)
 }

@@ -21,25 +21,25 @@ type TimesheetRequest struct {
 	Format            string       `json:"format" binding:"required,oneof=excel pdf" example:"excel"`
 	Project           string       `json:"project" example:"Core Banking Modernization"`
 	Division          string       `json:"division" example:"Application Development Division"`
-	Name              string       `json:"name" example:"Faisal Al Munawar Fathur Rahman"`
-	MiiID             string       `json:"mii_id" example:"MII-04828"`
+	Name              string       `json:"name" example:"John Doe"`
+	MiiID             string       `json:"mii_id" example:"MII-00001"`
 	Site              string       `json:"site" example:"Jakarta"`
-	SignatureEmployee string       `json:"signature_employee" example:"Faisal Al Munawar Fathur Rahman"`
+	SignatureEmployee string       `json:"signature_employee" example:"John Doe"`
 	SignatureReviewer string       `json:"signature_reviewer" example:"Reviewer Name"`
 	SignatureApprover string       `json:"signature_approver" example:"Approver Name"`
 	DailyEntries      []DailyEntry `json:"daily_entries" binding:"required"`
 }
 
-// Holiday represents a holiday from the external API
-type Holiday struct {
+// HolidayDTO represents a holiday from the external API
+type HolidayDTO struct {
 	Date        string `json:"date"`
 	Description string `json:"description"`
 }
 
 // HolidayResponse represents the response format of the public holiday API
 type HolidayResponse struct {
-	Status  string    `json:"status"`
-	Code    int       `json:"code"`
-	Data    []Holiday `json:"data"`
-	Message string    `json:"message"`
+	Status  string       `json:"status"`
+	Code    int          `json:"code"`
+	Data    []HolidayDTO `json:"data"`
+	Message string       `json:"message"`
 }
