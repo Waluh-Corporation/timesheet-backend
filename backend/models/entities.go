@@ -228,7 +228,7 @@ type DailyActivity struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	UserID uint `gorm:"uniqueIndex:idx_user_date;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
+	UserID uint `gorm:"uniqueIndex:idx_user_date;not null" json:"user_id"`
 	// Date is normalised to midnight in Asia/Jakarta.
 	Date time.Time `gorm:"uniqueIndex:idx_user_date;not null;type:date" json:"date"`
 
