@@ -12,8 +12,8 @@ import (
 )
 
 func TestGenerateMII(t *testing.T) {
-	if len(assets.MIITemplate) == 0 {
-		t.Fatal("MII template asset is empty")
+	if len(assets.MIILogo) == 0 {
+		t.Fatal("MII logo asset is empty")
 	}
 
 	user := &models.User{Name: "Budi Santoso", Division: "Digital", MiiID: "MII-123", Site: "Jakarta"}

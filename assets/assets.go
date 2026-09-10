@@ -4,12 +4,6 @@ package assets
 
 import _ "embed"
 
-// MIITemplate is the raw .xlsx bytes of the built-in "MII Timesheet" template,
-// seeded as the default template on first boot.
-//
-//go:embed mii_timesheet_template.xlsx
-var MIITemplate []byte
-
 //go:embed images/mii_logo.png
 var MIILogo []byte
 
