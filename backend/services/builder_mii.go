@@ -276,15 +276,27 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	styleMergedRange(f, sheet, "D43", "F45", st.DataCenterStyle)
 	styleMergedRange(f, sheet, "G43", "J45", st.DataCenterStyle)
 
+	// Extract approver names from overtime entries if present
+	tlName := ""
+	dhName := ""
+	for _, ot := range in.Overtimes {
+		if ot.TeamLeader != nil && ot.TeamLeader.Name != "" && tlName == "" {
+			tlName = ot.TeamLeader.Name
+		}
+		if ot.DepartmentHead != nil && ot.DepartmentHead.Name != "" && dhName == "" {
+			dhName = ot.DepartmentHead.Name
+		}
+	}
+
 	// Names (Row 46)
 	styleMergedRange(f, sheet, "A46", "C46", st.BoldCenterStyle)
 	_ = f.SetCellValue(sheet, "A46", in.User.Name)
 
 	styleMergedRange(f, sheet, "D46", "F46", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "D46", "Daniel Harry Hasudungan Simbolon")
+	_ = f.SetCellValue(sheet, "D46", tlName)
 
 	styleMergedRange(f, sheet, "G46", "J46", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "G46", "Machfud Yohan Muchori")
+	_ = f.SetCellValue(sheet, "G46", dhName)
 
 	// Date Rows (Row 47)
 	styleMergedRange(f, sheet, "A47", "C47", st.DataLeftStyle)

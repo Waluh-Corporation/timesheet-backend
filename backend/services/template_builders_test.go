@@ -166,11 +166,11 @@ func TestBuildSDDWorkbook(t *testing.T) {
 
 func TestBuildAdidataWorkbook(t *testing.T) {
 	user := &models.User{
-		Name:       "Arief Mahendra",
+		Name:       "John Doe",
 		Division:   "WDL",
 		Department: "WCH",
 		Position:   "Junior Programmer",
-		EmployeeID: "900574",
+		EmployeeID: "EMP-0001",
 	}
 
 	act := models.DailyActivity{
@@ -182,8 +182,8 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 		ProjectName: "BNI Direct",
 	}
 
-	tl := models.Approver{Name: "Daniel Harry Hasudungan Simbolon"}
-	dh := models.Approver{Name: "M. Yohan Muchori"}
+	tl := models.Approver{Name: "Team Leader Example"}
+	dh := models.Approver{Name: "Department Head Example"}
 	ot := models.OvertimeEntry{
 		Date:            time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC),
 		StartTime:       "17:00",
@@ -217,12 +217,12 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 	// 1. Check TIMESHEET sheet
 	const sheetTS = "TIMESHEET"
 	valC3, _ := f.GetCellValue(sheetTS, "C3")
-	if valC3 != ": Arief Mahendra" {
-		t.Errorf("C3 = %q, want ': Arief Mahendra'", valC3)
+	if valC3 != ": John Doe" {
+		t.Errorf("C3 = %q, want ': John Doe'", valC3)
 	}
 	valC4, _ := f.GetCellValue(sheetTS, "C4")
-	if valC4 != ": 900574" {
-		t.Errorf("C4 = %q, want ': 900574'", valC4)
+	if valC4 != ": EMP-0001" {
+		t.Errorf("C4 = %q, want ': EMP-0001'", valC4)
 	}
 
 	// Day 4 -> Row 12
@@ -251,8 +251,8 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 	}
 
 	valNPP, _ := f.GetCellValue(splSheet, "E4")
-	if valNPP != ": 900574" {
-		t.Errorf("SPL E4 = %q, want ': 900574'", valNPP)
+	if valNPP != ": EMP-0001" {
+		t.Errorf("SPL E4 = %q, want ': EMP-0001'", valNPP)
 	}
 
 	valTask, _ := f.GetCellValue(splSheet, "H12")

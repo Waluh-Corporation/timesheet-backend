@@ -1,0 +1,277 @@
+package handlers
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+
+	"timesheet-backend/models"
+)
+
+// CreateApproverRequest carries fields to add a new approver.
+type CreateApproverRequest struct {
+	CompanyID *uint                   `json:"company_id" example:"1"`
+	Name      string                  `json:"name" binding:"required" example:"Approver Name"`
+	RoleType  models.ApproverRoleType `json:"role_type" binding:"required,oneof=team_leader department_head" example:"team_leader"`
+	Title     string                  `json:"title" example:"Team Leader"`
+	IsActive  *bool                   `json:"is_active" example:"true"`
+}
+
+// UpdateApproverRequest carries fields to update an existing approver.
+type UpdateApproverRequest struct {
+	CompanyID *uint                    `json:"company_id" example:"1"`
+	Name      *string                  `json:"name" example:"Approver Name Updated"`
+	RoleType  *models.ApproverRoleType `json:"role_type" example:"department_head"`
+	Title     *string                  `json:"title" example:"Department Head"`
+	IsActive  *bool                    `json:"is_active" example:"true"`
+}
+
+// CreateCompanyRequest carries fields to add a new company.
+type CreateCompanyRequest struct {
+	Code string `json:"code" binding:"required,min=2,max=32" example:"mii"`
+	Name string `json:"name" binding:"required,min=2,max=255" example:"PT Mitra Integrasi Informatika"`
+}
+
+// UpdateCompanyRequest carries fields to update a company.
+type UpdateCompanyRequest struct {
+	Code *string `json:"code" example:"mii"`
+	Name *string `json:"name" example:"PT Mitra Integrasi Informatika"`
+}
+
+// CreateApprover godoc
+// @Summary Create a new approver (admin only)
+// @Description Adds a new approver (Team Leader or Department Head) linked to a company.
+// @Tags Master Data
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body handlers.CreateApproverRequest true "Approver data"
+// @Success 201 {object} models.Approver
+// @Failure 400 {object} models.ErrorResponse "Bad request"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Forbidden"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/approvers [post]
+func (s *Server) CreateApprover(c *gin.Context) {
+	var req CreateApproverRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
+
+	appr := models.Approver{
+		CompanyID: req.CompanyID,
+		Name:      strings.TrimSpace(req.Name),
+		RoleType:  req.RoleType,
+		Title:     strings.TrimSpace(req.Title),
+		IsActive:  isActive,
+	}
+
+	if err := s.DB.Create(&appr).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to create approver: "+err.Error())
+		return
+	}
+
+	_ = s.DB.Preload("Company").First(&appr, appr.ID)
+	RespondSuccess(c, http.StatusCreated, appr)
+}
+
+// UpdateApprover godoc
+// @Summary Update an existing approver (admin only)
+// @Description Updates approver name, role, title, company, or active status.
+// @Tags Master Data
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "Approver ID"
+// @Param request body handlers.UpdateApproverRequest true "Approver update data"
+// @Success 200 {object} models.Approver
+// @Failure 400 {object} models.ErrorResponse "Bad request"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Forbidden"
+// @Failure 404 {object} models.ErrorResponse "Approver not found"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/approvers/{id} [patch]
+func (s *Server) UpdateApprover(c *gin.Context) {
+	id := c.Param("id")
+	var appr models.Approver
+	if err := s.DB.First(&appr, id).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "approver not found")
+		return
+	}
+
+	var req UpdateApproverRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if req.CompanyID != nil {
+		updates["company_id"] = *req.CompanyID
+	}
+	if req.Name != nil {
+		updates["name"] = strings.TrimSpace(*req.Name)
+	}
+	if req.RoleType != nil {
+		updates["role_type"] = *req.RoleType
+	}
+	if req.Title != nil {
+		updates["title"] = strings.TrimSpace(*req.Title)
+	}
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
+	}
+
+	if len(updates) > 0 {
+		if err := s.DB.Model(&appr).Updates(updates).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
+			return
+		}
+	}
+
+	_ = s.DB.Preload("Company").First(&appr, appr.ID)
+	RespondSuccess(c, http.StatusOK, appr)
+}
+
+// DeleteApprover godoc
+// @Summary Delete an approver (admin only)
+// @Description Permanently removes an approver from master data.
+// @Tags Master Data
+// @Security BearerAuth
+// @Produce json
+// @Param id path int true "Approver ID"
+// @Success 200 {object} models.DeleteResponse
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Forbidden"
+// @Failure 404 {object} models.ErrorResponse "Approver not found"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/approvers/{id} [delete]
+func (s *Server) DeleteApprover(c *gin.Context) {
+	id := c.Param("id")
+	var appr models.Approver
+	if err := s.DB.First(&appr, id).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "approver not found")
+		return
+	}
+
+	if err := s.DB.Delete(&appr).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to delete approver: "+err.Error())
+		return
+	}
+	RespondDelete(c, http.StatusOK)
+}
+
+// CreateCompany godoc
+// @Summary Create a company (admin only)
+// @Description Adds a new client/vendor company.
+// @Tags Master Data
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body handlers.CreateCompanyRequest true "Company data"
+// @Success 201 {object} models.Company
+// @Failure 400 {object} models.ErrorResponse "Bad request"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Forbidden"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/companies [post]
+func (s *Server) CreateCompany(c *gin.Context) {
+	var req CreateCompanyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	comp := models.Company{
+		Code: strings.ToLower(strings.TrimSpace(req.Code)),
+		Name: strings.TrimSpace(req.Name),
+	}
+
+	if err := s.DB.Create(&comp).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to create company: "+err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusCreated, comp)
+}
+
+// UpdateCompany godoc
+// @Summary Update a company (admin only)
+// @Description Updates code or name of an existing company.
+// @Tags Master Data
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "Company ID"
+// @Param request body handlers.UpdateCompanyRequest true "Company update data"
+// @Success 200 {object} models.Company
+// @Failure 400 {object} models.ErrorResponse "Bad request"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Forbidden"
+// @Failure 404 {object} models.ErrorResponse "Company not found"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/companies/{id} [patch]
+func (s *Server) UpdateCompany(c *gin.Context) {
+	id := c.Param("id")
+	var comp models.Company
+	if err := s.DB.First(&comp, id).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "company not found")
+		return
+	}
+
+	var req UpdateCompanyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if req.Code != nil {
+		updates["code"] = strings.ToLower(strings.TrimSpace(*req.Code))
+	}
+	if req.Name != nil {
+		updates["name"] = strings.TrimSpace(*req.Name)
+	}
+
+	if len(updates) > 0 {
+		if err := s.DB.Model(&comp).Updates(updates).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
+			return
+		}
+	}
+	RespondSuccess(c, http.StatusOK, comp)
+}
+
+// DeleteCompany godoc
+// @Summary Delete a company (admin only)
+// @Description Permanently removes a company from master data.
+// @Tags Master Data
+// @Security BearerAuth
+// @Produce json
+// @Param id path int true "Company ID"
+// @Success 200 {object} models.DeleteResponse
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Forbidden"
+// @Failure 404 {object} models.ErrorResponse "Company not found"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/companies/{id} [delete]
+func (s *Server) DeleteCompany(c *gin.Context) {
+	id := c.Param("id")
+	var comp models.Company
+	if err := s.DB.First(&comp, id).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "company not found")
+		return
+	}
+
+	if err := s.DB.Delete(&comp).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to delete company: "+err.Error())
+		return
+	}
+	RespondDelete(c, http.StatusOK)
+}

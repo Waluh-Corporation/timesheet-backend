@@ -308,15 +308,27 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 	styleMergedRange(f, sheet, "F54", "I56", st.DataCenterStyle)
 	styleMergedRange(f, sheet, "J54", "L56", st.DataCenterStyle)
 
+	// Extract approver names from overtime entries if present
+	tlName := ""
+	dhName := ""
+	for _, ot := range in.Overtimes {
+		if ot.TeamLeader != nil && ot.TeamLeader.Name != "" && tlName == "" {
+			tlName = ot.TeamLeader.Name
+		}
+		if ot.DepartmentHead != nil && ot.DepartmentHead.Name != "" && dhName == "" {
+			dhName = ot.DepartmentHead.Name
+		}
+	}
+
 	// Names (Row 57)
 	styleMergedRange(f, sheet, "B57", "E57", st.BoldCenterStyle)
 	_ = f.SetCellValue(sheet, "B57", in.User.Name)
 
 	styleMergedRange(f, sheet, "F57", "I57", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "F57", "Daniel Harry Hasudungan Simbolon")
+	_ = f.SetCellValue(sheet, "F57", tlName)
 
 	styleMergedRange(f, sheet, "J57", "L57", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "J57", "Machfud Yohan Muchori")
+	_ = f.SetCellValue(sheet, "J57", dhName)
 
 	// Date Rows (Row 58)
 	styleMergedRange(f, sheet, "B58", "E58", st.DataLeftStyle)

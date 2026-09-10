@@ -18,14 +18,14 @@ func Setup(db *gorm.DB, cfg *config.Config) error {
 		return fmt.Errorf("migration runner: %w", err)
 	}
 
+	if err := SeedActivityStatuses(db); err != nil {
+		log.Printf("[database] could not seed activity statuses: %v", err)
+	}
 	if err := seedAdmin(db, cfg); err != nil {
 		return err
 	}
 	if err := seedDefaultCompanies(db); err != nil {
 		log.Printf("[database] could not seed default companies: %v", err)
-	}
-	if err := seedDefaultApprovers(db); err != nil {
-		log.Printf("[database] could not seed default approvers: %v", err)
 	}
 	if err := seedDefaultProjectsAndNormalize(db); err != nil {
 		log.Printf("[database] normalization/project seeding error: %v", err)
@@ -106,12 +106,9 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 
 	// 3. Seed default projects
 	defaultProjects := []models.Project{
-		{Code: "P24015", Name: "BNI Direct", AppImpacted: "BNI Direct Cash", CompanyID: findCompanyID("mii"), IsActive: true},
-		{Code: "P24016", Name: "BNI Direct Overseas", AppImpacted: "BNI Direct Overseas", CompanyID: findCompanyID("mii"), IsActive: true},
-		{Code: "P24017", Name: "BNI Direct Bisnis", AppImpacted: "BNI Direct Bisnis", CompanyID: findCompanyID("mii"), IsActive: true},
-		{Code: "P24015", Name: "BNI Direct", AppImpacted: "BNI Direct", CompanyID: findCompanyID("ntt"), IsActive: true},
-		{Code: "SDD-01", Name: "Core Banking Development", AppImpacted: "Core Banking", CompanyID: findCompanyID("sdd"), IsActive: true},
-		{Code: "ADI-01", Name: "BNI Direct Maintenance", AppImpacted: "BNI Direct", CompanyID: findCompanyID("adidata"), IsActive: true},
+		{Code: "P24015", Name: "BNI Direct Cash", AppImpacted: "BNI Direct Cash", IsActive: true},
+		{Code: "P24015", Name: "BNI Direct Overseas", AppImpacted: "BNI Direct Overseas", IsActive: true},
+		{Code: "P24015", Name: "BNI Direct Bisnis", AppImpacted: "BNI Direct Bisnis", IsActive: true},
 	}
 	for _, p := range defaultProjects {
 		var cnt int64
@@ -153,20 +150,8 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	`).Error
 
 	// 5. Seed default activity statuses
-	defaultStatuses := []models.ActivityStatus{
-		{Code: "P", Name: "Present", Description: "Hadir bekerja normal", IsWorkingDay: true, SortOrder: 1},
-		{Code: "BT", Name: "Business Trip", Description: "Perjalanan dinas", IsWorkingDay: true, SortOrder: 2},
-		{Code: "S", Name: "Sick", Description: "Sakit", IsWorkingDay: false, SortOrder: 3},
-		{Code: "PM", Name: "Permission", Description: "Izin", IsWorkingDay: false, SortOrder: 4},
-		{Code: "V", Name: "Leave", Description: "Cuti / Vacation", IsWorkingDay: false, SortOrder: 5},
-		{Code: "X", Name: "Off", Description: "Libur / Off", IsWorkingDay: false, SortOrder: 6},
-	}
-	for _, s := range defaultStatuses {
-		var cnt int64
-		_ = db.Model(&models.ActivityStatus{}).Where("code = ?", s.Code).Count(&cnt).Error
-		if cnt == 0 {
-			_ = db.Create(&s).Error
-		}
+	if err := SeedActivityStatuses(db); err != nil {
+		log.Printf("[database] could not seed activity statuses: %v", err)
 	}
 
 	// Standardize daily_activities.status to uppercase and map unmapped to 'P'
@@ -219,10 +204,36 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	return nil
 }
 
-// seedAdmin creates the bootstrap admin the first time the portal boots with an
-// empty users table. Public sign-up is disabled, so this is the only way an
-// initial administrator can come into existence.
+// SeedActivityStatuses seeds default activity statuses (P, BT, S, PM, V, X) idempotently.
+func SeedActivityStatuses(db *gorm.DB) error {
+	defaultStatuses := []models.ActivityStatus{
+		{Code: "P", Name: "Present", Description: "Hadir bekerja normal", IsWorkingDay: true, SortOrder: 1},
+		{Code: "BT", Name: "Business Trip", Description: "Perjalanan dinas", IsWorkingDay: true, SortOrder: 2},
+		{Code: "S", Name: "Sick", Description: "Sakit", IsWorkingDay: false, SortOrder: 3},
+		{Code: "PM", Name: "Permission", Description: "Izin", IsWorkingDay: false, SortOrder: 4},
+		{Code: "V", Name: "Leave", Description: "Cuti / Vacation", IsWorkingDay: false, SortOrder: 5},
+		{Code: "X", Name: "Off", Description: "Libur / Off", IsWorkingDay: false, SortOrder: 6},
+	}
+	for _, s := range defaultStatuses {
+		var cnt int64
+		_ = db.Model(&models.ActivityStatus{}).Where("code = ?", s.Code).Count(&cnt).Error
+		if cnt == 0 {
+			if err := db.Create(&s).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// seedAdmin creates the bootstrap admin when BOOTSTRAP_ADMIN_PASSWORD is set in config
+// and the users table has no admin account. If no password is provided in config,
+// seeding is skipped so the initial setup / onboarding wizard can be used.
 func seedAdmin(db *gorm.DB, cfg *config.Config) error {
+	if cfg.AdminPassword == "" {
+		return nil
+	}
+
 	var count int64
 	if err := db.Model(&models.User{}).Where("role = ?", models.RoleAdmin).Count(&count).Error; err != nil {
 		return err
@@ -231,25 +242,11 @@ func seedAdmin(db *gorm.DB, cfg *config.Config) error {
 		return nil
 	}
 
-	// Never seed a known/guessable admin password. When BOOTSTRAP_ADMIN_PASSWORD
-	// is not explicitly provided, generate a strong, NIST SP 800-63B-compliant
-	// random one and print it once so an operator can capture it from the logs
-	// and rotate it. When it IS provided, validate it against the same policy so
-	// a weak default can never enter the system through the seeder.
-	adminPassword := cfg.AdminPassword
-	generated := false
-	if adminPassword == "" {
-		pw, err := auth.GeneratePassword(auth.GeneratedPasswordLength)
-		if err != nil {
-			return err
-		}
-		adminPassword = pw
-		generated = true
-	} else if err := auth.ValidatePassword(adminPassword, cfg.AdminUsername, cfg.AdminEmail); err != nil {
+	if err := auth.ValidatePassword(cfg.AdminPassword, cfg.AdminUsername, cfg.AdminEmail); err != nil {
 		log.Fatalf("[database] BOOTSTRAP_ADMIN_PASSWORD rejected by password policy: %v", err)
 	}
 
-	hash, err := auth.HashPassword(adminPassword)
+	hash, err := auth.HashPassword(cfg.AdminPassword)
 	if err != nil {
 		return err
 	}
@@ -264,96 +261,6 @@ func seedAdmin(db *gorm.DB, cfg *config.Config) error {
 	if err := db.Create(&admin).Error; err != nil {
 		return err
 	}
-	if generated {
-		log.Printf("[database] seeded bootstrap admin '%s' (%s) with a GENERATED password: %s", cfg.AdminUsername, cfg.AdminEmail, adminPassword)
-		log.Printf("[database] ^ capture this now and change it after first login; it will not be shown again")
-	} else {
-		log.Printf("[database] seeded bootstrap admin '%s' (%s) using BOOTSTRAP_ADMIN_PASSWORD", cfg.AdminUsername, cfg.AdminEmail)
-	}
-	return nil
-}
-
-// seedDefaultApprovers seeds initial Team Leaders and Department Heads for companies if not present.
-func seedDefaultApprovers(db *gorm.DB) error {
-	findCompanyID := func(code string) *uint {
-		var comp models.Company
-		if err := db.Where("code = ?", code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
-			return &comp.ID
-		}
-		return nil
-	}
-
-	approvers := []models.Approver{
-		// MII
-		{
-			CompanyID: findCompanyID("mii"),
-			Name:      "Eko Prasetyo",
-			RoleType:  models.ApproverRoleTeamLeader,
-			Title:     "Team Leader Enterprise Solutions",
-			IsActive:  true,
-		},
-		{
-			CompanyID: findCompanyID("mii"),
-			Name:      "Bambang Suryono",
-			RoleType:  models.ApproverRoleDepartmentHead,
-			Title:     "Head of Wholesale Delivery",
-			IsActive:  true,
-		},
-		// SDD
-		{
-			CompanyID: findCompanyID("sdd"),
-			Name:      "Hendra Wijaya",
-			RoleType:  models.ApproverRoleTeamLeader,
-			Title:     "Team Leader Switching & Core",
-			IsActive:  true,
-		},
-		{
-			CompanyID: findCompanyID("sdd"),
-			Name:      "Irwan Santoso",
-			RoleType:  models.ApproverRoleDepartmentHead,
-			Title:     "Department Head Banking Operations",
-			IsActive:  true,
-		},
-		// Adidata
-		{
-			CompanyID: findCompanyID("adidata"),
-			Name:      "Rudy Hermawan",
-			RoleType:  models.ApproverRoleTeamLeader,
-			Title:     "Team Leader Integration",
-			IsActive:  true,
-		},
-		{
-			CompanyID: findCompanyID("adidata"),
-			Name:      "Agus Setiawan",
-			RoleType:  models.ApproverRoleDepartmentHead,
-			Title:     "Department Head Enterprise Systems",
-			IsActive:  true,
-		},
-		// NTT
-		{
-			CompanyID: findCompanyID("ntt"),
-			Name:      "David Tanuwidjaja",
-			RoleType:  models.ApproverRoleTeamLeader,
-			Title:     "Lead Technical Architect",
-			IsActive:  true,
-		},
-		{
-			CompanyID: findCompanyID("ntt"),
-			Name:      "Siti Rahmawati",
-			RoleType:  models.ApproverRoleDepartmentHead,
-			Title:     "Director of Delivery",
-			IsActive:  true,
-		},
-	}
-
-	for _, a := range approvers {
-		var cnt int64
-		_ = db.Model(&models.Approver{}).
-			Where("name = ? AND role_type = ?", a.Name, a.RoleType).
-			Count(&cnt).Error
-		if cnt == 0 {
-			_ = db.Create(&a).Error
-		}
-	}
+	log.Printf("[database] seeded bootstrap admin '%s' (%s) using BOOTSTRAP_ADMIN_PASSWORD", cfg.AdminUsername, cfg.AdminEmail)
 	return nil
 }

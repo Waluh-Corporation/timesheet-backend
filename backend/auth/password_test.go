@@ -17,7 +17,7 @@ func TestValidatePassword(t *testing.T) {
 		{"commonBlockedCase", "Password123", nil, ErrPasswordBlocked},
 		{"adminBlocked", "admin123", nil, ErrPasswordBlocked},
 		{"contextUsername", "alicewonderland", []string{"alice"}, ErrPasswordBlocked},
-		{"contextEmailLocalPart", "naufalzaid17xyz", []string{"naufalzaid17@gmail.com"}, ErrPasswordBlocked},
+		{"contextEmailLocalPart", "johndoexyz", []string{"johndoe@example.com"}, ErrPasswordBlocked},
 		{"strongPassphrase", "correct horse battery staple", nil, nil},
 	}
 	for _, tc := range cases {

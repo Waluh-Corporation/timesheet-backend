@@ -240,11 +240,31 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 	styleMergedRange(f, sheetTS, "A48", "C48", st.BoldCenterStyle)
 	_ = f.SetCellValue(sheetTS, "A48", "( "+in.User.Name+" )")
 
+	// Extract approver names from overtime entries if present
+	tlName := ""
+	dhName := ""
+	for _, ot := range in.Overtimes {
+		if ot.TeamLeader != nil && ot.TeamLeader.Name != "" && tlName == "" {
+			tlName = ot.TeamLeader.Name
+		}
+		if ot.DepartmentHead != nil && ot.DepartmentHead.Name != "" && dhName == "" {
+			dhName = ot.DepartmentHead.Name
+		}
+	}
+	tlCell := ""
+	if tlName != "" {
+		tlCell = "( " + tlName + " )"
+	}
+	dhCell := ""
+	if dhName != "" {
+		dhCell = "( " + dhName + " )"
+	}
+
 	styleMergedRange(f, sheetTS, "D48", "F48", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheetTS, "D48", "( Daniel Harry Hasudungan Simbolon )")
+	_ = f.SetCellValue(sheetTS, "D48", tlCell)
 
 	styleMergedRange(f, sheetTS, "G48", "J48", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheetTS, "G48", "( M. Yohan Muchori )")
+	_ = f.SetCellValue(sheetTS, "G48", dhCell)
 
 	// Positions (Row 49)
 	posTitle := in.User.Position
@@ -361,11 +381,12 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 		if ot.TeamLeader != nil && ot.TeamLeader.Name != "" {
 			tl = ot.TeamLeader.Name
 		}
-		if tl == "" {
-			tl = "Daniel Harry Hasudungan Simbolon"
+		tlLabel := ""
+		if tl != "" {
+			tlLabel = "( " + tl + " )"
 		}
 		_ = f.MergeCell(splSheet, "G21", "J21")
-		_ = f.SetCellValue(splSheet, "G21", "( "+tl+" )")
+		_ = f.SetCellValue(splSheet, "G21", tlLabel)
 		_ = f.SetCellStyle(splSheet, "G21", "J21", st.BoldCenterStyle)
 
 		_ = f.MergeCell(splSheet, "G22", "J22")
@@ -376,11 +397,12 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 		if ot.DepartmentHead != nil && ot.DepartmentHead.Name != "" {
 			dh = ot.DepartmentHead.Name
 		}
-		if dh == "" {
-			dh = "M. Yohan Muchori"
+		dhLabel := ""
+		if dh != "" {
+			dhLabel = "( " + dh + " )"
 		}
 		_ = f.MergeCell(splSheet, "L21", "N21")
-		_ = f.SetCellValue(splSheet, "L21", "( "+dh+" )")
+		_ = f.SetCellValue(splSheet, "L21", dhLabel)
 		_ = f.SetCellStyle(splSheet, "L21", "N21", st.BoldCenterStyle)
 
 		_ = f.MergeCell(splSheet, "L22", "N22")

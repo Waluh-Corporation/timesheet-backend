@@ -77,7 +77,7 @@ definitions:
   models.BeginPasskeyLoginRequest:
     properties:
       identifier:
-        example: faisal
+        example: john_doe
         type: string
     type: object
   models.Company:
@@ -120,13 +120,13 @@ definitions:
         example: Application Development Division
         type: string
       email:
-        example: faisal@example.com
+        example: john_doe@example.com
         type: string
       mii_id:
-        example: MII-04828
+        example: MII-00001
         type: string
       name:
-        example: Faisal Al Munawar Fathur Rahman
+        example: John Doe
         type: string
       password:
         example: TempPass123!
@@ -142,7 +142,7 @@ definitions:
         example: Jakarta
         type: string
       username:
-        example: faisal
+        example: john_doe
         maxLength: 64
         minLength: 3
         type: string
@@ -271,7 +271,7 @@ definitions:
   models.ForgotRequest:
     properties:
       email:
-        example: faisal@example.com
+        example: john_doe@example.com
         type: string
     required:
     - email
@@ -321,7 +321,7 @@ definitions:
   models.LoginRequest:
     properties:
       identifier:
-        example: faisal
+        example: john_doe
         type: string
       password:
         example: MySecretPass123!
@@ -461,10 +461,10 @@ definitions:
         example: Application Development Division
         type: string
       mii_id:
-        example: MII-04828
+        example: MII-00001
         type: string
       name:
-        example: Faisal Al Munawar
+        example: John Doe
         type: string
       site:
         example: Jakarta
@@ -571,10 +571,10 @@ definitions:
         example: true
         type: boolean
       mii_id:
-        example: MII-04828
+        example: MII-00001
         type: string
       name:
-        example: Faisal Al Munawar
+        example: John Doe
         type: string
       role:
         allOf:

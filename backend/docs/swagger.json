@@ -2033,7 +2033,7 @@
             "properties": {
                 "identifier": {
                     "type": "string",
-                    "example": "faisal"
+                    "example": "john_doe"
                 }
             }
         },
@@ -2100,11 +2100,11 @@
                 },
                 "email": {
                     "type": "string",
-                    "example": "faisal@example.com"
+                    "example": "john.doe@example.com"
                 },
                 "mii_id": {
                     "type": "string",
-                    "example": "MII-04828"
+                    "example": "MII-00001"
                 },
                 "name": {
                     "type": "string",
@@ -2134,7 +2134,7 @@
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 3,
-                    "example": "faisal"
+                    "example": "john_doe"
                 }
             }
         },
@@ -2314,7 +2314,7 @@
             "properties": {
                 "email": {
                     "type": "string",
-                    "example": "faisal@example.com"
+                    "example": "john.doe@example.com"
                 }
             }
         },
@@ -2388,7 +2388,7 @@
             "properties": {
                 "identifier": {
                     "type": "string",
-                    "example": "faisal"
+                    "example": "john_doe"
                 },
                 "password": {
                     "type": "string",
@@ -2590,7 +2590,7 @@
                 },
                 "mii_id": {
                     "type": "string",
-                    "example": "MII-04828"
+                    "example": "MII-00001"
                 },
                 "name": {
                     "type": "string",
@@ -2746,7 +2746,7 @@
                 },
                 "mii_id": {
                     "type": "string",
-                    "example": "MII-04828"
+                    "example": "MII-00001"
                 },
                 "name": {
                     "type": "string",
