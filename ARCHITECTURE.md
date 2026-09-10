@@ -177,7 +177,8 @@ Interactive Swagger / OpenAPI 2.0 documentation is served directly by the Go bac
 | `POST /api/passkey/register/{begin,finish}`| user   | Add a passkey                  |
 | `GET|DELETE /api/passkeys[/:id]`           | user   | List or delete my passkeys     |
 | `POST /api/activities`                     | user   | Upsert a day                   |
-| `GET  /api/activities?year&month`          | user   | Month view                     |
+| `GET  /api/activities`                     | user   | List activities (paginated)    |
+| `GET  /api/activities/:id`                 | user   | View activity detail by ID     |
 | `POST|GET|DELETE /api/overtimes[/:id]`     | user   | Manage overtime entries for SPL|
 | `POST /api/timesheet/generate`             | user   | Generate + email `.xlsx`       |
 | `GET  /api/holidays`                       | user   | Public holidays for calendar   |

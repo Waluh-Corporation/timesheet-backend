@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -210,10 +211,33 @@ func RespondAbortError(c *gin.Context, code int, message string) {
 	})
 }
 
+// RespondPaginated sends a 2xx JSON response wrapped with pagination metadata.
+func RespondPaginated(c *gin.Context, code int, data interface{}, page int, limit int, totalRows int64) {
+	totalPages := 0
+	if limit > 0 {
+		totalPages = int(math.Ceil(float64(totalRows) / float64(limit)))
+	}
+	c.JSON(code, gin.H{
+		"code":   code,
+		"status": "success",
+		"data":   data,
+		"pagination": gin.H{
+			"page":        page,
+			"limit":       limit,
+			"total_rows":  totalRows,
+			"total_pages": totalPages,
+		},
+	})
+}
+
 // Convenience methods on Server
 func (s *Server) RespondSuccess(c *gin.Context, code int, data interface{}) { RespondSuccess(c, code, data) }
+func (s *Server) RespondPaginated(c *gin.Context, code int, data interface{}, page int, limit int, totalRows int64) {
+	RespondPaginated(c, code, data, page, limit, totalRows)
+}
 func (s *Server) RespondMessage(c *gin.Context, code int, message string)     { RespondMessage(c, code, message) }
 func (s *Server) RespondDelete(c *gin.Context, code int)                      { RespondDelete(c, code) }
 func (s *Server) RespondError(c *gin.Context, code int, message string)       { RespondError(c, code, message) }
 func (s *Server) RespondAbortError(c *gin.Context, code int, message string)  { RespondAbortError(c, code, message) }
+
 

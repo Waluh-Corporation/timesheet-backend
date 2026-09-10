@@ -135,33 +135,164 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, activity)
 }
 
-// ListMonthlyActivities godoc
-// @Summary List monthly activities
-// @Description Retrieves all daily activities for the authenticated user for a specific month and year.
+// GetDailyActivity godoc
+// @Summary Get daily activity detail
+// @Description Retrieves full details of a specific daily activity by ID, including its associated Project, Status, and User.
 // @Tags Activity
 // @Security BearerAuth
 // @Produce json
-// @Param year query int false "Year (defaults to current year)"
-// @Param month query int false "Month 1-12 (defaults to current month)"
-// @Success 200 {array} models.DailyActivity
+// @Param id path int true "Daily Activity ID"
+// @Success 200 {object} models.DailyActivity
+// @Failure 400 {object} models.ErrorResponse "Invalid activity ID"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 404 {object} models.ErrorResponse "Activity not found"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/activities/{id} [get]
+func (s *Server) GetDailyActivity(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid activity ID, expected positive integer")
+		return
+	}
+
+	var activity models.DailyActivity
+	query := s.DB.Preload("ProjectRef").Preload("StatusRef").Preload("User")
+
+	role, _ := c.Get(ctxRole)
+	if role != models.RoleAdmin {
+		query = query.Where("user_id = ?", currentUserID(c))
+	}
+
+	if err := query.First(&activity, id).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "activity not found")
+		return
+	}
+
+	RespondSuccess(c, http.StatusOK, activity)
+}
+
+// ListActivities godoc
+// @Summary List daily activities with pagination
+// @Description Retrieves daily activities for the authenticated user with pagination and optional filtering by year, month, date range, or status.
+// @Tags Activity
+// @Security BearerAuth
+// @Produce json
+// @Param page query int false "Page number (default: 1)"
+// @Param limit query int false "Items per page (default: 10, max: 100). Use -1 or all=true for all records"
+// @Param year query int false "Year filter (e.g. 2026)"
+// @Param month query int false "Month filter (1-12)"
+// @Param start_date query string false "Start date filter (YYYY-MM-DD)"
+// @Param end_date query string false "End date filter (YYYY-MM-DD)"
+// @Param sort query string false "Sort order: asc or desc (default: desc, or asc when filtering by month)"
+// @Success 200 {object} models.PaginatedResponse
 // @Failure 401 {object} models.ErrorResponse "Unauthorized"
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/activities [get]
-func (s *Server) ListMonthlyActivities(c *gin.Context) {
-	year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
-	month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
+func (s *Server) ListActivities(c *gin.Context) {
+	uid := currentUserID(c)
+	query := s.DB.Model(&models.DailyActivity{}).Where("user_id = ?", uid)
 
-	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
-	end := start.AddDate(0, 1, 0)
+	// Filter by exact date range if provided
+	if startDateStr := c.Query("start_date"); startDateStr != "" {
+		if startDate, err := time.ParseInLocation("2006-01-02", startDateStr, jakarta()); err == nil {
+			query = query.Where("date >= ?", startDate)
+		}
+	}
+	if endDateStr := c.Query("end_date"); endDateStr != "" {
+		if endDate, err := time.ParseInLocation("2006-01-02", endDateStr, jakarta()); err == nil {
+			query = query.Where("date <= ?", endDate)
+		}
+	}
 
-	var activities []models.DailyActivity
-	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").
-		Where("user_id = ? AND date >= ? AND date < ?", currentUserID(c), start, end).
-		Order("date asc").Find(&activities).Error; err != nil {
+	// Filter by year/month if provided
+	hasMonth := c.Query("month") != ""
+	hasYear := c.Query("year") != ""
+	if hasMonth || hasYear {
+		year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
+		if hasMonth {
+			month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
+			start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
+			end := start.AddDate(0, 1, 0)
+			query = query.Where("date >= ? AND date < ?", start, end)
+		} else {
+			start := time.Date(year, 1, 1, 0, 0, 0, 0, jakarta())
+			end := start.AddDate(1, 0, 0)
+			query = query.Where("date >= ? AND date < ?", start, end)
+		}
+	} else if c.Query("page") == "" && c.Query("limit") == "" && c.Query("start_date") == "" && c.Query("end_date") == "" {
+		// Backwards-compatibility: if no filter or pagination params at all, default to current month
+		year := time.Now().In(jakarta()).Year()
+		month := int(time.Now().In(jakarta()).Month())
+		start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
+		end := start.AddDate(0, 1, 0)
+		query = query.Where("date >= ? AND date < ?", start, end)
+	}
+
+	// Status filter
+	if status := c.Query("status"); status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	// Sorting
+	sortOrder := strings.ToLower(c.Query("sort"))
+	if sortOrder != "asc" && sortOrder != "desc" {
+		if hasMonth || (c.Query("page") == "" && c.Query("limit") == "") {
+			sortOrder = "asc"
+		} else {
+			sortOrder = "desc"
+		}
+	}
+
+	var totalRows int64
+	if err := query.Count(&totalRows).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondSuccess(c, http.StatusOK, activities)
+
+	page := queryIntDefault(c, "page", 1)
+	if page < 1 {
+		page = 1
+	}
+
+	limit := queryIntDefault(c, "limit", 10)
+	isAll := c.Query("all") == "true" || limit == -1
+
+	// If no pagination params given and requesting month view without page/limit, return all for that month
+	if c.Query("page") == "" && c.Query("limit") == "" {
+		limit = int(totalRows)
+		if limit == 0 {
+			limit = 10
+		}
+	}
+
+	activities := make([]models.DailyActivity, 0)
+	dataQuery := query.Preload("ProjectRef").Preload("StatusRef").Order("date " + sortOrder)
+
+	if !isAll && limit > 0 {
+		if limit > 100 {
+			limit = 100
+		}
+		offset := (page - 1) * limit
+		dataQuery = dataQuery.Limit(limit).Offset(offset)
+	} else {
+		limit = int(totalRows)
+		if limit == 0 {
+			limit = 1
+		}
+	}
+
+	if err := dataQuery.Find(&activities).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondPaginated(c, http.StatusOK, activities, page, limit, totalRows)
+}
+
+// ListMonthlyActivities delegates to ListActivities for backwards-compatibility.
+func (s *Server) ListMonthlyActivities(c *gin.Context) {
+	s.ListActivities(c)
 }
 
 // GenerateTimesheet godoc

@@ -152,3 +152,18 @@ type UnsubscribeRequest struct {
 	Endpoint string `json:"endpoint" example:"https://fcm.googleapis.com/fcm/send/..."`
 }
 
+// PaginationMeta carries pagination navigation metadata.
+type PaginationMeta struct {
+	Page       int   `json:"page" example:"1"`
+	Limit      int   `json:"limit" example:"10"`
+	TotalRows  int64 `json:"total_rows" example:"35"`
+	TotalPages int   `json:"total_pages" example:"4"`
+}
+
+// PaginatedResponse wraps a paginated data payload along with navigation metadata.
+type PaginatedResponse struct {
+	Code       int            `json:"code" example:"200"`
+	Status     string         `json:"status" example:"success"`
+	Data       interface{}    `json:"data"`
+	Pagination PaginationMeta `json:"pagination"`
+}

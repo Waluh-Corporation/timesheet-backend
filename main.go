@@ -148,9 +148,10 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/passkeys", s.ListPasskeys)
 		authed.DELETE("/passkeys/:id", s.DeletePasskey)
 
-		// Daily activity entry + monthly view + generation.
+		// Daily activity entry + list + detail + generation.
 		authed.POST("/activities", s.UpsertDailyActivity)
-		authed.GET("/activities", s.ListMonthlyActivities)
+		authed.GET("/activities", s.ListActivities)
+		authed.GET("/activities/:id", s.GetDailyActivity)
 		authed.POST("/overtimes", s.UpsertOvertime)
 		authed.GET("/overtimes", s.ListMonthlyOvertimes)
 		authed.DELETE("/overtimes/:id", s.DeleteOvertime)

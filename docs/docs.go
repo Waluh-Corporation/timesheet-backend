@@ -48,25 +48,55 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves all daily activities for the authenticated user for a specific month and year.",
+                "description": "Retrieves daily activities for the authenticated user with pagination and optional filtering by year, month, date range, or status.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Activity"
                 ],
-                "summary": "List monthly activities",
+                "summary": "List daily activities with pagination",
                 "parameters": [
                     {
                         "type": "integer",
-                        "description": "Year (defaults to current year)",
+                        "description": "Page number (default: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default: 10, max: 100). Use -1 or all=true for all records",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Year filter (e.g. 2026)",
                         "name": "year",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Month 1-12 (defaults to current month)",
+                        "description": "Month filter (1-12)",
                         "name": "month",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date filter (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date filter (YYYY-MM-DD)",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Sort order: asc or desc (default: desc, or asc when filtering by month)",
+                        "name": "sort",
                         "in": "query"
                     }
                 ],
@@ -74,10 +104,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.DailyActivity"
-                            }
+                            "$ref": "#/definitions/models.PaginatedResponse"
                         }
                     },
                     "401": {
@@ -137,6 +164,64 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/activities/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves full details of a specific daily activity by ID, including its associated Project, Status, and User.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Activity"
+                ],
+                "summary": "Get daily activity detail",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Daily Activity ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DailyActivity"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid activity ID",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Activity not found",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
                         }
@@ -3236,6 +3321,44 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "models.PaginatedResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {},
+                "pagination": {
+                    "$ref": "#/definitions/models.PaginationMeta"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
+        "models.PaginationMeta": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "page": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "total_pages": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "total_rows": {
+                    "type": "integer",
+                    "example": 35
                 }
             }
         },
