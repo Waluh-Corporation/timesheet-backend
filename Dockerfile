@@ -1,33 +1,63 @@
+# ==============================================================================
+# Stage 1: Build binary statically
+# ==============================================================================
 FROM golang:1.25-alpine AS builder
 
-RUN apk update && apk add --no-cache git
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
-# Download dependencies.
-COPY go.mod go.sum* ./
-RUN go mod download || true
+# Download dependencies with cache optimization
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Copy source code and templates.
+# Copy application source code
 COPY . .
 
-# Build Go binary statically.
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o main .
+# Build static Go binary with stripped debug symbols and trimmed paths
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s" \
+    -trimpath \
+    -o /app/main .
 
-# Runtime stage.
-FROM alpine:latest
+# ==============================================================================
+# Stage 2: Minimal & Secure Production Runtime
+# ==============================================================================
+FROM alpine:3.21
 
-# ca-certificates for outbound TLS, tzdata so Asia/Jakarta resolves for the cron.
-RUN apk --no-cache add ca-certificates tzdata
+# ca-certificates for outbound HTTPS/SMTP TLS connections
+# tzdata for Asia/Jakarta timezone support in cron scheduler
+# wget is built-in to Busybox for container HEALTHCHECK
+RUN apk --no-cache add ca-certificates tzdata && \
+    addgroup -g 10001 -S appgroup && \
+    adduser -u 10001 -S appuser -G appgroup
 
 WORKDIR /app
 
-COPY --from=builder /app/main .
-COPY --from=builder /app/templates ./templates
+# Copy binary from builder stage
+COPY --from=builder /app/main /app/main
 
+# Copy required runtime templates and Swagger documentation
+COPY --from=builder /app/templates /app/templates
+COPY --from=builder /app/docs /app/docs
+
+# Set ownership to unprivileged user
+RUN chown -R appuser:appgroup /app
+
+# Run as non-root user
+USER appuser:appgroup
+
+# Service port
 EXPOSE 8080
 
-ENV PORT=8080
-ENV GIN_MODE=release
+# Environment defaults
+ENV PORT=8080 \
+    GIN_MODE=release \
+    TZ=Asia/Jakarta
 
-CMD ["./main"]
+# Container healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/v1/setup/status || exit 1
+
+ENTRYPOINT ["/app/main"]
