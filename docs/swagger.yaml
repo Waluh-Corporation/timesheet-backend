@@ -821,7 +821,7 @@ info:
     built with Go (Gin Engine) and PostgreSQL.
   license:
     name: MIT
-  termsOfService: https://github.com/naufalzaid17/timesheet-generator
+  termsOfService: https://github.com/Waluh-Corporation/timesheet-backend
   title: Timesheet Automation Portal API
   version: "2.0"
 paths:

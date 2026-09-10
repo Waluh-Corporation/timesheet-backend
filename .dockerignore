@@ -4,16 +4,10 @@
 .git
 **/.git
 
-# Node / Next
-frontend/node_modules
-**/node_modules
-frontend/.next
-frontend/out
-frontend/*.tsbuildinfo
-
 # Go build artifacts
-backend/tmp
-backend/main
+tmp/
+main
+*.exe
 
 # Local env / editor / OS
 **/.env
@@ -22,3 +16,4 @@ backend/main
 .idea
 .DS_Store
 *.log
+

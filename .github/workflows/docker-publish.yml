@@ -1,11 +1,7 @@
 name: Build and Publish Images
 
-# Publishes two images to GHCR on every push to main:
-#   :latest      unified production image (Go API + static frontend) — needs an
-#                external PostgreSQL; used by docker-compose.prod.yml.
-#   :dev         all-in-one dev/demo image (PostgreSQL + API + frontend in one
-#                container). Run it standalone:
-#                  docker run --rm -p 8080:8080 ghcr.io/<owner>/<repo>:dev
+# Publishes production image to GHCR on every push to main:
+#   :latest      production image for Timesheet Backend — needs an external PostgreSQL
 
 on:
   push:
@@ -55,23 +51,3 @@ jobs:
           cache-from: type=gha,scope=prod
           cache-to: type=gha,mode=max,scope=prod
 
-      # --- All-in-one dev/demo image (:dev) ---
-      - name: Metadata for dev image
-        id: meta-dev
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,prefix=dev-,format=short
-
-      - name: Build and push all-in-one dev image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile.aio
-          push: true
-          tags: ${{ steps.meta-dev.outputs.tags }}
-          labels: ${{ steps.meta-dev.outputs.labels }}
-          cache-from: type=gha,scope=dev
-          cache-to: type=gha,mode=max,scope=dev

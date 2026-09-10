@@ -1,11 +1,10 @@
 version: "3.8"
 
-# Full local development stack for the Phase 2 Timesheet Portal.
+# Full local development stack for Timesheet Backend.
 #   - PostgreSQL      : primary datastore
 #   - pgAdmin         : web DB admin (DBeaver can connect to the same 5432)
 #   - Mailpit         : local SMTP sink + web UI for transactional/delivery mail
-#   - backend (Go)    : API, WebAuthn, WebPush cron (17:00 WIB), SMTP delivery
-#   - frontend (Next) : Saweria-styled portal
+#   - backend (Go)    : REST API, WebAuthn, WebPush cron (17:00 WIB), SMTP delivery
 #
 # Bring it up with:  docker compose up --build
 
@@ -55,13 +54,13 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile.dev
     container_name: timesheet_backend
     ports:
       - "8080:8080"
     volumes:
-      - ./backend:/app
+      - .:/app
       - /app/tmp
     environment:
       PORT: "8080"
@@ -75,8 +74,7 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
       MAIL_FROM: "Timesheet Portal <no-reply@timesheet.local>"
-      # WebAuthn relying party (matches the frontend origin). WEBAUTHN_RP_ORIGIN
-      # accepts a comma-separated list to allow passkeys across multiple domains.
+      # WebAuthn relying party
       WEBAUTHN_RP_ID: localhost
       WEBAUTHN_RP_ORIGIN: "http://localhost:3000"
       WEBAUTHN_RP_NAME: "Timesheet Portal"
@@ -86,9 +84,7 @@ services:
       VAPID_PUBLIC_KEY: ""
       VAPID_PRIVATE_KEY: ""
       VAPID_SUBJECT: "mailto:admin@timesheet.local"
-      # Bootstrap admin (created once on first boot). Leave the password unset to
-      # have a strong random one generated and printed to the backend logs on
-      # first boot; set BOOTSTRAP_ADMIN_PASSWORD to choose your own.
+      # Bootstrap admin (created once on first boot).
       BOOTSTRAP_ADMIN_EMAIL: "admin@timesheet.local"
       BOOTSTRAP_ADMIN_USERNAME: "admin"
     depends_on:
@@ -96,25 +92,6 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
-    networks:
-      - timesheet-net
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: timesheet_frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-    environment:
-      NEXT_PUBLIC_API_URL: "http://localhost:8080"
-      PORT: "3000"
-    depends_on:
-      - backend
     networks:
       - timesheet-net
 

@@ -26,7 +26,7 @@ import (
 // @title Timesheet Automation Portal API
 // @version 2.0
 // @description High-performance RESTful backend API for the Timesheet Automation Portal, built with Go (Gin Engine) and PostgreSQL.
-// @termsOfService https://github.com/naufalzaid17/timesheet-generator
+// @termsOfService https://github.com/Waluh-Corporation/timesheet-backend
 // @contact.name API Support
 // @license.name MIT
 // @host localhost:8080

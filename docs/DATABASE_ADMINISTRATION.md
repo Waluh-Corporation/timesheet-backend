@@ -171,7 +171,7 @@ erDiagram
 
 ## 4. Connection Pooling Configuration
 
-Configured in `backend/database/database.go` on `*sql.DB`:
+Configured in `database/database.go` on `*sql.DB`:
 
 ```go
 sqlDB.SetMaxIdleConns(25)                  // Keep 25 idle connections hot in pool
