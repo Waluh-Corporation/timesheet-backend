@@ -68,8 +68,8 @@ func TestEmbeddedMigrationsAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read embedded migrations dir: %v", err)
 	}
-	if len(entries) < 22 {
-		t.Errorf("expected at least 22 migration files (11 up, 11 down), got %d", len(entries))
+	if len(entries) < 24 {
+		t.Errorf("expected at least 24 migration files (12 up, 12 down), got %d", len(entries))
 	}
 }
 
