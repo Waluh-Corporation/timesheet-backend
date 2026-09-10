@@ -109,6 +109,13 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 
 	api := r.Group("/api/v1")
 
+	// --- Public setup / onboarding wizard routes ---
+	setupGroup := api.Group("/setup")
+	{
+		setupGroup.GET("/status", s.GetSetupStatus)
+		setupGroup.POST("/init", s.InitSetup)
+	}
+
 	// --- Public auth routes (NO public sign-up) ---
 	authGroup := api.Group("/auth")
 	{
@@ -177,6 +184,15 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)
+
+		// Master data management (approvers & companies)
+		admin.POST("/approvers", s.CreateApprover)
+		admin.PATCH("/approvers/:id", s.UpdateApprover)
+		admin.DELETE("/approvers/:id", s.DeleteApprover)
+
+		admin.POST("/companies", s.CreateCompany)
+		admin.PATCH("/companies/:id", s.UpdateCompany)
+		admin.DELETE("/companies/:id", s.DeleteCompany)
 	}
 }
 

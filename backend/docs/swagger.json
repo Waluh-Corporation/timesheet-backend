@@ -184,6 +184,396 @@
                 }
             }
         },
+        "/api/v1/admin/approvers": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Adds a new approver (Team Leader or Department Head).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Master Data"
+                ],
+                "summary": "Create a new approver (admin only)",
+                "parameters": [
+                    {
+                        "description": "Approver data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CreateApproverRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Approver"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/approvers/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Permanently removes an approver from master data.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Master Data"
+                ],
+                "summary": "Delete an approver (admin only)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Approver ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeleteResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Approver not found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates approver name, role, title, or active status.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Master Data"
+                ],
+                "summary": "Update an existing approver (admin only)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Approver ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Approver update data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.UpdateApproverRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Approver"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Approver not found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/companies": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Adds a new client/vendor company.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Master Data"
+                ],
+                "summary": "Create a company (admin only)",
+                "parameters": [
+                    {
+                        "description": "Company data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CreateCompanyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Company"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/companies/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Permanently removes a company from master data.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Master Data"
+                ],
+                "summary": "Delete a company (admin only)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.DeleteResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Company not found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates code or name of an existing company.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Master Data"
+                ],
+                "summary": "Update a company (admin only)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Company ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Company update data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.UpdateCompanyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Company"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Company not found",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/profile-changes": {
             "get": {
                 "security": [
@@ -679,7 +1069,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves active approvers (Team Leaders, Department Heads), optionally filtered by company_id or role_type.",
+                "description": "Retrieves active approvers (Team Leaders, Department Heads), optionally filtered by role_type.",
                 "produces": [
                     "application/json"
                 ],
@@ -688,12 +1078,6 @@
                 ],
                 "summary": "List active approvers",
                 "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Company ID filter",
-                        "name": "company_id",
-                        "in": "query"
-                    },
                     {
                         "type": "string",
                         "description": "Role type filter (team_leader, department_head)",
@@ -1858,6 +2242,85 @@
                 }
             }
         },
+        "/api/v1/setup/init": {
+            "post": {
+                "description": "One-time setup endpoint to create the primary Super Administrator, initial companies, approvers, and departments. Automatically seeds ActivityStatus and sets is_new = N. Fails with 403 if system is already initialized.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Setup"
+                ],
+                "summary": "Perform initial system onboarding setup",
+                "parameters": [
+                    {
+                        "description": "Initialization payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.InitSetupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Setup success response with admin token",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request or validation error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "System already initialized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/setup/status": {
+            "get": {
+                "description": "Returns whether the system is already configured with an administrator or requires initial onboarding setup.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Setup"
+                ],
+                "summary": "Check system onboarding initialization status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.SetupStatusResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/timesheet/generate": {
             "post": {
                 "security": [
@@ -1923,6 +2386,194 @@
         }
     },
     "definitions": {
+        "handlers.CreateApproverRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "role_type"
+            ],
+            "properties": {
+                "is_active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Approver Name"
+                },
+                "role_type": {
+                    "enum": [
+                        "team_leader",
+                        "department_head"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApproverRoleType"
+                        }
+                    ],
+                    "example": "team_leader"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Team Leader"
+                }
+            }
+        },
+        "handlers.CreateCompanyRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 2,
+                    "example": "mii"
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 2,
+                    "example": "PT Mitra Integrasi Informatika"
+                }
+            }
+        },
+        "handlers.InitSetupAdminRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "name",
+                "password",
+                "username"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "admin@example.com"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Super Administrator"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "example": "SuperSecretPass2026!"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 3,
+                    "example": "admin"
+                }
+            }
+        },
+        "handlers.InitSetupApproverRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "role_type"
+            ],
+            "properties": {
+                "company_code": {
+                    "type": "string",
+                    "example": "mii"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Supervisor Name"
+                },
+                "role_type": {
+                    "enum": [
+                        "team_leader",
+                        "department_head"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApproverRoleType"
+                        }
+                    ],
+                    "example": "team_leader"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Team Leader"
+                }
+            }
+        },
+        "handlers.InitSetupCompanyRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "mii"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "PT Mitra Integrasi Informatika"
+                }
+            }
+        },
+        "handlers.InitSetupDepartmentRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "WCSD"
+                },
+                "company_code": {
+                    "type": "string",
+                    "example": "mii"
+                },
+                "division": {
+                    "type": "string",
+                    "example": "Wholesale Digital Delivery"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Wholesale Channel and Service Delivery"
+                }
+            }
+        },
+        "handlers.InitSetupRequest": {
+            "type": "object",
+            "required": [
+                "admin"
+            ],
+            "properties": {
+                "admin": {
+                    "$ref": "#/definitions/handlers.InitSetupAdminRequest"
+                },
+                "approvers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.InitSetupApproverRequest"
+                    }
+                },
+                "companies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.InitSetupCompanyRequest"
+                    }
+                },
+                "departments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.InitSetupDepartmentRequest"
+                    }
+                }
+            }
+        },
         "handlers.OvertimeRequest": {
             "type": "object",
             "required": [
@@ -1963,6 +2614,62 @@
                 }
             }
         },
+        "handlers.SetupStatusResponse": {
+            "type": "object",
+            "properties": {
+                "admin_count": {
+                    "type": "integer"
+                },
+                "is_initialized": {
+                    "type": "boolean"
+                },
+                "is_new": {
+                    "type": "string",
+                    "example": "Y"
+                },
+                "requires_setup": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "handlers.UpdateApproverRequest": {
+            "type": "object",
+            "properties": {
+                "is_active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Approver Name Updated"
+                },
+                "role_type": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApproverRoleType"
+                        }
+                    ],
+                    "example": "department_head"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Department Head"
+                }
+            }
+        },
+        "handlers.UpdateCompanyRequest": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "mii"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "PT Mitra Integrasi Informatika"
+                }
+            }
+        },
         "models.ActivityStatus": {
             "type": "object",
             "properties": {
@@ -1988,12 +2695,6 @@
         "models.Approver": {
             "type": "object",
             "properties": {
-                "company": {
-                    "$ref": "#/definitions/models.Company"
-                },
-                "company_id": {
-                    "type": "integer"
-                },
                 "created_at": {
                     "type": "string"
                 },
@@ -2033,7 +2734,7 @@
             "properties": {
                 "identifier": {
                     "type": "string",
-                    "example": "faisal"
+                    "example": "john_doe"
                 }
             }
         },
@@ -2100,15 +2801,15 @@
                 },
                 "email": {
                     "type": "string",
-                    "example": "faisal@example.com"
+                    "example": "john.doe@example.com"
                 },
                 "mii_id": {
                     "type": "string",
-                    "example": "MII-04828"
+                    "example": "MII-00001"
                 },
                 "name": {
                     "type": "string",
-                    "example": "Faisal Al Munawar Fathur Rahman"
+                    "example": "John Doe"
                 },
                 "password": {
                     "type": "string",
@@ -2134,7 +2835,7 @@
                     "type": "string",
                     "maxLength": 64,
                     "minLength": 3,
-                    "example": "faisal"
+                    "example": "john_doe"
                 }
             }
         },
@@ -2183,6 +2884,9 @@
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/models.User"
                 },
                 "user_id": {
                     "type": "integer"
@@ -2314,7 +3018,7 @@
             "properties": {
                 "email": {
                     "type": "string",
-                    "example": "faisal@example.com"
+                    "example": "john.doe@example.com"
                 }
             }
         },
@@ -2388,7 +3092,7 @@
             "properties": {
                 "identifier": {
                     "type": "string",
-                    "example": "faisal"
+                    "example": "john_doe"
                 },
                 "password": {
                     "type": "string",
@@ -2590,11 +3294,11 @@
                 },
                 "mii_id": {
                     "type": "string",
-                    "example": "MII-04828"
+                    "example": "MII-00001"
                 },
                 "name": {
                     "type": "string",
-                    "example": "Faisal Al Munawar"
+                    "example": "John Doe"
                 },
                 "site": {
                     "type": "string",
@@ -2746,11 +3450,11 @@
                 },
                 "mii_id": {
                     "type": "string",
-                    "example": "MII-04828"
+                    "example": "MII-00001"
                 },
                 "name": {
                     "type": "string",
-                    "example": "Faisal Al Munawar"
+                    "example": "John Doe"
                 },
                 "role": {
                     "allOf": [

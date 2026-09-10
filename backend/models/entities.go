@@ -135,8 +135,6 @@ type Approver struct {
 	ID        uint             `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
-	CompanyID *uint            `gorm:"index" json:"company_id"`
-	Company   *Company         `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
 	Name      string           `gorm:"size:255;not null" json:"name"`
 	RoleType  ApproverRoleType `gorm:"size:32;not null;index" json:"role_type"`
 	Title     string           `gorm:"size:128" json:"title"`
@@ -299,4 +297,11 @@ type PasswordResetToken struct {
 	UsedAt    *time.Time `json:"-"`
 	CreatedIP string     `gorm:"size:45" json:"-"`
 	UsedIP    string     `gorm:"size:45" json:"-"`
+}
+
+// SystemSetting stores system-wide key-value configuration flags (e.g. is_new = Y/N).
+type SystemSetting struct {
+	Key       string    `gorm:"primaryKey;size:64" json:"key"`
+	Value     string    `gorm:"type:text;not null" json:"value"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

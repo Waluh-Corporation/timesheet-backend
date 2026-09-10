@@ -55,13 +55,13 @@ type PasskeySessionResponse struct {
 
 // LoginRequest is the username/email and password authentication payload.
 type LoginRequest struct {
-	Identifier string `json:"identifier" binding:"required" example:"faisal"`
+	Identifier string `json:"identifier" binding:"required" example:"john_doe"`
 	Password   string `json:"password" binding:"required" example:"MySecretPass123!"`
 }
 
 // ForgotRequest triggers a password reset email.
 type ForgotRequest struct {
-	Email string `json:"email" binding:"required,email" example:"faisal@example.com"`
+	Email string `json:"email" binding:"required,email" example:"john.doe@example.com"`
 }
 
 // ResetRequest completes a password reset.
@@ -72,16 +72,16 @@ type ResetRequest struct {
 
 // BeginPasskeyLoginRequest optionally carries a username/email for targeted passkey login.
 type BeginPasskeyLoginRequest struct {
-	Identifier string `json:"identifier" example:"faisal"`
+	Identifier string `json:"identifier" example:"john_doe"`
 }
 
 // CreateUserRequest is the payload for administrator user provisioning.
 type CreateUserRequest struct {
-	Username     string `json:"username" binding:"required,min=3,max=64" example:"faisal"`
-	Email        string `json:"email" binding:"required,email" example:"faisal@example.com"`
+	Username     string `json:"username" binding:"required,min=3,max=64" example:"john_doe"`
+	Email        string `json:"email" binding:"required,email" example:"john.doe@example.com"`
 	Role         Role   `json:"role" binding:"required,oneof=admin user" example:"user"`
-	Name         string `json:"name" example:"Faisal Al Munawar Fathur Rahman"`
-	MiiID        string `json:"mii_id" example:"MII-04828"`
+	Name         string `json:"name" example:"John Doe"`
+	MiiID        string `json:"mii_id" example:"MII-00001"`
 	Division     string `json:"division" example:"Application Development Division"`
 	Department   string `json:"department" example:"Core Banking"`
 	DepartmentID *uint  `json:"department_id" example:"1"`
@@ -95,8 +95,8 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Role         *Role   `json:"role" example:"user"`
 	IsActive     *bool   `json:"is_active" example:"true"`
-	Name         *string `json:"name" example:"Faisal Al Munawar"`
-	MiiID        *string `json:"mii_id" example:"MII-04828"`
+	Name         *string `json:"name" example:"John Doe"`
+	MiiID        *string `json:"mii_id" example:"MII-00001"`
 	Division     *string `json:"division" example:"Application Development Division"`
 	Department   *string `json:"department" example:"Core Banking"`
 	DepartmentID *uint   `json:"department_id" example:"1"`
@@ -107,8 +107,8 @@ type UpdateUserRequest struct {
 
 // ProfileChangeRequestDTO represents a user's self-service profile change submission.
 type ProfileChangeRequestDTO struct {
-	Name         string `json:"name" example:"Faisal Al Munawar"`
-	MiiID        string `json:"mii_id" example:"MII-04828"`
+	Name         string `json:"name" example:"John Doe"`
+	MiiID        string `json:"mii_id" example:"MII-00001"`
 	Division     string `json:"division" example:"Application Development Division"`
 	Department   string `json:"department" example:"Core Banking"`
 	DepartmentID *uint  `json:"department_id" example:"1"`

@@ -560,11 +560,10 @@ func (s *Server) ListHolidays(c *gin.Context) {
 
 // ListApprovers godoc
 // @Summary List active approvers
-// @Description Retrieves active approvers (Team Leaders, Department Heads), optionally filtered by company_id or role_type.
+// @Description Retrieves active approvers (Team Leaders, Department Heads), optionally filtered by role_type.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param company_id query int false "Company ID filter"
 // @Param role_type query string false "Role type filter (team_leader, department_head)"
 // @Success 200 {array} models.Approver
 // @Failure 401 {object} models.ErrorResponse "Unauthorized"
@@ -573,13 +572,10 @@ func (s *Server) ListHolidays(c *gin.Context) {
 func (s *Server) ListApprovers(c *gin.Context) {
 	var approvers []models.Approver
 	q := s.DB.Where("is_active = ?", true)
-	if compID := c.Query("company_id"); compID != "" {
-		q = q.Where("company_id = ? OR company_id IS NULL", compID)
-	}
 	if roleType := c.Query("role_type"); roleType != "" {
 		q = q.Where("role_type = ?", roleType)
 	}
-	if err := q.Preload("Company").Order("name asc").Find(&approvers).Error; err != nil {
+	if err := q.Order("name asc").Find(&approvers).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -101,7 +101,6 @@ export interface ProfileChangeRequest {
 
 export interface Approver {
   id: number;
-  company_id?: number;
   name: string;
   role_type: "team_leader" | "department_head";
   title?: string;

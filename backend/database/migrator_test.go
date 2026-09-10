@@ -68,8 +68,8 @@ func TestEmbeddedMigrationsAvailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read embedded migrations dir: %v", err)
 	}
-	if len(entries) < 18 {
-		t.Errorf("expected at least 18 migration files (9 up, 9 down), got %d", len(entries))
+	if len(entries) < 22 {
+		t.Errorf("expected at least 22 migration files (11 up, 11 down), got %d", len(entries))
 	}
 }
 
@@ -125,15 +125,19 @@ func TestRunMigrationsOnDB(t *testing.T) {
 		t.Errorf("overtime_entries.team_leader_id FK column should exist")
 	}
 
-	// 4. Verify approvers table exists after migration 000008
-	var hasApproversTable, hasApproverRoleType bool
-	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?)` , "approvers").Scan(&hasApproversTable)
+	// 4. Verify approvers table exists after migration 000008 and company_id is removed after 000011
+	var hasApproversTable, hasApproverRoleType, hasApproverCompanyID bool
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?)`, "approvers").Scan(&hasApproversTable)
 	if !hasApproversTable {
 		t.Errorf("table approvers should exist after migration 000008")
 	}
 	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'approvers' AND column_name = 'role_type')`).Scan(&hasApproverRoleType)
 	if !hasApproverRoleType {
 		t.Errorf("approvers.role_type column should exist")
+	}
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'approvers' AND column_name = 'company_id')`).Scan(&hasApproverCompanyID)
+	if hasApproverCompanyID {
+		t.Errorf("approvers.company_id column should have been removed by migration 000011")
 	}
 
 	// 5. Verify daily_activities user foreign key constraint after migration 000009
@@ -147,5 +151,19 @@ func TestRunMigrationsOnDB(t *testing.T) {
 	`).Scan(&hasFKUser)
 	if !hasFKUser {
 		t.Errorf("expected foreign key from daily_activities(user_id) to users(id) to exist")
+	}
+
+	// 6. Verify profile_change_requests has exactly 1 foreign key constraint referencing companies(id)
+	var pcrCompanyFKCount int64
+	_ = db.Raw(`
+		SELECT count(*)
+		FROM information_schema.table_constraints tc
+		JOIN pg_constraint c ON c.conname = tc.constraint_name
+		WHERE tc.table_name = 'profile_change_requests'
+		  AND tc.constraint_type = 'FOREIGN KEY'
+		  AND pg_get_constraintdef(c.oid) LIKE '%FOREIGN KEY (company_id) REFERENCES companies(id)%'
+	`).Scan(&pcrCompanyFKCount)
+	if pcrCompanyFKCount != 1 {
+		t.Errorf("expected exactly 1 foreign key from profile_change_requests(company_id) to companies(id), got %d", pcrCompanyFKCount)
 	}
 }
