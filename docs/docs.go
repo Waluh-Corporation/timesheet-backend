@@ -1368,7 +1368,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns all companies with their associated projects and departments.",
+                "description": "Returns all companies with their associated departments.",
                 "produces": [
                     "application/json"
                 ],
@@ -1504,7 +1504,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns holidays, optionally filtered by year or company_id.",
+                "description": "Returns holidays, optionally filtered by year.",
                 "produces": [
                     "application/json"
                 ],
@@ -1513,12 +1513,6 @@ const docTemplate = `{
                 ],
                 "summary": "List holidays",
                 "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Company ID filter",
-                        "name": "company_id",
-                        "in": "query"
-                    },
                     {
                         "type": "integer",
                         "description": "Year filter",
@@ -1544,6 +1538,52 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/holidays/sync": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Fetches holidays for a specific year from Kemendesa and upserts into local database.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Holiday"
+                ],
+                "summary": "Synchronize holidays from external Kemendesa API to database",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Year to sync (defaults to current year)",
+                        "name": "year",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad gateway",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
                         }
@@ -2049,7 +2089,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns all active projects, optionally filtered by company_id.",
+                "description": "Returns all active projects.",
                 "produces": [
                     "application/json"
                 ],
@@ -2057,14 +2097,6 @@ const docTemplate = `{
                     "Master Data"
                 ],
                 "summary": "List active projects",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Company ID filter",
-                        "name": "company_id",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -2766,12 +2798,6 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "projects": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Project"
-                    }
-                },
                 "updated_at": {
                     "type": "string"
                 }
@@ -2785,6 +2811,10 @@ const docTemplate = `{
                 "username"
             ],
             "properties": {
+                "bni_id": {
+                    "type": "string",
+                    "example": "12345678"
+                },
                 "company": {
                     "type": "string",
                     "example": "MII"
@@ -2808,10 +2838,6 @@ const docTemplate = `{
                 "email": {
                     "type": "string",
                     "example": "john.doe@example.com"
-                },
-                "mii_id": {
-                    "type": "string",
-                    "example": "MII-00001"
                 },
                 "name": {
                     "type": "string",
@@ -3052,12 +3078,6 @@ const docTemplate = `{
         "models.Holiday": {
             "type": "object",
             "properties": {
-                "company": {
-                    "$ref": "#/definitions/models.Company"
-                },
-                "company_id": {
-                    "type": "integer"
-                },
                 "created_at": {
                     "type": "string"
                 },
@@ -3070,7 +3090,13 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "is_civic": {
+                    "type": "boolean"
+                },
                 "is_joint_leave": {
+                    "type": "boolean"
+                },
+                "is_religious": {
                     "type": "boolean"
                 },
                 "updated_at": {
@@ -3086,6 +3112,18 @@ const docTemplate = `{
                 },
                 "description": {
                     "type": "string"
+                },
+                "is_civic": {
+                    "type": "boolean"
+                },
+                "is_cuti_bersama": {
+                    "type": "boolean"
+                },
+                "is_joint_leave": {
+                    "type": "boolean"
+                },
+                "is_religious": {
+                    "type": "boolean"
                 }
             }
         },
@@ -3214,6 +3252,10 @@ const docTemplate = `{
         "models.ProfileChangeRequest": {
             "type": "object",
             "properties": {
+                "bni_id": {
+                    "description": "NPP BNI",
+                    "type": "string"
+                },
                 "company_id": {
                     "type": "integer"
                 },
@@ -3243,9 +3285,6 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
-                },
-                "mii_id": {
-                    "type": "string"
                 },
                 "name": {
                     "type": "string"
@@ -3282,6 +3321,10 @@ const docTemplate = `{
         "models.ProfileChangeRequestDTO": {
             "type": "object",
             "properties": {
+                "bni_id": {
+                    "type": "string",
+                    "example": "12345678"
+                },
                 "company_id": {
                     "type": "integer",
                     "example": 1
@@ -3297,10 +3340,6 @@ const docTemplate = `{
                 "division": {
                     "type": "string",
                     "example": "Application Development Division"
-                },
-                "mii_id": {
-                    "type": "string",
-                    "example": "MII-00001"
                 },
                 "name": {
                     "type": "string",
@@ -3333,12 +3372,6 @@ const docTemplate = `{
                 "code": {
                     "description": "e.g. \"P24015\"",
                     "type": "string"
-                },
-                "company": {
-                    "$ref": "#/definitions/models.Company"
-                },
-                "company_id": {
-                    "type": "integer"
                 },
                 "created_at": {
                     "type": "string"
@@ -3430,6 +3463,10 @@ const docTemplate = `{
         "models.UpdateUserRequest": {
             "type": "object",
             "properties": {
+                "bni_id": {
+                    "type": "string",
+                    "example": "12345678"
+                },
                 "company": {
                     "type": "string",
                     "example": "MII"
@@ -3454,10 +3491,6 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": true
                 },
-                "mii_id": {
-                    "type": "string",
-                    "example": "MII-00001"
-                },
                 "name": {
                     "type": "string",
                     "example": "John Doe"
@@ -3479,6 +3512,10 @@ const docTemplate = `{
         "models.User": {
             "type": "object",
             "properties": {
+                "bni_id": {
+                    "description": "NPP BNI",
+                    "type": "string"
+                },
                 "company": {
                     "type": "string"
                 },
@@ -3507,7 +3544,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "employee_id": {
-                    "description": "NPP or MII ID",
+                    "description": "NPP or Vendor ID",
                     "type": "string"
                 },
                 "group_name": {
@@ -3519,9 +3556,6 @@ const docTemplate = `{
                 },
                 "is_active": {
                     "type": "boolean"
-                },
-                "mii_id": {
-                    "type": "string"
                 },
                 "name": {
                     "description": "Profile fields (the \"approved\" / live values).",

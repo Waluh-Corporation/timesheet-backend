@@ -49,7 +49,7 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 
 	empID := in.User.EmployeeID
 	if empID == "" {
-		empID = in.User.MiiID
+		empID = in.User.BniID
 	}
 	div := in.User.Division
 	if div == "" {

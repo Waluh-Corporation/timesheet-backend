@@ -166,4 +166,33 @@ func TestRunMigrationsOnDB(t *testing.T) {
 	if pcrCompanyFKCount != 1 {
 		t.Errorf("expected exactly 1 foreign key from profile_change_requests(company_id) to companies(id), got %d", pcrCompanyFKCount)
 	}
+
+	// 7. Verify users table has bni_id and mii_id is dropped/renamed
+	var hasBniID, hasMiiID bool
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'bni_id')`).Scan(&hasBniID)
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'mii_id')`).Scan(&hasMiiID)
+	if !hasBniID {
+		t.Errorf("users.bni_id should exist after migration 000015")
+	}
+	if hasMiiID {
+		t.Errorf("users.mii_id should not exist after migration 000015")
+	}
+
+	// 8. Verify users.bni_id comment
+	var bniIDComment string
+	_ = db.Raw(`
+		SELECT col_description('users'::regclass, ordinal_position)
+		FROM information_schema.columns
+		WHERE table_name = 'users' AND column_name = 'bni_id'
+	`).Scan(&bniIDComment)
+	if bniIDComment != "NPP BNI" {
+		t.Errorf("expected users.bni_id comment to be 'NPP BNI', got %q", bniIDComment)
+	}
+
+	// 9. Verify projects.company_id is removed
+	var hasProjectCompanyID bool
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'company_id')`).Scan(&hasProjectCompanyID)
+	if hasProjectCompanyID {
+		t.Errorf("projects.company_id should be removed after migration 000015")
+	}
 }

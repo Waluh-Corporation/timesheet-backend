@@ -16,7 +16,7 @@ func TestGenerateMII(t *testing.T) {
 		t.Fatal("MII logo asset is empty")
 	}
 
-	user := &models.User{Name: "Budi Santoso", Division: "Digital", MiiID: "MII-123", Site: "Jakarta"}
+	user := &models.User{Name: "Budi Santoso", Division: "Digital", BniID: "MII-123", Site: "Jakarta"}
 	// Day 4 of May 2026 is a Monday (a working day).
 	act := models.DailyActivity{
 		Date:        time.Date(2026, 5, 4, 0, 0, 0, 0, time.UTC),

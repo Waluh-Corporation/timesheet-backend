@@ -29,7 +29,7 @@ Through a 3-phase normalization roadmap, the database achieves **Third Normal Fo
        │
        ▼ [Normalization Phase 1: Migration 000002]
   companies (id, code, name)
-  projects (id, code, name, app_impacted, company_id FK)
+  projects (id, code, name, app_impacted)
   users.company_id -> companies(id)
   templates.company_id -> companies(id)
   daily_activities.project_ref_id -> projects(id)
@@ -48,7 +48,7 @@ Through a 3-phase normalization roadmap, the database achieves **Third Normal Fo
   overtime_entries.user_id -> users(id) [FK Constraint]
   Composite performance indexes:
     - daily_activities(status)
-    - projects(company_id, is_active)
+    - projects(code)
     - departments(company_id, is_active)
     - overtime_entries(user_id, date)
   PostgreSQL Connection Pool Sizing (MaxOpen: 100, MaxIdle: 25, ConnMaxLifetime: 1h)
@@ -61,7 +61,6 @@ Through a 3-phase normalization roadmap, the database achieves **Third Normal Fo
 ```mermaid
 erDiagram
     COMPANIES ||--o{ DEPARTMENTS : "houses"
-    COMPANIES ||--o{ PROJECTS : "owns"
     COMPANIES ||--o{ TEMPLATES : "configures"
     COMPANIES ||--o{ USERS : "employs"
 
@@ -100,7 +99,6 @@ erDiagram
 
     PROJECTS {
         bigint id PK
-        bigint company_id FK
         varchar code
         varchar name
         varchar app_impacted

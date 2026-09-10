@@ -43,8 +43,8 @@ type User struct {
 
 	// Profile fields (the "approved" / live values).
 	Name       string   `gorm:"size:255" json:"name"`
-	MiiID      string   `gorm:"size:64" json:"mii_id"`
-	EmployeeID string   `gorm:"size:64" json:"employee_id"` // NPP or MII ID
+	BniID      string   `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
+	EmployeeID string   `gorm:"size:64" json:"employee_id"`            // NPP or Vendor ID
 	Division      string      `gorm:"size:255" json:"division"`
 	Department    string      `gorm:"size:255" json:"department"`
 	DepartmentID  *uint       `gorm:"index" json:"department_id"`
@@ -71,7 +71,6 @@ type Company struct {
 	UpdatedAt   time.Time    `json:"updated_at"`
 	Code        string       `gorm:"unique;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
 	Name        string       `gorm:"size:255;not null" json:"name"`
-	Projects    []Project    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"projects,omitempty"`
 	Departments []Department `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"departments,omitempty"`
 }
 
@@ -116,10 +115,8 @@ type Project struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 	Code        string    `gorm:"size:64;not null;index" json:"code"` // e.g. "P24015"
 	Name        string    `gorm:"size:255;not null" json:"name"`      // e.g. "BNI Direct"
-	AppImpacted string    `gorm:"size:255" json:"app_impacted"`       // e.g. "BNI Direct Cash"
-	CompanyID   *uint     `gorm:"index" json:"company_id"`
-	Company     *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
-	IsActive    bool      `gorm:"not null;default:true" json:"is_active"`
+	AppImpacted string `gorm:"size:255" json:"app_impacted"` // e.g. "BNI Direct Cash"
+	IsActive    bool   `gorm:"not null;default:true" json:"is_active"`
 }
 
 // ApproverRoleType enumerates the functional role of an approver.
@@ -267,7 +264,7 @@ type ProfileChangeRequest struct {
 	Status    ProfileStatus `gorm:"size:16;not null;default:pending" json:"status"`
 
 	Name          string      `gorm:"size:255" json:"name"`
-	MiiID         string      `gorm:"size:64" json:"mii_id"`
+	BniID         string      `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
 	EmployeeID    string      `gorm:"size:64" json:"employee_id"`
 	Division      string      `gorm:"size:255" json:"division"`
 	Department    string      `gorm:"size:255" json:"department"`

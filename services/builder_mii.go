@@ -61,7 +61,7 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	name := in.User.Name
 	empID := in.User.EmployeeID
 	if empID == "" {
-		empID = in.User.MiiID
+		empID = in.User.BniID
 	}
 	site := in.User.Site
 	if site == "" {

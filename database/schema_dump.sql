@@ -296,7 +296,7 @@ CREATE TABLE public.profile_change_requests (
     user_id bigint NOT NULL,
     status character varying(16) DEFAULT 'pending'::character varying NOT NULL,
     name character varying(255),
-    mii_id character varying(64),
+    bni_id character varying(64),
     employee_id character varying(64),
     division character varying(255),
     department character varying(255),
@@ -340,7 +340,6 @@ CREATE TABLE public.projects (
     code character varying(64) NOT NULL,
     name character varying(255) NOT NULL,
     app_impacted character varying(255),
-    company_id bigint,
     is_active boolean DEFAULT true NOT NULL
 );
 
@@ -434,7 +433,7 @@ CREATE TABLE public.users (
     role character varying(16) DEFAULT 'user'::character varying NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     name character varying(255),
-    mii_id character varying(64),
+    bni_id character varying(64),
     employee_id character varying(64),
     division character varying(255),
     department character varying(255),

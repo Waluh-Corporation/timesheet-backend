@@ -260,15 +260,14 @@ definitions:
         type: integer
       name:
         type: string
-      projects:
-        items:
-          $ref: '#/definitions/models.Project'
-        type: array
       updated_at:
         type: string
     type: object
   models.CreateUserRequest:
     properties:
+      bni_id:
+        example: "12345678"
+        type: string
       company:
         example: MII
         type: string
@@ -286,9 +285,6 @@ definitions:
         type: string
       email:
         example: john.doe@example.com
-        type: string
-      mii_id:
-        example: MII-00001
         type: string
       name:
         example: John Doe
@@ -461,10 +457,6 @@ definitions:
     type: object
   models.Holiday:
     properties:
-      company:
-        $ref: '#/definitions/models.Company'
-      company_id:
-        type: integer
       created_at:
         type: string
       date:
@@ -473,7 +465,11 @@ definitions:
         type: string
       id:
         type: integer
+      is_civic:
+        type: boolean
       is_joint_leave:
+        type: boolean
+      is_religious:
         type: boolean
       updated_at:
         type: string
@@ -484,6 +480,14 @@ definitions:
         type: string
       description:
         type: string
+      is_civic:
+        type: boolean
+      is_cuti_bersama:
+        type: boolean
+      is_joint_leave:
+        type: boolean
+      is_religious:
+        type: boolean
     type: object
   models.LoginRequest:
     properties:
@@ -570,6 +574,9 @@ definitions:
     type: object
   models.ProfileChangeRequest:
     properties:
+      bni_id:
+        description: NPP BNI
+        type: string
       company_id:
         type: integer
       company_rel:
@@ -590,8 +597,6 @@ definitions:
         type: string
       id:
         type: integer
-      mii_id:
-        type: string
       name:
         type: string
       position:
@@ -615,6 +620,9 @@ definitions:
     type: object
   models.ProfileChangeRequestDTO:
     properties:
+      bni_id:
+        example: "12345678"
+        type: string
       company_id:
         example: 1
         type: integer
@@ -626,9 +634,6 @@ definitions:
         type: integer
       division:
         example: Application Development Division
-        type: string
-      mii_id:
-        example: MII-00001
         type: string
       name:
         example: John Doe
@@ -653,10 +658,6 @@ definitions:
       code:
         description: e.g. "P24015"
         type: string
-      company:
-        $ref: '#/definitions/models.Company'
-      company_id:
-        type: integer
       created_at:
         type: string
       id:
@@ -719,6 +720,9 @@ definitions:
     type: object
   models.UpdateUserRequest:
     properties:
+      bni_id:
+        example: "12345678"
+        type: string
       company:
         example: MII
         type: string
@@ -737,9 +741,6 @@ definitions:
       is_active:
         example: true
         type: boolean
-      mii_id:
-        example: MII-00001
-        type: string
       name:
         example: John Doe
         type: string
@@ -753,6 +754,9 @@ definitions:
     type: object
   models.User:
     properties:
+      bni_id:
+        description: NPP BNI
+        type: string
       company:
         type: string
       company_id:
@@ -772,7 +776,7 @@ definitions:
       email:
         type: string
       employee_id:
-        description: NPP or MII ID
+        description: NPP or Vendor ID
         type: string
       group_name:
         description: Kelompok (SDD)
@@ -781,8 +785,6 @@ definitions:
         type: integer
       is_active:
         type: boolean
-      mii_id:
-        type: string
       name:
         description: Profile fields (the "approved" / live values).
         type: string
@@ -1703,7 +1705,7 @@ paths:
       - Auth
   /api/v1/companies:
     get:
-      description: Returns all companies with their associated projects and departments.
+      description: Returns all companies with their associated departments.
       produces:
       - application/json
       responses:
@@ -1789,12 +1791,8 @@ paths:
       - Holiday
   /api/v1/holidays/all:
     get:
-      description: Returns holidays, optionally filtered by year or company_id.
+      description: Returns holidays, optionally filtered by year.
       parameters:
-      - description: Company ID filter
-        in: query
-        name: company_id
-        type: integer
       - description: Year filter
         in: query
         name: year
@@ -1819,6 +1817,36 @@ paths:
       security:
       - BearerAuth: []
       summary: List holidays
+      tags:
+      - Holiday
+  /api/v1/holidays/sync:
+    post:
+      description: Fetches holidays for a specific year from Kemendesa and upserts
+        into local database.
+      parameters:
+      - description: Year to sync (defaults to current year)
+        in: query
+        name: year
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "502":
+          description: Bad gateway
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Synchronize holidays from external Kemendesa API to database
       tags:
       - Holiday
   /api/v1/me:
@@ -2140,12 +2168,7 @@ paths:
       - User
   /api/v1/projects:
     get:
-      description: Returns all active projects, optionally filtered by company_id.
-      parameters:
-      - description: Company ID filter
-        in: query
-        name: company_id
-        type: integer
+      description: Returns all active projects.
       produces:
       - application/json
       responses:

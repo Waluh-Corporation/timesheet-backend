@@ -122,8 +122,8 @@ func GenerateExcel(req *models.TimesheetRequest, holidayMap map[string]string) (
 	if req.Name != "" {
 		_ = f.SetCellValue(sheetName, "C3", req.Name)
 	}
-	if req.MiiID != "" {
-		_ = f.SetCellValue(sheetName, "C4", req.MiiID)
+	if req.BniID != "" {
+		_ = f.SetCellValue(sheetName, "C4", req.BniID)
 	}
 	if req.Site != "" {
 		_ = f.SetCellValue(sheetName, "C5", req.Site)

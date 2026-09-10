@@ -67,7 +67,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		Email:        req.Email,
 		Role:         req.Role,
 		Name:         req.Name,
-		MiiID:        req.MiiID,
+		BniID:        req.BniID,
 		Division:     req.Division,
 		Department:   req.Department,
 		DepartmentID: req.DepartmentID,
@@ -205,8 +205,8 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	if req.Name != nil {
 		updates["name"] = *req.Name
 	}
-	if req.MiiID != nil {
-		updates["mii_id"] = *req.MiiID
+	if req.BniID != nil {
+		updates["bni_id"] = *req.BniID
 	}
 	if req.Division != nil {
 		updates["division"] = *req.Division
@@ -298,7 +298,7 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 		UserID:       currentUserID(c),
 		Status:       models.ProfilePending,
 		Name:         req.Name,
-		MiiID:        req.MiiID,
+		BniID:        req.BniID,
 		Division:     req.Division,
 		Department:   req.Department,
 		DepartmentID: req.DepartmentID,
@@ -393,7 +393,7 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	if action == "approve" {
 		updates := map[string]interface{}{
 			"name":     change.Name,
-			"mii_id":   change.MiiID,
+			"bni_id":   change.BniID,
 			"division": change.Division,
 			"site":     change.Site,
 		}

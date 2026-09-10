@@ -81,7 +81,7 @@ type CreateUserRequest struct {
 	Email        string `json:"email" binding:"required,email" example:"john.doe@example.com"`
 	Role         Role   `json:"role" binding:"required,oneof=admin user" example:"user"`
 	Name         string `json:"name" example:"John Doe"`
-	MiiID        string `json:"mii_id" example:"MII-00001"`
+	BniID        string `json:"bni_id" example:"12345678"`
 	Division     string `json:"division" example:"Application Development Division"`
 	Department   string `json:"department" example:"Core Banking"`
 	DepartmentID *uint  `json:"department_id" example:"1"`
@@ -96,7 +96,7 @@ type UpdateUserRequest struct {
 	Role         *Role   `json:"role" example:"user"`
 	IsActive     *bool   `json:"is_active" example:"true"`
 	Name         *string `json:"name" example:"John Doe"`
-	MiiID        *string `json:"mii_id" example:"MII-00001"`
+	BniID        *string `json:"bni_id" example:"12345678"`
 	Division     *string `json:"division" example:"Application Development Division"`
 	Department   *string `json:"department" example:"Core Banking"`
 	DepartmentID *uint   `json:"department_id" example:"1"`
@@ -108,7 +108,7 @@ type UpdateUserRequest struct {
 // ProfileChangeRequestDTO represents a user's self-service profile change submission.
 type ProfileChangeRequestDTO struct {
 	Name         string `json:"name" example:"John Doe"`
-	MiiID        string `json:"mii_id" example:"MII-00001"`
+	BniID        string `json:"bni_id" example:"12345678"`
 	Division     string `json:"division" example:"Application Development Division"`
 	Department   string `json:"department" example:"Core Banking"`
 	DepartmentID *uint  `json:"department_id" example:"1"`

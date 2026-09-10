@@ -71,6 +71,15 @@ func AutoMigrate(db *gorm.DB) error {
 	_ = db.Exec(`ALTER TABLE holidays DROP CONSTRAINT IF EXISTS holidays_company_id_fkey`).Error
 	_ = db.Exec(`DROP INDEX IF EXISTS idx_holidays_company_id`).Error
 	_ = db.Exec(`ALTER TABLE holidays DROP COLUMN IF EXISTS company_id`).Error
+	// Drop projects company_id foreign key constraint, index, and column if they exist
+	_ = db.Exec(`ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_company_id_fkey`).Error
+	_ = db.Exec(`DROP INDEX IF EXISTS idx_projects_company_id`).Error
+	_ = db.Exec(`ALTER TABLE projects DROP COLUMN IF EXISTS company_id`).Error
+	// Rename mii_id to bni_id and set comment on users and profile_change_requests if needed
+	_ = db.Exec(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'mii_id') THEN ALTER TABLE users RENAME COLUMN mii_id TO bni_id; END IF; END $$;`).Error
+	_ = db.Exec(`COMMENT ON COLUMN users.bni_id IS 'NPP BNI'`).Error
+	_ = db.Exec(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profile_change_requests' AND column_name = 'mii_id') THEN ALTER TABLE profile_change_requests RENAME COLUMN mii_id TO bni_id; END IF; END $$;`).Error
+	_ = db.Exec(`COMMENT ON COLUMN profile_change_requests.bni_id IS 'NPP BNI'`).Error
 
 	return db.AutoMigrate(
 		&models.Company{},
@@ -123,13 +132,7 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	}
 	for _, p := range defaultProjects {
 		var cnt int64
-		q := db.Model(&models.Project{}).Where("code = ?", p.Code)
-		if p.CompanyID == nil {
-			q = q.Where("company_id IS NULL")
-		} else {
-			q = q.Where("company_id = ?", *p.CompanyID)
-		}
-		_ = q.Count(&cnt).Error
+		_ = db.Model(&models.Project{}).Where("code = ? AND name = ?", p.Code, p.Name).Count(&cnt).Error
 		if cnt == 0 {
 			_ = db.Create(&p).Error
 		}

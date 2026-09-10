@@ -514,11 +514,10 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 
 // ListProjects godoc
 // @Summary List active projects
-// @Description Returns all active projects, optionally filtered by company_id.
+// @Description Returns all active projects.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param company_id query int false "Company ID filter"
 // @Success 200 {array} models.Project
 // @Failure 401 {object} models.ErrorResponse "Unauthorized"
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
@@ -526,10 +525,7 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 func (s *Server) ListProjects(c *gin.Context) {
 	var projects []models.Project
 	query := s.DB.Where("is_active = ?", true)
-	if compID := c.Query("company_id"); compID != "" {
-		query = query.Where("company_id = ?", compID)
-	}
-	if err := query.Preload("Company").Order("name asc").Find(&projects).Error; err != nil {
+	if err := query.Order("name asc").Find(&projects).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -538,7 +534,7 @@ func (s *Server) ListProjects(c *gin.Context) {
 
 // ListCompanies godoc
 // @Summary List all companies
-// @Description Returns all companies with their associated projects and departments.
+// @Description Returns all companies with their associated departments.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
@@ -548,7 +544,7 @@ func (s *Server) ListProjects(c *gin.Context) {
 // @Router /api/v1/companies [get]
 func (s *Server) ListCompanies(c *gin.Context) {
 	var companies []models.Company
-	if err := s.DB.Preload("Projects").Preload("Departments").Order("id asc").Find(&companies).Error; err != nil {
+	if err := s.DB.Preload("Departments").Order("id asc").Find(&companies).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

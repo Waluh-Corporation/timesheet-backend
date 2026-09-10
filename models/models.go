@@ -22,7 +22,7 @@ type TimesheetRequest struct {
 	Project           string       `json:"project" example:"Core Banking Modernization"`
 	Division          string       `json:"division" example:"Application Development Division"`
 	Name              string       `json:"name" example:"John Doe"`
-	MiiID             string       `json:"mii_id" example:"MII-00001"`
+	BniID             string       `json:"bni_id" example:"12345678"`
 	Site              string       `json:"site" example:"Jakarta"`
 	SignatureEmployee string       `json:"signature_employee" example:"John Doe"`
 	SignatureReviewer string       `json:"signature_reviewer" example:"Reviewer Name"`

@@ -68,7 +68,7 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 
 	empID := in.User.EmployeeID
 	if empID == "" {
-		empID = in.User.MiiID
+		empID = in.User.BniID
 	}
 	dept := in.User.Department
 	if dept == "" {
