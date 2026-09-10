@@ -206,19 +206,12 @@ func (s *Server) InitSetup(c *gin.Context) {
 			if name == "" {
 				continue
 			}
-			var compID *uint
-			if cCode := strings.ToLower(strings.TrimSpace(ar.CompanyCode)); cCode != "" {
-				if id, ok := compMap[cCode]; ok {
-					compID = &id
-				}
-			}
 
 			newAppr := models.Approver{
-				CompanyID: compID,
-				Name:      name,
-				RoleType:  ar.RoleType,
-				Title:     strings.TrimSpace(ar.Title),
-				IsActive:  true,
+				Name:     name,
+				RoleType: ar.RoleType,
+				Title:    strings.TrimSpace(ar.Title),
+				IsActive: true,
 			}
 			if err := tx.Create(&newAppr).Error; err != nil {
 				return err

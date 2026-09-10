@@ -11,20 +11,18 @@ import (
 
 // CreateApproverRequest carries fields to add a new approver.
 type CreateApproverRequest struct {
-	CompanyID *uint                   `json:"company_id" example:"1"`
-	Name      string                  `json:"name" binding:"required" example:"Approver Name"`
-	RoleType  models.ApproverRoleType `json:"role_type" binding:"required,oneof=team_leader department_head" example:"team_leader"`
-	Title     string                  `json:"title" example:"Team Leader"`
-	IsActive  *bool                   `json:"is_active" example:"true"`
+	Name     string                  `json:"name" binding:"required" example:"Approver Name"`
+	RoleType models.ApproverRoleType `json:"role_type" binding:"required,oneof=team_leader department_head" example:"team_leader"`
+	Title    string                  `json:"title" example:"Team Leader"`
+	IsActive *bool                   `json:"is_active" example:"true"`
 }
 
 // UpdateApproverRequest carries fields to update an existing approver.
 type UpdateApproverRequest struct {
-	CompanyID *uint                    `json:"company_id" example:"1"`
-	Name      *string                  `json:"name" example:"Approver Name Updated"`
-	RoleType  *models.ApproverRoleType `json:"role_type" example:"department_head"`
-	Title     *string                  `json:"title" example:"Department Head"`
-	IsActive  *bool                    `json:"is_active" example:"true"`
+	Name     *string                  `json:"name" example:"Approver Name Updated"`
+	RoleType *models.ApproverRoleType `json:"role_type" example:"department_head"`
+	Title    *string                  `json:"title" example:"Department Head"`
+	IsActive *bool                    `json:"is_active" example:"true"`
 }
 
 // CreateCompanyRequest carries fields to add a new company.
@@ -41,7 +39,7 @@ type UpdateCompanyRequest struct {
 
 // CreateApprover godoc
 // @Summary Create a new approver (admin only)
-// @Description Adds a new approver (Team Leader or Department Head) linked to a company.
+// @Description Adds a new approver (Team Leader or Department Head).
 // @Tags Master Data
 // @Security BearerAuth
 // @Accept json
@@ -66,11 +64,10 @@ func (s *Server) CreateApprover(c *gin.Context) {
 	}
 
 	appr := models.Approver{
-		CompanyID: req.CompanyID,
-		Name:      strings.TrimSpace(req.Name),
-		RoleType:  req.RoleType,
-		Title:     strings.TrimSpace(req.Title),
-		IsActive:  isActive,
+		Name:     strings.TrimSpace(req.Name),
+		RoleType: req.RoleType,
+		Title:    strings.TrimSpace(req.Title),
+		IsActive: isActive,
 	}
 
 	if err := s.DB.Create(&appr).Error; err != nil {
@@ -78,13 +75,12 @@ func (s *Server) CreateApprover(c *gin.Context) {
 		return
 	}
 
-	_ = s.DB.Preload("Company").First(&appr, appr.ID)
 	RespondSuccess(c, http.StatusCreated, appr)
 }
 
 // UpdateApprover godoc
 // @Summary Update an existing approver (admin only)
-// @Description Updates approver name, role, title, company, or active status.
+// @Description Updates approver name, role, title, or active status.
 // @Tags Master Data
 // @Security BearerAuth
 // @Accept json
@@ -113,9 +109,6 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 	}
 
 	updates := map[string]interface{}{}
-	if req.CompanyID != nil {
-		updates["company_id"] = *req.CompanyID
-	}
 	if req.Name != nil {
 		updates["name"] = strings.TrimSpace(*req.Name)
 	}
@@ -136,7 +129,7 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 		}
 	}
 
-	_ = s.DB.Preload("Company").First(&appr, appr.ID)
+	_ = s.DB.First(&appr, appr.ID)
 	RespondSuccess(c, http.StatusOK, appr)
 }
 

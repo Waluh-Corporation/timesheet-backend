@@ -135,8 +135,6 @@ type Approver struct {
 	ID        uint             `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
-	CompanyID *uint            `gorm:"index" json:"company_id"`
-	Company   *Company         `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
 	Name      string           `gorm:"size:255;not null" json:"name"`
 	RoleType  ApproverRoleType `gorm:"size:32;not null;index" json:"role_type"`
 	Title     string           `gorm:"size:128" json:"title"`
