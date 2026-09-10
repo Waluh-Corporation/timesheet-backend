@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -14,9 +15,10 @@ import (
 
 // SetupStatusResponse describes the system initialization state.
 type SetupStatusResponse struct {
-	IsInitialized bool  `json:"is_initialized"`
-	RequiresSetup bool  `json:"requires_setup"`
-	AdminCount    int64 `json:"admin_count"`
+	IsNew         string `json:"is_new" example:"Y"`
+	IsInitialized bool   `json:"is_initialized"`
+	RequiresSetup bool   `json:"requires_setup"`
+	AdminCount    int64  `json:"admin_count"`
 }
 
 // InitSetupAdminRequest carries administrator account details for setup.
@@ -72,9 +74,18 @@ func (s *Server) GetSetupStatus(c *gin.Context) {
 		return
 	}
 
+	var setting models.SystemSetting
+	isNew := "Y"
+	if err := s.DB.Where("key = ?", "is_new").First(&setting).Error; err == nil {
+		isNew = strings.ToUpper(strings.TrimSpace(setting.Value))
+	} else if adminCount > 0 {
+		isNew = "N"
+	}
+
 	resp := SetupStatusResponse{
-		IsInitialized: adminCount > 0,
-		RequiresSetup: adminCount == 0,
+		IsNew:         isNew,
+		IsInitialized: isNew == "N",
+		RequiresSetup: isNew == "Y",
 		AdminCount:    adminCount,
 	}
 	RespondSuccess(c, http.StatusOK, resp)
@@ -82,7 +93,7 @@ func (s *Server) GetSetupStatus(c *gin.Context) {
 
 // InitSetup godoc
 // @Summary Perform initial system onboarding setup
-// @Description One-time setup endpoint to create the primary Super Administrator, initial companies, approvers, and departments. Automatically seeds ActivityStatus. Fails with 403 if an administrator already exists.
+// @Description One-time setup endpoint to create the primary Super Administrator, initial companies, approvers, and departments. Automatically seeds ActivityStatus and sets is_new = N. Fails with 403 if system is already initialized.
 // @Tags Setup
 // @Accept json
 // @Produce json
@@ -98,7 +109,16 @@ func (s *Server) InitSetup(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "failed to check setup status: "+err.Error())
 		return
 	}
-	if adminCount > 0 {
+
+	var setting models.SystemSetting
+	isNew := "Y"
+	if err := s.DB.Where("key = ?", "is_new").First(&setting).Error; err == nil {
+		isNew = strings.ToUpper(strings.TrimSpace(setting.Value))
+	} else if adminCount > 0 {
+		isNew = "N"
+	}
+
+	if isNew == "N" || adminCount > 0 {
 		RespondError(c, http.StatusForbidden, "system is already initialized")
 		return
 	}
@@ -220,6 +240,15 @@ func (s *Server) InitSetup(c *gin.Context) {
 
 		// 5. Ensure ActivityStatuses are automatically seeded
 		if err := database.SeedActivityStatuses(tx); err != nil {
+			return err
+		}
+
+		// 6. Mark system as initialized (is_new = N)
+		if err := tx.Save(&models.SystemSetting{
+			Key:       "is_new",
+			Value:     "N",
+			UpdatedAt: time.Now(),
+		}).Error; err != nil {
 			return err
 		}
 

@@ -34,6 +34,7 @@ func TestSetupHandlers(t *testing.T) {
 		tx := db.Begin()
 		defer tx.Rollback()
 		_ = tx.Exec("DELETE FROM users WHERE role = 'admin'").Error
+		_ = tx.Save(&models.SystemSetting{Key: "is_new", Value: "Y"}).Error
 
 		authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
 		srv := &Server{
@@ -69,6 +70,7 @@ func TestSetupHandlers(t *testing.T) {
 		tx := db.Begin()
 		defer tx.Rollback()
 		_ = tx.Exec("DELETE FROM users WHERE role = 'admin'").Error
+		_ = tx.Save(&models.SystemSetting{Key: "is_new", Value: "Y"}).Error
 
 		authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
 		srv := &Server{
@@ -131,6 +133,58 @@ func TestSetupHandlers(t *testing.T) {
 		}
 		if resp.Data.User.Role != models.RoleAdmin {
 			t.Errorf("expected role 'admin', got %s", resp.Data.User.Role)
+		}
+
+		var setting models.SystemSetting
+		if err := tx.Where("key = ?", "is_new").First(&setting).Error; err != nil {
+			t.Errorf("expected is_new setting in system_settings: %v", err)
+		} else if setting.Value != "N" {
+			t.Errorf("expected is_new = 'N' after setup, got '%s'", setting.Value)
+		}
+	})
+
+	t.Run("GetSetupStatus reflects is_new flag", func(t *testing.T) {
+		db, cfg := setupTestDB(t)
+		tx := db.Begin()
+		defer tx.Rollback()
+
+		authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
+		srv := &Server{
+			DB:   tx,
+			Cfg:  cfg,
+			Auth: authSvc,
+		}
+
+		// Set is_new = Y
+		_ = tx.Save(&models.SystemSetting{Key: "is_new", Value: "Y"}).Error
+		_ = tx.Exec("DELETE FROM users WHERE role = 'admin'").Error
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/setup/status", nil)
+		srv.GetSetupStatus(c)
+
+		var resp struct {
+			Data SetupStatusResponse `json:"data"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		if resp.Data.IsNew != "Y" || !resp.Data.RequiresSetup || resp.Data.IsInitialized {
+			t.Errorf("expected IsNew=Y, RequiresSetup=true, IsInitialized=false; got %+v", resp.Data)
+		}
+
+		// Set is_new = N
+		_ = tx.Save(&models.SystemSetting{Key: "is_new", Value: "N"}).Error
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Request = httptest.NewRequest("GET", "/api/v1/setup/status", nil)
+		srv.GetSetupStatus(c2)
+
+		var resp2 struct {
+			Data SetupStatusResponse `json:"data"`
+		}
+		_ = json.Unmarshal(w2.Body.Bytes(), &resp2)
+		if resp2.Data.IsNew != "N" || resp2.Data.RequiresSetup || !resp2.Data.IsInitialized {
+			t.Errorf("expected IsNew=N, RequiresSetup=false, IsInitialized=true; got %+v", resp2.Data)
 		}
 	})
 

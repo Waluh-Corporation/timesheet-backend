@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -20,6 +21,9 @@ func Setup(db *gorm.DB, cfg *config.Config) error {
 
 	if err := SeedActivityStatuses(db); err != nil {
 		log.Printf("[database] could not seed activity statuses: %v", err)
+	}
+	if err := EnsureSystemSettings(db); err != nil {
+		log.Printf("[database] could not ensure system settings: %v", err)
 	}
 	if err := seedAdmin(db, cfg); err != nil {
 		return err
@@ -76,6 +80,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.PushSubscription{},
 		&models.ProfileChangeRequest{},
 		&models.PasswordResetToken{},
+		&models.SystemSetting{},
 	)
 }
 
@@ -261,6 +266,31 @@ func seedAdmin(db *gorm.DB, cfg *config.Config) error {
 	if err := db.Create(&admin).Error; err != nil {
 		return err
 	}
+	_ = db.Save(&models.SystemSetting{
+		Key:       "is_new",
+		Value:     "N",
+		UpdatedAt: time.Now(),
+	}).Error
 	log.Printf("[database] seeded bootstrap admin '%s' (%s) using BOOTSTRAP_ADMIN_PASSWORD", cfg.AdminUsername, cfg.AdminEmail)
+	return nil
+}
+
+// EnsureSystemSettings ensures that essential system configuration flags exist.
+func EnsureSystemSettings(db *gorm.DB) error {
+	var cnt int64
+	_ = db.Model(&models.SystemSetting{}).Where("key = ?", "is_new").Count(&cnt).Error
+	if cnt == 0 {
+		var adminCount int64
+		_ = db.Model(&models.User{}).Where("role = ? AND deleted_at IS NULL", models.RoleAdmin).Count(&adminCount).Error
+		val := "Y"
+		if adminCount > 0 {
+			val = "N"
+		}
+		_ = db.Create(&models.SystemSetting{
+			Key:       "is_new",
+			Value:     val,
+			UpdatedAt: time.Now(),
+		}).Error
+	}
 	return nil
 }
