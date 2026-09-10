@@ -37,8 +37,10 @@ export interface Holiday {
   id?: number;
   date: string;
   description: string;
-  company_id?: number;
   is_joint_leave?: boolean;
+  is_cuti_bersama?: boolean;
+  is_civic?: boolean;
+  is_religious?: boolean;
 }
 
 export interface User {

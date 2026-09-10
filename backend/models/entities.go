@@ -97,16 +97,16 @@ type ActivityStatus struct {
 	SortOrder    int    `gorm:"not null;default:0" json:"sort_order"`
 }
 
-// Holiday represents a national, regional, or company-specific holiday or joint leave.
+// Holiday represents a national or regional holiday or joint leave.
 type Holiday struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	Date         time.Time `gorm:"type:date;uniqueIndex;not null" json:"date"`
 	Description  string    `gorm:"size:255;not null" json:"description"`
-	CompanyID    *uint     `gorm:"index" json:"company_id"`
-	Company      *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
-	IsJointLeave bool      `gorm:"not null;default:false" json:"is_joint_leave"`
+	IsJointLeave bool      `gorm:"not null;default:false;index:idx_holidays_joint_leave" json:"is_joint_leave"`
+	IsCivic      bool      `gorm:"not null;default:false" json:"is_civic"`
+	IsReligious  bool      `gorm:"not null;default:false" json:"is_religious"`
 }
 
 // Project represents a billable project or initiative (e.g. BNI Direct, Core Banking).

@@ -157,6 +157,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.POST("/timesheet/generate", s.GenerateTimesheet)
 		authed.GET("/holidays", s.GetHolidays)
 		authed.GET("/holidays/all", s.ListHolidays)
+		authed.POST("/holidays/sync", s.SyncHolidays)
 
 		// Master data (normalized projects, companies, departments, activity-statuses, approvers).
 		authed.GET("/projects", s.ListProjects)

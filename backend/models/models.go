@@ -30,16 +30,33 @@ type TimesheetRequest struct {
 	DailyEntries      []DailyEntry `json:"daily_entries" binding:"required"`
 }
 
-// HolidayDTO represents a holiday from the external API
+// HolidayDTO represents a holiday exposed to the client or cached in system
 type HolidayDTO struct {
-	Date        string `json:"date"`
-	Description string `json:"description"`
+	Date          string `json:"date"`
+	Description   string `json:"description"`
+	IsJointLeave  bool   `json:"is_joint_leave"`
+	IsCutiBersama bool   `json:"is_cuti_bersama"`
+	IsCivic       bool   `json:"is_civic"`
+	IsReligious   bool   `json:"is_religious"`
 }
 
-// HolidayResponse represents the response format of the public holiday API
-type HolidayResponse struct {
-	Status  string       `json:"status"`
-	Code    int          `json:"code"`
-	Data    []HolidayDTO `json:"data"`
-	Message string       `json:"message"`
+// KemendesaHolidayItem represents a single holiday item from api.kemendesa.link
+type KemendesaHolidayItem struct {
+	Date          string `json:"date"`
+	Name          string `json:"name"`
+	IsCivic       bool   `json:"is_civic"`
+	IsReligious   bool   `json:"is_religious"`
+	IsCutiBersama bool   `json:"is_cuti_bersama"`
 }
+
+// KemendesaHolidayResponse represents the payload from api.kemendesa.link/libur-nasional
+type KemendesaHolidayResponse struct {
+	Metadata struct {
+		Version     string `json:"version"`
+		Year        int    `json:"year"`
+		LastUpdated string `json:"last_updated"`
+		Timezone    string `json:"timezone"`
+	} `json:"metadata"`
+	Data []KemendesaHolidayItem `json:"data"`
+}
+

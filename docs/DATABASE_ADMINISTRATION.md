@@ -37,7 +37,7 @@ Through a 3-phase normalization roadmap, the database achieves **Third Normal Fo
        ▼ [Normalization Phase 2: Migration 000003]
   departments (id, code, name, division, company_id FK)
   activity_statuses (code PK, name, description, is_working_day, sort_order)
-  holidays (id, date UNIQUE, description, company_id FK, is_joint_leave)
+  holidays (id, date UNIQUE, description, is_joint_leave, is_civic, is_religious)
   users.department_id -> departments(id)
   profile_change_requests.company_id -> companies(id)
   profile_change_requests.department_id -> departments(id)
@@ -64,7 +64,6 @@ erDiagram
     COMPANIES ||--o{ PROJECTS : "owns"
     COMPANIES ||--o{ TEMPLATES : "configures"
     COMPANIES ||--o{ USERS : "employs"
-    COMPANIES ||--o{ HOLIDAYS : "applies"
 
     DEPARTMENTS ||--o{ USERS : "assigns"
     DEPARTMENTS ||--o{ PROFILE_CHANGE_REQUESTS : "requested_dept"

@@ -67,6 +67,10 @@ func AutoMigrate(db *gorm.DB) error {
 	_ = db.Exec(`UPDATE overtime_entries SET department_head_id = NULL WHERE department_head_id IS NOT NULL AND department_head_id NOT IN (SELECT id FROM approvers)`).Error
 	// Drop legacy duplicate foreign key constraint on daily_activities if it exists
 	_ = db.Exec(`ALTER TABLE daily_activities DROP CONSTRAINT IF EXISTS daily_activities_user_id_fkey`).Error
+	// Drop holidays company_id foreign key constraint, index, and column if they exist
+	_ = db.Exec(`ALTER TABLE holidays DROP CONSTRAINT IF EXISTS holidays_company_id_fkey`).Error
+	_ = db.Exec(`DROP INDEX IF EXISTS idx_holidays_company_id`).Error
+	_ = db.Exec(`ALTER TABLE holidays DROP COLUMN IF EXISTS company_id`).Error
 
 	return db.AutoMigrate(
 		&models.Company{},

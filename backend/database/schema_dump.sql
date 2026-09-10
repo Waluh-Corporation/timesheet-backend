@@ -186,8 +186,9 @@ CREATE TABLE public.holidays (
     updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     date date NOT NULL,
     description character varying(255) NOT NULL,
-    company_id bigint,
-    is_joint_leave boolean DEFAULT false NOT NULL
+    is_joint_leave boolean DEFAULT false NOT NULL,
+    is_civic boolean DEFAULT false NOT NULL,
+    is_religious boolean DEFAULT false NOT NULL
 );
 
 
@@ -798,18 +799,18 @@ CREATE INDEX idx_departments_company_active ON public.departments USING btree (c
 CREATE INDEX idx_departments_company_id ON public.departments USING btree (company_id);
 
 
---
--- Name: idx_holidays_company_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_holidays_company_id ON public.holidays USING btree (company_id);
-
 
 --
 -- Name: idx_holidays_date; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_holidays_date ON public.holidays USING btree (date);
+
+--
+-- Name: idx_holidays_joint_leave; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_holidays_joint_leave ON public.holidays USING btree (is_joint_leave);
 
 
 --
@@ -1029,13 +1030,6 @@ ALTER TABLE ONLY public.profile_change_requests
 ALTER TABLE ONLY public.profile_change_requests
     ADD CONSTRAINT fk_profile_change_requests_reviewer FOREIGN KEY (reviewed_by) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE SET NULL;
 
-
---
--- Name: holidays holidays_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.holidays
-    ADD CONSTRAINT holidays_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON UPDATE CASCADE ON DELETE SET NULL;
 
 
 --
