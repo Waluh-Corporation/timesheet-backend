@@ -243,6 +243,33 @@ type DailyActivity struct {
 	User         *User           `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user,omitempty"`
 }
 
+// GetProjectCode returns the canonical project code from the referenced Project,
+// falling back to the denormalized ProjectID if ProjectRef is not preloaded.
+func (d DailyActivity) GetProjectCode() string {
+	if d.ProjectRef != nil && d.ProjectRef.Code != "" {
+		return d.ProjectRef.Code
+	}
+	return d.ProjectID
+}
+
+// GetProjectName returns the canonical project name from the referenced Project,
+// falling back to the denormalized ProjectName if ProjectRef is not preloaded.
+func (d DailyActivity) GetProjectName() string {
+	if d.ProjectRef != nil && d.ProjectRef.Name != "" {
+		return d.ProjectRef.Name
+	}
+	return d.ProjectName
+}
+
+// GetAppImpacted returns the canonical app impacted from the referenced Project,
+// falling back to the denormalized AppImpacted if ProjectRef is not preloaded.
+func (d DailyActivity) GetAppImpacted() string {
+	if d.ProjectRef != nil && d.ProjectRef.AppImpacted != "" {
+		return d.ProjectRef.AppImpacted
+	}
+	return d.AppImpacted
+}
+
 // PushSubscription persists a browser Web Push subscription for a user.
 type PushSubscription struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`

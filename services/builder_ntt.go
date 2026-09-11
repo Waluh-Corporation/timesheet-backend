@@ -178,19 +178,19 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 			}
 
 			_ = f.SetCellValue(sheet, "K"+rs, act.Activity)
-			projName := act.ProjectName
+			projName := act.GetProjectName()
 			if projName == "" {
 				projName = "BNI Direct"
 			}
-			projCode := act.ProjectID
+			projCode := act.GetProjectCode()
 			if projCode == "" {
 				projCode = "P24015"
 			}
 			_ = f.SetCellValue(sheet, "L"+rs, projName)
 			_ = f.SetCellValue(sheet, "M"+rs, projCode)
-			_ = f.SetCellValue(sheet, "N"+rs, act.AppImpacted)
+			_ = f.SetCellValue(sheet, "N"+rs, act.GetAppImpacted())
 
-			h := calculateRowHeight(act.Activity, projName, projCode, act.AppImpacted, "", "")
+			h := calculateRowHeight(act.Activity, projName, projCode, act.GetAppImpacted(), "", "")
 			_ = f.SetRowHeight(sheet, row, h)
 		} else if isHolidayOrWeekend {
 			if holiday != "" {

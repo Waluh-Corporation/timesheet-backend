@@ -215,11 +215,11 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 				_ = f.SetCellValue(sheet, "J"+rs, "v")
 			}
 
-			_ = f.SetCellValue(sheet, "K"+rs, act.ProjectName)
-			_ = f.SetCellValue(sheet, "L"+rs, act.ProjectID)
+			_ = f.SetCellValue(sheet, "K"+rs, act.GetProjectName())
+			_ = f.SetCellValue(sheet, "L"+rs, act.GetProjectCode())
 			_ = f.SetCellValue(sheet, "N"+rs, act.Activity)
 
-			h := calculateRowHeight(act.Activity, act.ProjectName, act.ProjectID, "", "", "")
+			h := calculateRowHeight(act.Activity, act.GetProjectName(), act.GetProjectCode(), "", "", "")
 			_ = f.SetRowHeight(sheet, row, h)
 		} else if isHolidayOrWeekend {
 			if holiday != "" {

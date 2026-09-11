@@ -52,6 +52,11 @@ Through a 3-phase normalization roadmap, the database achieves **Third Normal Fo
     - departments(company_id, is_active)
     - overtime_entries(user_id, date)
   PostgreSQL Connection Pool Sizing (MaxOpen: 100, MaxIdle: 25, ConnMaxLifetime: 1h)
+       │
+       ▼ [Normalization Phase 4: Migration 000016 - Pure Relational 3NF Project Harmonization]
+  daily_activities.project_ref_id -> projects(id) [Canonical FK & Data Backfill]
+  Single Source of Truth: projects(code, name, app_impacted)
+  Auto-synchronization across API handlers, accessors, and spreadsheet generators
 ```
 
 ---

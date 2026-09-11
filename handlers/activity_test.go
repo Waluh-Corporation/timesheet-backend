@@ -284,6 +284,65 @@ func TestActivityHandlers_Integration(t *testing.T) {
 			t.Errorf("expected total_pages 2, got %d", resp.Pagination.TotalPages)
 		}
 	})
+
+	t.Run("UpsertDailyActivity synchronizes project attributes from master Project", func(t *testing.T) {
+		// Create a master project
+		testProj := models.Project{
+			Code:        "P99001",
+			Name:        "Master Project Alpha",
+			AppImpacted: "Alpha Mobile App",
+			IsActive:    true,
+		}
+		if err := tx.Create(&testProj).Error; err != nil {
+			t.Fatalf("failed to create test project: %v", err)
+		}
+
+		// Upsert with project_ref_id
+		reqBody := `{"date":"2026-09-20","project_ref_id":` + itoa(testProj.ID) + `,"activity":"Developing Alpha feature","status":"P","start_time":"08:30","end_time":"17:30"}`
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("POST", "/api/v1/activities", strings.NewReader(reqBody))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.UpsertDailyActivity(c)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d (body: %s)", w.Code, w.Body.String())
+		}
+
+		var resp struct {
+			Code int                  `json:"code"`
+			Data models.DailyActivity `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+
+		// Verify 3NF relational sync
+		if resp.Data.ProjectRefID == nil || *resp.Data.ProjectRefID != testProj.ID {
+			t.Errorf("expected ProjectRefID %d, got %v", testProj.ID, resp.Data.ProjectRefID)
+		}
+		if resp.Data.ProjectID != testProj.Code {
+			t.Errorf("expected ProjectID %q, got %q", testProj.Code, resp.Data.ProjectID)
+		}
+		if resp.Data.ProjectName != testProj.Name {
+			t.Errorf("expected ProjectName %q, got %q", testProj.Name, resp.Data.ProjectName)
+		}
+		if resp.Data.AppImpacted != testProj.AppImpacted {
+			t.Errorf("expected AppImpacted %q, got %q", testProj.AppImpacted, resp.Data.AppImpacted)
+		}
+		if resp.Data.GetProjectCode() != testProj.Code {
+			t.Errorf("expected GetProjectCode() %q, got %q", testProj.Code, resp.Data.GetProjectCode())
+		}
+		if resp.Data.GetProjectName() != testProj.Name {
+			t.Errorf("expected GetProjectName() %q, got %q", testProj.Name, resp.Data.GetProjectName())
+		}
+		if resp.Data.GetAppImpacted() != testProj.AppImpacted {
+			t.Errorf("expected GetAppImpacted() %q, got %q", testProj.AppImpacted, resp.Data.GetAppImpacted())
+		}
+	})
 }
 
 func itoa(n uint) string {

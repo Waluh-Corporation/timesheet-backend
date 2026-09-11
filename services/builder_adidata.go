@@ -181,11 +181,11 @@ func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 			}
 
 			_ = f.SetCellValue(sheetTS, "K"+rs, act.Activity)
-			_ = f.SetCellValue(sheetTS, "L"+rs, act.ProjectName)
-			_ = f.SetCellValue(sheetTS, "M"+rs, act.ProjectID)
-			_ = f.SetCellValue(sheetTS, "N"+rs, act.AppImpacted)
+			_ = f.SetCellValue(sheetTS, "L"+rs, act.GetProjectName())
+			_ = f.SetCellValue(sheetTS, "M"+rs, act.GetProjectCode())
+			_ = f.SetCellValue(sheetTS, "N"+rs, act.GetAppImpacted())
 
-			h := calculateRowHeight(act.Activity, act.ProjectName, act.ProjectID, act.AppImpacted, "", "")
+			h := calculateRowHeight(act.Activity, act.GetProjectName(), act.GetProjectCode(), act.GetAppImpacted(), "", "")
 			_ = f.SetRowHeight(sheetTS, row, h)
 		} else if isHolidayOrWeekend {
 			if holiday != "" {

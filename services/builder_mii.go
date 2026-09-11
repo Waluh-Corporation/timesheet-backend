@@ -220,11 +220,11 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheet, "K"+rs, act.Activity)
 			_ = f.SetCellValue(sheet, "L"+rs, miiProjectName)
 			_ = f.SetCellValue(sheet, "M"+rs, miiProjectID)
-			_ = f.SetCellValue(sheet, "N"+rs, NormalizeMIIAppImpacted(act.AppImpacted))
+			_ = f.SetCellValue(sheet, "N"+rs, NormalizeMIIAppImpacted(act.GetAppImpacted()))
 			_ = f.SetCellValue(sheet, "P"+rs, miiDivision)
 			_ = f.SetCellValue(sheet, "Q"+rs, miiDepartment)
 
-			h := calculateRowHeight(act.Activity, miiProjectName, miiProjectID, act.AppImpacted, miiDivision, miiDepartment)
+			h := calculateRowHeight(act.Activity, miiProjectName, miiProjectID, act.GetAppImpacted(), miiDivision, miiDepartment)
 			_ = f.SetRowHeight(sheet, row, h)
 		} else if isHolidayOrWeekend {
 			if holiday != "" {

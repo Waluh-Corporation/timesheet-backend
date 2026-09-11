@@ -73,21 +73,18 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		ProjectRefID: req.ProjectRefID,
 	}
 
-	// Associate with normalized Project if matched by ID, code, or name
+	// Pure Relational 3NF: Associate with master Project by ID, code, or name
+	// Always synchronize ProjectID (code), ProjectName, and AppImpacted from the canonical Project
 	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
 		var proj models.Project
-		if err := s.DB.Limit(1).Find(&proj, *req.ProjectRefID).Error; err == nil && proj.ID != 0 {
-			activity.ProjectRefID = &proj.ID
-			if activity.ProjectName == "" {
-				activity.ProjectName = proj.Name
-			}
-			if activity.ProjectID == "" {
-				activity.ProjectID = proj.Code
-			}
-			if activity.AppImpacted == "" {
-				activity.AppImpacted = proj.AppImpacted
-			}
+		if err := s.DB.First(&proj, *req.ProjectRefID).Error; err != nil || proj.ID == 0 {
+			RespondError(c, http.StatusBadRequest, "invalid project_ref_id: project does not exist")
+			return
 		}
+		activity.ProjectRefID = &proj.ID
+		activity.ProjectID = proj.Code
+		activity.ProjectName = proj.Name
+		activity.AppImpacted = proj.AppImpacted
 	} else if req.ProjectID != "" || req.ProjectName != "" {
 		var proj models.Project
 		query := s.DB.Model(&models.Project{})
@@ -105,15 +102,9 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		}
 		if err := query.Limit(1).Find(&proj).Error; err == nil && proj.ID != 0 {
 			activity.ProjectRefID = &proj.ID
-			if activity.AppImpacted == "" && proj.AppImpacted != "" {
-				activity.AppImpacted = proj.AppImpacted
-			}
-			if activity.ProjectName == "" {
-				activity.ProjectName = proj.Name
-			}
-			if activity.ProjectID == "" {
-				activity.ProjectID = proj.Code
-			}
+			activity.ProjectID = proj.Code
+			activity.ProjectName = proj.Name
+			activity.AppImpacted = proj.AppImpacted
 		}
 	}
 
@@ -343,7 +334,8 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	start := time.Date(req.Year, time.Month(req.Month), 1, 0, 0, 0, 0, jakarta())
 	end := start.AddDate(0, 1, 0)
 	var activities []models.DailyActivity
-	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).Find(&activities)
+	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).
+		Preload("ProjectRef").Preload("StatusRef").Find(&activities)
 
 	var overtimes []models.OvertimeEntry
 	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).
