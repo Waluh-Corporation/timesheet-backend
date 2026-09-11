@@ -21,7 +21,7 @@ const (
 // buildMIIWorkbook generates the MII timesheet Excel document purely from code.
 func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	f := excelize.NewFile()
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	const sheet = "Sheet1"
 	_ = f.SetSheetName(f.GetSheetName(0), sheet)

@@ -15,7 +15,7 @@ import (
 // including dynamic SPL sheets if overtime entries are present.
 func buildAdidataWorkbook(in GenerationInput) ([]byte, error) {
 	f := excelize.NewFile()
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	const sheetTS = "TIMESHEET"
 	_ = f.SetSheetName(f.GetSheetName(0), sheetTS)

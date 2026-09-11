@@ -102,7 +102,7 @@ func GenerateExcel(req *models.TimesheetRequest, holidayMap map[string]string) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to open Excel template: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Set document metadata properties
 	_ = f.SetDocProps(&excelize.DocProperties{

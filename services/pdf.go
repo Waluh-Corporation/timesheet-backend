@@ -16,7 +16,7 @@ func ConvertExcelToPDF(excelBytes []byte, filename string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp directory for PDF conversion: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Write Excel bytes to temporary file
 	inputPath := filepath.Join(tmpDir, filename)

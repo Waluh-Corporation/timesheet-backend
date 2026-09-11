@@ -26,7 +26,7 @@ func indonesianMonth(m int) string {
 // buildSDDWorkbook generates the SDD timesheet Excel document purely from code.
 func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 	f := excelize.NewFile()
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	sheet := indonesianMonth(in.Month)
 	_ = f.SetSheetName(f.GetSheetName(0), sheet)
