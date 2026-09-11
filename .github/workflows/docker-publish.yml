@@ -3,7 +3,7 @@ name: Build, Scan & Publish Docker Image
 on:
   push:
     branches:
-      - main
+      - development
     tags:
       - 'v*.*.*'
   workflow_dispatch:
@@ -37,10 +37,14 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,prefix=sha-,format=short
+            # Preview tags saat push / merge ke development
+            type=raw,value=development,enable=${{ github.ref == 'refs/heads/development' }}
+            type=sha,prefix=dev-,format=short,enable=${{ github.ref == 'refs/heads/development' }}
+            # Release tags saat push Git Tag v*.*.*
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build image for container vulnerability scanning
         uses: docker/build-push-action@v6
@@ -48,13 +52,13 @@ jobs:
           context: .
           file: ./Dockerfile
           load: true
-          tags: ${{ github.repository }}:scan
-          cache-from: type=gha,scope=prod
+          tags: timesheet-backend:scan
+          cache-from: type=gha,scope=docker-publish
 
       - name: Run Trivy container vulnerability scanner
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ github.repository }}:scan
+          image-ref: timesheet-backend:scan
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -62,12 +66,12 @@ jobs:
           exit-code: '0' # Catat temuan ke SARIF tanpa memblokir jika belum ada perbaikan kritis darurat
 
       - name: Upload Trivy scan results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
 
-      - name: Build and push production image to GHCR
+      - name: Build and push image to GHCR
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -75,5 +79,5 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=prod
-          cache-to: type=gha,mode=max,scope=prod
+          cache-from: type=gha,scope=docker-publish
+          cache-to: type=gha,mode=max,scope=docker-publish
