@@ -42,9 +42,9 @@ type User struct {
 	IsActive     bool   `gorm:"not null;default:true" json:"is_active"`
 
 	// Profile fields (the "approved" / live values).
-	Name       string   `gorm:"size:255" json:"name"`
-	BniID      string   `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
-	EmployeeID string   `gorm:"size:64" json:"employee_id"`            // NPP or Vendor ID
+	Name          string      `gorm:"size:255" json:"name"`
+	BniID         string      `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
+	EmployeeID    string      `gorm:"size:64" json:"employee_id"`            // NPP or Vendor ID
 	Division      string      `gorm:"size:255" json:"division"`
 	Department    string      `gorm:"size:255" json:"department"`
 	DepartmentID  *uint       `gorm:"index" json:"department_id"`
@@ -81,7 +81,7 @@ type Department struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	CompanyID *uint     `gorm:"index" json:"company_id"`
 	Company   *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
-	Code      string    `gorm:"size:64;index" json:"code"` // e.g. "WCSD", "DEV-01"
+	Code      string    `gorm:"size:64;index" json:"code"`     // e.g. "WCSD", "DEV-01"
 	Name      string    `gorm:"size:255;not null" json:"name"` // e.g. "Wholesale Channel and Service Delivery"
 	Division  string    `gorm:"size:255" json:"division"`      // e.g. "Wholesale Digital Delivery"
 	IsActive  bool      `gorm:"not null;default:true" json:"is_active"`
@@ -115,8 +115,8 @@ type Project struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 	Code        string    `gorm:"size:64;not null;index" json:"code"` // e.g. "P24015"
 	Name        string    `gorm:"size:255;not null" json:"name"`      // e.g. "BNI Direct"
-	AppImpacted string `gorm:"size:255" json:"app_impacted"` // e.g. "BNI Direct Cash"
-	IsActive    bool   `gorm:"not null;default:true" json:"is_active"`
+	AppImpacted string    `gorm:"size:255" json:"app_impacted"`       // e.g. "BNI Direct Cash"
+	IsActive    bool      `gorm:"not null;default:true" json:"is_active"`
 }
 
 // ApproverRoleType enumerates the functional role of an approver.
@@ -140,24 +140,23 @@ type Approver struct {
 
 // OvertimeEntry records overtime activities for SPL sheet generation.
 type OvertimeEntry struct {
-	ID               uint           `gorm:"primaryKey" json:"id"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	UserID           uint           `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
-	DailyActivityID  *uint          `gorm:"index;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"daily_activity_id"`
-	Date             time.Time      `gorm:"type:date;not null" json:"date"`
-	StartTime        string         `gorm:"size:8" json:"start_time"` // "17:00"
-	EndTime          string         `gorm:"size:8" json:"end_time"`   // "21:00"
-	TaskDescription  string         `gorm:"type:text;not null" json:"task_description"`
-	TeamLeaderID     *uint          `gorm:"index" json:"team_leader_id"`
-	DepartmentHeadID *uint          `gorm:"index" json:"department_head_id"`
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	UserID           uint      `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
+	DailyActivityID  *uint     `gorm:"index;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"daily_activity_id"`
+	Date             time.Time `gorm:"type:date;not null" json:"date"`
+	StartTime        string    `gorm:"size:8" json:"start_time"` // "17:00"
+	EndTime          string    `gorm:"size:8" json:"end_time"`   // "21:00"
+	TaskDescription  string    `gorm:"type:text;not null" json:"task_description"`
+	TeamLeaderID     *uint     `gorm:"index" json:"team_leader_id"`
+	DepartmentHeadID *uint     `gorm:"index" json:"department_head_id"`
 
 	User           User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
 	DailyActivity  *DailyActivity `gorm:"foreignKey:DailyActivityID" json:"daily_activity,omitempty"`
 	TeamLeader     *Approver      `gorm:"foreignKey:TeamLeaderID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"team_leader,omitempty"`
 	DepartmentHead *Approver      `gorm:"foreignKey:DepartmentHeadID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_head,omitempty"`
 }
-
 
 // WebAuthnID implements webauthn.User.
 func (u User) WebAuthnID() []byte {
@@ -217,7 +216,6 @@ type WebAuthnCredential struct {
 	Transports   datatypes.JSON `json:"-"`
 	FriendlyName string         `gorm:"size:128" json:"friendly_name"`
 }
-
 
 // DailyActivity stores one user's timesheet entry for a single calendar day.
 type DailyActivity struct {

@@ -52,7 +52,6 @@ type PasskeySessionResponse struct {
 	Options   interface{} `json:"options"`
 }
 
-
 // LoginRequest is the username/email and password authentication payload.
 type LoginRequest struct {
 	Identifier string `json:"identifier" binding:"required" example:"john_doe"`

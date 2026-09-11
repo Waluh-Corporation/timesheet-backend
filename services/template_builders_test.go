@@ -29,11 +29,11 @@ func TestBuildMIIWorkbook(t *testing.T) {
 
 	in := GenerationInput{
 		CompanyCode: "mii",
-		User:       user,
-		Month:      6,
-		Year:       2026,
-		Activities: []models.DailyActivity{act},
-		Holidays:   map[int]string{},
+		User:        user,
+		Month:       6,
+		Year:        2026,
+		Activities:  []models.DailyActivity{act},
+		Holidays:    map[int]string{},
 	}
 
 	out, err := GenerateFromTemplate(in)
@@ -109,11 +109,11 @@ func TestBuildSDDWorkbook(t *testing.T) {
 
 	in := GenerationInput{
 		CompanyCode: "sdd",
-		User:       user,
-		Month:      6,
-		Year:       2026,
-		Activities: []models.DailyActivity{act},
-		Holidays:   map[int]string{},
+		User:        user,
+		Month:       6,
+		Year:        2026,
+		Activities:  []models.DailyActivity{act},
+		Holidays:    map[int]string{},
 	}
 
 	out, err := GenerateFromTemplate(in)
@@ -195,12 +195,12 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 
 	in := GenerationInput{
 		CompanyCode: "adidata",
-		User:       user,
-		Month:      6,
-		Year:       2026,
-		Activities: []models.DailyActivity{act},
-		Overtimes:  []models.OvertimeEntry{ot},
-		Holidays:   map[int]string{},
+		User:        user,
+		Month:       6,
+		Year:        2026,
+		Activities:  []models.DailyActivity{act},
+		Overtimes:   []models.OvertimeEntry{ot},
+		Holidays:    map[int]string{},
 	}
 
 	out, err := GenerateFromTemplate(in)
@@ -281,11 +281,11 @@ func TestBuildNTTWorkbook(t *testing.T) {
 
 	in := GenerationInput{
 		CompanyCode: "ntt",
-		User:       user,
-		Month:      9,
-		Year:       2026,
-		Activities: []models.DailyActivity{act},
-		Holidays:   map[int]string{},
+		User:        user,
+		Month:       9,
+		Year:        2026,
+		Activities:  []models.DailyActivity{act},
+		Holidays:    map[int]string{},
 	}
 
 	out, err := GenerateFromTemplate(in)
@@ -333,4 +333,3 @@ func TestBuildNTTWorkbook(t *testing.T) {
 		t.Errorf("E42 formula = %q, want 'COUNTA(E11:E41)'", formulaE42)
 	}
 }
-

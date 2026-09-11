@@ -52,7 +52,7 @@ jobs:
           cache-from: type=gha,scope=prod
 
       - name: Run Trivy container vulnerability scanner
-        uses: aquasecurity/trivy-action@0.29.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ github.repository }}:scan
           format: 'sarif'
