@@ -1,37 +1,63 @@
-# Stage 1: Build the static frontend with Bun.
-FROM oven/bun:alpine AS frontend-builder
-WORKDIR /app
-COPY frontend/package.json frontend/bun.lock* ./
-RUN bun install
-COPY frontend/ ./
-RUN bun run build
+# ==============================================================================
+# Stage 1: Build binary statically
+# ==============================================================================
+FROM golang:1.25-alpine AS builder
 
-# Stage 2: Build the Go backend.
-FROM golang:1.25-alpine AS backend-builder
-RUN apk update && apk add --no-cache git
-WORKDIR /app
-COPY backend/go.mod backend/go.sum* ./
-RUN go mod download || true
-COPY backend/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o main .
-
-# Stage 3: Unified production image.
-FROM alpine:latest
-# CA certs, timezone database (WIB cron), LibreOffice + fonts for optional PDF rendering.
-RUN apk --no-cache add ca-certificates tzdata libreoffice udev ttf-dejavu fontconfig
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
-COPY --from=backend-builder /app/main .
-COPY --from=backend-builder /app/templates ./templates
+# Download dependencies with cache optimization
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Static frontend export (Next.js `output: export` emits to `out`).
-COPY --from=frontend-builder /app/out ./static
+# Copy application source code
+COPY . .
 
+# Build static Go binary with stripped debug symbols and trimmed paths
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s" \
+    -trimpath \
+    -o /app/main .
+
+# ==============================================================================
+# Stage 2: Minimal & Secure Production Runtime
+# ==============================================================================
+FROM alpine:3.21
+
+# ca-certificates for outbound HTTPS/SMTP TLS connections
+# tzdata for Asia/Jakarta timezone support in cron scheduler
+# wget is built-in to Busybox for container HEALTHCHECK
+RUN apk --no-cache add ca-certificates tzdata && \
+    addgroup -g 10001 -S appgroup && \
+    adduser -u 10001 -S appuser -G appgroup
+
+WORKDIR /app
+
+# Copy binary from builder stage
+COPY --from=builder /app/main /app/main
+
+# Copy required runtime templates and Swagger documentation
+COPY --from=builder /app/templates /app/templates
+COPY --from=builder /app/docs /app/docs
+
+# Set ownership to unprivileged user
+RUN chown -R appuser:appgroup /app
+
+# Run as non-root user
+USER appuser:appgroup
+
+# Service port
 EXPOSE 8080
 
-ENV PORT=8080
-ENV GIN_MODE=release
-ENV STATIC_FILES_PATH=./static
+# Environment defaults
+ENV PORT=8080 \
+    GIN_MODE=release \
+    TZ=Asia/Jakarta
 
-CMD ["./main"]
+# Container healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/api/v1/setup/status || exit 1
+
+ENTRYPOINT ["/app/main"]

@@ -1,18 +1,7 @@
-# Dependency directories
-node_modules/
+# Build artifacts and temp
 tmp/
 main
-backend/tmp/
-backend/main
-backend/docs/docs.go
-backend/docs/swagger.json
-backend/docs/swagger.yaml
-
-# Next.js build and cache
-.next/
-out/
-next-env.d.ts
-*.tsbuildinfo
+*.exe
 
 # OS/IDE files
 .DS_Store
@@ -38,4 +27,5 @@ sshpass.py
 *.sh
 # Keep these scripts tracked despite the blanket *.sh ignore above.
 !deploy_and_commit.sh
-!docker/aio-entrypoint.sh
+!scripts/*.sh
+
