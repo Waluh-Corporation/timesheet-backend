@@ -7,12 +7,12 @@ import (
 
 // Standard domain sentinel errors
 var (
-	ErrNotFound       = errors.New("resource not found")
-	ErrUnauthorized   = errors.New("unauthorized")
-	ErrForbidden      = errors.New("forbidden")
-	ErrInvalidInput   = errors.New("invalid input")
-	ErrConflict       = errors.New("resource already exists")
-	ErrInternal       = errors.New("internal server error")
+	ErrNotFound        = errors.New("resource not found")
+	ErrUnauthorized    = errors.New("unauthorized")
+	ErrForbidden       = errors.New("forbidden")
+	ErrInvalidInput    = errors.New("invalid input")
+	ErrConflict        = errors.New("resource already exists")
+	ErrInternal        = errors.New("internal server error")
 	ErrAccountDisabled = errors.New("account is disabled")
 )
 

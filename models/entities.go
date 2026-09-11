@@ -81,9 +81,9 @@ type Department struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	CompanyID *uint     `gorm:"index;uniqueIndex:uq_departments_company_name,priority:1" json:"company_id"`
 	Company   *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
-	Code      string    `gorm:"size:64;index" json:"code"`     // e.g. "WCSD", "DEV-01"
+	Code      string    `gorm:"size:64;index" json:"code"`                                                        // e.g. "WCSD", "DEV-01"
 	Name      string    `gorm:"size:255;not null;uniqueIndex:uq_departments_company_name,priority:2" json:"name"` // e.g. "Wholesale Channel and Service Delivery"
-	Division  string    `gorm:"size:255" json:"division"`      // e.g. "Wholesale Digital Delivery"
+	Division  string    `gorm:"size:255" json:"division"`                                                         // e.g. "Wholesale Digital Delivery"
 	IsActive  bool      `gorm:"not null;default:true" json:"is_active"`
 }
 
@@ -115,7 +115,7 @@ type Project struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 	Code        string    `gorm:"size:64;not null;index;uniqueIndex:uq_projects_code_name,priority:1" json:"code"` // e.g. "P24015"
 	Name        string    `gorm:"size:255;not null;uniqueIndex:uq_projects_code_name,priority:2" json:"name"`      // e.g. "BNI Direct"
-	AppImpacted string    `gorm:"size:255" json:"app_impacted"`       // e.g. "BNI Direct Cash"
+	AppImpacted string    `gorm:"size:255" json:"app_impacted"`                                                    // e.g. "BNI Direct Cash"
 	IsActive    bool      `gorm:"not null;default:true" json:"is_active"`
 }
 
