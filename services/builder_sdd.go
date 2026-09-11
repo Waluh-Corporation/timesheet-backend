@@ -8,7 +8,6 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"timesheet-backend/assets"
-	"timesheet-backend/models"
 )
 
 // indonesianMonth returns Indonesian month names for SDD.
@@ -129,25 +128,18 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 	}
 
 	// 7. Daily Rows (Days 1 to 31, starting Row 12)
-	byDay := make(map[int]models.DailyActivity, len(in.Activities))
-	for _, a := range in.Activities {
-		byDay[a.Date.Day()] = a
-	}
+	byDay := BuildByDayMap(in.Activities)
 
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	const firstRow = 12
+	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
 
 	for day := 1; day <= 31; day++ {
 		row := firstRow + (day - 1)
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			// Days beyond month length are left blank with borders
-			for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"} {
-				_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
-			}
-			_ = f.SetCellStyle(sheet, "N"+rs, "N"+rs, st.DataCenterWrapStyle)
-			_ = f.SetRowHeight(sheet, row, 15)
+			ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"N"}, st)
 			continue
 		}
 
@@ -169,7 +161,7 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 			timeStyle = st.GreyTimeStyle
 		}
 
-		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"} {
+		for _, col := range allCols {
 			_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
 		}
 		_ = f.SetCellStyle(sheet, "N"+rs, "N"+rs, centerWrapStyle)
@@ -179,21 +171,7 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheet, "B"+rs, "B"+rs, dateStyle)
 
 		if hasAct {
-			hasStart, hasEnd := false, false
-			if act.StartTime != "" {
-				if frac, ferr := parseTimeToExcelFraction(act.StartTime); ferr == nil {
-					_ = f.SetCellValue(sheet, "C"+rs, frac)
-					_ = f.SetCellStyle(sheet, "C"+rs, "C"+rs, timeStyle)
-					hasStart = true
-				}
-			}
-			if act.EndTime != "" {
-				if frac, ferr := parseTimeToExcelFraction(act.EndTime); ferr == nil {
-					_ = f.SetCellValue(sheet, "D"+rs, frac)
-					_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, timeStyle)
-					hasEnd = true
-				}
-			}
+			hasStart, hasEnd := WriteTimeCells(f, sheet, "C"+rs, "D"+rs, act.StartTime, act.EndTime, timeStyle)
 
 			// Formula total jam kerja = D - C
 			if hasStart && hasEnd {

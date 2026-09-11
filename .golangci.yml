@@ -1,0 +1,45 @@
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - misspell
+    - unparam
+    - durationcheck
+    - exportloopref
+    - nilerr
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+      - shadow
+  gosec:
+    excludes:
+      - G104 # unchecked error, handled by errcheck
+      - G304 # file path inclusion
+  misspell:
+    locale: US
+
+issues:
+  exclude-dirs:
+    - docs
+    - assets
+    - scripts
+    - tmp
+    - static
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - unparam

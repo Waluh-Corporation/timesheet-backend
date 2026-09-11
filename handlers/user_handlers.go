@@ -170,11 +170,6 @@ func (s *Server) CreateUser(c *gin.Context) {
 // @Router /api/v1/admin/users/{id} [patch]
 func (s *Server) UpdateUser(c *gin.Context) {
 	id := c.Param("id")
-	var user models.User
-	if err := s.DB.First(&user, id).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "user not found")
-		return
-	}
 
 	var req models.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -193,6 +188,17 @@ func (s *Server) UpdateUser(c *gin.Context) {
 			RespondError(c, http.StatusForbidden, "you cannot remove your own admin role")
 			return
 		}
+	}
+
+	if s.DB == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
+	}
+
+	var user models.User
+	if err := s.DB.WithContext(c.Request.Context()).First(&user, id).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "user not found")
+		return
 	}
 
 	updates := map[string]interface{}{}
@@ -377,8 +383,18 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	id := c.Param("id")
 	action := c.Query("action") // "approve" or "reject"
 
+	if action != "approve" && action != "reject" {
+		RespondError(c, http.StatusBadRequest, "invalid action: must be 'approve' or 'reject'")
+		return
+	}
+
+	if s.DB == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
+	}
+
 	var change models.ProfileChangeRequest
-	if err := s.DB.First(&change, id).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).First(&change, id).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "request not found")
 		return
 	}

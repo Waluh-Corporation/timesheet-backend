@@ -42,4 +42,7 @@ func TestPush_NewGeneratesKeysWhenEmpty(t *testing.T) {
 	if cfg.VAPIDPrivateKey == "" {
 		t.Error("expected generated VAPID private key, got empty")
 	}
+
+	// SendToUser with nil db should safely return without panic
+	svc.SendToUser(42, Payload{Title: "Title", Body: "Body", URL: "/test"})
 }

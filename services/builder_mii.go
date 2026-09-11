@@ -8,7 +8,6 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"timesheet-backend/assets"
-	"timesheet-backend/models"
 )
 
 const (
@@ -136,14 +135,12 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	}
 
 	// 5. Daily Rows (Days 1 to 31)
-	byDay := make(map[int]models.DailyActivity, len(in.Activities))
-	for _, a := range in.Activities {
-		byDay[a.Date.Day()] = a
-	}
+	byDay := BuildByDayMap(in.Activities)
 
 	statusCol := map[string]string{"P": "E", "S": "F", "BT": "G", "PM": "H", "V": "I", "X": "J"}
 	statusMark := map[string]string{"P": "P", "S": "S", "BT": "BT", "PM": "PM", "V": "V", "X": "x"}
 	matrixCols := []string{"E", "F", "G", "H", "I", "J"}
+	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
 
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	const firstRow = 9
@@ -153,13 +150,7 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			// Days beyond month length are left blank with border intact
-			for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"} {
-				_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
-			}
-			_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, st.DataCenterWrapStyle)
-			_ = f.SetCellStyle(sheet, "Q"+rs, "Q"+rs, st.DataCenterWrapStyle)
-			_ = f.SetRowHeight(sheet, row, 15)
+			ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"K", "Q"}, st)
 			continue
 		}
 
@@ -182,7 +173,7 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		}
 
 		// Border & background initialization across all columns
-		for _, col := range []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"} {
+		for _, col := range allCols {
 			_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
 		}
 		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, centerWrapStyle)
@@ -194,22 +185,7 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		status := ""
 		if hasAct {
 			status = strings.ToUpper(strings.TrimSpace(act.Status))
-			hasStart, hasEnd := false, false
-
-			if act.StartTime != "" {
-				if frac, ferr := parseTimeToExcelFraction(act.StartTime); ferr == nil {
-					_ = f.SetCellValue(sheet, "B"+rs, frac)
-					_ = f.SetCellStyle(sheet, "B"+rs, "B"+rs, timeStyle)
-					hasStart = true
-				}
-			}
-			if act.EndTime != "" {
-				if frac, ferr := parseTimeToExcelFraction(act.EndTime); ferr == nil {
-					_ = f.SetCellValue(sheet, "C"+rs, frac)
-					_ = f.SetCellStyle(sheet, "C"+rs, "C"+rs, timeStyle)
-					hasEnd = true
-				}
-			}
+			hasStart, hasEnd := WriteTimeCells(f, sheet, "B"+rs, "C"+rs, act.StartTime, act.EndTime, timeStyle)
 
 			// Formula total hour = C - B
 			if hasStart && hasEnd {
@@ -276,17 +252,7 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	styleMergedRange(f, sheet, "D43", "F45", st.DataCenterStyle)
 	styleMergedRange(f, sheet, "G43", "J45", st.DataCenterStyle)
 
-	// Extract approver names from overtime entries if present
-	tlName := ""
-	dhName := ""
-	for _, ot := range in.Overtimes {
-		if ot.TeamLeader != nil && ot.TeamLeader.Name != "" && tlName == "" {
-			tlName = ot.TeamLeader.Name
-		}
-		if ot.DepartmentHead != nil && ot.DepartmentHead.Name != "" && dhName == "" {
-			dhName = ot.DepartmentHead.Name
-		}
-	}
+	tlName, dhName := ExtractApprovers(in.Overtimes)
 
 	// Names (Row 46)
 	styleMergedRange(f, sheet, "A46", "C46", st.BoldCenterStyle)

@@ -280,6 +280,11 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/auth/passkey/login/begin [post]
 func (s *Server) BeginPasskeyLogin(c *gin.Context) {
+	if s.WebAuthn == nil {
+		RespondError(c, http.StatusInternalServerError, "webauthn not configured")
+		return
+	}
+
 	var req models.BeginPasskeyLoginRequest
 	_ = c.ShouldBindJSON(&req) // identifier is optional
 

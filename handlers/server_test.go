@@ -116,7 +116,7 @@ func TestServer_PublicBaseURL(t *testing.T) {
 
 func TestServer_Sessions(t *testing.T) {
 	srv := &Server{
-		webAuthnSessions: make(map[string]*webauthn.SessionData),
+		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
 	}
 
 	data := &webauthn.SessionData{
@@ -133,7 +133,20 @@ func TestServer_Sessions(t *testing.T) {
 	// Subsequent take returns false (one-time use)
 	_, ok2 := srv.takeSession("session-1")
 	if ok2 {
-		t.Errorf("expected session to be deleted after take")
+		t.Errorf("expected session to be consumed on first take")
+	}
+
+	// Test expired session (> 5 minutes)
+	srv.sessionsMu.Lock()
+	srv.webAuthnSessions["expired-session"] = &webAuthnSessionEntry{
+		data:      data,
+		createdAt: time.Now().Add(-6 * time.Minute),
+	}
+	srv.sessionsMu.Unlock()
+
+	_, okExpired := srv.takeSession("expired-session")
+	if okExpired {
+		t.Errorf("expected expired session to be rejected")
 	}
 }
 

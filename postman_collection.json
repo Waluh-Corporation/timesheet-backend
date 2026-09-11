@@ -1,0 +1,275 @@
+{
+	"info": {
+		"_postman_id": "7f8b9c2a-e1d4-4f56-8a90-3b1a2e4f5a6b",
+		"name": "Timesheet Backend API",
+		"description": "API collection for Timesheet Backend with PostgreSQL and SMTP integration.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health & Probes",
+			"item": [
+				{
+					"name": "Health Check (Liveness)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/healthz",
+							"host": ["{{baseUrl}}"],
+							"path": ["healthz"]
+						}
+					}
+				},
+				{
+					"name": "Readiness Check (Database Ping)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/readyz",
+							"host": ["{{baseUrl}}"],
+							"path": ["readyz"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Setup",
+			"item": [
+				{
+					"name": "Initial System Setup",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"admin_username\": \"admin\",\n  \"admin_name\": \"System Administrator\",\n  \"admin_email\": \"timesheet@fafr.dev\",\n  \"admin_password\": \"Password1!Strong\",\n  \"company_name\": \"Default Company\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/setup/init",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "setup", "init"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.token) {",
+									"    pm.collectionVariables.set('jwt_token', jsonData.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"admin\",\n  \"password\": \"Password1!Strong\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Get Current User Profile (/me)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{jwt_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/me",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "me"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Master Data",
+			"item": [
+				{
+					"name": "Get Companies",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{jwt_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/companies",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "companies"]
+						}
+					}
+				},
+				{
+					"name": "Get Projects",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{jwt_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/projects",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "projects"]
+						}
+					}
+				},
+				{
+					"name": "Get Activity Statuses",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{jwt_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/activity-statuses",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "activity-statuses"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Timesheet & Activities",
+			"item": [
+				{
+					"name": "Log Daily Activity",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{jwt_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"date\": \"2026-09-11\",\n  \"status\": \"WFO\",\n  \"start_time\": \"08:30\",\n  \"end_time\": \"17:30\",\n  \"project_id\": 1,\n  \"description\": \"Backend refactoring and E2E verification\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/activities",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "activities"]
+						}
+					}
+				},
+				{
+					"name": "Generate Timesheet (Excel & SMTP)",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{jwt_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"month\": 9,\n  \"year\": 2026,\n  \"send_email\": true\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/timesheet/generate",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "timesheet", "generate"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080"
+		},
+		{
+			"key": "jwt_token",
+			"value": ""
+		}
+	]
+}

@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -18,6 +23,8 @@ import (
 	"timesheet-backend/database"
 	_ "timesheet-backend/docs"
 	"timesheet-backend/handlers"
+	"timesheet-backend/internal/middleware"
+	"timesheet-backend/internal/observability"
 	"timesheet-backend/mailer"
 	"timesheet-backend/push"
 	"timesheet-backend/scheduler"
@@ -37,6 +44,8 @@ import (
 // @description Enter JWT token with format "Bearer {token}".
 
 func main() {
+	logger := observability.Logger()
+
 	migrateFlag := flag.Bool("migrate", false, "run database migrations before starting the server")
 	migrateOnlyFlag := flag.Bool("migrate-only", false, "run database migrations and exit")
 	flag.Parse()
@@ -48,17 +57,19 @@ func main() {
 
 	db, err := database.Connect(cfg)
 	if err != nil {
-		log.Fatalf("database connection failed: %v", err)
+		logger.Error("database connection failed", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	if cfg.RunMigrations {
 		if err := database.Setup(db, cfg); err != nil {
-			log.Fatalf("database setup failed: %v", err)
+			logger.Error("database setup failed", slog.Any("error", err))
+			os.Exit(1)
 		}
 	}
 
 	if *migrateOnlyFlag {
-		log.Println("database migrations completed successfully")
+		logger.Info("database migrations completed successfully")
 		return
 	}
 
@@ -68,7 +79,8 @@ func main() {
 
 	srv, err := handlers.NewServer(db, cfg, authSvc, mailSvc, pushSvc)
 	if err != nil {
-		log.Fatalf("failed to init server: %v", err)
+		logger.Error("failed to init server", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	// Daily 17:00 WIB reminder scheduler.
@@ -76,9 +88,25 @@ func main() {
 	sched.Start()
 	defer sched.Stop()
 
-	r := gin.Default()
+	r := gin.New()
+	r.Use(middleware.RequestID())
+	r.Use(middleware.StructuredRecovery())
+	r.Use(middleware.SecurityHeaders())
 	r.Use(handlers.CORSMiddleware())
 	r.MaxMultipartMemory = 16 << 20 // 16 MiB template uploads
+
+	// Liveness and Readiness probes for Kubernetes / container orchestration
+	r.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+	r.GET("/readyz", func(c *gin.Context) {
+		sqlDB, err := db.DB()
+		if err != nil || sqlDB.PingContext(c.Request.Context()) != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unready", "database": "disconnected"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "connected"})
+	})
 
 	registerRoutes(r, srv)
 
@@ -90,13 +118,45 @@ func main() {
 	}
 	if _, err := os.Stat(staticPath); err == nil {
 		r.NoRoute(spaHandler(staticPath))
-		log.Printf("serving static frontend from %s", staticPath)
+		logger.Info("serving static frontend", slog.String("path", staticPath))
 	}
 
-	log.Printf("server starting on port %s", cfg.Port)
-	if err := r.Run(":" + cfg.Port); err != nil {
-		log.Fatalf("failed to run server: %v", err)
+	httpServer := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		logger.Info("server starting", slog.String("port", cfg.Port))
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server listen failed", slog.Any("error", err))
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	stop()
+	logger.Info("shutting down gracefully, press Ctrl+C again to force")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("server forced to shutdown", slog.Any("error", err))
+	}
+
+	sqlDB, err := db.DB()
+	if err == nil {
+		_ = sqlDB.Close()
+	}
+
+	logger.Info("server exited cleanly")
 }
 
 // registerRoutes wires the full Phase 2 API surface.
@@ -116,11 +176,12 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		setupGroup.POST("/init", s.InitSetup)
 	}
 
-	// --- Public auth routes (NO public sign-up) ---
+	// --- Public auth routes with rate limiting ---
+	authLimiter := middleware.NewIPRateLimiter(10, 1*time.Minute)
 	authGroup := api.Group("/auth")
 	{
-		authGroup.POST("/login", s.Login)
-		authGroup.POST("/forgot-password", s.ForgotPassword)
+		authGroup.POST("/login", middleware.RateLimitMiddleware(authLimiter), s.Login)
+		authGroup.POST("/forgot-password", middleware.RateLimitMiddleware(authLimiter), s.ForgotPassword)
 		authGroup.POST("/reset-password", s.ResetPassword)
 		authGroup.POST("/passkey/login/begin", s.BeginPasskeyLogin)
 		authGroup.POST("/passkey/login/finish", s.FinishPasskeyLogin)

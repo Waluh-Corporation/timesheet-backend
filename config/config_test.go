@@ -54,3 +54,61 @@ func TestGetEnvBool(t *testing.T) {
 		}
 	}
 }
+
+func TestSanitizeRPID(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"https://example.com:8080/path", "example.com"},
+		{"http://sub.domain.org/", "sub.domain.org"},
+		{"  localhost:3000\\ ", "localhost"},
+		{"bare-domain.com", "bare-domain.com"},
+	}
+
+	for _, tc := range cases {
+		got := sanitizeRPID(tc.in)
+		if got != tc.want {
+			t.Errorf("sanitizeRPID(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestGetEnvAndGetEnvInt(t *testing.T) {
+	t.Setenv("TEST_STR_KEY", "custom_val")
+	if v := getEnv("TEST_STR_KEY", "fallback"); v != "custom_val" {
+		t.Errorf("expected custom_val, got %s", v)
+	}
+	if v := getEnv("UNSET_KEY_XYZ", "fallback"); v != "fallback" {
+		t.Errorf("expected fallback, got %s", v)
+	}
+
+	t.Setenv("TEST_INT_KEY", "42")
+	if v := getEnvInt("TEST_INT_KEY", 10); v != 42 {
+		t.Errorf("expected 42, got %d", v)
+	}
+	t.Setenv("TEST_INT_INVALID", "not_a_number")
+	if v := getEnvInt("TEST_INT_INVALID", 10); v != 10 {
+		t.Errorf("expected fallback 10 for invalid int, got %d", v)
+	}
+}
+
+func TestConfigLoad(t *testing.T) {
+	t.Setenv("PORT", "9999")
+	t.Setenv("WEBAUTHN_RP_ID", "test.example.com")
+	t.Setenv("JWT_SECRET", "this-is-a-strong-custom-secret-key-32b")
+	cfg := Load()
+
+	if cfg == nil {
+		t.Fatal("expected non-nil config")
+	}
+	if cfg.Port != "9999" {
+		t.Errorf("expected port 9999, got %s", cfg.Port)
+	}
+	if cfg.RPID != "test.example.com" {
+		t.Errorf("expected RPID test.example.com, got %s", cfg.RPID)
+	}
+	if cfg.JWTSecret != "this-is-a-strong-custom-secret-key-32b" {
+		t.Errorf("expected custom JWTSecret, got %s", cfg.JWTSecret)
+	}
+}
