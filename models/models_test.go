@@ -347,4 +347,3 @@ func TestDTOs(t *testing.T) {
 		t.Errorf("KemendesaHolidayResponse mismatch: %+v", kResp)
 	}
 }
-
