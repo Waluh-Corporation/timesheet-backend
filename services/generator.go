@@ -336,7 +336,7 @@ func GenerateExcel(req *models.TimesheetRequest, holidayMap map[string]string) (
 
 		dateStr := fmt.Sprintf("%04d-%02d-%02d", req.Year, req.Month, day)
 		holidayDesc, isHoliday := holidayMap[dateStr]
-		var h float64 = 15.0
+		var h float64
 
 		if isWeekend || isHoliday {
 			// Apply soft gray background across all fillable columns (B to Q)
