@@ -145,6 +145,7 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 // @Success 200 {object} models.DailyActivity
 // @Failure 400 {object} models.ErrorResponse "Invalid activity ID"
 // @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Forbidden: not authorized to access another user's activity"
 // @Failure 404 {object} models.ErrorResponse "Activity not found"
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/activities/{id} [get]
@@ -157,15 +158,13 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 	}
 
 	var activity models.DailyActivity
-	query := s.DB.Preload("ProjectRef").Preload("StatusRef").Preload("User")
-
-	role, _ := c.Get(ctxRole)
-	if role != models.RoleAdmin {
-		query = query.Where("user_id = ?", currentUserID(c))
+	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").Preload("User").First(&activity, id).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "activity not found")
+		return
 	}
 
-	if err := query.First(&activity, id).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "activity not found")
+	if activity.UserID != currentUserID(c) {
+		RespondError(c, http.StatusForbidden, "you are not authorized to access another user's activity")
 		return
 	}
 

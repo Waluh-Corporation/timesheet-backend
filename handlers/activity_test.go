@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -219,12 +220,15 @@ func TestActivityHandlers_Integration(t *testing.T) {
 
 		srv.GetDailyActivity(c)
 
-		if w.Code != http.StatusNotFound {
-			t.Fatalf("expected status 404 for other user, got %d", w.Code)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403 for other user, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "you are not authorized to access another user's activity") {
+			t.Fatalf("expected forbidden message, got %s", w.Body.String())
 		}
 	})
 
-	t.Run("GetDailyActivity allows admin to view any activity", func(t *testing.T) {
+	t.Run("GetDailyActivity forbids admin from viewing another user's activity", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Params = gin.Params{{Key: "id", Value: itoa(act1.ID)}}
@@ -233,8 +237,11 @@ func TestActivityHandlers_Integration(t *testing.T) {
 
 		srv.GetDailyActivity(c)
 
-		if w.Code != http.StatusOK {
-			t.Fatalf("expected status 200 for admin, got %d", w.Code)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("expected status 403 for admin viewing another user's activity, got %d", w.Code)
+		}
+		if !strings.Contains(w.Body.String(), "you are not authorized to access another user's activity") {
+			t.Fatalf("expected forbidden message for admin, got %s", w.Body.String())
 		}
 	})
 
