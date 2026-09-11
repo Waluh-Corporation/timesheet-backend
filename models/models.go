@@ -59,4 +59,3 @@ type KemendesaHolidayResponse struct {
 	} `json:"metadata"`
 	Data []KemendesaHolidayItem `json:"data"`
 }
-

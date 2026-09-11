@@ -767,6 +767,3 @@ func (s *Server) ListApprovers(c *gin.Context) {
 	}
 	RespondSuccess(c, http.StatusOK, approvers)
 }
-
-
-

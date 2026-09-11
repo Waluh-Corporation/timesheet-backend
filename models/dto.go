@@ -38,7 +38,7 @@ type LoginResponse struct {
 
 // VAPIDKeyResponse carries the Web Push VAPID public application server key.
 type VAPIDKeyResponse struct {
-	PublicKey string `json:"public_key" example:"BEl62iUYgUivxIkv...`
+	PublicKey string `json:"public_key" example:"BEl62iUYgUivxIkv..."`
 }
 
 // OriginsResponse returns allowed WebAuthn related origins.
@@ -51,7 +51,6 @@ type PasskeySessionResponse struct {
 	SessionID string      `json:"session_id" example:"a1b2c3d4-e5f6-7890-abcd-ef1234567890"`
 	Options   interface{} `json:"options"`
 }
-
 
 // LoginRequest is the username/email and password authentication payload.
 type LoginRequest struct {
@@ -137,8 +136,8 @@ type GenerateRequest struct {
 
 // PushKeyPayload carries the browser push subscription keys.
 type PushKeyPayload struct {
-	P256dh string `json:"p256dh" binding:"required" example:"BCVxsG6...`
-	Auth   string `json:"auth" binding:"required" example:"5Kpqz...`
+	P256dh string `json:"p256dh" binding:"required" example:"BCVxsG6..."`
+	Auth   string `json:"auth" binding:"required" example:"5Kpqz..."`
 }
 
 // SubscribeRequest carries the Web Push subscription parameters.

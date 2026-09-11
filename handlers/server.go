@@ -231,13 +231,19 @@ func RespondPaginated(c *gin.Context, code int, data interface{}, page int, limi
 }
 
 // Convenience methods on Server
-func (s *Server) RespondSuccess(c *gin.Context, code int, data interface{}) { RespondSuccess(c, code, data) }
+func (s *Server) RespondSuccess(c *gin.Context, code int, data interface{}) {
+	RespondSuccess(c, code, data)
+}
 func (s *Server) RespondPaginated(c *gin.Context, code int, data interface{}, page int, limit int, totalRows int64) {
 	RespondPaginated(c, code, data, page, limit, totalRows)
 }
-func (s *Server) RespondMessage(c *gin.Context, code int, message string)     { RespondMessage(c, code, message) }
-func (s *Server) RespondDelete(c *gin.Context, code int)                      { RespondDelete(c, code) }
-func (s *Server) RespondError(c *gin.Context, code int, message string)       { RespondError(c, code, message) }
-func (s *Server) RespondAbortError(c *gin.Context, code int, message string)  { RespondAbortError(c, code, message) }
-
-
+func (s *Server) RespondMessage(c *gin.Context, code int, message string) {
+	RespondMessage(c, code, message)
+}
+func (s *Server) RespondDelete(c *gin.Context, code int) { RespondDelete(c, code) }
+func (s *Server) RespondError(c *gin.Context, code int, message string) {
+	RespondError(c, code, message)
+}
+func (s *Server) RespondAbortError(c *gin.Context, code int, message string) {
+	RespondAbortError(c, code, message)
+}

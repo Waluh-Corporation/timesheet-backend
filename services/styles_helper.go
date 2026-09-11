@@ -12,8 +12,8 @@ import (
 
 // BuilderStyles bundles pre-created cell style IDs for programmatic sheet generation.
 type BuilderStyles struct {
-	HeaderStyle     int
-	HeaderGreyStyle int
+	HeaderStyle         int
+	HeaderGreyStyle     int
 	DataCenterStyle     int
 	DataCenterWrapStyle int
 	DataLeftStyle       int

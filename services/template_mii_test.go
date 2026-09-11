@@ -29,11 +29,11 @@ func TestGenerateMII(t *testing.T) {
 
 	in := GenerationInput{
 		CompanyCode: "mii",
-		User:       user,
-		Month:      5,
-		Year:       2026,
-		Activities: []models.DailyActivity{act},
-		Holidays:   map[int]string{},
+		User:        user,
+		Month:       5,
+		Year:        2026,
+		Activities:  []models.DailyActivity{act},
+		Holidays:    map[int]string{},
 	}
 
 	out, err := GenerateFromTemplate(in)
@@ -77,11 +77,11 @@ func TestGenerateMII(t *testing.T) {
 func TestGenerateMIITrimsShortMonth(t *testing.T) {
 	in := GenerationInput{
 		CompanyCode: "mii",
-		User:       &models.User{Name: "X"},
-		Month:      4, // April has 30 days -> day 31 (row 39) must be cleared
-		Year:       2026,
-		Activities: []models.DailyActivity{},
-		Holidays:   map[int]string{},
+		User:        &models.User{Name: "X"},
+		Month:       4, // April has 30 days -> day 31 (row 39) must be cleared
+		Year:        2026,
+		Activities:  []models.DailyActivity{},
+		Holidays:    map[int]string{},
 	}
 	out, err := GenerateFromTemplate(in)
 	if err != nil {
