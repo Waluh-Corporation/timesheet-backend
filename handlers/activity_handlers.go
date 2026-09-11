@@ -128,12 +128,12 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 
 // GetDailyActivity godoc
 // @Summary Get daily activity detail
-// @Description Retrieves full details of a specific daily activity by ID, including its associated Project, Status, and User.
+// @Description Retrieves full details of a specific daily activity by ID, including its associated Project and Status.
 // @Tags Activity
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "Daily Activity ID"
-// @Success 200 {object} models.DailyActivity
+// @Success 200 {object} models.DailyActivityDetailResponse
 // @Failure 400 {object} models.ErrorResponse "Invalid activity ID"
 // @Failure 401 {object} models.ErrorResponse "Unauthorized"
 // @Failure 403 {object} models.ErrorResponse "Forbidden: not authorized to access another user's activity"
@@ -149,7 +149,7 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 	}
 
 	var activity models.DailyActivity
-	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").Preload("User").First(&activity, id).Error; err != nil {
+	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").First(&activity, id).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "activity not found")
 		return
 	}
@@ -159,7 +159,22 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 		return
 	}
 
-	RespondSuccess(c, http.StatusOK, activity)
+	resp := models.DailyActivityDetailResponse{
+		ID:          activity.ID,
+		CreatedAt:   activity.CreatedAt,
+		UpdatedAt:   activity.UpdatedAt,
+		UserID:      activity.UserID,
+		Date:        activity.Date,
+		StartTime:   activity.StartTime,
+		EndTime:     activity.EndTime,
+		Activity:    activity.Activity,
+		ProjectName: activity.ProjectName,
+		ProjectID:   activity.ProjectID,
+		ProjectRef:  activity.ProjectRef,
+		StatusRef:   activity.StatusRef,
+	}
+
+	RespondSuccess(c, http.StatusOK, resp)
 }
 
 // ListActivities godoc

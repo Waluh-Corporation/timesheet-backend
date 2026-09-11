@@ -184,7 +184,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves full details of a specific daily activity by ID, including its associated Project, Status, and User.",
+                "description": "Retrieves full details of a specific daily activity by ID, including its associated Project and Status.",
                 "produces": [
                     "application/json"
                 ],
@@ -205,7 +205,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.DailyActivity"
+                            "$ref": "#/definitions/models.DailyActivityDetailResponse"
                         }
                     },
                     "400": {
@@ -216,6 +216,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden: not authorized to access another user's activity",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
                         }
@@ -3010,6 +3016,47 @@ const docTemplate = `{
                 }
             }
         },
+        "models.DailyActivityDetailResponse": {
+            "type": "object",
+            "properties": {
+                "activity": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "project_id": {
+                    "type": "string"
+                },
+                "project_name": {
+                    "type": "string"
+                },
+                "project_ref": {
+                    "$ref": "#/definitions/models.Project"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "status_ref": {
+                    "$ref": "#/definitions/models.ActivityStatus"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "models.DailyActivityRequest": {
             "type": "object",
             "required": [
@@ -3522,10 +3569,12 @@ const docTemplate = `{
             ],
             "properties": {
                 "auth": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "5Kpqz..."
                 },
                 "p256dh": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "BCVxsG6..."
                 }
             }
         },
@@ -3705,7 +3754,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "public_key": {
-                    "type": "string"
+                    "type": "string",
+                    "example": "BEl62iUYgUivxIkv..."
                 }
             }
         },
