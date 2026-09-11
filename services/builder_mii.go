@@ -237,42 +237,13 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	}
 
 	// 7. Signature Area (Rows 42-47) matching official MII template
-	// Headers (Row 42)
-	styleMergedRange(f, sheet, "A42", "C42", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "A42", "TTD PEGAWAI,")
-
-	styleMergedRange(f, sheet, "D42", "F42", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "D42", "DIPERIKSA OLEH,")
-
-	styleMergedRange(f, sheet, "G42", "J42", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "G42", "DISETUJUI OLEH,")
-
-	// Empty Signature Boxes with Borders (Rows 43-45)
-	styleMergedRange(f, sheet, "A43", "C45", st.DataCenterStyle)
-	styleMergedRange(f, sheet, "D43", "F45", st.DataCenterStyle)
-	styleMergedRange(f, sheet, "G43", "J45", st.DataCenterStyle)
-
 	tlName, dhName := ExtractApprovers(in.Overtimes)
 
-	// Names (Row 46)
-	styleMergedRange(f, sheet, "A46", "C46", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "A46", in.User.Name)
-
-	styleMergedRange(f, sheet, "D46", "F46", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "D46", tlName)
-
-	styleMergedRange(f, sheet, "G46", "J46", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "G46", dhName)
-
-	// Date Rows (Row 47)
-	styleMergedRange(f, sheet, "A47", "C47", st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "A47", "DATE : ")
-
-	styleMergedRange(f, sheet, "D47", "F47", st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "D47", "DATE : ")
-
-	styleMergedRange(f, sheet, "G47", "J47", st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "G47", "DATE : ")
+	WriteSignaturesLayout(f, sheet, 42, 3, []SignatureParty{
+		{StartCol: "A", EndCol: "C", Title: "TTD PEGAWAI,", Name: in.User.Name, DatePrefix: "DATE : "},
+		{StartCol: "D", EndCol: "F", Title: "DIPERIKSA OLEH,", Name: tlName, DatePrefix: "DATE : "},
+		{StartCol: "G", EndCol: "J", Title: "DISETUJUI OLEH,", Name: dhName, DatePrefix: "DATE : "},
+	}, st)
 
 	// Set row heights for visual balance
 	_ = f.SetRowHeight(sheet, 42, 20)

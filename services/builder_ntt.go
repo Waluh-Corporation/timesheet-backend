@@ -271,43 +271,13 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 	}
 
 	// 8. Signatures Area (Rows 53-58) matching official NTT template
-	// Headers (Row 53)
-	styleMergedRange(f, sheet, "B53", "E53", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "B53", "TTD PEGAWAI,")
-
-	styleMergedRange(f, sheet, "F53", "I53", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "F53", "DIPERIKSA OLEH,")
-
-	styleMergedRange(f, sheet, "J53", "L53", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "J53", "DISETUJUI OLEH,")
-
-	// Empty Signature Boxes with Borders (Rows 54-56)
-	styleMergedRange(f, sheet, "B54", "E56", st.DataCenterStyle)
-	styleMergedRange(f, sheet, "F54", "I56", st.DataCenterStyle)
-	styleMergedRange(f, sheet, "J54", "L56", st.DataCenterStyle)
-
-	// Extract approver names from overtime entries if present
 	tlName, dhName := ExtractApprovers(in.Overtimes)
 
-	// Names (Row 57)
-	styleMergedRange(f, sheet, "B57", "E57", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "B57", in.User.Name)
-
-	styleMergedRange(f, sheet, "F57", "I57", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "F57", tlName)
-
-	styleMergedRange(f, sheet, "J57", "L57", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "J57", dhName)
-
-	// Date Rows (Row 58)
-	styleMergedRange(f, sheet, "B58", "E58", st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "B58", "DATE: ")
-
-	styleMergedRange(f, sheet, "F58", "I58", st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "F58", "DATE: ")
-
-	styleMergedRange(f, sheet, "J58", "L58", st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "J58", "DATE: ")
+	WriteSignaturesLayout(f, sheet, 53, 3, []SignatureParty{
+		{StartCol: "B", EndCol: "E", Title: "TTD PEGAWAI,", Name: in.User.Name, DatePrefix: "DATE: "},
+		{StartCol: "F", EndCol: "I", Title: "DIPERIKSA OLEH,", Name: tlName, DatePrefix: "DATE: "},
+		{StartCol: "J", EndCol: "L", Title: "DISETUJUI OLEH,", Name: dhName, DatePrefix: "DATE: "},
+	}, st)
 
 	// Set row heights for visual balance
 	_ = f.SetRowHeight(sheet, 53, 20)

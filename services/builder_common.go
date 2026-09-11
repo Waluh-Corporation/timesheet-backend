@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/xuri/excelize/v2"
 
@@ -99,52 +100,67 @@ func WriteTotalSummaryRow(f *excelize.File, sheet string, summaryRow, firstDataR
 	}
 }
 
+// SignatureParty defines one signer column block.
+type SignatureParty struct {
+	StartCol   string
+	EndCol     string
+	Title      string
+	Name       string
+	DatePrefix string
+}
+
+// WriteSignaturesLayout renders a configurable multi-party signature section.
+func WriteSignaturesLayout(f *excelize.File, sheet string, headerRow int, boxRows int, parties []SignatureParty, st *BuilderStyles) {
+	rHeader := fmt.Sprintf("%d", headerRow)
+	rName := fmt.Sprintf("%d", headerRow+boxRows+1)
+	rDate := fmt.Sprintf("%d", headerRow+boxRows+2)
+
+	for _, p := range parties {
+		// Header / Title
+		styleMergedRange(f, sheet, p.StartCol+rHeader, p.EndCol+rHeader, st.BoldCenterStyle)
+		_ = f.SetCellValue(sheet, p.StartCol+rHeader, p.Title)
+
+		// Empty Signature Box
+		if boxRows > 0 {
+			rBoxStart := fmt.Sprintf("%d", headerRow+1)
+			rBoxEnd := fmt.Sprintf("%d", headerRow+boxRows)
+			styleMergedRange(f, sheet, p.StartCol+rBoxStart, p.EndCol+rBoxEnd, st.DataCenterStyle)
+		}
+
+		// Name
+		nameStyle := st.BoldCenterStyle
+		nameVal := p.Name
+		if strings.HasPrefix(p.DatePrefix, "Nama :") {
+			nameStyle = st.DataLeftStyle
+			if p.Name != "" {
+				nameVal = "Nama : " + p.Name
+			} else {
+				nameVal = "Nama : "
+			}
+		}
+		styleMergedRange(f, sheet, p.StartCol+rName, p.EndCol+rName, nameStyle)
+		_ = f.SetCellValue(sheet, p.StartCol+rName, nameVal)
+
+		// Date (if provided)
+		if p.DatePrefix != "" && !strings.HasPrefix(p.DatePrefix, "Nama :") {
+			styleMergedRange(f, sheet, p.StartCol+rDate, p.EndCol+rDate, st.DataLeftStyle)
+			_ = f.SetCellValue(sheet, p.StartCol+rDate, p.DatePrefix)
+		}
+	}
+}
+
 // WriteSignaturesBlock renders the 3-party signature section (Employee, Team Leader, Dept Head).
 func WriteSignaturesBlock(f *excelize.File, sheet string, startRow int, userName, tlName, dhName string, st *BuilderStyles) {
-	rTitles := fmt.Sprintf("%d", startRow)
-	rNames := fmt.Sprintf("%d", startRow+4)
-	rDates := fmt.Sprintf("%d", startRow+5)
-
-	// Titles
-	styleMergedRange(f, sheet, "A"+rTitles, "C"+rTitles, st.HeaderStyle)
-	_ = f.SetCellValue(sheet, "A"+rTitles, "Prepared by :")
-
-	styleMergedRange(f, sheet, "D"+rTitles, "F"+rTitles, st.HeaderStyle)
-	_ = f.SetCellValue(sheet, "D"+rTitles, "Approved by :")
-
-	styleMergedRange(f, sheet, "G"+rTitles, "J"+rTitles, st.HeaderStyle)
-	_ = f.SetCellValue(sheet, "G"+rTitles, "Approved by :")
-
-	// Empty signature box rows
-	for i := 1; i <= 3; i++ {
-		rEmpty := fmt.Sprintf("%d", startRow+i)
-		styleMergedRange(f, sheet, "A"+rEmpty, "C"+rEmpty, st.DataCenterStyle)
-		styleMergedRange(f, sheet, "D"+rEmpty, "F"+rEmpty, st.DataCenterStyle)
-		styleMergedRange(f, sheet, "G"+rEmpty, "J"+rEmpty, st.DataCenterStyle)
-		_ = f.SetRowHeight(sheet, startRow+i, 16)
-	}
-
-	// Names
-	styleMergedRange(f, sheet, "A"+rNames, "C"+rNames, st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "A"+rNames, userName)
-
-	styleMergedRange(f, sheet, "D"+rNames, "F"+rNames, st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "D"+rNames, tlName)
-
-	styleMergedRange(f, sheet, "G"+rNames, "J"+rNames, st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "G"+rNames, dhName)
-
-	// Dates
-	styleMergedRange(f, sheet, "A"+rDates, "C"+rDates, st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "A"+rDates, "DATE : ")
-
-	styleMergedRange(f, sheet, "D"+rDates, "F"+rDates, st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "D"+rDates, "DATE : ")
-
-	styleMergedRange(f, sheet, "G"+rDates, "J"+rDates, st.DataLeftStyle)
-	_ = f.SetCellValue(sheet, "G"+rDates, "DATE : ")
+	WriteSignaturesLayout(f, sheet, startRow, 3, []SignatureParty{
+		{StartCol: "A", EndCol: "C", Title: "Prepared by :", Name: userName, DatePrefix: "DATE : "},
+		{StartCol: "D", EndCol: "F", Title: "Approved by :", Name: tlName, DatePrefix: "DATE : "},
+		{StartCol: "G", EndCol: "J", Title: "Approved by :", Name: dhName, DatePrefix: "DATE : "},
+	}, st)
 
 	_ = f.SetRowHeight(sheet, startRow, 20)
+	for i := 1; i <= 3; i++ {
+		_ = f.SetRowHeight(sheet, startRow+i, 16)
+	}
 	_ = f.SetRowHeight(sheet, startRow+4, 22)
 	_ = f.SetRowHeight(sheet, startRow+5, 18)
 }

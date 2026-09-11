@@ -14,6 +14,12 @@ import (
 	"timesheet-backend/models"
 )
 
+const (
+	errInvalidPayload = "invalid payload"
+	errInvalidAuth    = "invalid credentials" //nolint:gosec // G101: error message text, not a credential
+	errUserNotFound   = "user not found"
+)
+
 // Login godoc
 // @Summary Authenticate user with credentials
 // @Description Authenticates user with username/email and password, returning a JWT token and user profile.
@@ -30,14 +36,14 @@ import (
 func (s *Server) Login(c *gin.Context) {
 	var req models.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid payload")
+		RespondError(c, http.StatusBadRequest, errInvalidPayload)
 		return
 	}
 
 	var user models.User
 	err := s.DB.Where("username = ? OR email = ?", req.Identifier, req.Identifier).First(&user).Error
 	if err != nil {
-		RespondError(c, http.StatusUnauthorized, "invalid credentials")
+		RespondError(c, http.StatusUnauthorized, errInvalidAuth)
 		return
 	}
 	if !user.IsActive {
@@ -45,7 +51,7 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 	if user.PasswordHash == "" || !auth.CheckPassword(user.PasswordHash, req.Password) {
-		RespondError(c, http.StatusUnauthorized, "invalid credentials")
+		RespondError(c, http.StatusUnauthorized, errInvalidAuth)
 		return
 	}
 
@@ -90,7 +96,7 @@ func (s *Server) WebAuthnRelatedOrigins(c *gin.Context) {
 func (s *Server) Me(c *gin.Context) {
 	var user models.User
 	if err := s.DB.First(&user, currentUserID(c)).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "user not found")
+		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 	RespondSuccess(c, http.StatusOK, user)
@@ -109,7 +115,7 @@ func (s *Server) Me(c *gin.Context) {
 func (s *Server) ForgotPassword(c *gin.Context) {
 	var req models.ForgotRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid payload")
+		RespondError(c, http.StatusBadRequest, errInvalidPayload)
 		return
 	}
 
@@ -151,7 +157,7 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 func (s *Server) ResetPassword(c *gin.Context) {
 	var req models.ResetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid payload")
+		RespondError(c, http.StatusBadRequest, errInvalidPayload)
 		return
 	}
 
@@ -204,7 +210,7 @@ func (s *Server) ResetPassword(c *gin.Context) {
 func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
 	var user models.User
 	if err := s.DB.Preload("Credentials").First(&user, currentUserID(c)).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "user not found")
+		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
@@ -248,7 +254,7 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 
 	var user models.User
 	if err := s.DB.Preload("Credentials").First(&user, currentUserID(c)).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "user not found")
+		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 

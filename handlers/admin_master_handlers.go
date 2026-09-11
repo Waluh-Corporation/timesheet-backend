@@ -10,6 +10,8 @@ import (
 	"timesheet-backend/models"
 )
 
+const queryID = "id = ?"
+
 // CreateApproverRequest carries fields to add a new approver.
 type CreateApproverRequest struct {
 	Name     string                  `json:"name" binding:"required" example:"Approver Name"`
@@ -102,19 +104,19 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 		return
 	}
 
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database not available")
-		return
-	}
-
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
 		RespondError(c, http.StatusBadRequest, "invalid approver ID, expected positive integer")
 		return
 	}
 
+	if s.DB == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
+	}
+
 	var appr models.Approver
-	if err := s.DB.WithContext(c.Request.Context()).Where("id = ?", id).First(&appr).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
@@ -165,7 +167,7 @@ func (s *Server) DeleteApprover(c *gin.Context) {
 	}
 
 	var appr models.Approver
-	if err := s.DB.Where("id = ?", id).First(&appr).Error; err != nil {
+	if err := s.DB.Where(queryID, id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
@@ -233,19 +235,19 @@ func (s *Server) UpdateCompany(c *gin.Context) {
 		return
 	}
 
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database not available")
-		return
-	}
-
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
 		RespondError(c, http.StatusBadRequest, "invalid company ID, expected positive integer")
 		return
 	}
 
+	if s.DB == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
+	}
+
 	var comp models.Company
-	if err := s.DB.WithContext(c.Request.Context()).Where("id = ?", id).First(&comp).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}
@@ -288,7 +290,7 @@ func (s *Server) DeleteCompany(c *gin.Context) {
 	}
 
 	var comp models.Company
-	if err := s.DB.Where("id = ?", id).First(&comp).Error; err != nil {
+	if err := s.DB.Where(queryID, id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}

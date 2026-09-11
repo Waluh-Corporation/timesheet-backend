@@ -11,6 +11,11 @@ import (
 	"timesheet-backend/models"
 )
 
+const (
+	orderCreatedAtDesc  = "created_at desc"
+	queryCodeOrNameLike = "LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)"
+)
+
 // isSelf reports whether targetID refers to the authenticated caller.
 func isSelf(c *gin.Context, targetID uint) bool {
 	return targetID == currentUserID(c)
@@ -29,7 +34,7 @@ func isSelf(c *gin.Context, targetID uint) bool {
 // @Router /api/v1/admin/users [get]
 func (s *Server) ListUsers(c *gin.Context) {
 	var users []models.User
-	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").Order("created_at desc").Find(&users).Error; err != nil {
+	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").Order(orderCreatedAtDesc).Find(&users).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -84,7 +89,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		}
 	} else if req.Company != "" {
 		var comp models.Company
-		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
+		if err := s.DB.Where(queryCodeOrNameLike, req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
 			user.CompanyID = &comp.ID
 		}
 	}
@@ -103,7 +108,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		}
 	} else if req.Department != "" {
 		var dept models.Department
-		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", req.Department, "%"+req.Department+"%").First(&dept).Error; err == nil {
+		if err := s.DB.Where(queryCodeOrNameLike, req.Department, "%"+req.Department+"%").First(&dept).Error; err == nil {
 			user.DepartmentID = &dept.ID
 			if user.Division == "" && dept.Division != "" {
 				user.Division = dept.Division
@@ -196,7 +201,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := s.DB.WithContext(c.Request.Context()).Where("id = ?", id).First(&user).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&user).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
@@ -232,7 +237,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	if req.Company != nil {
 		updates["company"] = *req.Company
 		var comp models.Company
-		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
+		if err := s.DB.Where(queryCodeOrNameLike, *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
 			updates["company_id"] = comp.ID
 		} else {
 			updates["company_id"] = nil
@@ -271,7 +276,7 @@ func (s *Server) DeleteUser(c *gin.Context) {
 		return
 	}
 	var user models.User
-	if err := s.DB.Where("id = ?", id).First(&user).Error; err != nil {
+	if err := s.DB.Where(queryID, id).First(&user).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
@@ -279,7 +284,7 @@ func (s *Server) DeleteUser(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.DB.Where("id = ?", id).First(&user)
+	s.DB.Where(queryID, id).First(&user)
 	RespondSuccess(c, http.StatusOK, user)
 }
 
@@ -336,7 +341,7 @@ func (s *Server) MyProfileChanges(c *gin.Context) {
 	var changes []models.ProfileChangeRequest
 	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").
 		Where("user_id = ?", currentUserID(c)).
-		Order("created_at desc").Find(&changes).Error; err != nil {
+		Order(orderCreatedAtDesc).Find(&changes).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -357,7 +362,7 @@ func (s *Server) MyProfileChanges(c *gin.Context) {
 // @Router /api/v1/admin/profile-changes [get]
 func (s *Server) ListProfileChanges(c *gin.Context) {
 	var changes []models.ProfileChangeRequest
-	q := s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").Order("created_at desc")
+	q := s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").Order(orderCreatedAtDesc)
 	if status := c.Query("status"); status != "" {
 		q = q.Where("status = ?", status)
 	}
@@ -402,7 +407,7 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	}
 
 	var change models.ProfileChangeRequest
-	if err := s.DB.WithContext(c.Request.Context()).Where("id = ?", id).First(&change).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&change).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "request not found")
 		return
 	}
@@ -430,7 +435,7 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 		if change.CompanyID != nil {
 			updates["company_id"] = change.CompanyID
 		}
-		s.DB.Model(&models.User{}).Where("id = ?", change.UserID).Updates(updates)
+		s.DB.Model(&models.User{}).Where(queryID, change.UserID).Updates(updates)
 		change.Status = models.ProfileApproved
 	} else {
 		change.Status = "rejected"
