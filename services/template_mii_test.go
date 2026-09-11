@@ -45,7 +45,7 @@ func TestGenerateMII(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open output: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	const sh = "Sheet1"
 
 	row := 12 // day 4 -> row 9 + 3
@@ -88,7 +88,7 @@ func TestGenerateMIITrimsShortMonth(t *testing.T) {
 		t.Fatalf("GenerateFromTemplate: %v", err)
 	}
 	f, _ := excelize.OpenReader(bytes.NewReader(out))
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	for _, cell := range []string{"A39", "B39", "D39", "K39"} {
 		if v, _ := f.GetCellValue("Sheet1", cell); v != "" {
 			t.Errorf("row 39 (%s) should be trimmed/empty, got %q", cell, v)

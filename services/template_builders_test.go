@@ -45,7 +45,7 @@ func TestBuildMIIWorkbook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open output workbook: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	const sheet = "Sheet1"
 
@@ -125,7 +125,7 @@ func TestBuildSDDWorkbook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open output workbook: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	sheet := indonesianMonth(6) // "Juni"
 
@@ -212,7 +212,7 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open output workbook: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// 1. Check TIMESHEET sheet
 	const sheetTS = "TIMESHEET"
@@ -297,7 +297,7 @@ func TestBuildNTTWorkbook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open output workbook: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	const sheet = "Timesheet"
 

@@ -14,7 +14,7 @@ import (
 // buildNTTWorkbook generates the NTT timesheet Excel document purely from code.
 func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 	f := excelize.NewFile()
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	const sheet = "Timesheet"
 	_ = f.SetSheetName(f.GetSheetName(0), sheet)

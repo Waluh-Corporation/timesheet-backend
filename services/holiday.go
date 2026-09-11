@@ -33,7 +33,7 @@ func FetchHolidaysByYear(year int) ([]models.HolidayDTO, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// If year-specific endpoint returns 404, attempt fallback to /latest
 	if resp.StatusCode == http.StatusNotFound {
@@ -43,7 +43,7 @@ func FetchHolidaysByYear(year int) ([]models.HolidayDTO, error) {
 			latestReq.Header.Set("User-Agent", "TimesheetGenerator/1.0 (Kemendesa Holiday Client)")
 			latestReq.Header.Set("Accept", "application/json")
 			if latestResp, doErr := client.Do(latestReq); doErr == nil {
-				defer latestResp.Body.Close()
+				defer func() { _ = latestResp.Body.Close() }()
 				if latestResp.StatusCode == http.StatusOK {
 					var latestData models.KemendesaHolidayResponse
 					if decErr := json.NewDecoder(latestResp.Body).Decode(&latestData); decErr == nil {
