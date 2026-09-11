@@ -41,7 +41,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           check-latest: true
           cache: true
 
@@ -61,7 +61,7 @@ jobs:
       - name: Vulnerability Check (govulncheck)
         uses: golang/govulncheck-action@v1
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           go-package: ./...
 
       - name: golangci-lint
@@ -94,8 +94,14 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
+
+      - name: Run Database Migrations on Test DB
+        env:
+          DATABASE_URL: "host=localhost user=timesheet password=timesheet_test_password dbname=timesheet_test port=5432 sslmode=disable TimeZone=Asia/Jakarta"
+        run: |
+          go run . -migrate-only
 
       - name: Run Tests with Race Detector & Real DB
         env:

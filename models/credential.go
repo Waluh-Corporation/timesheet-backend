@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
-	"gorm.io/datatypes"
 )
 
 // ToLibrary converts a persisted credential back into the shape the webauthn
@@ -57,7 +56,7 @@ func NewWebAuthnCredential(userID uint, cred *webauthn.Credential, friendlyName 
 		CloneWarning:    cred.Authenticator.CloneWarning,
 		BackupEligible:  cred.Flags.BackupEligible,
 		BackupState:     cred.Flags.BackupState,
-		Transports:      datatypes.JSON(raw),
+		Transports:      JSON(raw),
 		FriendlyName:    friendlyName,
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -150,5 +151,85 @@ func TestAPIRouteVersioningTable(t *testing.T) {
 
 	if wTmpl.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404 for deleted route /api/v1/templates, got %d", wTmpl.Code)
+	}
+}
+
+func TestSPAHandler(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tempDir := t.TempDir()
+	indexFile := tempDir + "/index.html"
+	if err := os.WriteFile(indexFile, []byte("<html>Root Index</html>"), 0644); err != nil {
+		t.Fatalf("failed to write root index.html: %v", err)
+	}
+
+	loginFile := tempDir + "/login.html"
+	if err := os.WriteFile(loginFile, []byte("<html>Login Page</html>"), 0644); err != nil {
+		t.Fatalf("failed to write login.html: %v", err)
+	}
+
+	r := gin.New()
+	r.NoRoute(spaHandler(tempDir))
+
+	// 1. Unmatched /api/* returns JSON 404
+	reqAPI := httptest.NewRequest(http.MethodGet, "/api/v1/unknown", nil)
+	wAPI := httptest.NewRecorder()
+	r.ServeHTTP(wAPI, reqAPI)
+	if wAPI.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for /api/ route, got %d", wAPI.Code)
+	}
+
+	// 2. Unmatched /swagger/* returns JSON 404
+	reqSwag := httptest.NewRequest(http.MethodGet, "/swagger/notfound", nil)
+	wSwag := httptest.NewRecorder()
+	r.ServeHTTP(wSwag, reqSwag)
+	if wSwag.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for /swagger/ route, got %d", wSwag.Code)
+	}
+
+	// 3. Exact root / match
+	reqRoot := httptest.NewRequest(http.MethodGet, "/", nil)
+	wRoot := httptest.NewRecorder()
+	r.ServeHTTP(wRoot, reqRoot)
+	if wRoot.Code != http.StatusOK {
+		t.Errorf("expected 200 for /, got %d", wRoot.Code)
+	}
+
+	// 4. File extension match (/login -> login.html)
+	reqLogin := httptest.NewRequest(http.MethodGet, "/login", nil)
+	wLogin := httptest.NewRecorder()
+	r.ServeHTTP(wLogin, reqLogin)
+	if wLogin.Code != http.StatusOK {
+		t.Errorf("expected 200 for /login, got %d", wLogin.Code)
+	}
+
+	// 5. Fallback route (/client/subpath)
+	reqFallback := httptest.NewRequest(http.MethodGet, "/client/subpath", nil)
+	wFallback := httptest.NewRecorder()
+	r.ServeHTTP(wFallback, reqFallback)
+	if wFallback.Code != http.StatusOK {
+		t.Errorf("expected 200 for fallback, got %d", wFallback.Code)
+	}
+
+	// 6. Directory traversal attempt
+	reqTraversal := httptest.NewRequest(http.MethodGet, "/../../../../etc/passwd", nil)
+	wTraversal := httptest.NewRecorder()
+	r.ServeHTTP(wTraversal, reqTraversal)
+	if wTraversal.Code != http.StatusOK && wTraversal.Code != http.StatusNotFound && wTraversal.Code != http.StatusBadRequest {
+		t.Errorf("unexpected status code for traversal: %d", wTraversal.Code)
+	}
+	if strings.Contains(wTraversal.Body.String(), "root:x:0:0:") {
+		t.Errorf("path traversal leaked file content: %s", wTraversal.Body.String())
+	}
+
+	// 7. Empty static directory returns 404
+	emptyDir := t.TempDir()
+	rEmpty := gin.New()
+	rEmpty.NoRoute(spaHandler(emptyDir))
+	reqEmpty := httptest.NewRequest(http.MethodGet, "/something", nil)
+	wEmpty := httptest.NewRecorder()
+	rEmpty.ServeHTTP(wEmpty, reqEmpty)
+	if wEmpty.Code != http.StatusNotFound {
+		t.Errorf("expected 404 when no index.html exists, got %d", wEmpty.Code)
 	}
 }
