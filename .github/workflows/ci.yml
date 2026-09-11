@@ -1,19 +1,18 @@
 name: CI Quality Gates
 
 on:
-  push:
-    branches:
-      - main
-      - development
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
-      - main
-      - development
+      - "!main"
+      - "!development"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   secret-scan:
@@ -61,7 +60,7 @@ jobs:
       - name: Vulnerability Check (govulncheck)
         uses: golang/govulncheck-action@v1
         with:
-          go-version: '1.26'
+          go-version-input: '1.26'
           go-package: ./...
 
       - name: golangci-lint

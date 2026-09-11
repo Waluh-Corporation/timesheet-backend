@@ -1,11 +1,10 @@
 package models
 
 import (
-	"database/sql/driver"
-	"errors"
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -214,37 +213,8 @@ type WebAuthnCredential struct {
 	BackupEligible bool `json:"-"`
 	BackupState    bool `json:"-"`
 	// Transports is stored as a JSON array of transport strings.
-	Transports   JSON   `gorm:"type:jsonb" json:"-"`
-	FriendlyName string `gorm:"size:128" json:"friendly_name"`
-}
-
-// JSON represents a raw JSON payload for PostgreSQL jsonb columns, implementing driver.Valuer and sql.Scanner.
-type JSON []byte
-
-// Value implements driver.Valuer for database writes.
-func (j JSON) Value() (driver.Value, error) {
-	if len(j) == 0 {
-		return nil, nil
-	}
-	return string(j), nil
-}
-
-// Scan implements sql.Scanner for database reads.
-func (j *JSON) Scan(value interface{}) error {
-	if value == nil {
-		*j = nil
-		return nil
-	}
-	switch v := value.(type) {
-	case []byte:
-		*j = append((*j)[0:0], v...)
-		return nil
-	case string:
-		*j = []byte(v)
-		return nil
-	default:
-		return errors.New("cannot scan type into JSON")
-	}
+	Transports   datatypes.JSON `json:"-"`
+	FriendlyName string         `gorm:"size:128" json:"friendly_name"`
 }
 
 // DailyActivity stores one user's timesheet entry for a single calendar day.

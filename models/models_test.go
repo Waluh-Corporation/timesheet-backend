@@ -6,11 +6,12 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
+	"gorm.io/datatypes"
 )
 
 func TestJSON_ValueAndScan(t *testing.T) {
 	// Test nil/empty Value
-	var jEmpty JSON
+	var jEmpty datatypes.JSON
 	val, err := jEmpty.Value()
 	if err != nil {
 		t.Fatalf("unexpected error for empty JSON: %v", err)
@@ -20,7 +21,7 @@ func TestJSON_ValueAndScan(t *testing.T) {
 	}
 
 	// Test non-empty Value
-	jData := JSON([]byte(`{"key":"value"}`))
+	jData := datatypes.JSON([]byte(`{"key":"value"}`))
 	val, err = jData.Value()
 	if err != nil {
 		t.Fatalf("unexpected error for JSON: %v", err)
@@ -30,12 +31,12 @@ func TestJSON_ValueAndScan(t *testing.T) {
 	}
 
 	// Test Scan nil
-	var jScan JSON
+	var jScan datatypes.JSON
 	if err := jScan.Scan(nil); err != nil {
 		t.Fatalf("failed to scan nil: %v", err)
 	}
-	if jScan != nil {
-		t.Errorf("expected nil after scanning nil, got %v", jScan)
+	if string(jScan) != "null" {
+		t.Errorf("expected null after scanning nil, got %v", jScan)
 	}
 
 	// Test Scan []byte

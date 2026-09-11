@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -18,19 +17,12 @@ import (
 	"timesheet-backend/models"
 )
 
-var setupDBOnce sync.Once
-
 func setupTestDB(t *testing.T) (*gorm.DB, *config.Config) {
 	cfg := config.Load()
 	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
 	if err != nil {
 		t.Skipf("cannot connect to postgres db: %v", err)
 	}
-	setupDBOnce.Do(func() {
-		if err := database.Setup(db, cfg); err != nil {
-			t.Logf("setupTestDB: database.Setup note: %v", err)
-		}
-	})
 	return db, cfg
 }
 

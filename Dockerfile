@@ -26,9 +26,6 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # ==============================================================================
 FROM alpine:3.21
 
-# OCI Image Annotations
-LABEL org.opencontainers.image.source="https://github.com/Waluh-Corporation/timesheet-backend"
-
 # ca-certificates for outbound HTTPS/SMTP TLS connections
 # tzdata for Asia/Jakarta timezone support in cron scheduler
 # wget is built-in to Busybox for container HEALTHCHECK
