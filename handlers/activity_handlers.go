@@ -69,12 +69,11 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		Activity:     req.Activity,
 		ProjectName:  req.ProjectName,
 		ProjectID:    req.ProjectID,
-		AppImpacted:  req.AppImpacted,
 		ProjectRefID: req.ProjectRefID,
 	}
 
 	// Pure Relational 3NF: Associate with master Project by ID, code, or name
-	// Always synchronize ProjectID (code), ProjectName, and AppImpacted from the canonical Project
+	// Always synchronize ProjectID (code) and ProjectName from the canonical Project
 	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
 		var proj models.Project
 		if err := s.DB.First(&proj, *req.ProjectRefID).Error; err != nil || proj.ID == 0 {
@@ -84,7 +83,6 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		activity.ProjectRefID = &proj.ID
 		activity.ProjectID = proj.Code
 		activity.ProjectName = proj.Name
-		activity.AppImpacted = proj.AppImpacted
 	} else if req.ProjectID != "" || req.ProjectName != "" {
 		var proj models.Project
 		query := s.DB.Model(&models.Project{})
@@ -104,7 +102,6 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 			activity.ProjectRefID = &proj.ID
 			activity.ProjectID = proj.Code
 			activity.ProjectName = proj.Name
-			activity.AppImpacted = proj.AppImpacted
 		}
 	}
 
@@ -113,7 +110,7 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "date"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"start_time", "end_time", "status", "activity",
-			"project_name", "project_id", "app_impacted", "project_ref_id", "updated_at",
+			"project_name", "project_id", "project_ref_id", "updated_at",
 		}),
 	}).Create(&activity).Error
 	if err != nil {

@@ -188,7 +188,6 @@ func TestDailyActivity_ProjectGetters(t *testing.T) {
 	actFallback := DailyActivity{
 		ProjectID:   "PRJ-01",
 		ProjectName: "Project Alpha",
-		AppImpacted: "Core App",
 	}
 	if actFallback.GetProjectCode() != "PRJ-01" {
 		t.Errorf("expected PRJ-01, got %s", actFallback.GetProjectCode())
@@ -196,15 +195,14 @@ func TestDailyActivity_ProjectGetters(t *testing.T) {
 	if actFallback.GetProjectName() != "Project Alpha" {
 		t.Errorf("expected Project Alpha, got %s", actFallback.GetProjectName())
 	}
-	if actFallback.GetAppImpacted() != "Core App" {
-		t.Errorf("expected Core App, got %s", actFallback.GetAppImpacted())
+	if actFallback.GetAppImpacted() != "" {
+		t.Errorf("expected empty string without ProjectRef, got %s", actFallback.GetAppImpacted())
 	}
 
-	// Referenced Project takes precedence
+	// Referenced Project takes precedence and provides canonical AppImpacted
 	actRef := DailyActivity{
 		ProjectID:   "PRJ-OLD",
 		ProjectName: "Name Old",
-		AppImpacted: "App Old",
 		ProjectRef: &Project{
 			Code:        "PRJ-NEW",
 			Name:        "Name New",

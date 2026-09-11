@@ -19,7 +19,7 @@ func sampleBenchmarkInput(company string) services.GenerationInput {
 			Activity:    "Developed backend API and unit tests",
 			ProjectName: "BNI Direct Cash",
 			ProjectID:   "P24015",
-			AppImpacted: "BNI Direct",
+			ProjectRef:  &models.Project{Code: "P24015", Name: "BNI Direct Cash", AppImpacted: "BNI Direct"},
 		})
 	}
 

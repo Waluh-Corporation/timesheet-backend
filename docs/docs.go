@@ -2968,9 +2968,6 @@ const docTemplate = `{
                 "activity": {
                     "type": "string"
                 },
-                "app_impacted": {
-                    "type": "string"
-                },
                 "created_at": {
                     "type": "string"
                 },

@@ -233,7 +233,6 @@ type DailyActivity struct {
 	Activity    string `gorm:"type:text" json:"activity"`
 	ProjectName string `gorm:"size:255" json:"project_name"`
 	ProjectID   string `gorm:"size:64" json:"project_id"`
-	AppImpacted string `gorm:"size:255" json:"app_impacted"`
 
 	ProjectRefID *uint           `gorm:"index" json:"project_ref_id"`
 	ProjectRef   *Project        `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
@@ -260,12 +259,12 @@ func (d DailyActivity) GetProjectName() string {
 }
 
 // GetAppImpacted returns the canonical app impacted from the referenced Project,
-// falling back to the denormalized AppImpacted if ProjectRef is not preloaded.
+// or empty string if ProjectRef is not preloaded or empty.
 func (d DailyActivity) GetAppImpacted() string {
-	if d.ProjectRef != nil && d.ProjectRef.AppImpacted != "" {
+	if d.ProjectRef != nil {
 		return d.ProjectRef.AppImpacted
 	}
-	return d.AppImpacted
+	return ""
 }
 
 // PushSubscription persists a browser Web Push subscription for a user.

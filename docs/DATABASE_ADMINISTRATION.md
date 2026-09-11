@@ -57,6 +57,10 @@ Through a 3-phase normalization roadmap, the database achieves **Third Normal Fo
   daily_activities.project_ref_id -> projects(id) [Canonical FK & Data Backfill]
   Single Source of Truth: projects(code, name, app_impacted)
   Auto-synchronization across API handlers, accessors, and spreadsheet generators
+       │
+       ▼ [Normalization Phase 5: Migration 000017 - Drop Redundant app_impacted]
+  daily_activities.app_impacted column dropped to eliminate transitive redundancy
+  Canonical single source of truth: projects.app_impacted referenced via project_ref_id FK
 ```
 
 ---

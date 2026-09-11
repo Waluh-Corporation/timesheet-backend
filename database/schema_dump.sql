@@ -117,7 +117,6 @@ CREATE TABLE public.daily_activities (
     activity text,
     project_name character varying(255),
     project_id character varying(64),
-    app_impacted character varying(255),
     project_ref_id bigint
 );
 

@@ -19,12 +19,16 @@ func TestBuildMIIWorkbook(t *testing.T) {
 	}
 
 	act := models.DailyActivity{
-		Date:        time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
-		StartTime:   "08:00",
-		EndTime:     "17:00",
-		Status:      "P",
-		Activity:    "Feature implementation",
-		AppImpacted: "Cash",
+		Date:      time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
+		StartTime: "08:00",
+		EndTime:   "17:00",
+		Status:    "P",
+		Activity:  "Feature implementation",
+		ProjectRef: &models.Project{
+			Code:        "P24015",
+			Name:        "BNI Direct Cash",
+			AppImpacted: "Cash",
+		},
 	}
 
 	in := GenerationInput{
@@ -276,7 +280,11 @@ func TestBuildNTTWorkbook(t *testing.T) {
 		Activity:    "Sprint Planning",
 		ProjectName: "BNI Direct",
 		ProjectID:   "P24015",
-		AppImpacted: "Cash",
+		ProjectRef: &models.Project{
+			Code:        "P24015",
+			Name:        "BNI Direct",
+			AppImpacted: "Cash",
+		},
 	}
 
 	in := GenerationInput{

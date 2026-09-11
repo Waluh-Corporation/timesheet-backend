@@ -330,9 +330,6 @@ func TestActivityHandlers_Integration(t *testing.T) {
 		if resp.Data.ProjectName != testProj.Name {
 			t.Errorf("expected ProjectName %q, got %q", testProj.Name, resp.Data.ProjectName)
 		}
-		if resp.Data.AppImpacted != testProj.AppImpacted {
-			t.Errorf("expected AppImpacted %q, got %q", testProj.AppImpacted, resp.Data.AppImpacted)
-		}
 		if resp.Data.GetProjectCode() != testProj.Code {
 			t.Errorf("expected GetProjectCode() %q, got %q", testProj.Code, resp.Data.GetProjectCode())
 		}
