@@ -112,10 +112,11 @@ func main() {
 
 	// Serve the exported Next.js frontend from this same binary so the whole
 	// portal ships as a single image (frontend + API on one origin).
-	staticPath := os.Getenv("STATIC_FILES_PATH")
-	if staticPath == "" {
+	staticPath := filepath.Clean(os.Getenv("STATIC_FILES_PATH"))
+	if staticPath == "" || staticPath == "." {
 		staticPath = "./static"
 	}
+	//nolint:gosec // G703: staticPath is loaded from server environment variable configuration
 	if _, err := os.Stat(staticPath); err == nil {
 		r.NoRoute(spaHandler(staticPath))
 		logger.Info("serving static frontend", slog.String("path", staticPath))
@@ -286,7 +287,7 @@ func spaHandler(staticRoot string) gin.HandlerFunc {
 		}
 
 		// filepath.Clean on a "/"-prefixed path strips any "../" traversal; the
-		// subsequent prefix check is defence-in-depth against escaping the root.
+		// subsequent prefix check is defense-in-depth against escaping the root.
 		rel := filepath.Clean("/" + c.Request.URL.Path)
 		target := filepath.Join(root, filepath.FromSlash(rel))
 		if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {

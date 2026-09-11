@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/binary"
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -162,10 +163,7 @@ type OvertimeEntry struct {
 func (u User) WebAuthnID() []byte {
 	// Encode the primary key as a stable little-endian byte slice.
 	b := make([]byte, 8)
-	id := u.ID
-	for i := 0; i < 8; i++ {
-		b[i] = byte(id >> (8 * i))
-	}
+	binary.LittleEndian.PutUint64(b, uint64(u.ID))
 	return b
 }
 

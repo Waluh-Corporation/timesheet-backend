@@ -48,9 +48,13 @@ func seedDefaultCompanies(db *gorm.DB) error {
 	}
 	for _, c := range companies {
 		var cnt int64
-		_ = db.Model(&models.Company{}).Where("code = ?", c.Code).Count(&cnt).Error
+		if err := db.Model(&models.Company{}).Where("code = ?", c.Code).Count(&cnt).Error; err != nil {
+			return err
+		}
 		if cnt == 0 {
-			_ = db.Create(&c).Error
+			if err := db.Create(&c).Error; err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -202,7 +206,7 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	}
 
 	// 7. Backfill users.department_id
-	_ = db.Exec(`
+	if err := db.Exec(`
 		UPDATE users 
 		SET department_id = (
 			SELECT id FROM departments 
@@ -213,7 +217,9 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 		) 
 		WHERE (department_id IS NULL OR department_id = 0) 
 		  AND ((department IS NOT NULL AND department != '') OR (division IS NOT NULL AND division != ''))
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
 
 	return nil
 }
