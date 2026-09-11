@@ -215,8 +215,11 @@ func TestSPAHandler(t *testing.T) {
 	reqTraversal := httptest.NewRequest(http.MethodGet, "/../../../../etc/passwd", nil)
 	wTraversal := httptest.NewRecorder()
 	r.ServeHTTP(wTraversal, reqTraversal)
-	if wTraversal.Code != http.StatusOK && wTraversal.Code != http.StatusNotFound {
+	if wTraversal.Code != http.StatusOK && wTraversal.Code != http.StatusNotFound && wTraversal.Code != http.StatusBadRequest {
 		t.Errorf("unexpected status code for traversal: %d", wTraversal.Code)
+	}
+	if strings.Contains(wTraversal.Body.String(), "root:x:0:0:") {
+		t.Errorf("path traversal leaked file content: %s", wTraversal.Body.String())
 	}
 
 	// 7. Empty static directory returns 404
