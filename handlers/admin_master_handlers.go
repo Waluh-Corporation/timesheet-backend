@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -106,9 +107,14 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 		return
 	}
 
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid approver ID, expected positive integer")
+		return
+	}
+
 	var appr models.Approver
-	if err := s.DB.WithContext(c.Request.Context()).First(&appr, id).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where("id = ?", id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
@@ -152,9 +158,14 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/approvers/{id} [delete]
 func (s *Server) DeleteApprover(c *gin.Context) {
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid approver ID, expected positive integer")
+		return
+	}
+
 	var appr models.Approver
-	if err := s.DB.First(&appr, id).Error; err != nil {
+	if err := s.DB.Where("id = ?", id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
@@ -227,9 +238,14 @@ func (s *Server) UpdateCompany(c *gin.Context) {
 		return
 	}
 
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid company ID, expected positive integer")
+		return
+	}
+
 	var comp models.Company
-	if err := s.DB.WithContext(c.Request.Context()).First(&comp, id).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where("id = ?", id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}
@@ -265,9 +281,14 @@ func (s *Server) UpdateCompany(c *gin.Context) {
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/companies/{id} [delete]
 func (s *Server) DeleteCompany(c *gin.Context) {
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid company ID, expected positive integer")
+		return
+	}
+
 	var comp models.Company
-	if err := s.DB.First(&comp, id).Error; err != nil {
+	if err := s.DB.Where("id = ?", id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}

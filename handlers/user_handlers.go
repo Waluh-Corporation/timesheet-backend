@@ -11,13 +11,9 @@ import (
 	"timesheet-backend/models"
 )
 
-// isSelf reports whether the :id path param refers to the authenticated caller.
-func isSelf(c *gin.Context, id string) bool {
-	target, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return false
-	}
-	return uint(target) == currentUserID(c)
+// isSelf reports whether targetID refers to the authenticated caller.
+func isSelf(c *gin.Context, targetID uint) bool {
+	return targetID == currentUserID(c)
 }
 
 // ListUsers godoc
@@ -169,7 +165,11 @@ func (s *Server) CreateUser(c *gin.Context) {
 // @Failure 404 {object} models.ErrorResponse "User not found"
 // @Router /api/v1/admin/users/{id} [patch]
 func (s *Server) UpdateUser(c *gin.Context) {
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
+		return
+	}
 
 	var req models.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -179,7 +179,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 
 	// An admin may never deactivate or demote their own account through the
 	// update path either — both are self-lockout vectors.
-	if isSelf(c, id) {
+	if isSelf(c, uint(id)) {
 		if req.IsActive != nil && !*req.IsActive {
 			RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
 			return
@@ -196,7 +196,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := s.DB.WithContext(c.Request.Context()).First(&user, id).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where("id = ?", id).First(&user).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
@@ -259,15 +259,19 @@ func (s *Server) UpdateUser(c *gin.Context) {
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users/{id} [delete]
 func (s *Server) DeleteUser(c *gin.Context) {
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
+		return
+	}
 	// An admin may never deactivate/delete their own account — doing so could
 	// lock the last administrator out of the portal.
-	if isSelf(c, id) {
+	if isSelf(c, uint(id)) {
 		RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
 		return
 	}
 	var user models.User
-	if err := s.DB.First(&user, id).Error; err != nil {
+	if err := s.DB.Where("id = ?", id).First(&user).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
@@ -275,7 +279,7 @@ func (s *Server) DeleteUser(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.DB.First(&user, id)
+	s.DB.Where("id = ?", id).First(&user)
 	RespondSuccess(c, http.StatusOK, user)
 }
 
@@ -380,7 +384,11 @@ func (s *Server) ListProfileChanges(c *gin.Context) {
 // @Failure 409 {object} models.ErrorResponse "Request already reviewed"
 // @Router /api/v1/admin/profile-changes/{id}/review [post]
 func (s *Server) ReviewProfileChange(c *gin.Context) {
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid profile change request ID, expected positive integer")
+		return
+	}
 	action := c.Query("action") // "approve" or "reject"
 
 	if action != "approve" && action != "reject" {
@@ -394,7 +402,7 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	}
 
 	var change models.ProfileChangeRequest
-	if err := s.DB.WithContext(c.Request.Context()).First(&change, id).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where("id = ?", id).First(&change).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "request not found")
 		return
 	}
