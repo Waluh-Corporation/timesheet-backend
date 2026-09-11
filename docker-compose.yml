@@ -1,120 +1,72 @@
-version: "3.8"
-
-# Full local development stack for the Phase 2 Timesheet Portal.
-#   - PostgreSQL      : primary datastore
-#   - pgAdmin         : web DB admin (DBeaver can connect to the same 5432)
-#   - Mailpit         : local SMTP sink + web UI for transactional/delivery mail
-#   - backend (Go)    : API, WebAuthn, WebPush cron (17:00 WIB), SMTP delivery
-#   - frontend (Next) : Saweria-styled portal
-#
-# Bring it up with:  docker compose up --build
-
 services:
+  # ============================================================================
+  # Go Backend API Service
+  # ============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: timesheet-backend:latest
+    container_name: timesheet_backend
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
+      GIN_MODE: "${GIN_MODE:-debug}"
+      RUN_MIGRATIONS: "${RUN_MIGRATIONS:-true}"
+      DATABASE_URL: "host=postgres user=${POSTGRES_USER:-timesheet} password=${POSTGRES_PASSWORD:-timesheet} dbname=${POSTGRES_DB:-timesheet} port=5432 sslmode=disable TimeZone=Asia/Jakarta"
+      JWT_SECRET: "${JWT_SECRET:-}"
+      JWT_EXPIRY_HOURS: "${JWT_EXPIRY_HOURS:-24}"
+      RESET_TOKEN_TTL_MINUTES: "${RESET_TOKEN_TTL_MINUTES:-60}"
+      SCHEDULER_TZ: "Asia/Jakarta"
+      # SMTP Configuration (External SMTP Server)
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      MAIL_FROM: "${MAIL_FROM:-Timesheet Portal <no-reply@example.com>}"
+      # WebAuthn / Passkey relying party
+      WEBAUTHN_RP_ID: "${WEBAUTHN_RP_ID:-localhost}"
+      WEBAUTHN_RP_ORIGIN: "${WEBAUTHN_RP_ORIGIN:-http://localhost:8080,http://localhost:3000}"
+      WEBAUTHN_RP_NAME: "Timesheet Portal"
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:8080}"
+      # VAPID keys for Web Push (leave blank to auto-generate at boot)
+      # Generate VAPID keys using: https://vapidkeys.com
+      VAPID_PUBLIC_KEY: "${VAPID_PUBLIC_KEY:-}"
+      VAPID_PRIVATE_KEY: "${VAPID_PRIVATE_KEY:-}"
+      VAPID_SUBJECT: "${VAPID_SUBJECT:-mailto:admin@example.com}"
+      # Bootstrap Administrator
+      BOOTSTRAP_ADMIN_EMAIL: "${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}"
+      BOOTSTRAP_ADMIN_USERNAME: "${BOOTSTRAP_ADMIN_USERNAME:-admin}"
+      BOOTSTRAP_ADMIN_PASSWORD: "${BOOTSTRAP_ADMIN_PASSWORD:-}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - timesheet-net
+
+  # ============================================================================
+  # Primary Database: PostgreSQL 16
+  # ============================================================================
   postgres:
     image: postgres:16-alpine
     container_name: timesheet_postgres
     environment:
-      POSTGRES_USER: timesheet
-      POSTGRES_PASSWORD: timesheet
-      POSTGRES_DB: timesheet
+      POSTGRES_USER: "${POSTGRES_USER:-timesheet}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-timesheet}"
+      POSTGRES_DB: "${POSTGRES_DB:-timesheet}"
       TZ: Asia/Jakarta
     ports:
-      - "5432:5432" # exposed so DBeaver / psql can attach directly
+      - "5432:5432" # Direct access for DBeaver / psql / Navicat
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U timesheet"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-timesheet} -d ${POSTGRES_DB:-timesheet}"]
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - timesheet-net
-
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: timesheet_pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@timesheet.local
-      PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_CONFIG_SERVER_MODE: "False"
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres
-    networks:
-      - timesheet-net
-
-  mailpit:
-    image: axllent/mailpit:latest
-    container_name: timesheet_mailpit
-    ports:
-      - "1025:1025" # SMTP endpoint the backend delivers through
-      - "8025:8025" # Mailpit web UI to inspect sent mail
-    networks:
-      - timesheet-net
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
-    container_name: timesheet_backend
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./backend:/app
-      - /app/tmp
-    environment:
-      PORT: "8080"
-      GIN_MODE: debug
-      DATABASE_URL: "host=postgres user=timesheet password=timesheet dbname=timesheet port=5432 sslmode=disable TimeZone=Asia/Jakarta"
-      # JWT_SECRET intentionally unset: in debug mode the backend generates an
-      # ephemeral secret at boot. Set a strong value here (or via .env) to keep
-      # sessions valid across restarts.
-      SCHEDULER_TZ: "Asia/Jakarta"
-      # SMTP -> Mailpit
-      SMTP_HOST: mailpit
-      SMTP_PORT: "1025"
-      MAIL_FROM: "Timesheet Portal <no-reply@timesheet.local>"
-      # WebAuthn relying party (matches the frontend origin). WEBAUTHN_RP_ORIGIN
-      # accepts a comma-separated list to allow passkeys across multiple domains.
-      WEBAUTHN_RP_ID: localhost
-      WEBAUTHN_RP_ORIGIN: "http://localhost:3000"
-      WEBAUTHN_RP_NAME: "Timesheet Portal"
-      FRONTEND_URL: "http://localhost:3000"
-      # VAPID keys: leave blank to auto-generate on boot (logged to stdout),
-      # or paste a pinned pair here for stable subscriptions.
-      VAPID_PUBLIC_KEY: ""
-      VAPID_PRIVATE_KEY: ""
-      VAPID_SUBJECT: "mailto:admin@timesheet.local"
-      # Bootstrap admin (created once on first boot). Leave the password unset to
-      # have a strong random one generated and printed to the backend logs on
-      # first boot; set BOOTSTRAP_ADMIN_PASSWORD to choose your own.
-      BOOTSTRAP_ADMIN_EMAIL: "admin@timesheet.local"
-      BOOTSTRAP_ADMIN_USERNAME: "admin"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mailpit:
-        condition: service_started
-    networks:
-      - timesheet-net
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: timesheet_frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-    environment:
-      NEXT_PUBLIC_API_URL: "http://localhost:8080"
-      PORT: "3000"
-    depends_on:
-      - backend
+    restart: unless-stopped
     networks:
       - timesheet-net
 

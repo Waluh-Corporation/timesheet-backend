@@ -1,0 +1,2484 @@
+basePath: /
+definitions:
+  handlers.CreateApproverRequest:
+    properties:
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Approver Name
+        type: string
+      role_type:
+        allOf:
+        - $ref: '#/definitions/models.ApproverRoleType'
+        enum:
+        - team_leader
+        - department_head
+        example: team_leader
+      title:
+        example: Team Leader
+        type: string
+    required:
+    - name
+    - role_type
+    type: object
+  handlers.CreateCompanyRequest:
+    properties:
+      code:
+        example: mii
+        maxLength: 32
+        minLength: 2
+        type: string
+      name:
+        example: PT Mitra Integrasi Informatika
+        maxLength: 255
+        minLength: 2
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  handlers.InitSetupAdminRequest:
+    properties:
+      email:
+        example: admin@example.com
+        type: string
+      name:
+        example: Super Administrator
+        type: string
+      password:
+        example: SuperSecretPass2026!
+        minLength: 8
+        type: string
+      username:
+        example: admin
+        maxLength: 64
+        minLength: 3
+        type: string
+    required:
+    - email
+    - name
+    - password
+    - username
+    type: object
+  handlers.InitSetupApproverRequest:
+    properties:
+      company_code:
+        example: mii
+        type: string
+      name:
+        example: Supervisor Name
+        type: string
+      role_type:
+        allOf:
+        - $ref: '#/definitions/models.ApproverRoleType'
+        enum:
+        - team_leader
+        - department_head
+        example: team_leader
+      title:
+        example: Team Leader
+        type: string
+    required:
+    - name
+    - role_type
+    type: object
+  handlers.InitSetupCompanyRequest:
+    properties:
+      code:
+        example: mii
+        type: string
+      name:
+        example: PT Mitra Integrasi Informatika
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  handlers.InitSetupDepartmentRequest:
+    properties:
+      code:
+        example: WCSD
+        type: string
+      company_code:
+        example: mii
+        type: string
+      division:
+        example: Wholesale Digital Delivery
+        type: string
+      name:
+        example: Wholesale Channel and Service Delivery
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  handlers.InitSetupRequest:
+    properties:
+      admin:
+        $ref: '#/definitions/handlers.InitSetupAdminRequest'
+      approvers:
+        items:
+          $ref: '#/definitions/handlers.InitSetupApproverRequest'
+        type: array
+      companies:
+        items:
+          $ref: '#/definitions/handlers.InitSetupCompanyRequest'
+        type: array
+      departments:
+        items:
+          $ref: '#/definitions/handlers.InitSetupDepartmentRequest'
+        type: array
+    required:
+    - admin
+    type: object
+  handlers.OvertimeRequest:
+    properties:
+      date:
+        description: YYYY-MM-DD
+        example: "2026-09-01"
+        type: string
+      department_head_id:
+        example: 3
+        type: integer
+      end_time:
+        example: "21:00"
+        type: string
+      id:
+        example: 1
+        type: integer
+      start_time:
+        example: "17:00"
+        type: string
+      task_description:
+        example: Production bug fixing and system deployment
+        type: string
+      team_leader_id:
+        example: 2
+        type: integer
+    required:
+    - date
+    - end_time
+    - start_time
+    - task_description
+    type: object
+  handlers.SetupStatusResponse:
+    properties:
+      admin_count:
+        type: integer
+      is_initialized:
+        type: boolean
+      is_new:
+        example: "Y"
+        type: string
+      requires_setup:
+        type: boolean
+    type: object
+  handlers.UpdateApproverRequest:
+    properties:
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Approver Name Updated
+        type: string
+      role_type:
+        allOf:
+        - $ref: '#/definitions/models.ApproverRoleType'
+        example: department_head
+      title:
+        example: Department Head
+        type: string
+    type: object
+  handlers.UpdateCompanyRequest:
+    properties:
+      code:
+        example: mii
+        type: string
+      name:
+        example: PT Mitra Integrasi Informatika
+        type: string
+    type: object
+  models.ActivityStatus:
+    properties:
+      code:
+        description: '"P", "S", "PM", "V", "BT", "X"'
+        type: string
+      description:
+        type: string
+      is_working_day:
+        type: boolean
+      name:
+        description: '"Present", "Sick", etc.'
+        type: string
+      sort_order:
+        type: integer
+    type: object
+  models.Approver:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      role_type:
+        $ref: '#/definitions/models.ApproverRoleType'
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.ApproverRoleType:
+    enum:
+    - team_leader
+    - department_head
+    type: string
+    x-enum-varnames:
+    - ApproverRoleTeamLeader
+    - ApproverRoleDepartmentHead
+  models.BeginPasskeyLoginRequest:
+    properties:
+      identifier:
+        example: john_doe
+        type: string
+    type: object
+  models.Company:
+    properties:
+      code:
+        description: '"mii", "sdd", "adidata", "ntt"'
+        type: string
+      created_at:
+        type: string
+      departments:
+        items:
+          $ref: '#/definitions/models.Department'
+        type: array
+      id:
+        type: integer
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.CreateUserRequest:
+    properties:
+      bni_id:
+        example: "12345678"
+        type: string
+      company:
+        example: MII
+        type: string
+      company_id:
+        example: 1
+        type: integer
+      department:
+        example: Core Banking
+        type: string
+      department_id:
+        example: 1
+        type: integer
+      division:
+        example: Application Development Division
+        type: string
+      email:
+        example: john.doe@example.com
+        type: string
+      name:
+        example: John Doe
+        type: string
+      password:
+        example: TempPass123!
+        type: string
+      role:
+        allOf:
+        - $ref: '#/definitions/models.Role'
+        enum:
+        - admin
+        - user
+        example: user
+      site:
+        example: Jakarta
+        type: string
+      username:
+        example: john_doe
+        maxLength: 64
+        minLength: 3
+        type: string
+    required:
+    - email
+    - role
+    - username
+    type: object
+  models.DailyActivity:
+    properties:
+      activity:
+        type: string
+      app_impacted:
+        type: string
+      created_at:
+        type: string
+      date:
+        description: Date is normalised to midnight in Asia/Jakarta.
+        type: string
+      end_time:
+        type: string
+      id:
+        type: integer
+      project_id:
+        type: string
+      project_name:
+        type: string
+      project_ref:
+        $ref: '#/definitions/models.Project'
+      project_ref_id:
+        type: integer
+      start_time:
+        type: string
+      status:
+        type: string
+      status_ref:
+        $ref: '#/definitions/models.ActivityStatus'
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+    type: object
+  models.DailyActivityRequest:
+    properties:
+      activity:
+        example: Developing core features and API normalization
+        type: string
+      app_impacted:
+        example: BNI Mobile
+        type: string
+      date:
+        example: "2026-09-01"
+        type: string
+      end_time:
+        example: "17:00"
+        type: string
+      project_id:
+        example: P24015
+        type: string
+      project_name:
+        example: BNI Direct Cash
+        type: string
+      project_ref_id:
+        example: 1
+        type: integer
+      start_time:
+        example: "08:00"
+        type: string
+      status:
+        example: P
+        type: string
+    required:
+    - date
+    type: object
+  models.DeleteResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      deleted:
+        example: true
+        type: boolean
+      status:
+        example: success
+        type: string
+    type: object
+  models.Department:
+    properties:
+      code:
+        description: e.g. "WCSD", "DEV-01"
+        type: string
+      company:
+        $ref: '#/definitions/models.Company'
+      company_id:
+        type: integer
+      created_at:
+        type: string
+      division:
+        description: e.g. "Wholesale Digital Delivery"
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        description: e.g. "Wholesale Channel and Service Delivery"
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.ErrorResponse:
+    properties:
+      code:
+        example: 400
+        type: integer
+      error:
+        example: invalid request or unauthorized
+        type: string
+      message:
+        example: invalid request or unauthorized
+        type: string
+      status:
+        example: error
+        type: string
+    type: object
+  models.ForgotRequest:
+    properties:
+      email:
+        example: john.doe@example.com
+        type: string
+    required:
+    - email
+    type: object
+  models.GenerateRequest:
+    properties:
+      month:
+        example: 9
+        maximum: 12
+        minimum: 1
+        type: integer
+      year:
+        example: 2026
+        maximum: 9999
+        minimum: 2000
+        type: integer
+    required:
+    - month
+    - year
+    type: object
+  models.Holiday:
+    properties:
+      created_at:
+        type: string
+      date:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      is_civic:
+        type: boolean
+      is_joint_leave:
+        type: boolean
+      is_religious:
+        type: boolean
+      updated_at:
+        type: string
+    type: object
+  models.HolidayDTO:
+    properties:
+      date:
+        type: string
+      description:
+        type: string
+      is_civic:
+        type: boolean
+      is_cuti_bersama:
+        type: boolean
+      is_joint_leave:
+        type: boolean
+      is_religious:
+        type: boolean
+    type: object
+  models.LoginRequest:
+    properties:
+      identifier:
+        example: john_doe
+        type: string
+      password:
+        example: MySecretPass123!
+        type: string
+    required:
+    - identifier
+    - password
+    type: object
+  models.LoginResponse:
+    properties:
+      token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+    type: object
+  models.MessageResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      message:
+        example: operation successful
+        type: string
+      status:
+        example: success
+        type: string
+    type: object
+  models.OriginsResponse:
+    properties:
+      origins:
+        example:
+        - https://timesheet.example.com
+        items:
+          type: string
+        type: array
+    type: object
+  models.OvertimeEntry:
+    properties:
+      created_at:
+        type: string
+      daily_activity:
+        $ref: '#/definitions/models.DailyActivity'
+      daily_activity_id:
+        type: integer
+      date:
+        type: string
+      department_head:
+        $ref: '#/definitions/models.Approver'
+      department_head_id:
+        type: integer
+      end_time:
+        description: '"21:00"'
+        type: string
+      id:
+        type: integer
+      start_time:
+        description: '"17:00"'
+        type: string
+      task_description:
+        type: string
+      team_leader:
+        $ref: '#/definitions/models.Approver'
+      team_leader_id:
+        type: integer
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+    type: object
+  models.PaginatedResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data: {}
+      pagination:
+        $ref: '#/definitions/models.PaginationMeta'
+      status:
+        example: success
+        type: string
+    type: object
+  models.PaginationMeta:
+    properties:
+      limit:
+        example: 10
+        type: integer
+      page:
+        example: 1
+        type: integer
+      total_pages:
+        example: 4
+        type: integer
+      total_rows:
+        example: 35
+        type: integer
+    type: object
+  models.PasskeySessionResponse:
+    properties:
+      options: {}
+      session_id:
+        example: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+        type: string
+    type: object
+  models.ProfileChangeRequest:
+    properties:
+      bni_id:
+        description: NPP BNI
+        type: string
+      company_id:
+        type: integer
+      company_rel:
+        $ref: '#/definitions/models.Company'
+      created_at:
+        type: string
+      department:
+        type: string
+      department_id:
+        type: integer
+      department_rel:
+        $ref: '#/definitions/models.Department'
+      division:
+        type: string
+      employee_id:
+        type: string
+      group_name:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      position:
+        type: string
+      reviewed_at:
+        type: string
+      reviewed_by:
+        type: integer
+      reviewer:
+        $ref: '#/definitions/models.User'
+      site:
+        type: string
+      status:
+        $ref: '#/definitions/models.ProfileStatus'
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+    type: object
+  models.ProfileChangeRequestDTO:
+    properties:
+      bni_id:
+        example: "12345678"
+        type: string
+      company_id:
+        example: 1
+        type: integer
+      department:
+        example: Core Banking
+        type: string
+      department_id:
+        example: 1
+        type: integer
+      division:
+        example: Application Development Division
+        type: string
+      name:
+        example: John Doe
+        type: string
+      site:
+        example: Jakarta
+        type: string
+    type: object
+  models.ProfileStatus:
+    enum:
+    - approved
+    - pending
+    type: string
+    x-enum-varnames:
+    - ProfileApproved
+    - ProfilePending
+  models.Project:
+    properties:
+      app_impacted:
+        description: e.g. "BNI Direct Cash"
+        type: string
+      code:
+        description: e.g. "P24015"
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        description: e.g. "BNI Direct"
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.PushKeyPayload:
+    properties:
+      auth:
+        type: string
+      p256dh:
+        type: string
+    required:
+    - auth
+    - p256dh
+    type: object
+  models.ResetRequest:
+    properties:
+      password:
+        example: NewStrongPass123!
+        minLength: 8
+        type: string
+      token:
+        example: a8f9c0e2b1d3...
+        type: string
+    required:
+    - password
+    - token
+    type: object
+  models.Role:
+    enum:
+    - admin
+    - user
+    type: string
+    x-enum-varnames:
+    - RoleAdmin
+    - RoleUser
+  models.SubscribeRequest:
+    properties:
+      endpoint:
+        example: https://fcm.googleapis.com/fcm/send/...
+        type: string
+      keys:
+        $ref: '#/definitions/models.PushKeyPayload'
+    required:
+    - endpoint
+    - keys
+    type: object
+  models.UnsubscribeRequest:
+    properties:
+      endpoint:
+        example: https://fcm.googleapis.com/fcm/send/...
+        type: string
+    type: object
+  models.UpdateUserRequest:
+    properties:
+      bni_id:
+        example: "12345678"
+        type: string
+      company:
+        example: MII
+        type: string
+      company_id:
+        example: 1
+        type: integer
+      department:
+        example: Core Banking
+        type: string
+      department_id:
+        example: 1
+        type: integer
+      division:
+        example: Application Development Division
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: John Doe
+        type: string
+      role:
+        allOf:
+        - $ref: '#/definitions/models.Role'
+        example: user
+      site:
+        example: Jakarta
+        type: string
+    type: object
+  models.User:
+    properties:
+      bni_id:
+        description: NPP BNI
+        type: string
+      company:
+        type: string
+      company_id:
+        type: integer
+      company_rel:
+        $ref: '#/definitions/models.Company'
+      created_at:
+        type: string
+      department:
+        type: string
+      department_id:
+        type: integer
+      department_rel:
+        $ref: '#/definitions/models.Department'
+      division:
+        type: string
+      email:
+        type: string
+      employee_id:
+        description: NPP or Vendor ID
+        type: string
+      group_name:
+        description: Kelompok (SDD)
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        description: Profile fields (the "approved" / live values).
+        type: string
+      position:
+        type: string
+      role:
+        $ref: '#/definitions/models.Role'
+      site:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  models.VAPIDKeyResponse:
+    properties:
+      public_key:
+        type: string
+    type: object
+  models.WebAuthnCredential:
+    properties:
+      created_at:
+        type: string
+      friendly_name:
+        type: string
+      id:
+        type: integer
+      user_id:
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: API Support
+  description: High-performance RESTful backend API for the Timesheet Automation Portal,
+    built with Go (Gin Engine) and PostgreSQL.
+  license:
+    name: MIT
+  termsOfService: https://github.com/Waluh-Corporation/timesheet-backend
+  title: Timesheet Automation Portal API
+  version: "2.0"
+paths:
+  /.well-known/webauthn:
+    get:
+      description: Serves the WebAuthn Related Origin Requests well-known document
+        for multi-domain passkeys.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.OriginsResponse'
+      summary: WebAuthn related origins document
+      tags:
+      - Passkey
+  /api/v1/activities:
+    get:
+      description: Retrieves daily activities for the authenticated user with pagination
+        and optional filtering by year, month, date range, or status.
+      parameters:
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 10, max: 100). Use -1 or all=true for
+          all records'
+        in: query
+        name: limit
+        type: integer
+      - description: Year filter (e.g. 2026)
+        in: query
+        name: year
+        type: integer
+      - description: Month filter (1-12)
+        in: query
+        name: month
+        type: integer
+      - description: Start date filter (YYYY-MM-DD)
+        in: query
+        name: start_date
+        type: string
+      - description: End date filter (YYYY-MM-DD)
+        in: query
+        name: end_date
+        type: string
+      - description: 'Sort order: asc or desc (default: desc, or asc when filtering
+          by month)'
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PaginatedResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List daily activities with pagination
+      tags:
+      - Activity
+    post:
+      consumes:
+      - application/json
+      description: Creates or updates a daily activity record for the authenticated
+        user on a given date.
+      parameters:
+      - description: Daily activity payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.DailyActivityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DailyActivity'
+        "400":
+          description: Invalid date format or payload
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upsert daily timesheet activity
+      tags:
+      - Activity
+  /api/v1/activities/{id}:
+    get:
+      description: Retrieves full details of a specific daily activity by ID, including
+        its associated Project, Status, and User.
+      parameters:
+      - description: Daily Activity ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DailyActivity'
+        "400":
+          description: Invalid activity ID
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Activity not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get daily activity detail
+      tags:
+      - Activity
+  /api/v1/activity-statuses:
+    get:
+      description: Returns all normalized activity status options (e.g. Present, Sick,
+        Vacation).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ActivityStatus'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List activity status options
+      tags:
+      - Master Data
+  /api/v1/admin/approvers:
+    post:
+      consumes:
+      - application/json
+      description: Adds a new approver (Team Leader or Department Head).
+      parameters:
+      - description: Approver data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateApproverRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Approver'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new approver (admin only)
+      tags:
+      - Master Data
+  /api/v1/admin/approvers/{id}:
+    delete:
+      description: Permanently removes an approver from master data.
+      parameters:
+      - description: Approver ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DeleteResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Approver not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete an approver (admin only)
+      tags:
+      - Master Data
+    patch:
+      consumes:
+      - application/json
+      description: Updates approver name, role, title, or active status.
+      parameters:
+      - description: Approver ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Approver update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateApproverRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Approver'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Approver not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update an existing approver (admin only)
+      tags:
+      - Master Data
+  /api/v1/admin/companies:
+    post:
+      consumes:
+      - application/json
+      description: Adds a new client/vendor company.
+      parameters:
+      - description: Company data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateCompanyRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Company'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a company (admin only)
+      tags:
+      - Master Data
+  /api/v1/admin/companies/{id}:
+    delete:
+      description: Permanently removes a company from master data.
+      parameters:
+      - description: Company ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DeleteResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Company not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a company (admin only)
+      tags:
+      - Master Data
+    patch:
+      consumes:
+      - application/json
+      description: Updates code or name of an existing company.
+      parameters:
+      - description: Company ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Company update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateCompanyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Company'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Company not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a company (admin only)
+      tags:
+      - Master Data
+  /api/v1/admin/profile-changes:
+    get:
+      description: Retrieves submitted profile change requests with optional status
+        filtering (admin only).
+      parameters:
+      - description: Filter by review status (pending, approved, rejected)
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ProfileChangeRequest'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all profile change requests (Admin)
+      tags:
+      - Admin
+  /api/v1/admin/profile-changes/{id}/review:
+    post:
+      description: Approves or rejects a submitted profile change request (admin only).
+      parameters:
+      - description: Request ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Review action
+        enum:
+        - approve
+        - reject
+        in: query
+        name: action
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ProfileChangeRequest'
+        "400":
+          description: Invalid action
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Request not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "409":
+          description: Request already reviewed
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Review profile change request (Admin)
+      tags:
+      - Admin
+  /api/v1/admin/users:
+    get:
+      description: Retrieves all registered user accounts with company and department
+        associations (admin only).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.User'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all users (Admin)
+      tags:
+      - Admin
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account and emails an account setup invitation
+        link (admin only).
+      parameters:
+      - description: User provisioning payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Invalid payload or password policy failure
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "409":
+          description: Username or email already exists
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Provision new user account (Admin)
+      tags:
+      - Admin
+  /api/v1/admin/users/{id}:
+    delete:
+      description: Deactivates a user account (admin only). The account is not hard-deleted
+        to preserve timesheet audit logs.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Admin only or self-deactivation forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Soft deactivate user (Admin)
+      tags:
+      - Admin
+    patch:
+      consumes:
+      - application/json
+      description: Updates user profile information, role, or active status directly
+        (admin only).
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: Invalid payload
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Admin only or self-demotion forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update user attributes (Admin)
+      tags:
+      - Admin
+  /api/v1/admin/users/{id}/passkeys:
+    get:
+      description: Retrieves all registered passkeys for the specified user (admin
+        only).
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.WebAuthnCredential'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List passkeys for a user (Admin)
+      tags:
+      - Admin
+  /api/v1/admin/users/{id}/passkeys/{pid}:
+    delete:
+      description: Removes a specified passkey belonging to a user (admin only).
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Passkey ID
+        in: path
+        name: pid
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Passkey not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a passkey for a user (Admin)
+      tags:
+      - Admin
+  /api/v1/approvers:
+    get:
+      description: Retrieves active approvers (Team Leaders, Department Heads), optionally
+        filtered by role_type.
+      parameters:
+      - description: Role type filter (team_leader, department_head)
+        in: query
+        name: role_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Approver'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List active approvers
+      tags:
+      - Master Data
+  /api/v1/auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Generates a password reset token and sends an email with the reset
+        link. Always returns 200 to prevent user enumeration.
+      parameters:
+      - description: User email
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ForgotRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Invalid payload
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Request password reset
+      tags:
+      - Auth
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates user with username/email and password, returning
+        a JWT token and user profile.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LoginResponse'
+        "400":
+          description: Invalid payload
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Account is disabled
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Authenticate user with credentials
+      tags:
+      - Auth
+  /api/v1/auth/passkey/login/begin:
+    post:
+      consumes:
+      - application/json
+      description: Starts WebAuthn assertion ceremony for passwordless sign-in (discoverable
+        or username-scoped).
+      parameters:
+      - description: Optional user identifier
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/models.BeginPasskeyLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PasskeySessionResponse'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Begin passkey login
+      tags:
+      - Passkey
+  /api/v1/auth/passkey/login/finish:
+    post:
+      consumes:
+      - application/json
+      description: Verifies WebAuthn assertion signature and returns a JWT token on
+        success.
+      parameters:
+      - description: Session ID returned from begin ceremony
+        in: query
+        name: session_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LoginResponse'
+        "400":
+          description: Invalid or expired session
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Invalid credentials
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Account disabled
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Finish passkey login
+      tags:
+      - Passkey
+  /api/v1/auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Validates a reset token and sets a new password adhering to NIST
+        guidelines.
+      parameters:
+      - description: Password reset payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ResetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Invalid or expired token, or weak password
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Complete password reset
+      tags:
+      - Auth
+  /api/v1/companies:
+    get:
+      description: Returns all companies with their associated departments.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Company'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all companies
+      tags:
+      - Master Data
+  /api/v1/departments:
+    get:
+      description: Returns active departments, optionally filtered by company_id.
+      parameters:
+      - description: Company ID filter
+        in: query
+        name: company_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Department'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List active departments
+      tags:
+      - Master Data
+  /api/v1/holidays:
+    get:
+      description: Returns public holidays for the specified month and year with database
+        cache fallback.
+      parameters:
+      - description: Year (defaults to current year)
+        in: query
+        name: year
+        type: integer
+      - description: Month 1-12 (defaults to current month)
+        in: query
+        name: month
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.HolidayDTO'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get monthly Indonesian public holidays
+      tags:
+      - Holiday
+  /api/v1/holidays/all:
+    get:
+      description: Returns holidays, optionally filtered by year.
+      parameters:
+      - description: Year filter
+        in: query
+        name: year
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Holiday'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List holidays
+      tags:
+      - Holiday
+  /api/v1/holidays/sync:
+    post:
+      description: Fetches holidays for a specific year from Kemendesa and upserts
+        into local database.
+      parameters:
+      - description: Year to sync (defaults to current year)
+        in: query
+        name: year
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "502":
+          description: Bad gateway
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Synchronize holidays from external Kemendesa API to database
+      tags:
+      - Holiday
+  /api/v1/me:
+    get:
+      description: Returns the profile information of the currently authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user profile
+      tags:
+      - User
+  /api/v1/overtimes:
+    get:
+      description: Retrieves all overtime records for the authenticated user for a
+        specific month and year.
+      parameters:
+      - description: Year (defaults to current year)
+        in: query
+        name: year
+        type: integer
+      - description: Month 1-12 (defaults to current month)
+        in: query
+        name: month
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.OvertimeEntry'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List monthly overtime records
+      tags:
+      - Overtime
+    post:
+      consumes:
+      - application/json
+      description: Upserts an overtime entry for the authenticated user for SPL reporting.
+      parameters:
+      - description: Overtime entry data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.OvertimeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.OvertimeEntry'
+        "400":
+          description: Invalid payload or date format
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create or update overtime record
+      tags:
+      - Overtime
+  /api/v1/overtimes/{id}:
+    delete:
+      description: Removes a specific overtime entry belonging to the authenticated
+        user.
+      parameters:
+      - description: Overtime Entry ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.DeleteResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete overtime record
+      tags:
+      - Overtime
+  /api/v1/passkey/register/begin:
+    post:
+      description: Initiates a WebAuthn registration ceremony for the authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.PasskeySessionResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Begin passkey registration
+      tags:
+      - Passkey
+  /api/v1/passkey/register/finish:
+    post:
+      consumes:
+      - application/json
+      description: Completes WebAuthn credential registration and stores the credential.
+      parameters:
+      - description: Session ID returned from registration begin
+        in: query
+        name: session_id
+        required: true
+        type: string
+      - description: Friendly name for the passkey
+        in: query
+        name: name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Invalid or expired session
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Finish passkey registration
+      tags:
+      - Passkey
+  /api/v1/passkeys:
+    get:
+      description: Retrieves all registered passkeys for the currently authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.WebAuthnCredential'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List current user's passkeys
+      tags:
+      - Passkey
+  /api/v1/passkeys/{id}:
+    delete:
+      description: Deletes a registered passkey owned by the authenticated user.
+      parameters:
+      - description: Passkey credential ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Passkey not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete current user's passkey
+      tags:
+      - Passkey
+  /api/v1/profile/change:
+    post:
+      consumes:
+      - application/json
+      description: Submits a user's profile change request for administrator review
+        and approval.
+      parameters:
+      - description: Profile update fields
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ProfileChangeRequestDTO'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.ProfileChangeRequest'
+        "400":
+          description: Invalid payload
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Submit self-service profile update request
+      tags:
+      - User
+  /api/v1/profile/changes:
+    get:
+      description: Returns the profile change requests submitted by the currently
+        authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ProfileChangeRequest'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List current user's profile change requests
+      tags:
+      - User
+  /api/v1/projects:
+    get:
+      description: Returns all active projects.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Project'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List active projects
+      tags:
+      - Master Data
+  /api/v1/push/subscribe:
+    post:
+      consumes:
+      - application/json
+      description: Registers or updates browser push notification subscription for
+        the authenticated user.
+      parameters:
+      - description: Push subscription payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SubscribeRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "400":
+          description: Invalid payload
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Subscribe to Web Push notifications
+      tags:
+      - Push Notification
+  /api/v1/push/test:
+    post:
+      description: Dispatches an immediate test push notification to verify browser
+        notification display.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Send test push notification
+      tags:
+      - Push Notification
+  /api/v1/push/unsubscribe:
+    post:
+      consumes:
+      - application/json
+      description: Removes active push subscription for the browser, silencing timesheet
+        reminder notifications.
+      parameters:
+      - description: Optional endpoint filter
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/models.UnsubscribeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Unsubscribe from Web Push notifications
+      tags:
+      - Push Notification
+  /api/v1/push/vapid-public-key:
+    get:
+      description: Returns the application server public key for browser Web Push
+        subscription.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.VAPIDKeyResponse'
+      summary: Get VAPID public key
+      tags:
+      - Push Notification
+  /api/v1/setup/init:
+    post:
+      consumes:
+      - application/json
+      description: One-time setup endpoint to create the primary Super Administrator,
+        initial companies, approvers, and departments. Automatically seeds ActivityStatus
+        and sets is_new = N. Fails with 403 if system is already initialized.
+      parameters:
+      - description: Initialization payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.InitSetupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Setup success response with admin token
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request or validation error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: System already initialized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Perform initial system onboarding setup
+      tags:
+      - Setup
+  /api/v1/setup/status:
+    get:
+      description: Returns whether the system is already configured with an administrator
+        or requires initial onboarding setup.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.SetupStatusResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      summary: Check system onboarding initialization status
+      tags:
+      - Setup
+  /api/v1/timesheet/generate:
+    post:
+      consumes:
+      - application/json
+      description: Renders monthly activities and overtimes into an Excel (.xlsx)
+        workbook, initiates download, and dispatches an email copy.
+      parameters:
+      - description: Generation parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.GenerateRequest'
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: Generated Excel workbook (.xlsx)
+          schema:
+            type: file
+        "400":
+          description: Template or company mapping missing
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Generation failed
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Generate timesheet spreadsheet
+      tags:
+      - Timesheet
+securityDefinitions:
+  BearerAuth:
+    description: Enter JWT token with format "Bearer {token}".
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
