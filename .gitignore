@@ -1,5 +1,7 @@
 # Dependency directories
 node_modules/
+tmp/
+main
 backend/tmp/
 backend/main
 backend/docs/docs.go
