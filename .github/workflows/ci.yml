@@ -120,7 +120,7 @@ jobs:
           fetch-depth: 0 # Shallow clones disabled for accurate blame and relevancy
 
       - name: Download Coverage Artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: coverage-report
 
