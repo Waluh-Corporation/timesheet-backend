@@ -1,6 +1,6 @@
 module timesheet-backend
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
@@ -13,7 +13,7 @@ require (
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/swaggo/swag v1.16.4
 	github.com/xuri/excelize/v2 v2.11.0
-	golang.org/x/crypto v0.54.0
+	golang.org/x/crypto v0.56.0
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.0
@@ -69,11 +69,11 @@ require (
 	github.com/xuri/efp v0.0.1 // indirect
 	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
-	golang.org/x/tools v0.47.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/tools v0.48.0 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
