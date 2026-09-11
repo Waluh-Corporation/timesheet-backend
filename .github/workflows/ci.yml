@@ -4,16 +4,32 @@ on:
   push:
     branches:
       - main
+      - development
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
       - main
+      - development
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  secret-scan:
+    name: Secret Leak Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   lint-and-audit:
     name: Lint & Security Audit
     runs-on: ubuntu-latest
@@ -56,6 +72,20 @@ jobs:
   test:
     name: Automated Tests & Coverage
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: timesheet
+          POSTGRES_PASSWORD: timesheet_test_password
+          POSTGRES_DB: timesheet_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 2s
+          --health-retries 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -66,7 +96,9 @@ jobs:
           go-version: '1.25'
           cache: true
 
-      - name: Run Tests with Race Detector
+      - name: Run Tests with Race Detector & Real DB
+        env:
+          DATABASE_URL: "host=localhost user=timesheet password=timesheet_test_password dbname=timesheet_test port=5432 sslmode=disable TimeZone=Asia/Jakarta"
         run: |
           go test -v -race -covermode=atomic -coverprofile=coverage.out ./...
 
