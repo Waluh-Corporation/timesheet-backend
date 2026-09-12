@@ -21,7 +21,9 @@ func TestScheduler_NewAndStop(t *testing.T) {
 		t.Errorf("expected fallback to UTC, got %v", sUTC.loc)
 	}
 
-	// Start and Stop
+	// Start, execute handlers, and Stop
 	s.Start()
+	s.sendDailyReminders()
+	s.cleanupExpiredTokens()
 	s.Stop()
 }

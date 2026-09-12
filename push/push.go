@@ -75,6 +75,9 @@ func (s *Service) SendToSubscription(sub *models.PushSubscription, payload Paylo
 
 // SendToUser fans a payload out to every subscription a user owns.
 func (s *Service) SendToUser(userID uint, payload Payload) {
+	if s.db == nil {
+		return
+	}
 	var subs []models.PushSubscription
 	if err := s.db.Where("user_id = ?", userID).Find(&subs).Error; err != nil {
 		log.Printf("[push] failed to load subscriptions for user %d: %v", userID, err)

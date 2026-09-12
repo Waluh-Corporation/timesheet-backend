@@ -316,8 +316,6 @@ definitions:
     properties:
       activity:
         type: string
-      app_impacted:
-        type: string
       created_at:
         type: string
       date:
@@ -345,6 +343,33 @@ definitions:
         type: string
       user:
         $ref: '#/definitions/models.User'
+      user_id:
+        type: integer
+    type: object
+  models.DailyActivityDetailResponse:
+    properties:
+      activity:
+        type: string
+      created_at:
+        type: string
+      date:
+        type: string
+      end_time:
+        type: string
+      id:
+        type: integer
+      project_id:
+        type: string
+      project_name:
+        type: string
+      project_ref:
+        $ref: '#/definitions/models.Project'
+      start_time:
+        type: string
+      status_ref:
+        $ref: '#/definitions/models.ActivityStatus'
+      updated_at:
+        type: string
       user_id:
         type: integer
     type: object
@@ -700,8 +725,10 @@ definitions:
   models.PushKeyPayload:
     properties:
       auth:
+        example: 5Kpqz...
         type: string
       p256dh:
+        example: BCVxsG6...
         type: string
     required:
     - auth
@@ -829,6 +856,7 @@ definitions:
   models.VAPIDKeyResponse:
     properties:
       public_key:
+        example: BEl62iUYgUivxIkv...
         type: string
     type: object
   models.WebAuthnCredential:
@@ -962,7 +990,7 @@ paths:
   /api/v1/activities/{id}:
     get:
       description: Retrieves full details of a specific daily activity by ID, including
-        its associated Project, Status, and User.
+        its associated Project and Status.
       parameters:
       - description: Daily Activity ID
         in: path
@@ -975,13 +1003,17 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.DailyActivity'
+            $ref: '#/definitions/models.DailyActivityDetailResponse'
         "400":
           description: Invalid activity ID
           schema:
             $ref: '#/definitions/models.ErrorResponse'
         "401":
           description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: 'Forbidden: not authorized to access another user''s activity'
           schema:
             $ref: '#/definitions/models.ErrorResponse'
         "404":

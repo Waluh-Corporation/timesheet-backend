@@ -91,8 +91,240 @@ func calculateRowHeight(activity, projectName, projectID, appImpacted, division,
 }
 
 // GenerateExcel processes the master template and returns the filled spreadsheet as a byte array
+type masterTemplateStyles struct {
+	grayStyle         int
+	grayDateStyle     int
+	dateStyle         int
+	timeStyle         int
+	activeStyleCenter int
+	activeStyleLeft   int
+}
+
+func initMasterStyles(f *excelize.File) (*masterTemplateStyles, error) {
+	borderBlack := []excelize.Border{
+		{Type: "left", Color: "000000", Style: 1},
+		{Type: "top", Color: "000000", Style: 1},
+		{Type: "right", Color: "000000", Style: 1},
+		{Type: "bottom", Color: "000000", Style: 1},
+	}
+	fontArial11 := &excelize.Font{Family: "Arial", Size: 11}
+	fillGray := excelize.Fill{Type: "pattern", Color: []string{"#D3D3D3"}, Pattern: 1}
+
+	grayStyle, err := f.NewStyle(&excelize.Style{
+		Fill:      fillGray,
+		Font:      fontArial11,
+		Border:    borderBlack,
+		Alignment: &excelize.Alignment{Vertical: "center", Horizontal: "center", WrapText: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("generate gray Excel styling: %w", err)
+	}
+
+	grayDateStyle, _ := f.NewStyle(&excelize.Style{
+		CustomNumFmt: stringPtr("d-m-yy"),
+		Fill:         fillGray,
+		Font:         fontArial11,
+		Border:       borderBlack,
+		Alignment:    &excelize.Alignment{Vertical: "center", Horizontal: "center"},
+	})
+
+	dateStyle, _ := f.NewStyle(&excelize.Style{
+		CustomNumFmt: stringPtr("d-m-yy"),
+		Font:         fontArial11,
+		Border:       borderBlack,
+		Alignment:    &excelize.Alignment{Vertical: "center", Horizontal: "center"},
+	})
+
+	timeStyle, _ := f.NewStyle(&excelize.Style{
+		CustomNumFmt: stringPtr("hh:mm"),
+		Font:         fontArial11,
+		Border:       borderBlack,
+		Alignment:    &excelize.Alignment{Vertical: "center", Horizontal: "center"},
+	})
+
+	activeStyleCenter, _ := f.NewStyle(&excelize.Style{
+		Font:      fontArial11,
+		Border:    borderBlack,
+		Alignment: &excelize.Alignment{Vertical: "center", Horizontal: "center"},
+	})
+
+	activeStyleLeft, _ := f.NewStyle(&excelize.Style{
+		Font:      fontArial11,
+		Border:    borderBlack,
+		Alignment: &excelize.Alignment{Vertical: "center", Horizontal: "center", WrapText: true},
+	})
+
+	return &masterTemplateStyles{
+		grayStyle:         grayStyle,
+		grayDateStyle:     grayDateStyle,
+		dateStyle:         dateStyle,
+		timeStyle:         timeStyle,
+		activeStyleCenter: activeStyleCenter,
+		activeStyleLeft:   activeStyleLeft,
+	}, nil
+}
+
+func writeMasterHeaderMetadata(f *excelize.File, sheet string, req *models.TimesheetRequest) {
+	if req.Project != "" {
+		_ = f.SetCellValue(sheet, "C1", req.Project)
+	}
+	if req.Division != "" {
+		_ = f.SetCellValue(sheet, "C2", req.Division)
+	}
+	if req.Name != "" {
+		_ = f.SetCellValue(sheet, "C3", req.Name)
+	}
+	if req.BniID != "" {
+		_ = f.SetCellValue(sheet, "C4", req.BniID)
+	}
+	if req.Site != "" {
+		_ = f.SetCellValue(sheet, "C5", req.Site)
+	}
+
+	periodStr := fmt.Sprintf("%d-%02d-01", req.Year, req.Month)
+	_ = f.SetCellValue(sheet, "C6", periodStr)
+
+	headerStyle, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Family: "Arial", Size: 11},
+	})
+	if err == nil {
+		for i := 1; i <= 6; i++ {
+			_ = f.SetCellStyle(sheet, fmt.Sprintf("C%d", i), fmt.Sprintf("C%d", i), headerStyle)
+		}
+	}
+}
+
+func trimMasterExcessRows(f *excelize.File, sheet string, daysInMonth int) error {
+	for r := 39; r >= 9+daysInMonth; r-- {
+		if err := f.RemoveRow(sheet, r); err != nil {
+			return fmt.Errorf("failed to remove excess row: %w", err)
+		}
+	}
+	sumRow := 9 + daysInMonth
+	lastDayRow := 8 + daysInMonth
+	statusFormulas := map[string]string{
+		"E": fmt.Sprintf("COUNTIF(E9:E%d,\"P\")", lastDayRow),
+		"F": fmt.Sprintf("COUNTIF(F9:F%d,\"S\")", lastDayRow),
+		"G": fmt.Sprintf("COUNTIF(G9:G%d,\"BT\")", lastDayRow),
+		"H": fmt.Sprintf("COUNTIF(H9:H%d,\"PM\")", lastDayRow),
+		"I": fmt.Sprintf("COUNTIF(I9:I%d,\"V\")", lastDayRow),
+		"J": fmt.Sprintf("COUNTIF(J9:J%d,\"x\")", lastDayRow),
+	}
+	for col, formula := range statusFormulas {
+		_ = f.SetCellFormula(sheet, fmt.Sprintf("%s%d", col, sumRow), formula)
+	}
+	return nil
+}
+
+func writeMasterSignatures(f *excelize.File, sheet string, req *models.TimesheetRequest, daysInMonth int) {
+	finalRow := 12 + daysInMonth
+	sigStyle, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Family: "Arial", Size: 11},
+		Border: []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+		},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "bottom", WrapText: true},
+	})
+	if err != nil {
+		return
+	}
+	if req.SignatureEmployee != "" {
+		_ = f.SetCellValue(sheet, fmt.Sprintf("A%d", finalRow), req.SignatureEmployee)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("A%d", finalRow), fmt.Sprintf("C%d", finalRow+3), sigStyle)
+	}
+	if req.SignatureReviewer != "" {
+		_ = f.SetCellValue(sheet, fmt.Sprintf("D%d", finalRow), req.SignatureReviewer)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("D%d", finalRow), fmt.Sprintf("F%d", finalRow+3), sigStyle)
+	}
+	if req.SignatureApprover != "" {
+		_ = f.SetCellValue(sheet, fmt.Sprintf("G%d", finalRow), req.SignatureApprover)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("G%d", finalRow), fmt.Sprintf("J%d", finalRow+3), sigStyle)
+	}
+}
+
+func writeMasterNonWorkingDay(f *excelize.File, sheet string, r int, d time.Time, isHoliday bool, holidayDesc string, st *masterTemplateStyles) float64 {
+	_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", r), fmt.Sprintf("Q%d", r), st.grayStyle)
+	_ = f.SetCellValue(sheet, fmt.Sprintf("A%d", r), d)
+	_ = f.SetCellStyle(sheet, fmt.Sprintf("A%d", r), fmt.Sprintf("A%d", r), st.grayDateStyle)
+
+	_ = f.SetCellValue(sheet, fmt.Sprintf("B%d", r), "")
+	_ = f.SetCellValue(sheet, fmt.Sprintf("C%d", r), "")
+
+	for _, col := range []string{"E", "F", "G", "H", "I", "J"} {
+		_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", col, r), "")
+	}
+
+	if isHoliday {
+		_ = f.SetCellValue(sheet, fmt.Sprintf("K%d", r), holidayDesc)
+		for _, col := range []string{"L", "M", "N", "O", "P", "Q"} {
+			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", col, r), "")
+		}
+		return calculateRowHeight(holidayDesc, "", "", "", "", "")
+	}
+
+	for _, col := range []string{"K", "L", "M", "N", "O", "P", "Q"} {
+		_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", col, r), "")
+	}
+	return 15.0
+}
+
+func writeMasterWorkingDay(f *excelize.File, sheet string, r int, d time.Time, entry *models.DailyEntry, st *masterTemplateStyles) float64 {
+	_ = f.SetCellValue(sheet, fmt.Sprintf("A%d", r), d)
+	_ = f.SetCellStyle(sheet, fmt.Sprintf("A%d", r), fmt.Sprintf("A%d", r), st.dateStyle)
+
+	var h float64
+	if entry != nil {
+		h = writeMasterEntryDetails(f, sheet, r, entry)
+	} else {
+		_ = f.SetCellValue(sheet, fmt.Sprintf("B%d", r), "")
+		_ = f.SetCellValue(sheet, fmt.Sprintf("C%d", r), "")
+		for _, col := range []string{"E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q"} {
+			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", col, r), "")
+		}
+		h = 15.0
+	}
+
+	_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", r), fmt.Sprintf("C%d", r), st.timeStyle)
+	_ = f.SetCellStyle(sheet, fmt.Sprintf("D%d", r), fmt.Sprintf("D%d", r), st.timeStyle)
+	_ = f.SetCellStyle(sheet, fmt.Sprintf("E%d", r), fmt.Sprintf("J%d", r), st.activeStyleCenter)
+	_ = f.SetCellStyle(sheet, fmt.Sprintf("K%d", r), fmt.Sprintf("Q%d", r), st.activeStyleLeft)
+	return h
+}
+
+func writeMasterTimeCell(f *excelize.File, sheet, cell, timeStr string) {
+	if timeStr == "" || timeStr == "00:00" {
+		_ = f.SetCellValue(sheet, cell, "")
+		return
+	}
+	if frac, err := parseTimeToExcelFraction(timeStr); err == nil {
+		_ = f.SetCellValue(sheet, cell, frac)
+		return
+	}
+	_ = f.SetCellValue(sheet, cell, timeStr)
+}
+
+func writeMasterEntryDetails(f *excelize.File, sheet string, r int, entry *models.DailyEntry) float64 {
+	rs := fmt.Sprintf("%d", r)
+	writeMasterTimeCell(f, sheet, "B"+rs, entry.StartTime)
+	writeMasterTimeCell(f, sheet, "C"+rs, entry.EndTime)
+	WriteAttendanceMatrixStatus(f, sheet, rs, strings.ToUpper(entry.Status))
+
+	_ = f.SetCellValue(sheet, "K"+rs, entry.Activity)
+	_ = f.SetCellValue(sheet, "L"+rs, entry.ProjectName)
+	_ = f.SetCellValue(sheet, "M"+rs, entry.ProjectID)
+	_ = f.SetCellValue(sheet, "N"+rs, entry.AppImpacted)
+	_ = f.SetCellValue(sheet, "O"+rs, "")
+	_ = f.SetCellValue(sheet, "P"+rs, entry.Division)
+	_ = f.SetCellValue(sheet, "Q"+rs, entry.Department)
+
+	return calculateRowHeight(entry.Activity, entry.ProjectName, entry.ProjectID, entry.AppImpacted, entry.Division, entry.Department)
+}
+
+// GenerateExcel processes the master template and returns the filled spreadsheet as a byte array
 func GenerateExcel(req *models.TimesheetRequest, holidayMap map[string]string) ([]byte, error) {
-	// Open spreadsheet template
 	templatePath := os.Getenv("TEMPLATE_PATH")
 	if templatePath == "" {
 		templatePath = "templates/master_template.xlsx"
@@ -104,371 +336,56 @@ func GenerateExcel(req *models.TimesheetRequest, holidayMap map[string]string) (
 	}
 	defer func() { _ = f.Close() }()
 
-	// Set document metadata properties
-	_ = f.SetDocProps(&excelize.DocProperties{
-		Creator:        "FAFR & Zaid © 2026",
-		LastModifiedBy: "FAFR & Zaid © 2026",
-	})
+	userName := ""
+	if req != nil {
+		userName = req.Name
+	}
+	SetWorkbookProperties(f, "Monthly Timesheet", userName)
 
-	sheetName := "Sheet1"
+	const sheetName = "Sheet1"
+	writeMasterHeaderMetadata(f, sheetName, req)
 
-	// 1. Populate header metadata (C1-C6)
-	if req.Project != "" {
-		_ = f.SetCellValue(sheetName, "C1", req.Project)
-	}
-	if req.Division != "" {
-		_ = f.SetCellValue(sheetName, "C2", req.Division)
-	}
-	if req.Name != "" {
-		_ = f.SetCellValue(sheetName, "C3", req.Name)
-	}
-	if req.BniID != "" {
-		_ = f.SetCellValue(sheetName, "C4", req.BniID)
-	}
-	if req.Site != "" {
-		_ = f.SetCellValue(sheetName, "C5", req.Site)
-	}
-
-	// Write Period into C6 (e.g. YYYY-MM-01)
-	periodStr := fmt.Sprintf("%d-%02d-01", req.Year, req.Month)
-	_ = f.SetCellValue(sheetName, "C6", periodStr)
-
-	// Style header input cells to highly readable standard Arial, size 11
-	headerStyle, err := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{
-			Family: "Arial",
-			Size:   11,
-		},
-	})
-	if err == nil {
-		for i := 1; i <= 6; i++ {
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("C%d", i), fmt.Sprintf("C%d", i), headerStyle)
-		}
-	}
-
-	// 2. Calculate exact days in the month
 	daysInMonth := GetDaysInMonth(req.Year, req.Month)
-
-	// 3. Row Trimming (CRITICAL)
-	// Delete excess rows in the bottom of the grid (rows 37-39 for short months)
-	// To prevent indices shifting, we delete starting from the bottom row index (39) down to (9 + daysInMonth)
-	for r := 39; r >= 9+daysInMonth; r-- {
-		if err := f.RemoveRow(sheetName, r); err != nil {
-			return nil, fmt.Errorf("failed to remove excess row: %w", err)
-		}
+	if err := trimMasterExcessRows(f, sheetName, daysInMonth); err != nil {
+		return nil, err
 	}
 
-	// Rewrite attendance summation formulas dynamically to prevent circular references in short months
-	sumRow := 9 + daysInMonth
-	_ = f.SetCellFormula(sheetName, fmt.Sprintf("E%d", sumRow), fmt.Sprintf("COUNTIF(E9:E%d,\"P\")", 8+daysInMonth))
-	_ = f.SetCellFormula(sheetName, fmt.Sprintf("F%d", sumRow), fmt.Sprintf("COUNTIF(F9:F%d,\"S\")", 8+daysInMonth))
-	_ = f.SetCellFormula(sheetName, fmt.Sprintf("G%d", sumRow), fmt.Sprintf("COUNTIF(G9:G%d,\"BT\")", 8+daysInMonth))
-	_ = f.SetCellFormula(sheetName, fmt.Sprintf("H%d", sumRow), fmt.Sprintf("COUNTIF(H9:H%d,\"PM\")", 8+daysInMonth))
-	_ = f.SetCellFormula(sheetName, fmt.Sprintf("I%d", sumRow), fmt.Sprintf("COUNTIF(I9:I%d,\"V\")", 8+daysInMonth))
-	_ = f.SetCellFormula(sheetName, fmt.Sprintf("J%d", sumRow), fmt.Sprintf("COUNTIF(J9:J%d,\"x\")", 8+daysInMonth))
+	writeMasterSignatures(f, sheetName, req, daysInMonth)
 
-	// Write signature blocks (A43, D43, G43 shifted up to finalRow)
-	finalRow := 12 + daysInMonth
-	sigStyle, err := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{
-			Family: "Arial",
-			Size:   11,
-		},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Alignment: &excelize.Alignment{
-			Horizontal: "center",
-			Vertical:   "bottom",
-			WrapText:   true,
-		},
-	})
-	if err == nil {
-		if req.SignatureEmployee != "" {
-			_ = f.SetCellValue(sheetName, fmt.Sprintf("A%d", finalRow), req.SignatureEmployee)
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("A%d", finalRow), fmt.Sprintf("C%d", finalRow+3), sigStyle)
-		}
-		if req.SignatureReviewer != "" {
-			_ = f.SetCellValue(sheetName, fmt.Sprintf("D%d", finalRow), req.SignatureReviewer)
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("D%d", finalRow), fmt.Sprintf("F%d", finalRow+3), sigStyle)
-		}
-		if req.SignatureApprover != "" {
-			_ = f.SetCellValue(sheetName, fmt.Sprintf("G%d", finalRow), req.SignatureApprover)
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("G%d", finalRow), fmt.Sprintf("J%d", finalRow+3), sigStyle)
-		}
-	}
-
-	// 4. Define Excel styles
-	// Soft gray fill style for weekends and holidays (#D3D3D3)
-	grayStyle, err := f.NewStyle(&excelize.Style{
-		Fill: excelize.Fill{
-			Type:    "pattern",
-			Color:   []string{"#D3D3D3"},
-			Pattern: 1,
-		},
-		Font: &excelize.Font{
-			Family: "Arial",
-			Size:   11,
-		},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Alignment: &excelize.Alignment{
-			Vertical:   "center",
-			Horizontal: "center",
-			WrapText:   true,
-		},
-	})
+	st, err := initMasterStyles(f)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate gray Excel styling: %w", err)
+		return nil, err
 	}
 
-	// Gray Date Style for Column A on weekends/holidays (keeps date number format intact)
-	grayDateStyle, _ := f.NewStyle(&excelize.Style{
-		CustomNumFmt: stringPtr("d-m-yy"),
-		Fill: excelize.Fill{
-			Type:    "pattern",
-			Color:   []string{"#D3D3D3"},
-			Pattern: 1,
-		},
-		Font: &excelize.Font{
-			Family: "Arial",
-			Size:   11,
-		},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Alignment: &excelize.Alignment{
-			Vertical:   "center",
-			Horizontal: "center",
-		},
-	})
+	entryMap := make(map[int]*models.DailyEntry, len(req.DailyEntries))
+	for i := range req.DailyEntries {
+		entryMap[req.DailyEntries[i].Day] = &req.DailyEntries[i]
+	}
 
-	// Date style for Column A on working days
-	dateStyle, _ := f.NewStyle(&excelize.Style{
-		CustomNumFmt: stringPtr("d-m-yy"),
-		Font: &excelize.Font{
-			Family: "Arial",
-			Size:   11,
-		},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Alignment: &excelize.Alignment{
-			Vertical:   "center",
-			Horizontal: "center",
-		},
-	})
-
-	// Time style for Columns B, C, D on working days
-	timeStyle, _ := f.NewStyle(&excelize.Style{
-		CustomNumFmt: stringPtr("hh:mm"),
-		Font: &excelize.Font{
-			Family: "Arial",
-			Size:   11,
-		},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Alignment: &excelize.Alignment{
-			Vertical:   "center",
-			Horizontal: "center",
-		},
-	})
-
-	// Active Center Style for Columns E-J on working days
-	activeStyleCenter, _ := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{
-			Family: "Arial",
-			Size:   11,
-		},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Alignment: &excelize.Alignment{
-			Vertical:   "center",
-			Horizontal: "center",
-		},
-	})
-
-	// Active Centered Style for Columns K-Q (Text columns) on working days
-	activeStyleLeft, _ := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{
-			Family: "Arial",
-			Size:   11,
-		},
-		Border: []excelize.Border{
-			{Type: "left", Color: "000000", Style: 1},
-			{Type: "top", Color: "000000", Style: 1},
-			{Type: "right", Color: "000000", Style: 1},
-			{Type: "bottom", Color: "000000", Style: 1},
-		},
-		Alignment: &excelize.Alignment{
-			Vertical:   "center",
-			Horizontal: "center",
-			WrapText:   true,
-		},
-	})
-
-	// 5. Inject Data & Apply styles row by row
 	for day := 1; day <= daysInMonth; day++ {
 		r := 8 + day
 		d := time.Date(req.Year, time.Month(req.Month), day, 0, 0, 0, 0, time.UTC)
 		isWeekend := d.Weekday() == time.Saturday || d.Weekday() == time.Sunday
-
 		dateStr := fmt.Sprintf("%04d-%02d-%02d", req.Year, req.Month, day)
 		holidayDesc, isHoliday := holidayMap[dateStr]
+
 		var h float64
-
 		if isWeekend || isHoliday {
-			// Apply soft gray background across all fillable columns (B to Q)
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("B%d", r), fmt.Sprintf("Q%d", r), grayStyle)
-			// Apply gray date style to A (Date)
-			_ = f.SetCellValue(sheetName, fmt.Sprintf("A%d", r), d)
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("A%d", r), fmt.Sprintf("A%d", r), grayDateStyle)
-
-			// Clear time columns (B and C)
-			_ = f.SetCellValue(sheetName, fmt.Sprintf("B%d", r), "")
-			_ = f.SetCellValue(sheetName, fmt.Sprintf("C%d", r), "")
-
-			// Clear attendance columns (E-J)
-			for _, col := range []string{"E", "F", "G", "H", "I", "J"} {
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("%s%d", col, r), "")
-			}
-
-			if isHoliday {
-				// Automatically insert the holiday's name into the Activity/Remark cell (Column K)
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("K%d", r), holidayDesc)
-				// Clear other text columns
-				for _, col := range []string{"L", "M", "N", "O", "P", "Q"} {
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("%s%d", col, r), "")
-				}
-				h = calculateRowHeight(holidayDesc, "", "", "", "", "")
-			} else {
-				// Clear all text columns for weekend
-				for _, col := range []string{"K", "L", "M", "N", "O", "P", "Q"} {
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("%s%d", col, r), "")
-				}
-				h = 15.0
-			}
+			h = writeMasterNonWorkingDay(f, sheetName, r, d, isHoliday, holidayDesc, st)
 		} else {
-			// Working day: search for entry
-			var entry *models.DailyEntry
-			for i := range req.DailyEntries {
-				if req.DailyEntries[i].Day == day {
-					entry = &req.DailyEntries[i]
-					break
-				}
-			}
-
-			// Write date and format Column A
-			_ = f.SetCellValue(sheetName, fmt.Sprintf("A%d", r), d)
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("A%d", r), fmt.Sprintf("A%d", r), dateStyle)
-
-			if entry != nil {
-				// Inject time values
-				if entry.StartTime != "" && entry.StartTime != "00:00" {
-					startVal, err := parseTimeToExcelFraction(entry.StartTime)
-					if err == nil {
-						_ = f.SetCellValue(sheetName, fmt.Sprintf("B%d", r), startVal)
-					} else {
-						_ = f.SetCellValue(sheetName, fmt.Sprintf("B%d", r), entry.StartTime)
-					}
-				} else {
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("B%d", r), "")
-				}
-
-				if entry.EndTime != "" && entry.EndTime != "00:00" {
-					endVal, err := parseTimeToExcelFraction(entry.EndTime)
-					if err == nil {
-						_ = f.SetCellValue(sheetName, fmt.Sprintf("C%d", r), endVal)
-					} else {
-						_ = f.SetCellValue(sheetName, fmt.Sprintf("C%d", r), entry.EndTime)
-					}
-				} else {
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("C%d", r), "")
-				}
-
-				// Clear and set status
-				for _, col := range []string{"E", "F", "G", "H", "I", "J"} {
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("%s%d", col, r), "")
-				}
-
-				statusUpper := strings.ToUpper(entry.Status)
-				switch statusUpper {
-				case "P":
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("E%d", r), "P")
-				case "S":
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("F%d", r), "S")
-				case "BT":
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("G%d", r), "BT")
-				case "PM":
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("H%d", r), "PM")
-				case "V":
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("I%d", r), "V")
-				case "X":
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("J%d", r), "x")
-				}
-
-				// Set text columns
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("K%d", r), entry.Activity)
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("L%d", r), entry.ProjectName)
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("M%d", r), entry.ProjectID)
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("N%d", r), entry.AppImpacted)
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("O%d", r), "") // AIP Fitur
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("P%d", r), entry.Division)
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("Q%d", r), entry.Department)
-
-				h = calculateRowHeight(entry.Activity, entry.ProjectName, entry.ProjectID, entry.AppImpacted, entry.Division, entry.Department)
-			} else {
-				// Clear fields if no entry was found for this working day
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("B%d", r), "")
-				_ = f.SetCellValue(sheetName, fmt.Sprintf("C%d", r), "")
-				for _, col := range []string{"E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q"} {
-					_ = f.SetCellValue(sheetName, fmt.Sprintf("%s%d", col, r), "")
-				}
-				h = 15.0
-			}
-
-			// Format styles for working days
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("B%d", r), fmt.Sprintf("C%d", r), timeStyle)
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("D%d", r), fmt.Sprintf("D%d", r), timeStyle)
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("E%d", r), fmt.Sprintf("J%d", r), activeStyleCenter)
-			_ = f.SetCellStyle(sheetName, fmt.Sprintf("K%d", r), fmt.Sprintf("Q%d", r), activeStyleLeft)
+			h = writeMasterWorkingDay(f, sheetName, r, d, entryMap[day], st)
 		}
-
 		_ = f.SetRowHeight(sheetName, r, h)
 	}
 
-	// 6. Readability & Print Formatting
-	// Set Page Layout: A4 Paper (PaperSize: 9) and Landscape orientation
 	err = f.SetPageLayout(sheetName, &excelize.PageLayoutOptions{
-		Size:        intPtr(9),              // A4 paper size
-		Orientation: stringPtr("landscape"), // Landscape orientation
+		Size:        intPtr(9),
+		Orientation: stringPtr("landscape"),
 	})
 	if err != nil {
 		log.Printf("Warning: Failed to set page layout: %v", err)
 	}
 
-	// Save modified spreadsheet to buffer
 	var excelBuf bytes.Buffer
 	if err := f.Write(&excelBuf); err != nil {
 		return nil, fmt.Errorf("failed to write Excel data: %w", err)

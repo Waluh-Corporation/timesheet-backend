@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -8,10 +9,20 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"timesheet-backend/models"
 	"timesheet-backend/services"
+)
+
+const (
+	dateFormatYYYYMMDD = "2006-01-02"
+	queryDateRange     = "date >= ? AND date < ?"
+	queryUserDateRange = "user_id = ? AND date >= ? AND date < ?"
+	orderDateAsc       = "date asc"
+	orderNameAsc       = "name asc"
+	queryIsActive      = "is_active = ?"
 )
 
 // jakarta returns the Asia/Jakarta location, falling back to a fixed +07:00.
@@ -21,6 +32,62 @@ func jakarta() *time.Location {
 		return time.FixedZone("WIB", 7*3600)
 	}
 	return loc
+}
+
+func (s *Server) validateActivityStatus(status string) bool {
+	var statusCount int64
+	return s.DB.Model(&models.ActivityStatus{}).Where("code = ?", status).Count(&statusCount).Error == nil && statusCount > 0
+}
+
+func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
+	var proj models.Project
+	if err := s.DB.Where("id = ?", refID).First(&proj).Error; err != nil || proj.ID == 0 {
+		return nil, errors.New("invalid project_ref_id: project does not exist")
+	}
+	return &proj, nil
+}
+
+func (s *Server) buildProjectQuery(projectID, projectName string) *gorm.DB {
+	query := s.DB.Model(&models.Project{})
+	if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
+		query = query.Where("id = ? OR code = ?", idNum, projectID)
+	} else if projectID != "" {
+		query = query.Where("code = ?", projectID)
+	}
+	if projectName != "" {
+		if projectID != "" {
+			query = s.DB.Model(&models.Project{}).Where("(code = ? OR LOWER(name) = LOWER(?))", projectID, projectName)
+		} else {
+			query = query.Where("LOWER(name) = LOWER(?)", projectName)
+		}
+	}
+	return query
+}
+
+func (s *Server) resolveDailyActivityProject(req *models.DailyActivityRequest, activity *models.DailyActivity) error {
+	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
+		proj, err := s.findProjectByRefID(*req.ProjectRefID)
+		if err != nil {
+			return err
+		}
+		activity.ProjectRefID = &proj.ID
+		activity.ProjectID = proj.Code
+		activity.ProjectName = proj.Name
+		return nil
+	}
+
+	if req.ProjectID == "" && req.ProjectName == "" {
+		return nil
+	}
+
+	var proj models.Project
+	query := s.buildProjectQuery(req.ProjectID, req.ProjectName)
+	if err := query.Limit(1).Find(&proj).Error; err == nil && proj.ID != 0 {
+		activity.ProjectRefID = &proj.ID
+		activity.ProjectID = proj.Code
+		activity.ProjectName = proj.Name
+	}
+	return nil
 }
 
 // UpsertDailyActivity godoc
@@ -42,7 +109,7 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	date, err := time.ParseInLocation("2006-01-02", req.Date, jakarta())
+	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, jakarta())
 	if err != nil {
 		RespondError(c, http.StatusBadRequest, "invalid date format, expected YYYY-MM-DD")
 		return
@@ -54,8 +121,7 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 	}
 
 	// Validate status against activity_statuses to return 400 instead of foreign key constraint 500
-	var statusCount int64
-	if err := s.DB.Model(&models.ActivityStatus{}).Where("code = ?", req.Status).Count(&statusCount).Error; err != nil || statusCount == 0 {
+	if !s.validateActivityStatus(req.Status) {
 		RespondError(c, http.StatusBadRequest, "invalid status code: must be a valid activity status (e.g. P, BT, S, PM, V, X)")
 		return
 	}
@@ -69,43 +135,12 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		Activity:     req.Activity,
 		ProjectName:  req.ProjectName,
 		ProjectID:    req.ProjectID,
-		AppImpacted:  req.AppImpacted,
 		ProjectRefID: req.ProjectRefID,
 	}
 
-	// Pure Relational 3NF: Associate with master Project by ID, code, or name
-	// Always synchronize ProjectID (code), ProjectName, and AppImpacted from the canonical Project
-	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
-		var proj models.Project
-		if err := s.DB.First(&proj, *req.ProjectRefID).Error; err != nil || proj.ID == 0 {
-			RespondError(c, http.StatusBadRequest, "invalid project_ref_id: project does not exist")
-			return
-		}
-		activity.ProjectRefID = &proj.ID
-		activity.ProjectID = proj.Code
-		activity.ProjectName = proj.Name
-		activity.AppImpacted = proj.AppImpacted
-	} else if req.ProjectID != "" || req.ProjectName != "" {
-		var proj models.Project
-		query := s.DB.Model(&models.Project{})
-		if idNum, err := strconv.Atoi(req.ProjectID); err == nil && idNum > 0 {
-			query = query.Where("id = ? OR code = ?", idNum, req.ProjectID)
-		} else if req.ProjectID != "" {
-			query = query.Where("code = ?", req.ProjectID)
-		}
-		if req.ProjectName != "" {
-			if req.ProjectID != "" {
-				query = s.DB.Model(&models.Project{}).Where("(code = ? OR LOWER(name) = LOWER(?))", req.ProjectID, req.ProjectName)
-			} else {
-				query = query.Where("LOWER(name) = LOWER(?)", req.ProjectName)
-			}
-		}
-		if err := query.Limit(1).Find(&proj).Error; err == nil && proj.ID != 0 {
-			activity.ProjectRefID = &proj.ID
-			activity.ProjectID = proj.Code
-			activity.ProjectName = proj.Name
-			activity.AppImpacted = proj.AppImpacted
-		}
+	if err := s.resolveDailyActivityProject(&req, &activity); err != nil {
+		RespondError(c, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	// Upsert on the (user_id, date) unique index.
@@ -113,7 +148,7 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		Columns: []clause.Column{{Name: "user_id"}, {Name: "date"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"start_time", "end_time", "status", "activity",
-			"project_name", "project_id", "app_impacted", "project_ref_id", "updated_at",
+			"project_name", "project_id", "project_ref_id", "updated_at",
 		}),
 	}).Create(&activity).Error
 	if err != nil {
@@ -128,12 +163,12 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 
 // GetDailyActivity godoc
 // @Summary Get daily activity detail
-// @Description Retrieves full details of a specific daily activity by ID, including its associated Project, Status, and User.
+// @Description Retrieves full details of a specific daily activity by ID, including its associated Project and Status.
 // @Tags Activity
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "Daily Activity ID"
-// @Success 200 {object} models.DailyActivity
+// @Success 200 {object} models.DailyActivityDetailResponse
 // @Failure 400 {object} models.ErrorResponse "Invalid activity ID"
 // @Failure 401 {object} models.ErrorResponse "Unauthorized"
 // @Failure 403 {object} models.ErrorResponse "Forbidden: not authorized to access another user's activity"
@@ -149,7 +184,7 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 	}
 
 	var activity models.DailyActivity
-	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").Preload("User").First(&activity, id).Error; err != nil {
+	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").First(&activity, id).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "activity not found")
 		return
 	}
@@ -159,7 +194,107 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 		return
 	}
 
-	RespondSuccess(c, http.StatusOK, activity)
+	resp := models.DailyActivityDetailResponse{
+		ID:          activity.ID,
+		CreatedAt:   activity.CreatedAt,
+		UpdatedAt:   activity.UpdatedAt,
+		UserID:      activity.UserID,
+		Date:        activity.Date,
+		StartTime:   activity.StartTime,
+		EndTime:     activity.EndTime,
+		Activity:    activity.Activity,
+		ProjectName: activity.ProjectName,
+		ProjectID:   activity.ProjectID,
+		ProjectRef:  activity.ProjectRef,
+		StatusRef:   activity.StatusRef,
+	}
+
+	RespondSuccess(c, http.StatusOK, resp)
+}
+
+// ListActivities godoc
+// @Summary List daily activities with pagination
+// @Description Retrieves daily activities for the authenticated user with pagination and optional filtering by year, month, date range, or status.
+// @Tags Activity
+// @Security BearerAuth
+// @Produce json
+// @Param page query int false "Page number (default: 1)"
+// @Param limit query int false "Items per page (default: 10, max: 100). Use -1 or all=true for all records"
+// @Param year query int false "Year filter (e.g. 2026)"
+// @Param month query int false "Month filter (1-12)"
+// @Param start_date query string false "Start date filter (YYYY-MM-DD)"
+// @Param end_date query string false "End date filter (YYYY-MM-DD)"
+// @Param sort query string false "Sort order: asc or desc (default: desc, or asc when filtering by month)"
+// @Success 200 {object} models.PaginatedResponse
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+func applyActivityDateFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
+	if startDateStr := c.Query("start_date"); startDateStr != "" {
+		if startDate, err := time.ParseInLocation(dateFormatYYYYMMDD, startDateStr, jakarta()); err == nil {
+			query = query.Where("date >= ?", startDate)
+		}
+	}
+	if endDateStr := c.Query("end_date"); endDateStr != "" {
+		if endDate, err := time.ParseInLocation(dateFormatYYYYMMDD, endDateStr, jakarta()); err == nil {
+			query = query.Where("date <= ?", endDate)
+		}
+	}
+
+	hasMonth := c.Query("month") != ""
+	hasYear := c.Query("year") != ""
+	if hasMonth || hasYear {
+		year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
+		if hasMonth {
+			month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
+			start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
+			end := start.AddDate(0, 1, 0)
+			query = query.Where(queryDateRange, start, end)
+		} else {
+			start := time.Date(year, 1, 1, 0, 0, 0, 0, jakarta())
+			end := start.AddDate(1, 0, 0)
+			query = query.Where(queryDateRange, start, end)
+		}
+	} else if c.Query("page") == "" && c.Query("limit") == "" && c.Query("start_date") == "" && c.Query("end_date") == "" {
+		year := time.Now().In(jakarta()).Year()
+		month := int(time.Now().In(jakarta()).Month())
+		start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
+		end := start.AddDate(0, 1, 0)
+		query = query.Where(queryDateRange, start, end)
+	}
+
+	if status := c.Query("status"); status != "" {
+		query = query.Where("status = ?", status)
+	}
+	return query
+}
+
+func determineActivitySortOrder(c *gin.Context) string {
+	sortOrder := strings.ToLower(c.Query("sort"))
+	if sortOrder == "asc" || sortOrder == "desc" {
+		return sortOrder
+	}
+	if c.Query("month") != "" || (c.Query("page") == "" && c.Query("limit") == "") {
+		return "asc"
+	}
+	return "desc"
+}
+
+func calculateActivityPagination(c *gin.Context, totalRows int64) (int, int, bool) {
+	page := queryIntDefault(c, "page", 1)
+	if page < 1 {
+		page = 1
+	}
+
+	limit := queryIntDefault(c, "limit", 10)
+	isAll := c.Query("all") == "true" || limit == -1
+
+	if c.Query("page") == "" && c.Query("limit") == "" {
+		limit = int(totalRows)
+		if limit == 0 {
+			limit = 10
+		}
+	}
+	return page, limit, isAll
 }
 
 // ListActivities godoc
@@ -182,57 +317,9 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 func (s *Server) ListActivities(c *gin.Context) {
 	uid := currentUserID(c)
 	query := s.DB.Model(&models.DailyActivity{}).Where("user_id = ?", uid)
+	query = applyActivityDateFilters(c, query)
 
-	// Filter by exact date range if provided
-	if startDateStr := c.Query("start_date"); startDateStr != "" {
-		if startDate, err := time.ParseInLocation("2006-01-02", startDateStr, jakarta()); err == nil {
-			query = query.Where("date >= ?", startDate)
-		}
-	}
-	if endDateStr := c.Query("end_date"); endDateStr != "" {
-		if endDate, err := time.ParseInLocation("2006-01-02", endDateStr, jakarta()); err == nil {
-			query = query.Where("date <= ?", endDate)
-		}
-	}
-
-	// Filter by year/month if provided
-	hasMonth := c.Query("month") != ""
-	hasYear := c.Query("year") != ""
-	if hasMonth || hasYear {
-		year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
-		if hasMonth {
-			month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
-			start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
-			end := start.AddDate(0, 1, 0)
-			query = query.Where("date >= ? AND date < ?", start, end)
-		} else {
-			start := time.Date(year, 1, 1, 0, 0, 0, 0, jakarta())
-			end := start.AddDate(1, 0, 0)
-			query = query.Where("date >= ? AND date < ?", start, end)
-		}
-	} else if c.Query("page") == "" && c.Query("limit") == "" && c.Query("start_date") == "" && c.Query("end_date") == "" {
-		// Backwards-compatibility: if no filter or pagination params at all, default to current month
-		year := time.Now().In(jakarta()).Year()
-		month := int(time.Now().In(jakarta()).Month())
-		start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
-		end := start.AddDate(0, 1, 0)
-		query = query.Where("date >= ? AND date < ?", start, end)
-	}
-
-	// Status filter
-	if status := c.Query("status"); status != "" {
-		query = query.Where("status = ?", status)
-	}
-
-	// Sorting
-	sortOrder := strings.ToLower(c.Query("sort"))
-	if sortOrder != "asc" && sortOrder != "desc" {
-		if hasMonth || (c.Query("page") == "" && c.Query("limit") == "") {
-			sortOrder = "asc"
-		} else {
-			sortOrder = "desc"
-		}
-	}
+	sortOrder := determineActivitySortOrder(c)
 
 	var totalRows int64
 	if err := query.Count(&totalRows).Error; err != nil {
@@ -240,21 +327,7 @@ func (s *Server) ListActivities(c *gin.Context) {
 		return
 	}
 
-	page := queryIntDefault(c, "page", 1)
-	if page < 1 {
-		page = 1
-	}
-
-	limit := queryIntDefault(c, "limit", 10)
-	isAll := c.Query("all") == "true" || limit == -1
-
-	// If no pagination params given and requesting month view without page/limit, return all for that month
-	if c.Query("page") == "" && c.Query("limit") == "" {
-		limit = int(totalRows)
-		if limit == 0 {
-			limit = 10
-		}
-	}
+	page, limit, isAll := calculateActivityPagination(c, totalRows)
 
 	activities := make([]models.DailyActivity, 0)
 	dataQuery := query.Preload("ProjectRef").Preload("StatusRef").Order("date " + sortOrder)
@@ -334,13 +407,13 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	start := time.Date(req.Year, time.Month(req.Month), 1, 0, 0, 0, 0, jakarta())
 	end := start.AddDate(0, 1, 0)
 	var activities []models.DailyActivity
-	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).
+	s.DB.Where(queryUserDateRange, user.ID, start, end).
 		Preload("ProjectRef").Preload("StatusRef").Find(&activities)
 
 	var overtimes []models.OvertimeEntry
-	s.DB.Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).
+	s.DB.Where(queryUserDateRange, user.ID, start, end).
 		Preload("TeamLeader").Preload("DepartmentHead").
-		Order("date asc").Find(&overtimes)
+		Order(orderDateAsc).Find(&overtimes)
 
 	// Fetch public holidays for the month so weekends/holidays are reflected in
 	// the generated sheet (best-effort; generation still proceeds on failure).
@@ -379,6 +452,60 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
 }
 
+func saveYearlyHolidays(db *gorm.DB, yearlyHolidays []models.HolidayDTO) int {
+	syncedCount := 0
+	for _, h := range yearlyHolidays {
+		if t, parseErr := time.Parse(dateFormatYYYYMMDD, h.Date); parseErr == nil {
+			err := db.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "date"}},
+				DoUpdates: clause.AssignmentColumns([]string{"description", "is_joint_leave", "is_civic", "is_religious", "updated_at"}),
+			}).Create(&models.Holiday{
+				Date:         t,
+				Description:  h.Description,
+				IsJointLeave: h.IsJointLeave,
+				IsCivic:      h.IsCivic,
+				IsReligious:  h.IsReligious,
+			}).Error
+			if err == nil {
+				syncedCount++
+			}
+		}
+	}
+	return syncedCount
+}
+
+func filterHolidaysByMonth(yearlyHolidays []models.HolidayDTO, year, month int) []models.HolidayDTO {
+	prefix := fmt.Sprintf("%04d-%02d-", year, month)
+	var monthHolidays []models.HolidayDTO
+	for _, h := range yearlyHolidays {
+		if strings.HasPrefix(h.Date, prefix) {
+			monthHolidays = append(monthHolidays, h)
+		}
+	}
+	return monthHolidays
+}
+
+func fetchDBHolidays(db *gorm.DB, year, month int) []models.HolidayDTO {
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	var dbHolidays []models.Holiday
+	if err := db.Where(queryDateRange, start, end).Order(orderDateAsc).Find(&dbHolidays).Error; err == nil && len(dbHolidays) > 0 {
+		resp := make([]models.HolidayDTO, 0, len(dbHolidays))
+		for _, dh := range dbHolidays {
+			resp = append(resp, models.HolidayDTO{
+				Date:          dh.Date.Format(dateFormatYYYYMMDD),
+				Description:   dh.Description,
+				IsJointLeave:  dh.IsJointLeave,
+				IsCutiBersama: dh.IsJointLeave,
+				IsCivic:       dh.IsCivic,
+				IsReligious:   dh.IsReligious,
+			})
+		}
+		return resp
+	}
+	return nil
+}
+
 // GetHolidays godoc
 // @Summary Get monthly Indonesian public holidays
 // @Description Returns public holidays for the specified month and year with database cache fallback.
@@ -397,50 +524,15 @@ func (s *Server) GetHolidays(c *gin.Context) {
 
 	// Attempt to fetch and cache entire year from Kemendesa API
 	if yearlyHolidays, err := services.FetchHolidaysByYear(year); err == nil && len(yearlyHolidays) > 0 {
-		for _, h := range yearlyHolidays {
-			if t, parseErr := time.Parse("2006-01-02", h.Date); parseErr == nil {
-				_ = s.DB.Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "date"}},
-					DoUpdates: clause.AssignmentColumns([]string{"description", "is_joint_leave", "is_civic", "is_religious", "updated_at"}),
-				}).Create(&models.Holiday{
-					Date:         t,
-					Description:  h.Description,
-					IsJointLeave: h.IsJointLeave,
-					IsCivic:      h.IsCivic,
-					IsReligious:  h.IsReligious,
-				}).Error
-			}
-		}
-
-		// Filter for the requested month
-		prefix := fmt.Sprintf("%04d-%02d-", year, month)
-		var monthHolidays []models.HolidayDTO
-		for _, h := range yearlyHolidays {
-			if strings.HasPrefix(h.Date, prefix) {
-				monthHolidays = append(monthHolidays, h)
-			}
-		}
+		saveYearlyHolidays(s.DB, yearlyHolidays)
+		monthHolidays := filterHolidaysByMonth(yearlyHolidays, year, month)
 		RespondSuccess(c, http.StatusOK, monthHolidays)
 		return
 	}
 
 	// Fallback to relational database if external API is unreachable
-	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
-	end := start.AddDate(0, 1, 0)
-	var dbHolidays []models.Holiday
-	if err := s.DB.Where("date >= ? AND date < ?", start, end).Order("date asc").Find(&dbHolidays).Error; err == nil && len(dbHolidays) > 0 {
-		resp := make([]models.HolidayDTO, 0, len(dbHolidays))
-		for _, dh := range dbHolidays {
-			resp = append(resp, models.HolidayDTO{
-				Date:          dh.Date.Format("2006-01-02"),
-				Description:   dh.Description,
-				IsJointLeave:  dh.IsJointLeave,
-				IsCutiBersama: dh.IsJointLeave,
-				IsCivic:       dh.IsCivic,
-				IsReligious:   dh.IsReligious,
-			})
-		}
-		RespondSuccess(c, http.StatusOK, resp)
+	if dbHolidays := fetchDBHolidays(s.DB, year, month); len(dbHolidays) > 0 {
+		RespondSuccess(c, http.StatusOK, dbHolidays)
 		return
 	}
 
@@ -476,24 +568,7 @@ func (s *Server) SyncHolidays(c *gin.Context) {
 		return
 	}
 
-	syncedCount := 0
-	for _, h := range yearlyHolidays {
-		if t, parseErr := time.Parse("2006-01-02", h.Date); parseErr == nil {
-			err := s.DB.Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "date"}},
-				DoUpdates: clause.AssignmentColumns([]string{"description", "is_joint_leave", "is_civic", "is_religious", "updated_at"}),
-			}).Create(&models.Holiday{
-				Date:         t,
-				Description:  h.Description,
-				IsJointLeave: h.IsJointLeave,
-				IsCivic:      h.IsCivic,
-				IsReligious:  h.IsReligious,
-			}).Error
-			if err == nil {
-				syncedCount++
-			}
-		}
-	}
+	syncedCount := saveYearlyHolidays(s.DB, yearlyHolidays)
 
 	RespondSuccess(c, http.StatusOK, gin.H{
 		"message": fmt.Sprintf("successfully synchronized %d holidays for year %d", syncedCount, year),
@@ -553,7 +628,7 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	date, err := time.ParseInLocation("2006-01-02", req.Date, jakarta())
+	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, jakarta())
 	if err != nil {
 		RespondError(c, http.StatusBadRequest, "invalid date format, expected YYYY-MM-DD")
 		return
@@ -605,9 +680,9 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 	end := start.AddDate(0, 1, 0)
 
 	var overtimes []models.OvertimeEntry
-	if err := s.DB.Where("user_id = ? AND date >= ? AND date < ?", currentUserID(c), start, end).
+	if err := s.DB.Where(queryUserDateRange, currentUserID(c), start, end).
 		Preload("TeamLeader").Preload("DepartmentHead").
-		Order("date asc").Find(&overtimes).Error; err != nil {
+		Order(orderDateAsc).Find(&overtimes).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -646,8 +721,8 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 // @Router /api/v1/projects [get]
 func (s *Server) ListProjects(c *gin.Context) {
 	var projects []models.Project
-	query := s.DB.Where("is_active = ?", true)
-	if err := query.Order("name asc").Find(&projects).Error; err != nil {
+	query := s.DB.Where(queryIsActive, true)
+	if err := query.Order(orderNameAsc).Find(&projects).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -686,11 +761,11 @@ func (s *Server) ListCompanies(c *gin.Context) {
 // @Router /api/v1/departments [get]
 func (s *Server) ListDepartments(c *gin.Context) {
 	var depts []models.Department
-	query := s.DB.Where("is_active = ?", true)
+	query := s.DB.Where(queryIsActive, true)
 	if compID := c.Query("company_id"); compID != "" {
 		query = query.Where("company_id = ?", compID)
 	}
-	if err := query.Preload("Company").Order("name asc").Find(&depts).Error; err != nil {
+	if err := query.Preload("Company").Order(orderNameAsc).Find(&depts).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -729,12 +804,12 @@ func (s *Server) ListActivityStatuses(c *gin.Context) {
 // @Router /api/v1/holidays/all [get]
 func (s *Server) ListHolidays(c *gin.Context) {
 	var holidays []models.Holiday
-	query := s.DB.Order("date asc")
+	query := s.DB.Order(orderDateAsc)
 	if yearStr := c.Query("year"); yearStr != "" {
 		if y, err := time.Parse("2006", yearStr); err == nil {
 			start := time.Date(y.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
 			end := start.AddDate(1, 0, 0)
-			query = query.Where("date >= ? AND date < ?", start, end)
+			query = query.Where(queryDateRange, start, end)
 		}
 	}
 	if err := query.Find(&holidays).Error; err != nil {
@@ -757,11 +832,11 @@ func (s *Server) ListHolidays(c *gin.Context) {
 // @Router /api/v1/approvers [get]
 func (s *Server) ListApprovers(c *gin.Context) {
 	var approvers []models.Approver
-	q := s.DB.Where("is_active = ?", true)
+	q := s.DB.Where(queryIsActive, true)
 	if roleType := c.Query("role_type"); roleType != "" {
 		q = q.Where("role_type = ?", roleType)
 	}
-	if err := q.Order("name asc").Find(&approvers).Error; err != nil {
+	if err := q.Order(orderNameAsc).Find(&approvers).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

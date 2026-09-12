@@ -119,6 +119,10 @@ func verifyArgon2id(hash, plain string) (bool, error) {
 		return false, ErrInvalidHash
 	}
 
+	if len(want) > 1024 {
+		return false, ErrInvalidHash
+	}
+	//nolint:gosec // G115: len(want) bounded above
 	got := argon2.IDKey([]byte(plain), salt, iter, mem, par, uint32(len(want)))
 	return subtle.ConstantTimeCompare(got, want) == 1, nil
 }

@@ -6,18 +6,20 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"timesheet-backend/auth"
 	"timesheet-backend/models"
 )
 
-// isSelf reports whether the :id path param refers to the authenticated caller.
-func isSelf(c *gin.Context, id string) bool {
-	target, err := strconv.ParseUint(id, 10, 64)
-	if err != nil {
-		return false
-	}
-	return uint(target) == currentUserID(c)
+const (
+	orderCreatedAtDesc  = "created_at desc"
+	queryCodeOrNameLike = "LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)"
+)
+
+// isSelf reports whether targetID refers to the authenticated caller.
+func isSelf(c *gin.Context, targetID uint) bool {
+	return targetID == currentUserID(c)
 }
 
 // ListUsers godoc
@@ -33,7 +35,7 @@ func isSelf(c *gin.Context, id string) bool {
 // @Router /api/v1/admin/users [get]
 func (s *Server) ListUsers(c *gin.Context) {
 	var users []models.User
-	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").Order("created_at desc").Find(&users).Error; err != nil {
+	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").Order(orderCreatedAtDesc).Find(&users).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -43,6 +45,70 @@ func (s *Server) ListUsers(c *gin.Context) {
 // CreateUser godoc
 // @Summary Provision new user account (Admin)
 // @Description Creates a new user account and emails an account setup invitation link (admin only).
+// @Tags Admin
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param request body models.CreateUserRequest true "User provisioning payload"
+// @Success 201 {object} models.User
+func (s *Server) resolveUserCompany(req *models.CreateUserRequest, user *models.User) {
+	if req.CompanyID != nil && *req.CompanyID != 0 {
+		var comp models.Company
+		if err := s.DB.First(&comp, *req.CompanyID).Error; err == nil {
+			user.CompanyID = &comp.ID
+			if user.Company == "" {
+				user.Company = comp.Name
+			}
+		}
+	} else if req.Company != "" {
+		var comp models.Company
+		if err := s.DB.Where(queryCodeOrNameLike, req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
+			user.CompanyID = &comp.ID
+		}
+	}
+}
+
+func (s *Server) resolveUserDepartment(req *models.CreateUserRequest, user *models.User) {
+	if req.DepartmentID != nil && *req.DepartmentID != 0 {
+		var dept models.Department
+		if err := s.DB.First(&dept, *req.DepartmentID).Error; err == nil {
+			user.DepartmentID = &dept.ID
+			if user.Department == "" {
+				user.Department = dept.Name
+			}
+			if user.Division == "" {
+				user.Division = dept.Division
+			}
+		}
+	} else if req.Department != "" {
+		var dept models.Department
+		if err := s.DB.Where(queryCodeOrNameLike, req.Department, "%"+req.Department+"%").First(&dept).Error; err == nil {
+			user.DepartmentID = &dept.ID
+			if user.Division == "" && dept.Division != "" {
+				user.Division = dept.Division
+			}
+		}
+	}
+}
+
+func handleInitialPassword(req *models.CreateUserRequest, user *models.User) (string, int) {
+	if req.Password == "" {
+		return "", 0
+	}
+	if err := auth.ValidatePassword(req.Password, req.Username, req.Email); err != nil {
+		return err.Error(), http.StatusBadRequest
+	}
+	hash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		return "could not hash password", http.StatusInternalServerError
+	}
+	user.PasswordHash = hash
+	return "", 0
+}
+
+// CreateUser godoc
+// @Summary Create user (Admin)
+// @Description Creates a new user account with role, departmental assignment, and optional initial password.
 // @Tags Admin
 // @Security BearerAuth
 // @Accept json
@@ -77,57 +143,12 @@ func (s *Server) CreateUser(c *gin.Context) {
 		IsActive:     true,
 	}
 
-	// Resolve Company
-	if req.CompanyID != nil && *req.CompanyID != 0 {
-		var comp models.Company
-		if err := s.DB.First(&comp, *req.CompanyID).Error; err == nil {
-			user.CompanyID = &comp.ID
-			if user.Company == "" {
-				user.Company = comp.Name
-			}
-		}
-	} else if req.Company != "" {
-		var comp models.Company
-		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
-			user.CompanyID = &comp.ID
-		}
-	}
+	s.resolveUserCompany(&req, &user)
+	s.resolveUserDepartment(&req, &user)
 
-	// Resolve Department
-	if req.DepartmentID != nil && *req.DepartmentID != 0 {
-		var dept models.Department
-		if err := s.DB.First(&dept, *req.DepartmentID).Error; err == nil {
-			user.DepartmentID = &dept.ID
-			if user.Department == "" {
-				user.Department = dept.Name
-			}
-			if user.Division == "" {
-				user.Division = dept.Division
-			}
-		}
-	} else if req.Department != "" {
-		var dept models.Department
-		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", req.Department, "%"+req.Department+"%").First(&dept).Error; err == nil {
-			user.DepartmentID = &dept.ID
-			if user.Division == "" && dept.Division != "" {
-				user.Division = dept.Division
-			}
-		}
-	}
-
-	if req.Password != "" {
-		// Enforce the NIST SP 800-63B policy on any admin-supplied initial
-		// password (length + blocklist + context-specific terms).
-		if err := auth.ValidatePassword(req.Password, req.Username, req.Email); err != nil {
-			RespondError(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		hash, err := auth.HashPassword(req.Password)
-		if err != nil {
-			RespondError(c, http.StatusInternalServerError, "could not hash password")
-			return
-		}
-		user.PasswordHash = hash
+	if errMsg, code := handleInitialPassword(&req, &user); code != 0 {
+		RespondError(c, code, errMsg)
+		return
 	}
 
 	if err := s.DB.Create(&user).Error; err != nil {
@@ -149,52 +170,24 @@ func (s *Server) CreateUser(c *gin.Context) {
 		_ = s.Mailer.SendSetupEmail(user.Email, user.Username, link)
 	}
 
-	_ = s.DB.Preload("CompanyRel").Preload("DepartmentRel").First(&user, user.ID)
+	s.DB.Preload("CompanyRel").Preload("DepartmentRel").First(&user, user.ID)
 	RespondSuccess(c, http.StatusCreated, user)
 }
 
-// UpdateUser godoc
-// @Summary Update user attributes (Admin)
-// @Description Updates user profile information, role, or active status directly (admin only).
-// @Tags Admin
-// @Security BearerAuth
-// @Accept json
-// @Produce json
-// @Param id path int true "User ID"
-// @Param request body models.UpdateUserRequest true "Update payload"
-// @Success 200 {object} models.User
-// @Failure 400 {object} models.ErrorResponse "Invalid payload"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Admin only or self-demotion forbidden"
-// @Failure 404 {object} models.ErrorResponse "User not found"
-// @Router /api/v1/admin/users/{id} [patch]
-func (s *Server) UpdateUser(c *gin.Context) {
-	id := c.Param("id")
-	var user models.User
-	if err := s.DB.First(&user, id).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "user not found")
-		return
+func validateSelfUpdate(c *gin.Context, id uint, req *models.UpdateUserRequest) (string, int) {
+	if !isSelf(c, id) {
+		return "", 0
 	}
-
-	var req models.UpdateUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, err.Error())
-		return
+	if req.IsActive != nil && !*req.IsActive {
+		return "you cannot deactivate your own account", http.StatusForbidden
 	}
-
-	// An admin may never deactivate or demote their own account through the
-	// update path either — both are self-lockout vectors.
-	if isSelf(c, id) {
-		if req.IsActive != nil && !*req.IsActive {
-			RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
-			return
-		}
-		if req.Role != nil && *req.Role != models.RoleAdmin {
-			RespondError(c, http.StatusForbidden, "you cannot remove your own admin role")
-			return
-		}
+	if req.Role != nil && *req.Role != models.RoleAdmin {
+		return "you cannot remove your own admin role", http.StatusForbidden
 	}
+	return "", 0
+}
 
+func buildUserUpdates(db *gorm.DB, req *models.UpdateUserRequest) map[string]interface{} {
 	updates := map[string]interface{}{}
 	if req.Role != nil {
 		updates["role"] = *req.Role
@@ -226,12 +219,60 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	if req.Company != nil {
 		updates["company"] = *req.Company
 		var comp models.Company
-		if err := s.DB.Where("LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)", *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
+		if err := db.Where(queryCodeOrNameLike, *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
 			updates["company_id"] = comp.ID
 		} else {
 			updates["company_id"] = nil
 		}
 	}
+	return updates
+}
+
+// UpdateUser godoc
+// @Summary Update user (Admin)
+// @Description Updates user attributes (role, active status, name, company, department). Self-deactivation and self-demotion are blocked.
+// @Tags Admin
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Param request body models.UpdateUserRequest true "Update payload"
+// @Success 200 {object} models.User
+// @Failure 400 {object} models.ErrorResponse "Invalid payload"
+// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 403 {object} models.ErrorResponse "Admin only or self-demotion forbidden"
+// @Failure 404 {object} models.ErrorResponse "User not found"
+// @Router /api/v1/admin/users/{id} [patch]
+func (s *Server) UpdateUser(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
+		return
+	}
+
+	var req models.UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if errMsg, code := validateSelfUpdate(c, uint(id), &req); code != 0 {
+		RespondError(c, code, errMsg)
+		return
+	}
+
+	if s.DB == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
+	}
+
+	var user models.User
+	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&user).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "user not found")
+		return
+	}
+
+	updates := buildUserUpdates(s.DB, &req)
 	if len(updates) > 0 {
 		s.DB.Model(&user).Updates(updates)
 	}
@@ -253,15 +294,19 @@ func (s *Server) UpdateUser(c *gin.Context) {
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users/{id} [delete]
 func (s *Server) DeleteUser(c *gin.Context) {
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
+		return
+	}
 	// An admin may never deactivate/delete their own account — doing so could
 	// lock the last administrator out of the portal.
-	if isSelf(c, id) {
+	if isSelf(c, uint(id)) {
 		RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
 		return
 	}
 	var user models.User
-	if err := s.DB.First(&user, id).Error; err != nil {
+	if err := s.DB.Where(queryID, id).First(&user).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
@@ -269,7 +314,7 @@ func (s *Server) DeleteUser(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.DB.First(&user, id)
+	s.DB.Where(queryID, id).First(&user)
 	RespondSuccess(c, http.StatusOK, user)
 }
 
@@ -326,7 +371,7 @@ func (s *Server) MyProfileChanges(c *gin.Context) {
 	var changes []models.ProfileChangeRequest
 	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").
 		Where("user_id = ?", currentUserID(c)).
-		Order("created_at desc").Find(&changes).Error; err != nil {
+		Order(orderCreatedAtDesc).Find(&changes).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -347,7 +392,7 @@ func (s *Server) MyProfileChanges(c *gin.Context) {
 // @Router /api/v1/admin/profile-changes [get]
 func (s *Server) ListProfileChanges(c *gin.Context) {
 	var changes []models.ProfileChangeRequest
-	q := s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").Order("created_at desc")
+	q := s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").Order(orderCreatedAtDesc)
 	if status := c.Query("status"); status != "" {
 		q = q.Where("status = ?", status)
 	}
@@ -374,11 +419,25 @@ func (s *Server) ListProfileChanges(c *gin.Context) {
 // @Failure 409 {object} models.ErrorResponse "Request already reviewed"
 // @Router /api/v1/admin/profile-changes/{id}/review [post]
 func (s *Server) ReviewProfileChange(c *gin.Context) {
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid profile change request ID, expected positive integer")
+		return
+	}
 	action := c.Query("action") // "approve" or "reject"
 
+	if action != "approve" && action != "reject" {
+		RespondError(c, http.StatusBadRequest, "invalid action: must be 'approve' or 'reject'")
+		return
+	}
+
+	if s.DB == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
+	}
+
 	var change models.ProfileChangeRequest
-	if err := s.DB.First(&change, id).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&change).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "request not found")
 		return
 	}
@@ -406,7 +465,7 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 		if change.CompanyID != nil {
 			updates["company_id"] = change.CompanyID
 		}
-		s.DB.Model(&models.User{}).Where("id = ?", change.UserID).Updates(updates)
+		s.DB.Model(&models.User{}).Where(queryID, change.UserID).Updates(updates)
 		change.Status = models.ProfileApproved
 	} else {
 		change.Status = "rejected"

@@ -12,6 +12,8 @@ import (
 	"timesheet-backend/models"
 )
 
+const queryCode = "code = ?"
+
 // Setup runs database migrations and initial seeding.
 func Setup(db *gorm.DB, cfg *config.Config) error {
 	log.Println("[database] running database migrations...")
@@ -48,9 +50,13 @@ func seedDefaultCompanies(db *gorm.DB) error {
 	}
 	for _, c := range companies {
 		var cnt int64
-		_ = db.Model(&models.Company{}).Where("code = ?", c.Code).Count(&cnt).Error
+		if err := db.Model(&models.Company{}).Where(queryCode, c.Code).Count(&cnt).Error; err != nil {
+			return err
+		}
 		if cnt == 0 {
-			_ = db.Create(&c).Error
+			if err := db.Create(&c).Error; err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -104,7 +110,7 @@ func AutoMigrate(db *gorm.DB) error {
 func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	findCompanyID := func(code string) *uint {
 		var comp models.Company
-		if err := db.Where("code = ?", code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
+		if err := db.Where(queryCode, code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
 			return &comp.ID
 		}
 		return nil
@@ -189,7 +195,7 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	}
 	for _, d := range defaultDepartments {
 		var cnt int64
-		q := db.Model(&models.Department{}).Where("code = ?", d.Code)
+		q := db.Model(&models.Department{}).Where(queryCode, d.Code)
 		if d.CompanyID == nil {
 			q = q.Where("company_id IS NULL")
 		} else {
@@ -202,7 +208,7 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	}
 
 	// 7. Backfill users.department_id
-	_ = db.Exec(`
+	if err := db.Exec(`
 		UPDATE users 
 		SET department_id = (
 			SELECT id FROM departments 
@@ -213,7 +219,9 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 		) 
 		WHERE (department_id IS NULL OR department_id = 0) 
 		  AND ((department IS NOT NULL AND department != '') OR (division IS NOT NULL AND division != ''))
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -230,7 +238,7 @@ func SeedActivityStatuses(db *gorm.DB) error {
 	}
 	for _, s := range defaultStatuses {
 		var cnt int64
-		_ = db.Model(&models.ActivityStatus{}).Where("code = ?", s.Code).Count(&cnt).Error
+		_ = db.Model(&models.ActivityStatus{}).Where(queryCode, s.Code).Count(&cnt).Error
 		if cnt == 0 {
 			if err := db.Create(&s).Error; err != nil {
 				return err
