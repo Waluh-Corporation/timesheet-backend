@@ -91,6 +91,17 @@ func TestUserHandlers_SelfProtectionAndValidation(t *testing.T) {
 		assertResponseCode(t, w, http.StatusBadRequest)
 	})
 
+	t.Run("CreateUser rejects weak password", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		body := `{"username":"testweak","email":"testweak@example.com","name":"Weak","password":"123","role":"user"}`
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader([]byte(body)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.CreateUser(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
 	t.Run("ReviewProfileChange rejects invalid ID and action", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
