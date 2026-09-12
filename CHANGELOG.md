@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- SonarCloud Security & Code Smells: Resolved all leak-period issues including GitHub Actions script injection (S7630), LibreOffice executable PATH resolution (S4036), hardcoded database credential string patterns (S2068), and GORM query/update taint sinks (S3649).
+- WebAuthn Credential Column Mapping: Added explicit `gorm:"column:aaguid"` tag to `WebAuthnCredential.AAGUID` aligning struct field with PostgreSQL schema.
+- Code Complexity & Duplication: Reduced cognitive complexity in `InitSetup`, `resolveUserDepartment`, and `ReviewProfileChange` below threshold (<=15), and deduplicated `"id = ?"` query literals with package-level constant `queryID`.
+
+### Added
+- Extended Automated Test Coverage: Added comprehensive test suites for authentication flows, passkeys, WebPush notifications, daily reminder scheduler, and timesheet report generation, elevating statement coverage across handlers to 71.0% and overall project to 77.1%.
+
 ---
 
 ## [1.1.0] - 2026-09-12

@@ -103,11 +103,10 @@ func (s *Server) GetSetupStatus(c *gin.Context) {
 // @Failure 403 {object} models.ErrorResponse "System already initialized"
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/setup/init [post]
-func (s *Server) InitSetup(c *gin.Context) {
+func (s *Server) isSystemAlreadyInitialized() (bool, error) {
 	var adminCount int64
 	if err := s.DB.Model(&models.User{}).Where("role = ? AND deleted_at IS NULL", models.RoleAdmin).Count(&adminCount).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, "failed to check setup status: "+err.Error())
-		return
+		return false, err
 	}
 
 	var setting models.SystemSetting
@@ -118,7 +117,108 @@ func (s *Server) InitSetup(c *gin.Context) {
 		isNew = "N"
 	}
 
-	if isNew == "N" || adminCount > 0 {
+	return isNew == "N" || adminCount > 0, nil
+}
+
+func seedSetupCompanies(tx *gorm.DB, companies []InitSetupCompanyRequest) (map[string]uint, error) {
+	compMap := make(map[string]uint)
+	var existingComps []models.Company
+	if err := tx.Find(&existingComps).Error; err != nil {
+		return nil, err
+	}
+	for _, comp := range existingComps {
+		compMap[strings.ToLower(comp.Code)] = comp.ID
+	}
+
+	for _, cr := range companies {
+		code := strings.ToLower(strings.TrimSpace(cr.Code))
+		if code == "" {
+			continue
+		}
+		if _, exists := compMap[code]; !exists {
+			newComp := models.Company{
+				Code: code,
+				Name: strings.TrimSpace(cr.Name),
+			}
+			if err := tx.Create(&newComp).Error; err != nil {
+				return nil, err
+			}
+			compMap[code] = newComp.ID
+		}
+	}
+	return compMap, nil
+}
+
+func seedSetupDepartments(tx *gorm.DB, departments []InitSetupDepartmentRequest, compMap map[string]uint) error {
+	for _, dr := range departments {
+		code := strings.TrimSpace(dr.Code)
+		if code == "" {
+			continue
+		}
+		var compID *uint
+		if cCode := strings.ToLower(strings.TrimSpace(dr.CompanyCode)); cCode != "" {
+			if id, ok := compMap[cCode]; ok {
+				compID = &id
+			}
+		}
+
+		var count int64
+		_ = tx.Model(&models.Department{}).Where("code = ?", code).Count(&count).Error
+		if count == 0 {
+			newDept := models.Department{
+				Code:      code,
+				Name:      strings.TrimSpace(dr.Name),
+				Division:  strings.TrimSpace(dr.Division),
+				CompanyID: compID,
+				IsActive:  true,
+			}
+			if err := tx.Create(&newDept).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func seedSetupApprovers(tx *gorm.DB, approvers []InitSetupApproverRequest) error {
+	for _, ar := range approvers {
+		name := strings.TrimSpace(ar.Name)
+		if name == "" {
+			continue
+		}
+
+		newAppr := models.Approver{
+			Name:     name,
+			RoleType: ar.RoleType,
+			Title:    strings.TrimSpace(ar.Title),
+			IsActive: true,
+		}
+		if err := tx.Create(&newAppr).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// InitSetup godoc
+// @Summary Initialize system setup
+// @Description Performs initial system configuration: provisions companies, departments, approvers, and super admin account.
+// @Tags Setup
+// @Accept json
+// @Produce json
+// @Param request body handlers.InitSetupRequest true "Initialization payload"
+// @Success 200 {object} map[string]interface{} "Setup success response with admin token"
+// @Failure 400 {object} models.ErrorResponse "Bad request or validation error"
+// @Failure 403 {object} models.ErrorResponse "System already initialized"
+// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Router /api/v1/setup/init [post]
+func (s *Server) InitSetup(c *gin.Context) {
+	initialized, err := s.isSystemAlreadyInitialized()
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to check setup status: "+err.Error())
+		return
+	}
+	if initialized {
 		RespondError(c, http.StatusForbidden, "system is already initialized")
 		return
 	}
@@ -129,7 +229,6 @@ func (s *Server) InitSetup(c *gin.Context) {
 		return
 	}
 
-	// Validate admin password policy
 	if err := auth.ValidatePassword(req.Admin.Password, req.Admin.Username, req.Admin.Email); err != nil {
 		RespondError(c, http.StatusBadRequest, "admin password policy violation: "+err.Error())
 		return
@@ -142,83 +241,18 @@ func (s *Server) InitSetup(c *gin.Context) {
 	}
 
 	var adminUser models.User
-
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
-		// 1. Companies
-		compMap := make(map[string]uint)
-		var existingComps []models.Company
-		if err := tx.Find(&existingComps).Error; err != nil {
+		compMap, err := seedSetupCompanies(tx, req.Companies)
+		if err != nil {
 			return err
 		}
-		for _, comp := range existingComps {
-			compMap[strings.ToLower(comp.Code)] = comp.ID
+		if err := seedSetupDepartments(tx, req.Departments, compMap); err != nil {
+			return err
+		}
+		if err := seedSetupApprovers(tx, req.Approvers); err != nil {
+			return err
 		}
 
-		for _, cr := range req.Companies {
-			code := strings.ToLower(strings.TrimSpace(cr.Code))
-			if code == "" {
-				continue
-			}
-			if _, exists := compMap[code]; !exists {
-				newComp := models.Company{
-					Code: code,
-					Name: strings.TrimSpace(cr.Name),
-				}
-				if err := tx.Create(&newComp).Error; err != nil {
-					return err
-				}
-				compMap[code] = newComp.ID
-			}
-		}
-
-		// 2. Departments
-		for _, dr := range req.Departments {
-			code := strings.TrimSpace(dr.Code)
-			if code == "" {
-				continue
-			}
-			var compID *uint
-			if cCode := strings.ToLower(strings.TrimSpace(dr.CompanyCode)); cCode != "" {
-				if id, ok := compMap[cCode]; ok {
-					compID = &id
-				}
-			}
-
-			var count int64
-			_ = tx.Model(&models.Department{}).Where("code = ?", code).Count(&count).Error
-			if count == 0 {
-				newDept := models.Department{
-					Code:      code,
-					Name:      strings.TrimSpace(dr.Name),
-					Division:  strings.TrimSpace(dr.Division),
-					CompanyID: compID,
-					IsActive:  true,
-				}
-				if err := tx.Create(&newDept).Error; err != nil {
-					return err
-				}
-			}
-		}
-
-		// 3. Approvers
-		for _, ar := range req.Approvers {
-			name := strings.TrimSpace(ar.Name)
-			if name == "" {
-				continue
-			}
-
-			newAppr := models.Approver{
-				Name:     name,
-				RoleType: ar.RoleType,
-				Title:    strings.TrimSpace(ar.Title),
-				IsActive: true,
-			}
-			if err := tx.Create(&newAppr).Error; err != nil {
-				return err
-			}
-		}
-
-		// 4. Create Super Admin user
 		adminUser = models.User{
 			Username:     strings.TrimSpace(req.Admin.Username),
 			Email:        strings.TrimSpace(req.Admin.Email),
@@ -231,21 +265,15 @@ func (s *Server) InitSetup(c *gin.Context) {
 			return err
 		}
 
-		// 5. Ensure ActivityStatuses are automatically seeded
 		if err := database.SeedActivityStatuses(tx); err != nil {
 			return err
 		}
 
-		// 6. Mark system as initialized (is_new = N)
-		if err := tx.Save(&models.SystemSetting{
+		return tx.Save(&models.SystemSetting{
 			Key:       "is_new",
 			Value:     "N",
 			UpdatedAt: time.Now(),
-		}).Error; err != nil {
-			return err
-		}
-
-		return nil
+		}).Error
 	})
 
 	if err != nil {

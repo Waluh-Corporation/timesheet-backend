@@ -201,7 +201,7 @@ type WebAuthnCredential struct {
 	CredentialID    []byte `gorm:"uniqueIndex;not null" json:"-"`
 	PublicKey       []byte `gorm:"not null" json:"-"`
 	AttestationType string `gorm:"size:64" json:"-"`
-	AAGUID          []byte `json:"-"`
+	AAGUID          []byte `gorm:"column:aaguid" json:"-"`
 	SignCount       uint32 `json:"-"`
 	CloneWarning    bool   `json:"-"`
 	// BackupEligible (BE) records whether the authenticator can back up / sync

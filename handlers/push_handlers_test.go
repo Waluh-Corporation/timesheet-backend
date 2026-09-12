@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/config"
+	"timesheet-backend/models"
 	"timesheet-backend/push"
 )
 
@@ -52,4 +53,84 @@ func TestPushHandlers(t *testing.T) {
 	if wSubErr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for invalid json, got %d", wSubErr.Code)
 	}
+}
+
+func TestPushHandlers_Extended(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	pushSvc := push.New(cfg, tx)
+	srv := &Server{
+		DB:   tx,
+		Cfg:  cfg,
+		Push: pushSvc,
+	}
+
+	testUser := models.User{
+		Username: "pushtestuser",
+		Email:    "pushtest@example.com",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+	if err := tx.Create(&testUser).Error; err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+	uid := testUser.ID
+
+	t.Run("Subscribe valid payload", func(t *testing.T) {
+		payload := models.SubscribeRequest{
+			Endpoint: "https://fcm.googleapis.com/fcm/send/test-endpoint-1",
+			Keys: models.PushKeyPayload{
+				P256dh: "test-p256dh-key",
+				Auth:   "test-auth-secret",
+			},
+		}
+		body, _ := json.Marshal(payload)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/push/subscribe", bytes.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, uid)
+
+		srv.Subscribe(c)
+		assertResponseCode(t, w, http.StatusCreated)
+	})
+
+	t.Run("SendTestPush dispatches", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/push/test", nil)
+		c.Set(ctxUserID, uid)
+
+		srv.SendTestPush(c)
+		assertResponseCode(t, w, http.StatusOK)
+	})
+
+	t.Run("Unsubscribe specific endpoint", func(t *testing.T) {
+		payload := models.UnsubscribeRequest{
+			Endpoint: "https://fcm.googleapis.com/fcm/send/test-endpoint-1",
+		}
+		body, _ := json.Marshal(payload)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/push/unsubscribe", bytes.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, uid)
+
+		srv.Unsubscribe(c)
+		assertResponseCode(t, w, http.StatusOK)
+	})
+
+	t.Run("Unsubscribe all for user", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/push/unsubscribe", nil)
+		c.Set(ctxUserID, uid)
+
+		srv.Unsubscribe(c)
+		assertResponseCode(t, w, http.StatusOK)
+	})
 }

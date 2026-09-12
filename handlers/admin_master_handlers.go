@@ -121,28 +121,25 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 		return
 	}
 
-	updates := map[string]interface{}{}
 	if req.Name != nil {
-		updates["name"] = strings.TrimSpace(*req.Name)
+		appr.Name = strings.TrimSpace(*req.Name)
 	}
 	if req.RoleType != nil {
-		updates["role_type"] = *req.RoleType
+		appr.RoleType = *req.RoleType
 	}
 	if req.Title != nil {
-		updates["title"] = strings.TrimSpace(*req.Title)
+		appr.Title = strings.TrimSpace(*req.Title)
 	}
 	if req.IsActive != nil {
-		updates["is_active"] = *req.IsActive
+		appr.IsActive = *req.IsActive
 	}
 
-	if len(updates) > 0 {
-		if err := s.DB.Model(&appr).Updates(updates).Error; err != nil {
-			RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
-			return
-		}
+	if err := s.DB.Save(&appr).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
+		return
 	}
 
-	_ = s.DB.First(&appr, appr.ID)
+	_ = s.DB.Where(queryID, appr.ID).First(&appr)
 	RespondSuccess(c, http.StatusOK, appr)
 }
 
@@ -252,19 +249,16 @@ func (s *Server) UpdateCompany(c *gin.Context) {
 		return
 	}
 
-	updates := map[string]interface{}{}
 	if req.Code != nil {
-		updates["code"] = strings.ToLower(strings.TrimSpace(*req.Code))
+		comp.Code = strings.ToLower(strings.TrimSpace(*req.Code))
 	}
 	if req.Name != nil {
-		updates["name"] = strings.TrimSpace(*req.Name)
+		comp.Name = strings.TrimSpace(*req.Name)
 	}
 
-	if len(updates) > 0 {
-		if err := s.DB.Model(&comp).Updates(updates).Error; err != nil {
-			RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
-			return
-		}
+	if err := s.DB.Save(&comp).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
+		return
 	}
 	RespondSuccess(c, http.StatusOK, comp)
 }

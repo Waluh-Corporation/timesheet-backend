@@ -61,4 +61,37 @@ func TestSetup_SeedFunctions(t *testing.T) {
 			t.Errorf("expected is_new setting to exist: %v", err)
 		}
 	})
+
+	t.Run("seedDefaultProjectsAndNormalize", func(t *testing.T) {
+		err := seedDefaultProjectsAndNormalize(tx)
+		if err != nil {
+			t.Fatalf("seedDefaultProjectsAndNormalize failed: %v", err)
+		}
+	})
+
+	t.Run("seedAdmin skipped when empty password", func(t *testing.T) {
+		emptyCfg := &config.Config{}
+		err := seedAdmin(tx, emptyCfg)
+		if err != nil {
+			t.Fatalf("seedAdmin with empty password failed: %v", err)
+		}
+	})
+
+	t.Run("seedAdmin creates admin when configured", func(t *testing.T) {
+		adminCfg := &config.Config{
+			AdminUsername: "testadmboot",
+			AdminEmail:    "admboot@example.com",
+			AdminPassword: "SuperAdminPass2026!",
+		}
+		_ = tx.Exec("DELETE FROM users WHERE username = 'testadmboot'").Error
+		err := seedAdmin(tx, adminCfg)
+		if err != nil {
+			t.Fatalf("seedAdmin failed: %v", err)
+		}
+		// Idempotent
+		err = seedAdmin(tx, adminCfg)
+		if err != nil {
+			t.Fatalf("seedAdmin idempotent run failed: %v", err)
+		}
+	})
 }

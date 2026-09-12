@@ -24,10 +24,15 @@ func ConvertExcelToPDF(excelBytes []byte, filename string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to write excel bytes to temp file: %w", err)
 	}
 
+	binPath, err := exec.LookPath("libreoffice")
+	if err != nil {
+		binPath = "libreoffice"
+	}
+
 	// Run LibreOffice headless conversion
 	// Command: libreoffice --headless --convert-to pdf --outdir <tmpDir> <inputPath>
 	//nolint:gosec // G204: inputPath is within isolated temporary directory
-	cmd := exec.Command("libreoffice", "--headless", "--convert-to", "pdf", "--outdir", tmpDir, inputPath)
+	cmd := exec.Command(binPath, "--headless", "--convert-to", "pdf", "--outdir", tmpDir, inputPath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {

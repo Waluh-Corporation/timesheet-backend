@@ -68,7 +68,7 @@ func (s *Service) SendToSubscription(sub *models.PushSubscription, payload Paylo
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone {
-		s.db.Delete(&models.PushSubscription{}, sub.ID)
+		s.db.Where("id = ?", sub.ID).Delete(&models.PushSubscription{})
 	}
 	return nil
 }

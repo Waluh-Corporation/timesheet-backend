@@ -25,11 +25,14 @@ jobs:
 
       - name: Determine Tag Name
         id: release_tag
+        env:
+          INPUT_TAG_NAME: ${{ inputs.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          if [ -n "${{ inputs.tag_name }}" ]; then
-            echo "tag=${{ inputs.tag_name }}" >> $GITHUB_OUTPUT
+          if [ -n "$INPUT_TAG_NAME" ]; then
+            echo "tag=$INPUT_TAG_NAME" >> $GITHUB_OUTPUT
           else
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "tag=$REF_NAME" >> $GITHUB_OUTPUT
           fi
 
       - name: Publish GitHub Release
