@@ -1422,8 +1422,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Creates a new user account and emails an account setup invitation
-        link (admin only).
+      description: Creates a new user account with role, departmental assignment,
+        and optional initial password.
       parameters:
       - description: User provisioning payload
         in: body
@@ -1460,7 +1460,7 @@ paths:
             $ref: '#/definitions/models.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Provision new user account (Admin)
+      summary: Create user (Admin)
       tags:
       - Admin
   /api/v1/admin/users/{id}:
@@ -1504,8 +1504,8 @@ paths:
     patch:
       consumes:
       - application/json
-      description: Updates user profile information, role, or active status directly
-        (admin only).
+      description: Updates user attributes (role, active status, name, company, department).
+        Self-deactivation and self-demotion are blocked.
       parameters:
       - description: User ID
         in: path
@@ -1543,7 +1543,7 @@ paths:
             $ref: '#/definitions/models.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Update user attributes (Admin)
+      summary: Update user (Admin)
       tags:
       - Admin
   /api/v1/admin/users/{id}/passkeys:
@@ -2415,9 +2415,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: One-time setup endpoint to create the primary Super Administrator,
-        initial companies, approvers, and departments. Automatically seeds ActivityStatus
-        and sets is_new = N. Fails with 403 if system is already initialized.
+      description: 'Performs initial system configuration: provisions companies, departments,
+        approvers, and super admin account.'
       parameters:
       - description: Initialization payload
         in: body
@@ -2445,7 +2444,7 @@ paths:
           description: Internal server error
           schema:
             $ref: '#/definitions/models.ErrorResponse'
-      summary: Perform initial system onboarding setup
+      summary: Initialize system setup
       tags:
       - Setup
   /api/v1/setup/status:

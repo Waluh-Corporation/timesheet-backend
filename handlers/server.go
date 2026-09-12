@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"math"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -139,15 +142,69 @@ func currentUserID(c *gin.Context) uint {
 // (setup / password-reset emails) so they open on the PUBLIC URL rather than a
 // hardcoded localhost default.
 //
+func matchHostOrURL(target, host, hostOnly string) bool {
+	if target == "" {
+		return false
+	}
+	if u, err := url.Parse(target); err == nil && u.Host != "" {
+		targetHost := u.Host
+		if th, _, err := net.SplitHostPort(u.Host); err == nil {
+			targetHost = th
+		}
+		return strings.EqualFold(host, u.Host) || strings.EqualFold(hostOnly, targetHost)
+	}
+	return strings.EqualFold(host, target) || strings.EqualFold(hostOnly, target)
+}
+
+func isLoopbackHost(hostOnly string) bool {
+	if strings.EqualFold(os.Getenv("GIN_MODE"), "release") {
+		return false
+	}
+	return hostOnly == "localhost" || hostOnly == "127.0.0.1" || hostOnly == "::1"
+}
+
+// isTrustedHost verifies that a requested host originates from an approved domain
+// (FrontendURL, RPOrigins, RPID, or loopback in development) to prevent Host Header Poisoning.
+func (s *Server) isTrustedHost(host string) bool {
+	if host == "" {
+		return false
+	}
+	hostOnly := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		hostOnly = h
+	}
+
+	if isLoopbackHost(hostOnly) {
+		return true
+	}
+
+	if s == nil || s.Cfg == nil {
+		return false
+	}
+
+	if matchHostOrURL(s.Cfg.RPID, host, hostOnly) || matchHostOrURL(s.Cfg.FrontendURL, host, hostOnly) {
+		return true
+	}
+
+	for _, origin := range s.Cfg.RPOrigins {
+		if matchHostOrURL(origin, host, hostOnly) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// publicBaseURL returns the scheme://host base to build user-facing links
+// (setup / password-reset emails) so they open on the PUBLIC URL rather than a
+// hardcoded localhost default.
+//
 // When the portal runs behind a reverse proxy the proxy advertises the real
-// public origin via X-Forwarded-Proto / X-Forwarded-Host — those win, so links
-// always match the domain the user actually reached the portal on. Only when no
-// forwarded host is present (e.g. the local split dev stack where the API and
-// the Next.js frontend live on different ports) do we fall back to the
-// configured FrontendURL.
+// public origin via X-Forwarded-Proto / X-Forwarded-Host — those win only if
+// the host is in our trusted allowlist, preventing password-reset link poisoning.
 func (s *Server) publicBaseURL(c *gin.Context) string {
 	host := firstHeaderValue(c.GetHeader("X-Forwarded-Host"))
-	if host != "" {
+	if host != "" && s.isTrustedHost(host) {
 		scheme := firstHeaderValue(c.GetHeader("X-Forwarded-Proto"))
 		if scheme == "" {
 			if c.Request.TLS != nil {
@@ -158,7 +215,10 @@ func (s *Server) publicBaseURL(c *gin.Context) string {
 		}
 		return strings.TrimRight(scheme+"://"+host, "/")
 	}
-	return strings.TrimRight(s.Cfg.FrontendURL, "/")
+	if s != nil && s.Cfg != nil && s.Cfg.FrontendURL != "" {
+		return strings.TrimRight(s.Cfg.FrontendURL, "/")
+	}
+	return "http://localhost:3000"
 }
 
 // firstHeaderValue returns the first, trimmed entry of a possibly
@@ -170,13 +230,45 @@ func firstHeaderValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
+// isOriginAllowed checks whether an origin header is in the allowed CORS list.
+func (s *Server) isOriginAllowed(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	clean := strings.TrimRight(strings.ToLower(origin), "/")
+
+	if s != nil && s.Cfg != nil {
+		if s.Cfg.FrontendURL != "" && strings.TrimRight(strings.ToLower(s.Cfg.FrontendURL), "/") == clean {
+			return true
+		}
+		for _, o := range s.Cfg.RPOrigins {
+			if strings.TrimRight(strings.ToLower(o), "/") == clean {
+				return true
+			}
+		}
+	}
+
+	// Local development allowlist outside release mode
+	if !strings.EqualFold(os.Getenv("GIN_MODE"), "release") {
+		switch clean {
+		case "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8080":
+			return true
+		}
+	}
+
+	return false
+}
+
 // CORSMiddleware sets up cross-origin resource sharing headers.
-func CORSMiddleware() gin.HandlerFunc {
+// Origins in the allowlist receive reflected Origin and credentials allowance.
+func (s *Server) CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 		if origin != "" {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			if s.isOriginAllowed(origin) {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
 		} else {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		}
@@ -190,6 +282,12 @@ func CORSMiddleware() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// CORSMiddleware is a package-level fallback that delegates to a Server instance.
+func CORSMiddleware() gin.HandlerFunc {
+	s := &Server{}
+	return s.CORSMiddleware()
 }
 
 // RespondSuccess sends a 2xx JSON response wrapped in the unified envelope.

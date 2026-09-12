@@ -851,7 +851,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a new user account and emails an account setup invitation link (admin only).",
+                "description": "Creates a new user account with role, departmental assignment, and optional initial password.",
                 "consumes": [
                     "application/json"
                 ],
@@ -861,7 +861,7 @@ const docTemplate = `{
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Provision new user account (Admin)",
+                "summary": "Create user (Admin)",
                 "parameters": [
                     {
                         "description": "User provisioning payload",
@@ -976,7 +976,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates user profile information, role, or active status directly (admin only).",
+                "description": "Updates user attributes (role, active status, name, company, department). Self-deactivation and self-demotion are blocked.",
                 "consumes": [
                     "application/json"
                 ],
@@ -986,7 +986,7 @@ const docTemplate = `{
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Update user attributes (Admin)",
+                "summary": "Update user (Admin)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -2373,7 +2373,7 @@ const docTemplate = `{
         },
         "/api/v1/setup/init": {
             "post": {
-                "description": "One-time setup endpoint to create the primary Super Administrator, initial companies, approvers, and departments. Automatically seeds ActivityStatus and sets is_new = N. Fails with 403 if system is already initialized.",
+                "description": "Performs initial system configuration: provisions companies, departments, approvers, and super admin account.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2383,7 +2383,7 @@ const docTemplate = `{
                 "tags": [
                     "Setup"
                 ],
-                "summary": "Perform initial system onboarding setup",
+                "summary": "Initialize system setup",
                 "parameters": [
                     {
                         "description": "Initialization payload",

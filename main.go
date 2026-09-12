@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -43,15 +44,8 @@ import (
 // @name Authorization
 // @description Enter JWT token with format "Bearer {token}".
 
-func main() {
-	logger := observability.Logger()
-
-	migrateFlag := flag.Bool("migrate", false, "run database migrations before starting the server")
-	migrateOnlyFlag := flag.Bool("migrate-only", false, "run database migrations and exit")
-	flag.Parse()
-
-	cfg := config.Load()
-	if *migrateFlag || *migrateOnlyFlag {
+func setupDatabase(cfg *config.Config, logger *slog.Logger, migrateFlag, migrateOnlyFlag bool) (*gorm.DB, bool) {
+	if migrateFlag || migrateOnlyFlag {
 		cfg.RunMigrations = true
 	}
 
@@ -68,34 +62,15 @@ func main() {
 		}
 	}
 
-	if *migrateOnlyFlag {
+	if migrateOnlyFlag {
 		logger.Info("database migrations completed successfully")
-		return
+		return nil, true
 	}
 
-	authSvc := auth.NewService(cfg.JWTSecret, cfg.JWTExpiry)
-	mailSvc := mailer.New(cfg)
-	pushSvc := push.New(cfg, db)
+	return db, false
+}
 
-	srv, err := handlers.NewServer(db, cfg, authSvc, mailSvc, pushSvc)
-	if err != nil {
-		logger.Error("failed to init server", slog.Any("error", err))
-		os.Exit(1)
-	}
-
-	// Daily 17:00 WIB reminder scheduler.
-	sched := scheduler.New(db, pushSvc, cfg.Timezone)
-	sched.Start()
-	defer sched.Stop()
-
-	r := gin.New()
-	r.Use(middleware.RequestID())
-	r.Use(middleware.StructuredRecovery())
-	r.Use(middleware.SecurityHeaders())
-	r.Use(handlers.CORSMiddleware())
-	r.MaxMultipartMemory = 16 << 20 // 16 MiB template uploads
-
-	// Liveness and Readiness probes for Kubernetes / container orchestration
+func registerHealthRoutes(r *gin.Engine, db *gorm.DB) {
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
@@ -107,11 +82,9 @@ func main() {
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "connected"})
 	})
+}
 
-	registerRoutes(r, srv)
-
-	// Serve the exported Next.js frontend from this same binary so the whole
-	// portal ships as a single image (frontend + API on one origin).
+func registerStaticRoutes(r *gin.Engine, logger *slog.Logger) {
 	staticPath := filepath.Clean(os.Getenv("STATIC_FILES_PATH"))
 	if staticPath == "" || staticPath == "." {
 		staticPath = "./static"
@@ -121,20 +94,28 @@ func main() {
 		r.NoRoute(spaHandler(staticPath))
 		logger.Info("serving static frontend", slog.String("path", staticPath))
 	}
+}
 
-	httpServer := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		IdleTimeout:  120 * time.Second,
-	}
+func setupRouter(db *gorm.DB, srv *handlers.Server, logger *slog.Logger) *gin.Engine {
+	r := gin.New()
+	r.Use(middleware.RequestID())
+	r.Use(middleware.StructuredRecovery())
+	r.Use(middleware.SecurityHeaders())
+	r.Use(srv.CORSMiddleware())
+	r.MaxMultipartMemory = 16 << 20 // 16 MiB template uploads
 
+	registerHealthRoutes(r, db)
+	registerRoutes(r, srv)
+	registerStaticRoutes(r, logger)
+	return r
+}
+
+func runHTTPServer(httpServer *http.Server, db *gorm.DB, logger *slog.Logger, port string) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	go func() {
-		logger.Info("server starting", slog.String("port", cfg.Port))
+		logger.Info("server starting", slog.String("port", port))
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server listen failed", slog.Any("error", err))
 			os.Exit(1)
@@ -152,12 +133,51 @@ func main() {
 		logger.Error("server forced to shutdown", slog.Any("error", err))
 	}
 
-	sqlDB, err := db.DB()
-	if err == nil {
+	if sqlDB, err := db.DB(); err == nil {
 		_ = sqlDB.Close()
 	}
 
 	logger.Info("server exited cleanly")
+}
+
+func main() {
+	logger := observability.Logger()
+
+	migrateFlag := flag.Bool("migrate", false, "run database migrations before starting the server")
+	migrateOnlyFlag := flag.Bool("migrate-only", false, "run database migrations and exit")
+	flag.Parse()
+
+	cfg := config.Load()
+	db, exitEarly := setupDatabase(cfg, logger, *migrateFlag, *migrateOnlyFlag)
+	if exitEarly {
+		return
+	}
+
+	authSvc := auth.NewService(cfg.JWTSecret, cfg.JWTExpiry)
+	mailSvc := mailer.New(cfg)
+	pushSvc := push.New(cfg, db)
+
+	srv, err := handlers.NewServer(db, cfg, authSvc, mailSvc, pushSvc)
+	if err != nil {
+		logger.Error("failed to init server", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	sched := scheduler.New(db, pushSvc, cfg.Timezone)
+	sched.Start()
+	defer sched.Stop()
+
+	r := setupRouter(db, srv, logger)
+
+	httpServer := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+
+	runHTTPServer(httpServer, db, logger, cfg.Port)
 }
 
 // registerRoutes wires the full Phase 2 API surface.
@@ -180,9 +200,10 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	// --- Public auth routes with rate limiting ---
 	authLimiter := middleware.NewIPRateLimiter(10, 1*time.Minute)
 	authGroup := api.Group("/auth")
+	authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
 	{
-		authGroup.POST("/login", middleware.RateLimitMiddleware(authLimiter), s.Login)
-		authGroup.POST("/forgot-password", middleware.RateLimitMiddleware(authLimiter), s.ForgotPassword)
+		authGroup.POST("/login", s.Login)
+		authGroup.POST("/forgot-password", s.ForgotPassword)
 		authGroup.POST("/reset-password", s.ResetPassword)
 		authGroup.POST("/passkey/login/begin", s.BeginPasskeyLogin)
 		authGroup.POST("/passkey/login/finish", s.FinishPasskeyLogin)
