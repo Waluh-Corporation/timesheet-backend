@@ -5,9 +5,8 @@
 High-performance, multi-company timesheet generation engine and RESTful API built with Go (Gin Web Framework) and PostgreSQL.
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/Waluh-Corporation/timesheet-backend?style=flat-square&logo=go)](https://go.dev/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
-[![CI Quality Gates](https://img.shields.io/github/actions/workflow/status/Waluh-Corporation/timesheet-backend/ci.yml?branch=main&label=CI&style=flat-square&logo=githubactions)](https://github.com/Waluh-Corporation/timesheet-backend/actions)
-[![Swagger API](https://img.shields.io/badge/API-Swagger%202.0-85EA2D?style=flat-square&logo=swagger)](http://localhost:8080/swagger/index.html)
+[![CI Quality Gates](https://github.com/Waluh-Corporation/timesheet-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/Waluh-Corporation/timesheet-backend/actions/workflows/ci.yml)
+[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=Waluh-Corporation_timesheet-generator&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Waluh-Corporation_timesheet-generator)
 [![Changelog](https://img.shields.io/badge/Changelog-Keep%20a%20Changelog-blue?style=flat-square)](CHANGELOG.md)
 
 </div>
