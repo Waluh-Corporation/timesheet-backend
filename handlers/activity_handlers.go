@@ -39,11 +39,36 @@ func (s *Server) validateActivityStatus(status string) bool {
 	return s.DB.Model(&models.ActivityStatus{}).Where("code = ?", status).Count(&statusCount).Error == nil && statusCount > 0
 }
 
+func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
+	var proj models.Project
+	if err := s.DB.First(&proj, refID).Error; err != nil || proj.ID == 0 {
+		return nil, errors.New("invalid project_ref_id: project does not exist")
+	}
+	return &proj, nil
+}
+
+func (s *Server) buildProjectQuery(projectID, projectName string) *gorm.DB {
+	query := s.DB.Model(&models.Project{})
+	if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
+		query = query.Where("id = ? OR code = ?", idNum, projectID)
+	} else if projectID != "" {
+		query = query.Where("code = ?", projectID)
+	}
+	if projectName != "" {
+		if projectID != "" {
+			query = s.DB.Model(&models.Project{}).Where("(code = ? OR LOWER(name) = LOWER(?))", projectID, projectName)
+		} else {
+			query = query.Where("LOWER(name) = LOWER(?)", projectName)
+		}
+	}
+	return query
+}
+
 func (s *Server) resolveDailyActivityProject(req *models.DailyActivityRequest, activity *models.DailyActivity) error {
 	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
-		var proj models.Project
-		if err := s.DB.First(&proj, *req.ProjectRefID).Error; err != nil || proj.ID == 0 {
-			return errors.New("invalid project_ref_id: project does not exist")
+		proj, err := s.findProjectByRefID(*req.ProjectRefID)
+		if err != nil {
+			return err
 		}
 		activity.ProjectRefID = &proj.ID
 		activity.ProjectID = proj.Code
@@ -56,19 +81,7 @@ func (s *Server) resolveDailyActivityProject(req *models.DailyActivityRequest, a
 	}
 
 	var proj models.Project
-	query := s.DB.Model(&models.Project{})
-	if idNum, err := strconv.Atoi(req.ProjectID); err == nil && idNum > 0 {
-		query = query.Where("id = ? OR code = ?", idNum, req.ProjectID)
-	} else if req.ProjectID != "" {
-		query = query.Where("code = ?", req.ProjectID)
-	}
-	if req.ProjectName != "" {
-		if req.ProjectID != "" {
-			query = s.DB.Model(&models.Project{}).Where("(code = ? OR LOWER(name) = LOWER(?))", req.ProjectID, req.ProjectName)
-		} else {
-			query = query.Where("LOWER(name) = LOWER(?)", req.ProjectName)
-		}
-	}
+	query := s.buildProjectQuery(req.ProjectID, req.ProjectName)
 	if err := query.Limit(1).Find(&proj).Error; err == nil && proj.ID != 0 {
 		activity.ProjectRefID = &proj.ID
 		activity.ProjectID = proj.Code

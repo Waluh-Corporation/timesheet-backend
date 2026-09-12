@@ -147,67 +147,71 @@ func writeMIIHolidayRow(f *excelize.File, sheet, rs string, row int, holiday str
 	_ = f.SetRowHeight(sheet, row, 15)
 }
 
-func writeMIIDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
-	byDay := BuildByDayMap(in.Activities)
-
+func writeMIIMatrixStatus(f *excelize.File, sheet, rs, status string) {
 	statusCol := map[string]string{"P": "E", "S": "F", "BT": "G", "PM": "H", "V": "I", "X": "J"}
 	statusMark := map[string]string{"P": "P", "S": "S", "BT": "BT", "PM": "PM", "V": "V", "X": "x"}
 	matrixCols := []string{"E", "F", "G", "H", "I", "J"}
+
+	for _, col := range matrixCols {
+		_ = f.SetCellValue(sheet, col+rs, "")
+	}
+	if col, ok := statusCol[status]; ok {
+		_ = f.SetCellValue(sheet, col+rs, statusMark[status])
+	}
+}
+
+func writeMIISingleDayRow(f *excelize.File, sheet string, in GenerationInput, day int, byDay map[int]models.DailyActivity, st *BuilderStyles) {
+	row := 9 + (day - 1)
+	rs := fmt.Sprintf("%d", row)
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
 
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
-	const firstRow = 9
+	if day > daysInMonth {
+		ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"K", "Q"}, st)
+		return
+	}
 
+	date := time.Date(in.Year, time.Month(in.Month), day, 0, 0, 0, 0, time.UTC)
+	isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
+	holiday := in.Holidays[day]
+	act, hasAct := byDay[day]
+	isHolidayOrWeekend := isWeekend || holiday != ""
+
+	centerStyle := st.DataCenterStyle
+	centerWrapStyle := st.DataCenterWrapStyle
+	dateStyle := st.DateStyle
+	timeStyle := st.TimeStyle
+	if isHolidayOrWeekend {
+		centerStyle = st.GreyCenterStyle
+		centerWrapStyle = st.GreyCenterWrapStyle
+		dateStyle = st.GreyDateStyle
+		timeStyle = st.GreyTimeStyle
+	}
+
+	for _, col := range allCols {
+		_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
+	}
+	_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, centerWrapStyle)
+	_ = f.SetCellStyle(sheet, "Q"+rs, "Q"+rs, centerWrapStyle)
+
+	_ = f.SetCellValue(sheet, "A"+rs, date)
+	_ = f.SetCellStyle(sheet, "A"+rs, "A"+rs, dateStyle)
+
+	status := ""
+	if hasAct {
+		status = strings.ToUpper(strings.TrimSpace(act.Status))
+		writeMIIActRow(f, sheet, rs, row, act, timeStyle)
+	} else if isHolidayOrWeekend {
+		writeMIIHolidayRow(f, sheet, rs, row, holiday)
+	}
+
+	writeMIIMatrixStatus(f, sheet, rs, status)
+}
+
+func writeMIIDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
+	byDay := BuildByDayMap(in.Activities)
 	for day := 1; day <= 31; day++ {
-		row := firstRow + (day - 1)
-		rs := fmt.Sprintf("%d", row)
-
-		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"K", "Q"}, st)
-			continue
-		}
-
-		date := time.Date(in.Year, time.Month(in.Month), day, 0, 0, 0, 0, time.UTC)
-		isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
-		holiday := in.Holidays[day]
-		act, hasAct := byDay[day]
-
-		isHolidayOrWeekend := isWeekend || holiday != ""
-
-		centerStyle := st.DataCenterStyle
-		centerWrapStyle := st.DataCenterWrapStyle
-		dateStyle := st.DateStyle
-		timeStyle := st.TimeStyle
-		if isHolidayOrWeekend {
-			centerStyle = st.GreyCenterStyle
-			centerWrapStyle = st.GreyCenterWrapStyle
-			dateStyle = st.GreyDateStyle
-			timeStyle = st.GreyTimeStyle
-		}
-
-		for _, col := range allCols {
-			_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
-		}
-		_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, centerWrapStyle)
-		_ = f.SetCellStyle(sheet, "Q"+rs, "Q"+rs, centerWrapStyle)
-
-		_ = f.SetCellValue(sheet, "A"+rs, date)
-		_ = f.SetCellStyle(sheet, "A"+rs, "A"+rs, dateStyle)
-
-		status := ""
-		if hasAct {
-			status = strings.ToUpper(strings.TrimSpace(act.Status))
-			writeMIIActRow(f, sheet, rs, row, act, timeStyle)
-		} else if isHolidayOrWeekend {
-			writeMIIHolidayRow(f, sheet, rs, row, holiday)
-		}
-
-		for _, col := range matrixCols {
-			_ = f.SetCellValue(sheet, col+rs, "")
-		}
-		if col, ok := statusCol[status]; ok {
-			_ = f.SetCellValue(sheet, col+rs, statusMark[status])
-		}
+		writeMIISingleDayRow(f, sheet, in, day, byDay, st)
 	}
 }
 
