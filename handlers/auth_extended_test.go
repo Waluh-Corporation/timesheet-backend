@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"timesheet-backend/auth"
+	"timesheet-backend/dto/request"
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 )
@@ -65,7 +66,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 	_ = tx.Model(&inactiveUser).Update("is_active", false)
 
 	t.Run("Login success with username", func(t *testing.T) {
-		body, _ := json.Marshal(models.LoginRequest{
+		body, _ := json.Marshal(request.LoginRequest{
 			Identifier: "authtestuser",
 			Password:   rawPass,
 		})
@@ -86,7 +87,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 	})
 
 	t.Run("Login success with email", func(t *testing.T) {
-		body, _ := json.Marshal(models.LoginRequest{
+		body, _ := json.Marshal(request.LoginRequest{
 			Identifier: "authtest@example.com",
 			Password:   rawPass,
 		})
@@ -117,7 +118,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 			t.Fatalf("failed to create legacy user: %v", err)
 		}
 
-		body, _ := json.Marshal(models.LoginRequest{
+		body, _ := json.Marshal(request.LoginRequest{
 			Identifier: "legacyuser",
 			Password:   legacyPass,
 		})
@@ -137,7 +138,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 	})
 
 	t.Run("Login wrong password", func(t *testing.T) {
-		body, _ := json.Marshal(models.LoginRequest{
+		body, _ := json.Marshal(request.LoginRequest{
 			Identifier: "authtestuser",
 			Password:   "WrongPass123!",
 		})
@@ -151,7 +152,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 	})
 
 	t.Run("Login nonexistent identifier", func(t *testing.T) {
-		body, _ := json.Marshal(models.LoginRequest{
+		body, _ := json.Marshal(request.LoginRequest{
 			Identifier: "nonexistent",
 			Password:   rawPass,
 		})
@@ -165,7 +166,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 	})
 
 	t.Run("Login inactive user", func(t *testing.T) {
-		body, _ := json.Marshal(models.LoginRequest{
+		body, _ := json.Marshal(request.LoginRequest{
 			Identifier: "inactiveuser",
 			Password:   rawPass,
 		})
@@ -199,7 +200,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 	})
 
 	t.Run("ForgotPassword with valid user", func(t *testing.T) {
-		body, _ := json.Marshal(models.ForgotRequest{
+		body, _ := json.Marshal(request.ForgotRequest{
 			Email: "authtest@example.com",
 		})
 		w := httptest.NewRecorder()
@@ -212,7 +213,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 	})
 
 	t.Run("ForgotPassword with nonexistent user succeeds silently", func(t *testing.T) {
-		body, _ := json.Marshal(models.ForgotRequest{
+		body, _ := json.Marshal(request.ForgotRequest{
 			Email: "ghost@example.com",
 		})
 		w := httptest.NewRecorder()
@@ -240,7 +241,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		}
 
 		// Reset with password violating policy (too short)
-		shortPassPayload, _ := json.Marshal(models.ResetRequest{
+		shortPassPayload, _ := json.Marshal(request.ResetRequest{
 			Token:    rawToken,
 			Password: "short",
 		})
@@ -253,7 +254,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 
 		// Reset with valid new password
 		newPass := "Br4ndNewSecurePass!2026"
-		validPayload, _ := json.Marshal(models.ResetRequest{
+		validPayload, _ := json.Marshal(request.ResetRequest{
 			Token:    rawToken,
 			Password: newPass,
 		})

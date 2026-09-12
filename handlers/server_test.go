@@ -12,6 +12,7 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
 
@@ -69,7 +70,7 @@ func TestServer_Responses(t *testing.T) {
 	if wPage.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", wPage.Code)
 	}
-	var pageResp models.PaginatedResponse
+	var pageResp response.PaginatedResponse
 	if err := json.Unmarshal(wPage.Body.Bytes(), &pageResp); err != nil {
 		t.Fatalf("failed to decode paginated response: %v", err)
 	}

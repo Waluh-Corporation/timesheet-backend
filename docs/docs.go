@@ -35,7 +35,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.OriginsResponse"
+                            "$ref": "#/definitions/response.OriginsResponse"
                         }
                     }
                 }
@@ -104,19 +104,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.PaginatedResponse"
+                            "$ref": "#/definitions/response.PaginatedResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -145,7 +145,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.DailyActivityRequest"
+                            "$ref": "#/definitions/request.DailyActivityRequest"
                         }
                     }
                 ],
@@ -153,25 +153,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.DailyActivity"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid date format or payload",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -205,37 +205,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.DailyActivityDetailResponse"
+                            "$ref": "#/definitions/response.DailyActivityDetailResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid activity ID",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden: not authorized to access another user's activity",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Activity not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -269,13 +269,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -314,31 +314,31 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.Approver"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -372,31 +372,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.DeleteResponse"
+                            "$ref": "#/definitions/response.DeleteResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Approver not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -440,37 +440,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Approver"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Approver not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -509,31 +509,31 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.Company"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -567,31 +567,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.DeleteResponse"
+                            "$ref": "#/definitions/response.DeleteResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Company not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -635,37 +635,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Company"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Bad request",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Forbidden",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Company not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -707,19 +707,19 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Admin only",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -764,37 +764,37 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.ProfileChangeRequest"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid action",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Admin only",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Request not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Request already reviewed",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -828,19 +828,19 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Admin only",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -869,7 +869,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.CreateUserRequest"
+                            "$ref": "#/definitions/request.CreateUserRequest"
                         }
                     }
                 ],
@@ -877,37 +877,37 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid payload or password policy failure",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Admin only",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "409": {
                         "description": "Username or email already exists",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -941,31 +941,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Admin only or self-deactivation forbidden",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1001,7 +1001,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.UpdateUserRequest"
+                            "$ref": "#/definitions/request.UpdateUserRequest"
                         }
                     }
                 ],
@@ -1009,31 +1009,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid payload",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Admin only or self-demotion forbidden",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1076,19 +1076,19 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Admin only",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1129,31 +1129,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Admin only",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Passkey not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1195,13 +1195,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1227,7 +1227,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ForgotRequest"
+                            "$ref": "#/definitions/request.ForgotRequest"
                         }
                     }
                 ],
@@ -1235,13 +1235,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid payload",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1267,7 +1267,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.LoginRequest"
+                            "$ref": "#/definitions/request.LoginRequest"
                         }
                     }
                 ],
@@ -1275,31 +1275,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.LoginResponse"
+                            "$ref": "#/definitions/response.LoginResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid payload",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Invalid credentials",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Account is disabled",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1324,7 +1324,7 @@ const docTemplate = `{
                         "name": "request",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/models.BeginPasskeyLoginRequest"
+                            "$ref": "#/definitions/request.BeginPasskeyLoginRequest"
                         }
                     }
                 ],
@@ -1332,19 +1332,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.PasskeySessionResponse"
+                            "$ref": "#/definitions/response.PasskeySessionResponse"
                         }
                     },
                     "401": {
                         "description": "Invalid credentials",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1376,31 +1376,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.LoginResponse"
+                            "$ref": "#/definitions/response.LoginResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid or expired session",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Invalid credentials",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "Account disabled",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1426,7 +1426,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ResetRequest"
+                            "$ref": "#/definitions/request.ResetRequest"
                         }
                     }
                 ],
@@ -1434,19 +1434,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid or expired token, or weak password",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1480,13 +1480,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1528,13 +1528,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1582,7 +1582,7 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1624,13 +1624,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1663,20 +1663,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "502": {
                         "description": "Bad gateway",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1707,13 +1706,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1761,13 +1760,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1804,25 +1803,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.OvertimeEntry"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid payload or date format",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1856,19 +1855,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.DeleteResponse"
+                            "$ref": "#/definitions/response.DeleteResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1893,25 +1892,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.PasskeySessionResponse"
+                            "$ref": "#/definitions/response.PasskeySessionResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -1954,31 +1953,31 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid or expired session",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2012,13 +2011,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2052,25 +2051,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "Passkey not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2101,7 +2100,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.ProfileChangeRequestDTO"
+                            "$ref": "#/definitions/request.ProfileChangeRequestDTO"
                         }
                     }
                 ],
@@ -2109,25 +2108,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.ProfileChangeRequest"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid payload",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2161,13 +2160,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2201,13 +2200,13 @@ const docTemplate = `{
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2238,7 +2237,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.SubscribeRequest"
+                            "$ref": "#/definitions/request.SubscribeRequest"
                         }
                     }
                 ],
@@ -2246,25 +2245,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "400": {
                         "description": "Invalid payload",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2289,13 +2288,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2325,7 +2324,7 @@ const docTemplate = `{
                         "name": "request",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/models.UnsubscribeRequest"
+                            "$ref": "#/definitions/request.UnsubscribeRequest"
                         }
                     }
                 ],
@@ -2333,19 +2332,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.MessageResponse"
+                            "$ref": "#/definitions/response.MessageResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2365,7 +2364,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.VAPIDKeyResponse"
+                            "$ref": "#/definitions/response.VAPIDKeyResponse"
                         }
                     }
                 }
@@ -2406,19 +2405,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad request or validation error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "403": {
                         "description": "System already initialized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2444,7 +2443,7 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal server error",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2475,7 +2474,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/models.GenerateRequest"
+                            "$ref": "#/definitions/request.GenerateRequest"
                         }
                     }
                 ],
@@ -2489,25 +2488,25 @@ const docTemplate = `{
                     "400": {
                         "description": "Template or company mapping missing",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
                         "description": "User not found",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "Generation failed",
                         "schema": {
-                            "$ref": "#/definitions/models.ErrorResponse"
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     }
                 }
@@ -2858,15 +2857,6 @@ const docTemplate = `{
                 "ApproverRoleDepartmentHead"
             ]
         },
-        "models.BeginPasskeyLoginRequest": {
-            "type": "object",
-            "properties": {
-                "identifier": {
-                    "type": "string",
-                    "example": "john_doe"
-                }
-            }
-        },
         "models.Company": {
             "type": "object",
             "properties": {
@@ -2891,74 +2881,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                }
-            }
-        },
-        "models.CreateUserRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "role",
-                "username"
-            ],
-            "properties": {
-                "bni_id": {
-                    "type": "string",
-                    "example": "12345678"
-                },
-                "company": {
-                    "type": "string",
-                    "example": "MII"
-                },
-                "company_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "department": {
-                    "type": "string",
-                    "example": "Core Banking"
-                },
-                "department_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "division": {
-                    "type": "string",
-                    "example": "Application Development Division"
-                },
-                "email": {
-                    "type": "string",
-                    "example": "john.doe@example.com"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "John Doe"
-                },
-                "password": {
-                    "type": "string",
-                    "example": "TempPass123!"
-                },
-                "role": {
-                    "enum": [
-                        "admin",
-                        "user"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Role"
-                        }
-                    ],
-                    "example": "user"
-                },
-                "site": {
-                    "type": "string",
-                    "example": "Jakarta"
-                },
-                "username": {
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 3,
-                    "example": "john_doe"
                 }
             }
         },
@@ -3013,108 +2935,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.DailyActivityDetailResponse": {
-            "type": "object",
-            "properties": {
-                "activity": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "date": {
-                    "type": "string"
-                },
-                "end_time": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "project_id": {
-                    "type": "string"
-                },
-                "project_name": {
-                    "type": "string"
-                },
-                "project_ref": {
-                    "$ref": "#/definitions/models.Project"
-                },
-                "start_time": {
-                    "type": "string"
-                },
-                "status_ref": {
-                    "$ref": "#/definitions/models.ActivityStatus"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "models.DailyActivityRequest": {
-            "type": "object",
-            "required": [
-                "date"
-            ],
-            "properties": {
-                "activity": {
-                    "type": "string",
-                    "example": "Developing core features and API normalization"
-                },
-                "app_impacted": {
-                    "type": "string",
-                    "example": "BNI Mobile"
-                },
-                "date": {
-                    "type": "string",
-                    "example": "2026-09-01"
-                },
-                "end_time": {
-                    "type": "string",
-                    "example": "17:00"
-                },
-                "project_id": {
-                    "type": "string",
-                    "example": "P24015"
-                },
-                "project_name": {
-                    "type": "string",
-                    "example": "BNI Direct Cash"
-                },
-                "project_ref_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "start_time": {
-                    "type": "string",
-                    "example": "08:00"
-                },
-                "status": {
-                    "type": "string",
-                    "example": "P"
-                }
-            }
-        },
-        "models.DeleteResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 200
-                },
-                "deleted": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "status": {
-                    "type": "string",
-                    "example": "success"
-                }
-            }
-        },
         "models.Department": {
             "type": "object",
             "properties": {
@@ -3147,60 +2967,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                }
-            }
-        },
-        "models.ErrorResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 400
-                },
-                "error": {
-                    "type": "string",
-                    "example": "invalid request or unauthorized"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "invalid request or unauthorized"
-                },
-                "status": {
-                    "type": "string",
-                    "example": "error"
-                }
-            }
-        },
-        "models.ForgotRequest": {
-            "type": "object",
-            "required": [
-                "email"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string",
-                    "example": "john.doe@example.com"
-                }
-            }
-        },
-        "models.GenerateRequest": {
-            "type": "object",
-            "required": [
-                "month",
-                "year"
-            ],
-            "properties": {
-                "month": {
-                    "type": "integer",
-                    "maximum": 12,
-                    "minimum": 1,
-                    "example": 9
-                },
-                "year": {
-                    "type": "integer",
-                    "maximum": 9999,
-                    "minimum": 2000,
-                    "example": 2026
                 }
             }
         },
@@ -3256,66 +3022,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.LoginRequest": {
-            "type": "object",
-            "required": [
-                "identifier",
-                "password"
-            ],
-            "properties": {
-                "identifier": {
-                    "type": "string",
-                    "example": "john_doe"
-                },
-                "password": {
-                    "type": "string",
-                    "example": "MySecretPass123!"
-                }
-            }
-        },
-        "models.LoginResponse": {
-            "type": "object",
-            "properties": {
-                "token": {
-                    "type": "string",
-                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                },
-                "user": {
-                    "$ref": "#/definitions/models.User"
-                }
-            }
-        },
-        "models.MessageResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 200
-                },
-                "message": {
-                    "type": "string",
-                    "example": "operation successful"
-                },
-                "status": {
-                    "type": "string",
-                    "example": "success"
-                }
-            }
-        },
-        "models.OriginsResponse": {
-            "type": "object",
-            "properties": {
-                "origins": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "https://timesheet.example.com"
-                    ]
-                }
-            }
-        },
         "models.OvertimeEntry": {
             "type": "object",
             "properties": {
@@ -3365,54 +3071,6 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
-                }
-            }
-        },
-        "models.PaginatedResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "integer",
-                    "example": 200
-                },
-                "data": {},
-                "pagination": {
-                    "$ref": "#/definitions/models.PaginationMeta"
-                },
-                "status": {
-                    "type": "string",
-                    "example": "success"
-                }
-            }
-        },
-        "models.PaginationMeta": {
-            "type": "object",
-            "properties": {
-                "limit": {
-                    "type": "integer",
-                    "example": 10
-                },
-                "page": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "total_pages": {
-                    "type": "integer",
-                    "example": 4
-                },
-                "total_rows": {
-                    "type": "integer",
-                    "example": 35
-                }
-            }
-        },
-        "models.PasskeySessionResponse": {
-            "type": "object",
-            "properties": {
-                "options": {},
-                "session_id": {
-                    "type": "string",
-                    "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
                 }
             }
         },
@@ -3485,39 +3143,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.ProfileChangeRequestDTO": {
-            "type": "object",
-            "properties": {
-                "bni_id": {
-                    "type": "string",
-                    "example": "12345678"
-                },
-                "company_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "department": {
-                    "type": "string",
-                    "example": "Core Banking"
-                },
-                "department_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "division": {
-                    "type": "string",
-                    "example": "Application Development Division"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "John Doe"
-                },
-                "site": {
-                    "type": "string",
-                    "example": "Jakarta"
-                }
-            }
-        },
         "models.ProfileStatus": {
             "type": "string",
             "enum": [
@@ -3558,41 +3183,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.PushKeyPayload": {
-            "type": "object",
-            "required": [
-                "auth",
-                "p256dh"
-            ],
-            "properties": {
-                "auth": {
-                    "type": "string",
-                    "example": "5Kpqz..."
-                },
-                "p256dh": {
-                    "type": "string",
-                    "example": "BCVxsG6..."
-                }
-            }
-        },
-        "models.ResetRequest": {
-            "type": "object",
-            "required": [
-                "password",
-                "token"
-            ],
-            "properties": {
-                "password": {
-                    "type": "string",
-                    "minLength": 8,
-                    "example": "NewStrongPass123!"
-                },
-                "token": {
-                    "type": "string",
-                    "example": "a8f9c0e2b1d3..."
-                }
-            }
-        },
         "models.Role": {
             "type": "string",
             "enum": [
@@ -3603,80 +3193,6 @@ const docTemplate = `{
                 "RoleAdmin",
                 "RoleUser"
             ]
-        },
-        "models.SubscribeRequest": {
-            "type": "object",
-            "required": [
-                "endpoint",
-                "keys"
-            ],
-            "properties": {
-                "endpoint": {
-                    "type": "string",
-                    "example": "https://fcm.googleapis.com/fcm/send/..."
-                },
-                "keys": {
-                    "$ref": "#/definitions/models.PushKeyPayload"
-                }
-            }
-        },
-        "models.UnsubscribeRequest": {
-            "type": "object",
-            "properties": {
-                "endpoint": {
-                    "type": "string",
-                    "example": "https://fcm.googleapis.com/fcm/send/..."
-                }
-            }
-        },
-        "models.UpdateUserRequest": {
-            "type": "object",
-            "properties": {
-                "bni_id": {
-                    "type": "string",
-                    "example": "12345678"
-                },
-                "company": {
-                    "type": "string",
-                    "example": "MII"
-                },
-                "company_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "department": {
-                    "type": "string",
-                    "example": "Core Banking"
-                },
-                "department_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "division": {
-                    "type": "string",
-                    "example": "Application Development Division"
-                },
-                "is_active": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "name": {
-                    "type": "string",
-                    "example": "John Doe"
-                },
-                "role": {
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.Role"
-                        }
-                    ],
-                    "example": "user"
-                },
-                "site": {
-                    "type": "string",
-                    "example": "Jakarta"
-                }
-            }
         },
         "models.User": {
             "type": "object",
@@ -3747,15 +3263,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.VAPIDKeyResponse": {
-            "type": "object",
-            "properties": {
-                "public_key": {
-                    "type": "string",
-                    "example": "BEl62iUYgUivxIkv..."
-                }
-            }
-        },
         "models.WebAuthnCredential": {
             "type": "object",
             "properties": {
@@ -3770,6 +3277,499 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "request.BeginPasskeyLoginRequest": {
+            "type": "object",
+            "properties": {
+                "identifier": {
+                    "type": "string",
+                    "example": "john_doe"
+                }
+            }
+        },
+        "request.CreateUserRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "role",
+                "username"
+            ],
+            "properties": {
+                "bni_id": {
+                    "type": "string",
+                    "example": "12345678"
+                },
+                "company": {
+                    "type": "string",
+                    "example": "MII"
+                },
+                "company_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "department": {
+                    "type": "string",
+                    "example": "Core Banking"
+                },
+                "department_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "division": {
+                    "type": "string",
+                    "example": "Application Development Division"
+                },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "TempPass123!"
+                },
+                "role": {
+                    "enum": [
+                        "admin",
+                        "user"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Role"
+                        }
+                    ],
+                    "example": "user"
+                },
+                "site": {
+                    "type": "string",
+                    "example": "Jakarta"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 3,
+                    "example": "john_doe"
+                }
+            }
+        },
+        "request.DailyActivityRequest": {
+            "type": "object",
+            "required": [
+                "date"
+            ],
+            "properties": {
+                "activity": {
+                    "type": "string",
+                    "example": "Developing core features and API normalization"
+                },
+                "app_impacted": {
+                    "type": "string",
+                    "example": "BNI Mobile"
+                },
+                "date": {
+                    "type": "string",
+                    "example": "2026-09-01"
+                },
+                "end_time": {
+                    "type": "string",
+                    "example": "17:00"
+                },
+                "project_id": {
+                    "type": "string",
+                    "example": "P24015"
+                },
+                "project_name": {
+                    "type": "string",
+                    "example": "BNI Direct Cash"
+                },
+                "project_ref_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "start_time": {
+                    "type": "string",
+                    "example": "08:00"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "P"
+                }
+            }
+        },
+        "request.ForgotRequest": {
+            "type": "object",
+            "required": [
+                "email"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                }
+            }
+        },
+        "request.GenerateRequest": {
+            "type": "object",
+            "required": [
+                "month",
+                "year"
+            ],
+            "properties": {
+                "month": {
+                    "type": "integer",
+                    "maximum": 12,
+                    "minimum": 1,
+                    "example": 9
+                },
+                "year": {
+                    "type": "integer",
+                    "maximum": 9999,
+                    "minimum": 2000,
+                    "example": 2026
+                }
+            }
+        },
+        "request.LoginRequest": {
+            "type": "object",
+            "required": [
+                "identifier",
+                "password"
+            ],
+            "properties": {
+                "identifier": {
+                    "type": "string",
+                    "example": "john_doe"
+                },
+                "password": {
+                    "type": "string",
+                    "example": "MySecretPass123!"
+                }
+            }
+        },
+        "request.ProfileChangeRequestDTO": {
+            "type": "object",
+            "properties": {
+                "bni_id": {
+                    "type": "string",
+                    "example": "12345678"
+                },
+                "company_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "department": {
+                    "type": "string",
+                    "example": "Core Banking"
+                },
+                "department_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "division": {
+                    "type": "string",
+                    "example": "Application Development Division"
+                },
+                "employee_id": {
+                    "type": "string",
+                    "example": "MII-12345"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "site": {
+                    "type": "string",
+                    "example": "Jakarta"
+                }
+            }
+        },
+        "request.PushKeyPayload": {
+            "type": "object",
+            "required": [
+                "auth",
+                "p256dh"
+            ],
+            "properties": {
+                "auth": {
+                    "type": "string",
+                    "example": "5Kpqz..."
+                },
+                "p256dh": {
+                    "type": "string",
+                    "example": "BCVxsG6..."
+                }
+            }
+        },
+        "request.ResetRequest": {
+            "type": "object",
+            "required": [
+                "password",
+                "token"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "example": "NewStrongPass123!"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "a8f9c0e2b1d3..."
+                }
+            }
+        },
+        "request.SubscribeRequest": {
+            "type": "object",
+            "required": [
+                "endpoint",
+                "keys"
+            ],
+            "properties": {
+                "endpoint": {
+                    "type": "string",
+                    "example": "https://fcm.googleapis.com/fcm/send/..."
+                },
+                "keys": {
+                    "$ref": "#/definitions/request.PushKeyPayload"
+                }
+            }
+        },
+        "request.UnsubscribeRequest": {
+            "type": "object",
+            "properties": {
+                "endpoint": {
+                    "type": "string",
+                    "example": "https://fcm.googleapis.com/fcm/send/..."
+                }
+            }
+        },
+        "request.UpdateUserRequest": {
+            "type": "object",
+            "properties": {
+                "bni_id": {
+                    "type": "string",
+                    "example": "12345678"
+                },
+                "company": {
+                    "type": "string",
+                    "example": "MII"
+                },
+                "company_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "department": {
+                    "type": "string",
+                    "example": "Core Banking"
+                },
+                "department_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "division": {
+                    "type": "string",
+                    "example": "Application Development Division"
+                },
+                "is_active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "role": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Role"
+                        }
+                    ],
+                    "example": "user"
+                },
+                "site": {
+                    "type": "string",
+                    "example": "Jakarta"
+                }
+            }
+        },
+        "response.DailyActivityDetailResponse": {
+            "type": "object",
+            "properties": {
+                "activity": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "project_id": {
+                    "type": "string"
+                },
+                "project_name": {
+                    "type": "string"
+                },
+                "project_ref": {
+                    "$ref": "#/definitions/models.Project"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "status_ref": {
+                    "$ref": "#/definitions/models.ActivityStatus"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "response.DeleteResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "deleted": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
+        "response.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 400
+                },
+                "error": {
+                    "type": "string",
+                    "example": "invalid request or unauthorized"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "invalid request or unauthorized"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "error"
+                }
+            }
+        },
+        "response.LoginResponse": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+            }
+        },
+        "response.MessageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "message": {
+                    "type": "string",
+                    "example": "operation successful"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
+        "response.OriginsResponse": {
+            "type": "object",
+            "properties": {
+                "origins": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "https://timesheet.example.com"
+                    ]
+                }
+            }
+        },
+        "response.PaginatedResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {},
+                "pagination": {
+                    "$ref": "#/definitions/response.PaginationMeta"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
+        "response.PaginationMeta": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "page": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "total_pages": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "total_rows": {
+                    "type": "integer",
+                    "example": 35
+                }
+            }
+        },
+        "response.PasskeySessionResponse": {
+            "type": "object",
+            "properties": {
+                "options": {},
+                "session_id": {
+                    "type": "string",
+                    "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                }
+            }
+        },
+        "response.VAPIDKeyResponse": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string",
+                    "example": "BEl62iUYgUivxIkv..."
                 }
             }
         }

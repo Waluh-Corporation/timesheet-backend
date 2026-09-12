@@ -23,6 +23,8 @@ import (
 	"timesheet-backend/config"
 	"timesheet-backend/database"
 	_ "timesheet-backend/docs"
+	_ "timesheet-backend/dto/request"
+	_ "timesheet-backend/dto/response"
 	"timesheet-backend/handlers"
 	"timesheet-backend/internal/middleware"
 	"timesheet-backend/internal/observability"

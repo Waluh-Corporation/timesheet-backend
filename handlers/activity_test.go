@@ -13,10 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/auth"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
 
-func assertPaginationResponse(t *testing.T, code int, status string, dataLen int, actual models.PaginationMeta, expected models.PaginationMeta) {
+func assertPaginationResponse(t *testing.T, code int, status string, dataLen int, actual response.PaginationMeta, expected response.PaginationMeta) {
 	t.Helper()
 	if code != 200 {
 		t.Errorf("expected code 200, got %d", code)
@@ -57,16 +58,16 @@ func TestRespondPaginatedEnvelope(t *testing.T) {
 		assertFatalCode(t, w, http.StatusOK)
 
 		var resp struct {
-			Code       int                   `json:"code"`
-			Status     string                `json:"status"`
-			Data       []map[string]string   `json:"data"`
-			Pagination models.PaginationMeta `json:"pagination"`
+			Code       int                     `json:"code"`
+			Status     string                  `json:"status"`
+			Data       []map[string]string     `json:"data"`
+			Pagination response.PaginationMeta `json:"pagination"`
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("failed to unmarshal JSON response: %v", err)
 		}
 
-		assertPaginationResponse(t, resp.Code, resp.Status, len(resp.Data), resp.Pagination, models.PaginationMeta{
+		assertPaginationResponse(t, resp.Code, resp.Status, len(resp.Data), resp.Pagination, response.PaginationMeta{
 			Page:       2,
 			Limit:      10,
 			TotalRows:  35,
@@ -82,7 +83,7 @@ func TestRespondPaginatedEnvelope(t *testing.T) {
 		RespondPaginated(c, http.StatusOK, items, 1, 10, 0)
 
 		var resp struct {
-			Pagination models.PaginationMeta `json:"pagination"`
+			Pagination response.PaginationMeta `json:"pagination"`
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("failed to unmarshal JSON: %v", err)
@@ -119,7 +120,7 @@ func TestGetDailyActivity_Validation(t *testing.T) {
 	}
 }
 
-func assertListActivitiesPagination(t *testing.T, dataLen int, meta models.PaginationMeta) {
+func assertListActivitiesPagination(t *testing.T, dataLen int, meta response.PaginationMeta) {
 	t.Helper()
 	if dataLen != 2 {
 		t.Errorf("expected 2 items for limit=2, got %d", dataLen)
@@ -269,10 +270,10 @@ func TestActivityHandlers_GetAndListIntegration(t *testing.T) {
 		assertFatalCode(t, w, http.StatusOK)
 
 		var resp struct {
-			Code       int                    `json:"code"`
-			Status     string                 `json:"status"`
-			Data       []models.DailyActivity `json:"data"`
-			Pagination models.PaginationMeta  `json:"pagination"`
+			Code       int                     `json:"code"`
+			Status     string                  `json:"status"`
+			Data       []models.DailyActivity  `json:"data"`
+			Pagination response.PaginationMeta `json:"pagination"`
 		}
 		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("unmarshal error: %v", err)
@@ -344,15 +345,12 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 	srv.UpsertDailyActivity(c)
 	assertFatalCode(t, w, http.StatusOK)
 
-	var resp struct {
-		Code int                  `json:"code"`
-		Data models.DailyActivity `json:"data"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal error: %v", err)
+	var saved models.DailyActivity
+	if err := srv.DB.Preload("ProjectRef").Preload("StatusRef").Where("user_id = ?", user1.ID).Order("id desc").First(&saved).Error; err != nil {
+		t.Fatalf("failed to query saved activity: %v", err)
 	}
 
-	assertProjectSyncFields(t, resp.Data, testProj)
+	assertProjectSyncFields(t, saved, testProj)
 }
 
 func itoa(n uint) string {
@@ -481,11 +479,11 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		srv.UpsertOvertime(c)
 		assertFatalCode(t, w, http.StatusOK)
 
-		var resp struct {
-			Data models.OvertimeEntry `json:"data"`
+		var savedEntry models.OvertimeEntry
+		if err := srv.DB.Where("user_id = ?", user.ID).Order("id desc").First(&savedEntry).Error; err != nil {
+			t.Fatalf("failed to find overtime entry: %v", err)
 		}
-		_ = json.Unmarshal(w.Body.Bytes(), &resp)
-		otID := resp.Data.ID
+		otID := savedEntry.ID
 
 		// Update existing overtime
 		updateBody := fmt.Sprintf(`{"id":%d,"date":"2026-09-15","start_time":"19:00","end_time":"22:00","task_description":"Updated overtime task"}`, otID)

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -313,7 +312,7 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	dept := models.Department{CompanyID: &comp.ID, Name: "PC Dept", Division: "PC Div", IsActive: true}
 	_ = tx.Create(&dept)
 
-	submitBody := fmt.Sprintf(`{"name": "Target New Name", "bni_id": "78910", "division": "Fintech", "department": "PC Dept", "department_id": %d, "company_id": %d}`, dept.ID, comp.ID)
+	submitBody := fmt.Sprintf(`{"name": "Target New Name", "bni_id": "78910", "employee_id": "EMP-9999", "division": "Fintech", "department": "PC Dept", "department_id": %d, "company_id": %d}`, dept.ID, comp.ID)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Set(ctxUserID, targetUser.ID)
@@ -323,11 +322,11 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	srv.SubmitProfileChange(c)
 	assertFatalCode(t, w, http.StatusCreated)
 
-	var respEnvelope struct {
-		Data models.ProfileChangeRequest `json:"data"`
+	var lastReq models.ProfileChangeRequest
+	if err := srv.DB.Where("user_id = ?", targetUser.ID).Order("id desc").First(&lastReq).Error; err != nil {
+		t.Fatalf("failed to find created profile change request: %v", err)
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &respEnvelope)
-	reqIDStr := fmt.Sprintf("%d", respEnvelope.Data.ID)
+	reqIDStr := fmt.Sprintf("%d", lastReq.ID)
 
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
@@ -358,6 +357,12 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	srv.ReviewProfileChange(c)
 	assertFatalCode(t, w, http.StatusOK)
 
+	var updatedTarget models.User
+	srv.DB.First(&updatedTarget, targetUser.ID)
+	if updatedTarget.EmployeeID != "EMP-9999" {
+		t.Errorf("expected employee_id 'EMP-9999', got %s", updatedTarget.EmployeeID)
+	}
+
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 	c.Set(ctxUserID, adminUser.ID)
@@ -372,11 +377,11 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/profile/change", bytes.NewReader([]byte(submitBody)))
 	c.Request.Header.Set("Content-Type", "application/json")
 	srv.SubmitProfileChange(c)
-	var respEnvelope2 struct {
-		Data models.ProfileChangeRequest `json:"data"`
+	var lastReq2 models.ProfileChangeRequest
+	if err := srv.DB.Where("user_id = ?", targetUser.ID).Order("id desc").First(&lastReq2).Error; err != nil {
+		t.Fatalf("failed to find created profile change request: %v", err)
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &respEnvelope2)
-	req2IDStr := fmt.Sprintf("%d", respEnvelope2.Data.ID)
+	req2IDStr := fmt.Sprintf("%d", lastReq2.ID)
 
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
@@ -445,11 +450,11 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 		srv.CreateUser(c)
 		assertFatalCode(t, w, http.StatusCreated)
 
-		var resp struct {
-			Data models.User `json:"data"`
+		var createdUser models.User
+		if err := srv.DB.Where("username = ?", "new_created_user").First(&createdUser).Error; err != nil {
+			t.Fatalf("failed to query created user: %v", err)
 		}
-		_ = json.Unmarshal(w.Body.Bytes(), &resp)
-		newUserID = resp.Data.ID
+		newUserID = createdUser.ID
 		if newUserID == 0 {
 			t.Fatal("expected non-zero created user ID")
 		}

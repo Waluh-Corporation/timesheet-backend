@@ -9,6 +9,8 @@ import (
 	"gorm.io/gorm"
 
 	"timesheet-backend/auth"
+	"timesheet-backend/dto/request"
+	_ "timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
 
@@ -29,9 +31,9 @@ func isSelf(c *gin.Context, targetID uint) bool {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {array} models.User
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Admin only"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Admin only"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users [get]
 func (s *Server) ListUsers(c *gin.Context) {
 	var users []models.User
@@ -49,9 +51,9 @@ func (s *Server) ListUsers(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param request body models.CreateUserRequest true "User provisioning payload"
+// @Param request body request.CreateUserRequest true "User provisioning payload"
 // @Success 201 {object} models.User
-func (s *Server) resolveUserCompany(req *models.CreateUserRequest, user *models.User) {
+func (s *Server) resolveUserCompany(req *request.CreateUserRequest, user *models.User) {
 	if user.Role == models.RoleAdmin {
 		user.CompanyID = nil
 		user.Company = ""
@@ -66,6 +68,7 @@ func (s *Server) resolveUserCompany(req *models.CreateUserRequest, user *models.
 			}
 		}
 	} else if req.Company != "" {
+		user.Company = req.Company
 		var comp models.Company
 		if err := s.DB.Where(queryCodeOrNameLike, req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
 			user.CompanyID = &comp.ID
@@ -73,7 +76,7 @@ func (s *Server) resolveUserCompany(req *models.CreateUserRequest, user *models.
 	}
 }
 
-func (s *Server) findDepartmentForUser(req *models.CreateUserRequest) *models.Department {
+func (s *Server) findDepartmentForUser(req *request.CreateUserRequest) *models.Department {
 	var dept models.Department
 	if req.DepartmentID != nil && *req.DepartmentID != 0 {
 		if err := s.DB.Where(queryID, *req.DepartmentID).First(&dept).Error; err == nil {
@@ -87,7 +90,7 @@ func (s *Server) findDepartmentForUser(req *models.CreateUserRequest) *models.De
 	return nil
 }
 
-func (s *Server) resolveUserDepartment(req *models.CreateUserRequest, user *models.User) {
+func (s *Server) resolveUserDepartment(req *request.CreateUserRequest, user *models.User) {
 	dept := s.findDepartmentForUser(req)
 	if dept == nil {
 		return
@@ -101,7 +104,7 @@ func (s *Server) resolveUserDepartment(req *models.CreateUserRequest, user *mode
 	}
 }
 
-func handleInitialPassword(req *models.CreateUserRequest, user *models.User) (string, int) {
+func handleInitialPassword(req *request.CreateUserRequest, user *models.User) (string, int) {
 	if req.Password == "" {
 		return "", 0
 	}
@@ -123,16 +126,16 @@ func handleInitialPassword(req *models.CreateUserRequest, user *models.User) (st
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param request body models.CreateUserRequest true "User provisioning payload"
-// @Success 201 {object} models.User
-// @Failure 400 {object} models.ErrorResponse "Invalid payload or password policy failure"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Admin only"
-// @Failure 409 {object} models.ErrorResponse "Username or email already exists"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Param request body request.CreateUserRequest true "User provisioning payload"
+// @Success 201 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid payload or password policy failure"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Admin only"
+// @Failure 409 {object} response.ErrorResponse "Username or email already exists"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users [post]
 func (s *Server) CreateUser(c *gin.Context) {
-	var req models.CreateUserRequest
+	var req request.CreateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
@@ -187,11 +190,10 @@ func (s *Server) CreateUser(c *gin.Context) {
 		}
 	}
 
-	s.DB.Preload("CompanyRel").Preload("DepartmentRel").Where(queryID, user.ID).First(&user)
-	RespondSuccess(c, http.StatusCreated, user)
+	RespondMessage(c, http.StatusCreated, "user created successfully")
 }
 
-func validateSelfUpdate(c *gin.Context, id uint, req *models.UpdateUserRequest) (string, int) {
+func validateSelfUpdate(c *gin.Context, id uint, req *request.UpdateUserRequest) (string, int) {
 	if !isSelf(c, id) {
 		return "", 0
 	}
@@ -204,7 +206,7 @@ func validateSelfUpdate(c *gin.Context, id uint, req *models.UpdateUserRequest) 
 	return "", 0
 }
 
-func applyUserUpdates(db *gorm.DB, user *models.User, req *models.UpdateUserRequest) {
+func applyUserUpdates(db *gorm.DB, user *models.User, req *request.UpdateUserRequest) {
 	if req.Role != nil {
 		user.Role = *req.Role
 	}
@@ -255,12 +257,12 @@ func applyUserUpdates(db *gorm.DB, user *models.User, req *models.UpdateUserRequ
 // @Accept json
 // @Produce json
 // @Param id path int true "User ID"
-// @Param request body models.UpdateUserRequest true "Update payload"
-// @Success 200 {object} models.User
-// @Failure 400 {object} models.ErrorResponse "Invalid payload"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Admin only or self-demotion forbidden"
-// @Failure 404 {object} models.ErrorResponse "User not found"
+// @Param request body request.UpdateUserRequest true "Update payload"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid payload"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Admin only or self-demotion forbidden"
+// @Failure 404 {object} response.ErrorResponse "User not found"
 // @Router /api/v1/admin/users/{id} [patch]
 func (s *Server) UpdateUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -269,7 +271,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	var req models.UpdateUserRequest
+	var req request.UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
@@ -296,8 +298,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "failed to update user: "+err.Error())
 		return
 	}
-	s.DB.Preload("CompanyRel").Preload("DepartmentRel").Where(queryID, id).First(&user)
-	RespondSuccess(c, http.StatusOK, user)
+	RespondMessage(c, http.StatusOK, "user updated successfully")
 }
 
 // DeleteUser godoc
@@ -307,11 +308,11 @@ func (s *Server) UpdateUser(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "User ID"
-// @Success 200 {object} models.User
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Admin only or self-deactivation forbidden"
-// @Failure 404 {object} models.ErrorResponse "User not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.MessageResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Admin only or self-deactivation forbidden"
+// @Failure 404 {object} response.ErrorResponse "User not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users/{id} [delete]
 func (s *Server) DeleteUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -334,8 +335,7 @@ func (s *Server) DeleteUser(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.DB.Where(queryID, id).First(&user)
-	RespondSuccess(c, http.StatusOK, user)
+	RespondMessage(c, http.StatusOK, "user deactivated successfully")
 }
 
 // --- Profile approval flow ---
@@ -347,14 +347,14 @@ func (s *Server) DeleteUser(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param request body models.ProfileChangeRequestDTO true "Profile update fields"
-// @Success 201 {object} models.ProfileChangeRequest
-// @Failure 400 {object} models.ErrorResponse "Invalid payload"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Param request body request.ProfileChangeRequestDTO true "Profile update fields"
+// @Success 201 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid payload"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/profile/change [post]
 func (s *Server) SubmitProfileChange(c *gin.Context) {
-	var req models.ProfileChangeRequestDTO
+	var req request.ProfileChangeRequestDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
@@ -364,6 +364,7 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 		Status:       models.ProfilePending,
 		Name:         req.Name,
 		BniID:        req.BniID,
+		EmployeeID:   req.EmployeeID,
 		Division:     req.Division,
 		Department:   req.Department,
 		DepartmentID: req.DepartmentID,
@@ -374,7 +375,7 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondSuccess(c, http.StatusCreated, change)
+	RespondMessage(c, http.StatusCreated, "profile change request submitted")
 }
 
 // MyProfileChanges godoc
@@ -384,8 +385,8 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {array} models.ProfileChangeRequest
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/profile/changes [get]
 func (s *Server) MyProfileChanges(c *gin.Context) {
 	var changes []models.ProfileChangeRequest
@@ -406,9 +407,9 @@ func (s *Server) MyProfileChanges(c *gin.Context) {
 // @Produce json
 // @Param status query string false "Filter by review status (pending, approved, rejected)"
 // @Success 200 {array} models.ProfileChangeRequest
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Admin only"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Admin only"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/profile-changes [get]
 func (s *Server) ListProfileChanges(c *gin.Context) {
 	var changes []models.ProfileChangeRequest
@@ -431,12 +432,12 @@ func (s *Server) ListProfileChanges(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Request ID"
 // @Param action query string true "Review action" Enums(approve, reject)
-// @Success 200 {object} models.ProfileChangeRequest
-// @Failure 400 {object} models.ErrorResponse "Invalid action"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Admin only"
-// @Failure 404 {object} models.ErrorResponse "Request not found"
-// @Failure 409 {object} models.ErrorResponse "Request already reviewed"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid action"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Admin only"
+// @Failure 404 {object} response.ErrorResponse "Request not found"
+// @Failure 409 {object} response.ErrorResponse "Request already reviewed"
 // @Router /api/v1/admin/profile-changes/{id}/review [post]
 func (s *Server) ReviewProfileChange(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -479,8 +480,7 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	change.ReviewedAt = &now
 	s.DB.Save(&change)
 
-	_ = s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").Where(queryID, change.ID).First(&change)
-	RespondSuccess(c, http.StatusOK, change)
+	RespondMessage(c, http.StatusOK, "profile change request "+action+"d")
 }
 
 func (s *Server) applyApprovedProfileChange(change *models.ProfileChangeRequest) {
@@ -490,6 +490,9 @@ func (s *Server) applyApprovedProfileChange(change *models.ProfileChangeRequest)
 	}
 	targetUser.Name = change.Name
 	targetUser.BniID = change.BniID
+	if change.EmployeeID != "" {
+		targetUser.EmployeeID = change.EmployeeID
+	}
 	targetUser.Division = change.Division
 	targetUser.Site = change.Site
 	if change.Department != "" {

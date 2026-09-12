@@ -10,6 +10,7 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/database"
+	_ "timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
 
@@ -65,7 +66,7 @@ type InitSetupRequest struct {
 // @Tags Setup
 // @Produce json
 // @Success 200 {object} handlers.SetupStatusResponse
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/setup/status [get]
 func (s *Server) GetSetupStatus(c *gin.Context) {
 	var adminCount int64
@@ -99,9 +100,9 @@ func (s *Server) GetSetupStatus(c *gin.Context) {
 // @Produce json
 // @Param request body handlers.InitSetupRequest true "Initialization payload"
 // @Success 200 {object} map[string]interface{} "Setup success response with admin token"
-// @Failure 400 {object} models.ErrorResponse "Bad request or validation error"
-// @Failure 403 {object} models.ErrorResponse "System already initialized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 400 {object} response.ErrorResponse "Bad request or validation error"
+// @Failure 403 {object} response.ErrorResponse "System already initialized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/setup/init [post]
 func (s *Server) isSystemAlreadyInitialized() (bool, error) {
 	var adminCount int64
@@ -208,9 +209,9 @@ func seedSetupApprovers(tx *gorm.DB, approvers []InitSetupApproverRequest) error
 // @Produce json
 // @Param request body handlers.InitSetupRequest true "Initialization payload"
 // @Success 200 {object} map[string]interface{} "Setup success response with admin token"
-// @Failure 400 {object} models.ErrorResponse "Bad request or validation error"
-// @Failure 403 {object} models.ErrorResponse "System already initialized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 400 {object} response.ErrorResponse "Bad request or validation error"
+// @Failure 403 {object} response.ErrorResponse "System already initialized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/setup/init [post]
 func (s *Server) InitSetup(c *gin.Context) {
 	initialized, err := s.isSystemAlreadyInitialized()

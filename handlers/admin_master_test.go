@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -175,15 +174,10 @@ func TestAdminMasterHandlers_ApproverDBIntegration(t *testing.T) {
 	srv.CreateApprover(c)
 	assertFatalCode(t, w, http.StatusCreated)
 
-	var respEnvelope struct {
-		Data models.Approver `json:"data"`
+	var created models.Approver
+	if err := srv.DB.Order("id desc").First(&created).Error; err != nil {
+		t.Fatalf("failed to find created approver: %v", err)
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &respEnvelope)
-	created := respEnvelope.Data
-	if created.ID == 0 {
-		t.Fatalf("expected non-zero ID for created approver")
-	}
-
 	idStr := fmt.Sprintf("%d", created.ID)
 
 	// 2. Update Approver
@@ -247,15 +241,10 @@ func TestAdminMasterHandlers_CompanyDBIntegration(t *testing.T) {
 	srv.CreateCompany(c)
 	assertFatalCode(t, w, http.StatusCreated)
 
-	var respEnvelope struct {
-		Data models.Company `json:"data"`
+	var created models.Company
+	if err := srv.DB.Where("code = ?", "tstcorp").First(&created).Error; err != nil {
+		t.Fatalf("failed to find created company: %v", err)
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &respEnvelope)
-	created := respEnvelope.Data
-	if created.ID == 0 {
-		t.Fatalf("expected non-zero ID for created company")
-	}
-
 	idStr := fmt.Sprintf("%d", created.ID)
 
 	// 2. Update Company

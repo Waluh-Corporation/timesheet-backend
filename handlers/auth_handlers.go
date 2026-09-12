@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 
 	"timesheet-backend/auth"
+	"timesheet-backend/dto/request"
+	_ "timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
 
@@ -26,15 +28,15 @@ const (
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param request body models.LoginRequest true "Login credentials"
-// @Success 200 {object} models.LoginResponse
-// @Failure 400 {object} models.ErrorResponse "Invalid payload"
-// @Failure 401 {object} models.ErrorResponse "Invalid credentials"
-// @Failure 403 {object} models.ErrorResponse "Account is disabled"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Param request body request.LoginRequest true "Login credentials"
+// @Success 200 {object} response.LoginResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid payload"
+// @Failure 401 {object} response.ErrorResponse "Invalid credentials"
+// @Failure 403 {object} response.ErrorResponse "Account is disabled"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/auth/login [post]
 func (s *Server) Login(c *gin.Context) {
-	var req models.LoginRequest
+	var req request.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, errInvalidPayload)
 		return
@@ -69,7 +71,7 @@ func (s *Server) Login(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "could not issue token")
 		return
 	}
-	RespondSuccess(c, http.StatusOK, gin.H{"token": token, "user": user})
+	RespondSuccess(c, http.StatusOK, gin.H{"token": token})
 }
 
 // WebAuthnRelatedOrigins godoc
@@ -77,7 +79,7 @@ func (s *Server) Login(c *gin.Context) {
 // @Description Serves the WebAuthn Related Origin Requests well-known document for multi-domain passkeys.
 // @Tags Passkey
 // @Produce json
-// @Success 200 {object} models.OriginsResponse
+// @Success 200 {object} response.OriginsResponse
 // @Router /.well-known/webauthn [get]
 func (s *Server) WebAuthnRelatedOrigins(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, gin.H{"origins": s.Cfg.RPOrigins})
@@ -90,8 +92,8 @@ func (s *Server) WebAuthnRelatedOrigins(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {object} models.User
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 404 {object} models.ErrorResponse "User not found"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 404 {object} response.ErrorResponse "User not found"
 // @Router /api/v1/me [get]
 func (s *Server) Me(c *gin.Context) {
 	var user models.User
@@ -108,12 +110,12 @@ func (s *Server) Me(c *gin.Context) {
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param request body models.ForgotRequest true "User email"
-// @Success 200 {object} models.MessageResponse
-// @Failure 400 {object} models.ErrorResponse "Invalid payload"
+// @Param request body request.ForgotRequest true "User email"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid payload"
 // @Router /api/v1/auth/forgot-password [post]
 func (s *Server) ForgotPassword(c *gin.Context) {
-	var req models.ForgotRequest
+	var req request.ForgotRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, errInvalidPayload)
 		return
@@ -149,13 +151,13 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 // @Tags Auth
 // @Accept json
 // @Produce json
-// @Param request body models.ResetRequest true "Password reset payload"
-// @Success 200 {object} models.MessageResponse
-// @Failure 400 {object} models.ErrorResponse "Invalid or expired token, or weak password"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Param request body request.ResetRequest true "Password reset payload"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid or expired token, or weak password"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/auth/reset-password [post]
 func (s *Server) ResetPassword(c *gin.Context) {
-	var req models.ResetRequest
+	var req request.ResetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, errInvalidPayload)
 		return
@@ -204,10 +206,10 @@ func (s *Server) ResetPassword(c *gin.Context) {
 // @Tags Passkey
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} models.PasskeySessionResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 404 {object} models.ErrorResponse "User not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.PasskeySessionResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 404 {object} response.ErrorResponse "User not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/passkey/register/begin [post]
 func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
 	var user models.User
@@ -240,11 +242,11 @@ func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
 // @Produce json
 // @Param session_id query string true "Session ID returned from registration begin"
 // @Param name query string false "Friendly name for the passkey"
-// @Success 200 {object} models.MessageResponse
-// @Failure 400 {object} models.ErrorResponse "Invalid or expired session"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 404 {object} models.ErrorResponse "User not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid or expired session"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 404 {object} response.ErrorResponse "User not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/passkey/register/finish [post]
 func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 	sid := c.Query("session_id")
@@ -282,10 +284,10 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 // @Tags Passkey
 // @Accept json
 // @Produce json
-// @Param request body models.BeginPasskeyLoginRequest false "Optional user identifier"
-// @Success 200 {object} models.PasskeySessionResponse
-// @Failure 401 {object} models.ErrorResponse "Invalid credentials"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Param request body request.BeginPasskeyLoginRequest false "Optional user identifier"
+// @Success 200 {object} response.PasskeySessionResponse
+// @Failure 401 {object} response.ErrorResponse "Invalid credentials"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/auth/passkey/login/begin [post]
 func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 	if s.WebAuthn == nil {
@@ -293,7 +295,7 @@ func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 		return
 	}
 
-	var req models.BeginPasskeyLoginRequest
+	var req request.BeginPasskeyLoginRequest
 	_ = c.ShouldBindJSON(&req) // identifier is optional
 
 	var (
@@ -330,11 +332,11 @@ func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param session_id query string true "Session ID returned from begin ceremony"
-// @Success 200 {object} models.LoginResponse
-// @Failure 400 {object} models.ErrorResponse "Invalid or expired session"
-// @Failure 401 {object} models.ErrorResponse "Invalid credentials"
-// @Failure 403 {object} models.ErrorResponse "Account disabled"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.LoginResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid or expired session"
+// @Failure 401 {object} response.ErrorResponse "Invalid credentials"
+// @Failure 403 {object} response.ErrorResponse "Account disabled"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/auth/passkey/login/finish [post]
 func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 	sid := c.Query("session_id")
@@ -387,7 +389,7 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "could not issue token")
 		return
 	}
-	RespondSuccess(c, http.StatusOK, gin.H{"token": token, "user": user})
+	RespondSuccess(c, http.StatusOK, gin.H{"token": token})
 }
 
 // --- Passkey management (self-service for any authenticated user) ---
@@ -399,8 +401,8 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {array} models.WebAuthnCredential
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/passkeys [get]
 func (s *Server) ListPasskeys(c *gin.Context) {
 	var creds []models.WebAuthnCredential
@@ -419,10 +421,10 @@ func (s *Server) ListPasskeys(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "Passkey credential ID"
-// @Success 200 {object} models.MessageResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 404 {object} models.ErrorResponse "Passkey not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.MessageResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 404 {object} response.ErrorResponse "Passkey not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/passkeys/{id} [delete]
 func (s *Server) DeletePasskey(c *gin.Context) {
 	res := s.DB.Where("id = ? AND user_id = ?", c.Param("id"), currentUserID(c)).
@@ -448,9 +450,9 @@ func (s *Server) DeletePasskey(c *gin.Context) {
 // @Produce json
 // @Param id path int true "User ID"
 // @Success 200 {array} models.WebAuthnCredential
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Admin only"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Admin only"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users/{id}/passkeys [get]
 func (s *Server) AdminListPasskeys(c *gin.Context) {
 	var creds []models.WebAuthnCredential
@@ -470,11 +472,11 @@ func (s *Server) AdminListPasskeys(c *gin.Context) {
 // @Produce json
 // @Param id path int true "User ID"
 // @Param pid path int true "Passkey ID"
-// @Success 200 {object} models.MessageResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Admin only"
-// @Failure 404 {object} models.ErrorResponse "Passkey not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.MessageResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Admin only"
+// @Failure 404 {object} response.ErrorResponse "Passkey not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users/{id}/passkeys/{pid} [delete]
 func (s *Server) AdminDeletePasskey(c *gin.Context) {
 	res := s.DB.Where("id = ? AND user_id = ?", c.Param("pid"), c.Param("id")).

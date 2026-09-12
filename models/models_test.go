@@ -220,56 +220,7 @@ func TestDailyActivity_ProjectGetters(t *testing.T) {
 	}
 }
 
-func TestResponseDTOs(t *testing.T) {
-	resp := APIResponse{Code: 200, Status: "success", Message: "ok", Data: "test"}
-	if resp.Code != 200 || resp.Status != "success" {
-		t.Errorf("APIResponse mismatch: %+v", resp)
-	}
-
-	msg := MessageResponse{Code: 200, Status: "success", Message: "done"}
-	if msg.Message != "done" {
-		t.Errorf("MessageResponse mismatch: %+v", msg)
-	}
-
-	errResp := ErrorResponse{Code: 400, Status: "error", Error: "err", Message: "err"}
-	if errResp.Error != "err" {
-		t.Errorf("ErrorResponse mismatch: %+v", errResp)
-	}
-
-	delResp := DeleteResponse{Code: 200, Status: "success", Deleted: true}
-	if !delResp.Deleted {
-		t.Errorf("DeleteResponse mismatch: %+v", delResp)
-	}
-
-	loginResp := LoginResponse{Token: "jwt-token", User: User{ID: 1}}
-	if loginResp.Token != "jwt-token" {
-		t.Errorf("LoginResponse mismatch: %+v", loginResp)
-	}
-
-	vapidResp := VAPIDKeyResponse{PublicKey: "vapid-key"}
-	if vapidResp.PublicKey != "vapid-key" {
-		t.Errorf("VAPIDKeyResponse mismatch: %+v", vapidResp)
-	}
-
-	originsResp := OriginsResponse{Origins: []string{"https://example.com"}}
-	if len(originsResp.Origins) != 1 {
-		t.Errorf("OriginsResponse mismatch: %+v", originsResp)
-	}
-
-	passkeySess := PasskeySessionResponse{SessionID: "sess-123"}
-	if passkeySess.SessionID != "sess-123" {
-		t.Errorf("PasskeySessionResponse mismatch: %+v", passkeySess)
-	}
-
-	pageResp := PaginatedResponse{
-		Code:       200,
-		Status:     "success",
-		Pagination: PaginationMeta{Page: 1, Limit: 10, TotalRows: 100, TotalPages: 10},
-	}
-	if pageResp.Pagination.TotalPages != 10 {
-		t.Errorf("PaginatedResponse mismatch: %+v", pageResp)
-	}
-
+func TestHolidayDTOs(t *testing.T) {
 	holDTO := HolidayDTO{Date: "2026-01-01", Description: "New Year"}
 	if holDTO.Date != "2026-01-01" {
 		t.Errorf("HolidayDTO mismatch: %+v", holDTO)
@@ -279,72 +230,5 @@ func TestResponseDTOs(t *testing.T) {
 	kResp := KemendesaHolidayResponse{Data: []KemendesaHolidayItem{kItem}}
 	if len(kResp.Data) != 1 {
 		t.Errorf("KemendesaHolidayResponse mismatch: %+v", kResp)
-	}
-}
-
-func TestRequestDTOs(t *testing.T) {
-	loginReq := LoginRequest{Identifier: "admin", Password: "pwd"}
-	if loginReq.Identifier != "admin" {
-		t.Errorf("LoginRequest mismatch: %+v", loginReq)
-	}
-
-	resetReq := ResetRequest{Token: "tok", Password: "pwd"}
-	if resetReq.Token != "tok" {
-		t.Errorf("ResetRequest mismatch: %+v", resetReq)
-	}
-
-	passkeyReq := BeginPasskeyLoginRequest{Identifier: "user1"}
-	if passkeyReq.Identifier != "user1" {
-		t.Errorf("BeginPasskeyLoginRequest mismatch: %+v", passkeyReq)
-	}
-
-	userReq := CreateUserRequest{Username: "newuser", Email: "new@example.com", Role: RoleUser}
-	if userReq.Username != "newuser" {
-		t.Errorf("CreateUserRequest mismatch: %+v", userReq)
-	}
-
-	updateReq := UpdateUserRequest{}
-	if updateReq.Role != nil {
-		t.Errorf("UpdateUserRequest mismatch: %+v", updateReq)
-	}
-
-	profileReq := ProfileChangeRequestDTO{Name: "Name"}
-	if profileReq.Name != "Name" {
-		t.Errorf("ProfileChangeRequestDTO mismatch: %+v", profileReq)
-	}
-
-	actReq := DailyActivityRequest{Date: "2026-09-01", Status: "P"}
-	if actReq.Date != "2026-09-01" {
-		t.Errorf("DailyActivityRequest mismatch: %+v", actReq)
-	}
-
-	genReq := GenerateRequest{Month: 9, Year: 2026}
-	if genReq.Month != 9 {
-		t.Errorf("GenerateRequest mismatch: %+v", genReq)
-	}
-
-	subReq := SubscribeRequest{Endpoint: "https://push.example.com", Keys: PushKeyPayload{P256dh: "key", Auth: "auth"}}
-	if subReq.Endpoint == "" {
-		t.Errorf("SubscribeRequest mismatch: %+v", subReq)
-	}
-
-	unsubReq := UnsubscribeRequest{Endpoint: "https://push.example.com"}
-	if unsubReq.Endpoint == "" {
-		t.Errorf("UnsubscribeRequest mismatch: %+v", unsubReq)
-	}
-
-	entry := DailyEntry{Day: 1, Status: "P"}
-	if entry.Day != 1 {
-		t.Errorf("DailyEntry mismatch: %+v", entry)
-	}
-
-	tsReq := TimesheetRequest{Month: 9, Year: 2026, Format: "excel"}
-	if tsReq.Month != 9 {
-		t.Errorf("TimesheetRequest mismatch: %+v", tsReq)
-	}
-
-	kItem := KemendesaHolidayItem{Date: "2026-01-01", Name: "Tahun Baru"}
-	if kItem.Date != "2026-01-01" {
-		t.Errorf("KemendesaHolidayItem mismatch: %+v", kItem)
 	}
 }
