@@ -1,10 +1,13 @@
 name: CI Quality Gates
 
 on:
+  push:
+    branches:
+      - "main"
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
-      - "development"
+      - "main"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
