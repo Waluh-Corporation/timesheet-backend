@@ -195,4 +195,31 @@ func TestRunMigrationsOnDB(t *testing.T) {
 	if hasProjectCompanyID {
 		t.Errorf("projects.company_id should be removed after migration 000015")
 	}
+
+	// 10. Verify departments.company_id foreign key constraint is dropped after migration 000019
+	var hasDeptCompanyFK bool
+	_ = db.Raw(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.table_constraints tc
+			JOIN pg_constraint c ON c.conname = tc.constraint_name
+			WHERE tc.table_name = 'departments'
+			  AND tc.constraint_type = 'FOREIGN KEY'
+			  AND pg_get_constraintdef(c.oid) LIKE '%FOREIGN KEY (company_id) REFERENCES companies(id)%'
+		)
+	`).Scan(&hasDeptCompanyFK)
+	if hasDeptCompanyFK {
+		t.Errorf("departments.company_id foreign key constraint referencing companies(id) should have been dropped by migration 000019")
+	}
+
+	// 11. Verify chk_users_admin_no_company constraint exists after migration 000019
+	var hasAdminNoCompanyCheck bool
+	_ = db.Raw(`
+		SELECT EXISTS (
+			SELECT 1 FROM pg_constraint
+			WHERE conname = 'chk_users_admin_no_company'
+		)
+	`).Scan(&hasAdminNoCompanyCheck)
+	if !hasAdminNoCompanyCheck {
+		t.Errorf("chk_users_admin_no_company constraint should exist on users table after migration 000019")
+	}
 }

@@ -141,7 +141,6 @@ func currentUserID(c *gin.Context) uint {
 // publicBaseURL returns the scheme://host base to build user-facing links
 // (setup / password-reset emails) so they open on the PUBLIC URL rather than a
 // hardcoded localhost default.
-//
 func matchHostOrURL(target, host, hostOnly string) bool {
 	if target == "" {
 		return false

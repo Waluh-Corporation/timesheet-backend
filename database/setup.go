@@ -108,15 +108,7 @@ func AutoMigrate(db *gorm.DB) error {
 // seedDefaultProjectsAndNormalize backfills missing associations,
 // seeds master statuses/projects/departments, and links existing data.
 func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
-	findCompanyID := func(code string) *uint {
-		var comp models.Company
-		if err := db.Where(queryCode, code).Limit(1).Find(&comp).Error; err == nil && comp.ID != 0 {
-			return &comp.ID
-		}
-		return nil
-	}
-
-	// 1. Backfill missing company_id on users
+	// 1. Backfill missing company_id on non-admin users
 	_ = db.Exec(`
 		UPDATE users 
 		SET company_id = (
@@ -128,13 +120,21 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 		WHERE (company_id IS NULL OR company_id = 0) 
 		  AND company IS NOT NULL 
 		  AND company != ''
+		  AND role != 'admin'
+	`).Error
+
+	// 2. Clear any company association for admin accounts
+	_ = db.Exec(`
+		UPDATE users 
+		SET company_id = NULL, company = '' 
+		WHERE role = 'admin' AND (company_id IS NOT NULL OR (company IS NOT NULL AND company != ''))
 	`).Error
 
 	// 3. Seed default projects
 	defaultProjects := []models.Project{
-		{Code: "P24015", Name: "BNI Direct Cash", AppImpacted: "BNI Direct Cash", IsActive: true},
-		{Code: "P24015", Name: "BNI Direct Overseas", AppImpacted: "BNI Direct Overseas", IsActive: true},
-		{Code: "P24015", Name: "BNI Direct Bisnis", AppImpacted: "BNI Direct Bisnis", IsActive: true},
+		{Code: "P24015", Name: "BNI Direct Cash", AppImpacted: "Cash", IsActive: true},
+		{Code: "P24015", Name: "BNI Direct Overseas", AppImpacted: "Overseas", IsActive: true},
+		{Code: "P24015", Name: "BNI Direct Bisnis", AppImpacted: "Bisnis", IsActive: true},
 	}
 	for _, p := range defaultProjects {
 		var cnt int64
@@ -188,20 +188,11 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 
 	// 6. Seed default departments
 	defaultDepartments := []models.Department{
-		{Code: "WCSD", Name: "Wholesale Channel and Service Delivery", Division: "Wholesale Digital Delivery", CompanyID: findCompanyID("mii"), IsActive: true},
-		{Code: "SDD-DEV1", Name: "Kelompok Pengembangan 1", Division: "Application Development Division", CompanyID: findCompanyID("sdd"), IsActive: true},
-		{Code: "IT-BANK", Name: "IT Banking Application", Division: "IT Banking", CompanyID: findCompanyID("ntt"), IsActive: true},
-		{Code: "ADI-TS", Name: "Technical Support & Dev", Division: "Application Development", CompanyID: findCompanyID("adidata"), IsActive: true},
+		{Code: "WDL", Name: "Wholesale Channel and Service Delivery", Division: "Wholesale Digital Delivery", IsActive: true},
 	}
 	for _, d := range defaultDepartments {
 		var cnt int64
-		q := db.Model(&models.Department{}).Where(queryCode, d.Code)
-		if d.CompanyID == nil {
-			q = q.Where("company_id IS NULL")
-		} else {
-			q = q.Where("company_id = ?", *d.CompanyID)
-		}
-		_ = q.Count(&cnt).Error
+		_ = db.Model(&models.Department{}).Where(queryCode, d.Code).Count(&cnt).Error
 		if cnt == 0 {
 			_ = db.Create(&d).Error
 		}

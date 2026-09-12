@@ -83,6 +83,64 @@ func TestBuilderCommon_ExtractApprovers(t *testing.T) {
 	})
 }
 
+func TestBuilderCommon_ResolveApprovers(t *testing.T) {
+	masterApprovers := []models.Approver{
+		{Name: "Master TL", RoleType: models.ApproverRoleTeamLeader, IsActive: true},
+		{Name: "Master DH", RoleType: models.ApproverRoleDepartmentHead, IsActive: true},
+		{Name: "Inactive TL", RoleType: models.ApproverRoleTeamLeader, IsActive: false},
+	}
+
+	t.Run("empty overtimes falls back to master approvers", func(t *testing.T) {
+		in := GenerationInput{
+			Approvers: masterApprovers,
+		}
+		tl, dh := ResolveApprovers(in)
+		if tl != "Master TL" {
+			t.Errorf("expected tl 'Master TL', got %q", tl)
+		}
+		if dh != "Master DH" {
+			t.Errorf("expected dh 'Master DH', got %q", dh)
+		}
+	})
+
+	t.Run("overtimes take precedence over master approvers", func(t *testing.T) {
+		in := GenerationInput{
+			Overtimes: []models.OvertimeEntry{
+				{
+					TeamLeader:     &models.Approver{Name: "Overtime TL"},
+					DepartmentHead: &models.Approver{Name: "Overtime DH"},
+				},
+			},
+			Approvers: masterApprovers,
+		}
+		tl, dh := ResolveApprovers(in)
+		if tl != "Overtime TL" {
+			t.Errorf("expected tl 'Overtime TL', got %q", tl)
+		}
+		if dh != "Overtime DH" {
+			t.Errorf("expected dh 'Overtime DH', got %q", dh)
+		}
+	})
+
+	t.Run("partial overtime approver falls back to master approver", func(t *testing.T) {
+		in := GenerationInput{
+			Overtimes: []models.OvertimeEntry{
+				{
+					TeamLeader: &models.Approver{Name: "Overtime TL Only"},
+				},
+			},
+			Approvers: masterApprovers,
+		}
+		tl, dh := ResolveApprovers(in)
+		if tl != "Overtime TL Only" {
+			t.Errorf("expected tl 'Overtime TL Only', got %q", tl)
+		}
+		if dh != "Master DH" {
+			t.Errorf("expected dh 'Master DH', got %q", dh)
+		}
+	})
+}
+
 func TestBuilderCommon_Helpers(t *testing.T) {
 	f := excelize.NewFile()
 	sheet := "Sheet1"

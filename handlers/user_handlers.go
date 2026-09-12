@@ -52,6 +52,11 @@ func (s *Server) ListUsers(c *gin.Context) {
 // @Param request body models.CreateUserRequest true "User provisioning payload"
 // @Success 201 {object} models.User
 func (s *Server) resolveUserCompany(req *models.CreateUserRequest, user *models.User) {
+	if user.Role == models.RoleAdmin {
+		user.CompanyID = nil
+		user.Company = ""
+		return
+	}
 	if req.CompanyID != nil && *req.CompanyID != 0 {
 		var comp models.Company
 		if err := s.DB.Where(queryID, *req.CompanyID).First(&comp).Error; err == nil {
@@ -148,6 +153,11 @@ func (s *Server) CreateUser(c *gin.Context) {
 		IsActive:     true,
 	}
 
+	if user.Role == models.RoleAdmin {
+		user.Company = ""
+		user.CompanyID = nil
+	}
+
 	s.resolveUserCompany(&req, &user)
 	s.resolveUserDepartment(&req, &user)
 
@@ -172,7 +182,9 @@ func (s *Server) CreateUser(c *gin.Context) {
 			CreatedIP: c.ClientIP(),
 		})
 		link := s.publicBaseURL(c) + "/reset-password?token=" + raw
-		_ = s.Mailer.SendSetupEmail(user.Email, user.Username, link)
+		if s.Mailer != nil {
+			_ = s.Mailer.SendSetupEmail(user.Email, user.Username, link)
+		}
 	}
 
 	s.DB.Preload("CompanyRel").Preload("DepartmentRel").Where(queryID, user.ID).First(&user)
@@ -228,6 +240,10 @@ func applyUserUpdates(db *gorm.DB, user *models.User, req *models.UpdateUserRequ
 		} else {
 			user.CompanyID = nil
 		}
+	}
+	if user.Role == models.RoleAdmin {
+		user.Company = ""
+		user.CompanyID = nil
 	}
 }
 

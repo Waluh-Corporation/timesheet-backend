@@ -206,6 +206,71 @@ func TestUserHandlers_UserCRUDIntegration(t *testing.T) {
 		srv.DeleteUser(c)
 		assertFatalCode(t, w, http.StatusNotFound)
 	})
+
+	t.Run("CreateUser with admin role ignores company and enforces no company relation", func(t *testing.T) {
+		comp := models.Company{Code: "admin_test_comp", Name: "Admin Test Comp"}
+		_ = tx.Create(&comp)
+
+		createAdminBody := fmt.Sprintf(`{"username":"new_admin_nocomp","email":"admin_nocomp@example.com","role":"admin","name":"Admin No Comp","company_id":%d,"company":"Admin Test Comp"}`, comp.ID)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(ctxUserID, adminUser.ID)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader([]byte(createAdminBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.CreateUser(c)
+		assertFatalCode(t, w, http.StatusCreated)
+
+		var createdAdmin models.User
+		if err := tx.Where("username = ?", "new_admin_nocomp").First(&createdAdmin).Error; err != nil {
+			t.Fatalf("failed to find created admin: %v", err)
+		}
+		if createdAdmin.CompanyID != nil {
+			t.Errorf("expected admin company_id to be nil, got %v", createdAdmin.CompanyID)
+		}
+		if createdAdmin.Company != "" {
+			t.Errorf("expected admin company to be empty, got %q", createdAdmin.Company)
+		}
+	})
+
+	t.Run("UpdateUser to admin role clears any existing company relation", func(t *testing.T) {
+		comp := models.Company{Code: "upd_admin_comp", Name: "Upd Admin Comp"}
+		_ = tx.Create(&comp)
+		regularUser := models.User{
+			Username:  "regular_to_admin",
+			Email:     "reg2admin@example.com",
+			Role:      models.RoleUser,
+			Name:      "Regular User",
+			Company:   comp.Name,
+			CompanyID: &comp.ID,
+			IsActive:  true,
+		}
+		if err := tx.Create(&regularUser).Error; err != nil {
+			t.Fatalf("failed to create user: %v", err)
+		}
+
+		updateBody := `{"role": "admin"}`
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(ctxUserID, adminUser.ID)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", regularUser.ID)}}
+		c.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/admin/users/%d", regularUser.ID), bytes.NewReader([]byte(updateBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.UpdateUser(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		var reloaded models.User
+		if err := tx.Where("id = ?", regularUser.ID).First(&reloaded).Error; err != nil {
+			t.Fatalf("failed to reload user: %v", err)
+		}
+		if reloaded.CompanyID != nil {
+			t.Errorf("expected promoted admin company_id to be nil, got %v", reloaded.CompanyID)
+		}
+		if reloaded.Company != "" {
+			t.Errorf("expected promoted admin company to be empty, got %q", reloaded.Company)
+		}
+	})
 }
 
 func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {

@@ -72,7 +72,7 @@ type Company struct {
 	UpdatedAt   time.Time    `json:"updated_at"`
 	Code        string       `gorm:"unique;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
 	Name        string       `gorm:"size:255;not null" json:"name"`
-	Departments []Department `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"departments,omitempty"`
+	Departments []Department `gorm:"foreignKey:CompanyID" json:"departments,omitempty"`
 }
 
 // Department represents an organizational department or unit within a company.
@@ -81,7 +81,7 @@ type Department struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	CompanyID *uint     `gorm:"index;uniqueIndex:uq_departments_company_name,priority:1" json:"company_id"`
-	Company   *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
+	Company   *Company  `gorm:"foreignKey:CompanyID" json:"company,omitempty"`
 	Code      string    `gorm:"size:64;index" json:"code"`                                                        // e.g. "WCSD", "DEV-01"
 	Name      string    `gorm:"size:255;not null;uniqueIndex:uq_departments_company_name,priority:2" json:"name"` // e.g. "Wholesale Channel and Service Delivery"
 	Division  string    `gorm:"size:255" json:"division"`                                                         // e.g. "Wholesale Digital Delivery"

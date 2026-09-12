@@ -427,6 +427,9 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		}
 	}
 
+	var approvers []models.Approver
+	s.DB.Where(queryIsActive, true).Order("id asc").Find(&approvers)
+
 	out, err := services.GenerateFromTemplate(services.GenerationInput{
 		CompanyCode: companyCode,
 		User:        &user,
@@ -434,6 +437,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		Year:        req.Year,
 		Activities:  activities,
 		Overtimes:   overtimes,
+		Approvers:   approvers,
 		Holidays:    holidays,
 	})
 	if err != nil {

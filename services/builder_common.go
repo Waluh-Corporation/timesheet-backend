@@ -145,6 +145,21 @@ func ExtractApprovers(overtimes []models.OvertimeEntry) (tlName string, dhName s
 	return tlName, dhName
 }
 
+// ResolveApprovers finds team leader and department head names for timesheet signatures.
+// It checks overtime entries first, and falls back to active approvers from master data.
+func ResolveApprovers(in GenerationInput) (tlName string, dhName string) {
+	tlName, dhName = ExtractApprovers(in.Overtimes)
+	for _, appr := range in.Approvers {
+		if tlName == "" && appr.RoleType == models.ApproverRoleTeamLeader && appr.IsActive {
+			tlName = appr.Name
+		}
+		if dhName == "" && appr.RoleType == models.ApproverRoleDepartmentHead && appr.IsActive {
+			dhName = appr.Name
+		}
+	}
+	return tlName, dhName
+}
+
 // WriteTimeCells parses start and end times to Excel fractions and sets their cells.
 func WriteTimeCells(f *excelize.File, sheet, startCell, endCell string, startStr, endStr string, timeStyle int) (hasStart, hasEnd bool) {
 	if startStr != "" {
