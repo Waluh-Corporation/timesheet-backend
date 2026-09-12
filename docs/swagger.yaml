@@ -246,12 +246,10 @@ definitions:
         type: string
       created_at:
         type: string
-      departments:
-        items:
-          $ref: '#/definitions/models.Department'
-        type: array
       id:
         type: integer
+      is_active:
+        type: boolean
       name:
         type: string
       updated_at:
@@ -262,10 +260,6 @@ definitions:
       code:
         description: e.g. "WCSD", "DEV-01"
         type: string
-      company:
-        $ref: '#/definitions/models.Company'
-      company_id:
-        type: integer
       created_at:
         type: string
       division:
@@ -356,8 +350,6 @@ definitions:
         $ref: '#/definitions/models.ProfileStatus'
       updated_at:
         type: string
-      user:
-        $ref: '#/definitions/models.User'
       user_id:
         type: integer
     type: object
@@ -1118,7 +1110,7 @@ paths:
       - Master Data
   /api/v1/admin/approvers/{id}:
     delete:
-      description: Permanently removes an approver from master data.
+      description: Soft-deactivates an approver from master data.
       parameters:
       - description: Approver ID
         in: path
@@ -1243,7 +1235,7 @@ paths:
       - Master Data
   /api/v1/admin/companies/{id}:
     delete:
-      description: Permanently removes a company from master data.
+      description: Soft-deactivates a company from master data.
       parameters:
       - description: Company ID
         in: path

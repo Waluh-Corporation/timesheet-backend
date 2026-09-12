@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -117,27 +118,30 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 	}
 
 	var appr models.Approver
-	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&appr).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where("id = ? AND is_active = true", id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
 
+	updates := make(map[string]interface{})
 	if req.Name != nil {
-		appr.Name = strings.TrimSpace(*req.Name)
+		updates["name"] = strings.TrimSpace(*req.Name)
 	}
 	if req.RoleType != nil {
-		appr.RoleType = *req.RoleType
+		updates["role_type"] = *req.RoleType
 	}
 	if req.Title != nil {
-		appr.Title = strings.TrimSpace(*req.Title)
+		updates["title"] = strings.TrimSpace(*req.Title)
 	}
 	if req.IsActive != nil {
-		appr.IsActive = *req.IsActive
+		updates["is_active"] = *req.IsActive
 	}
 
-	if err := s.DB.Save(&appr).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
-		return
+	if len(updates) > 0 {
+		if err := s.DB.WithContext(c.Request.Context()).Model(&models.Approver{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
+			return
+		}
 	}
 
 	RespondMessage(c, http.StatusOK, "approver updated successfully")
@@ -145,7 +149,7 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 
 // DeleteApprover godoc
 // @Summary Delete an approver (admin only)
-// @Description Permanently removes an approver from master data.
+// @Description Soft-deactivates an approver from master data.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
@@ -164,12 +168,15 @@ func (s *Server) DeleteApprover(c *gin.Context) {
 	}
 
 	var appr models.Approver
-	if err := s.DB.Where(queryID, id).First(&appr).Error; err != nil {
+	if err := s.DB.Where("id = ? AND is_active = true", id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
 
-	if err := s.DB.Delete(&appr).Error; err != nil {
+	if err := s.DB.Model(&appr).Updates(map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now(),
+	}).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to delete approver: "+err.Error())
 		return
 	}
@@ -198,8 +205,9 @@ func (s *Server) CreateCompany(c *gin.Context) {
 	}
 
 	comp := models.Company{
-		Code: strings.ToLower(strings.TrimSpace(req.Code)),
-		Name: strings.TrimSpace(req.Name),
+		Code:     strings.ToLower(strings.TrimSpace(req.Code)),
+		Name:     strings.TrimSpace(req.Name),
+		IsActive: true,
 	}
 
 	if err := s.DB.Create(&comp).Error; err != nil {
@@ -244,28 +252,32 @@ func (s *Server) UpdateCompany(c *gin.Context) {
 	}
 
 	var comp models.Company
-	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&comp).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where("id = ? AND is_active = true", id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}
 
+	updates := make(map[string]interface{})
 	if req.Code != nil {
-		comp.Code = strings.ToLower(strings.TrimSpace(*req.Code))
+		updates["code"] = strings.ToLower(strings.TrimSpace(*req.Code))
 	}
 	if req.Name != nil {
-		comp.Name = strings.TrimSpace(*req.Name)
+		updates["name"] = strings.TrimSpace(*req.Name)
 	}
 
-	if err := s.DB.Save(&comp).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
-		return
+	if len(updates) > 0 {
+		if err := s.DB.WithContext(c.Request.Context()).Model(&models.Company{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
+			return
+		}
 	}
+
 	RespondMessage(c, http.StatusOK, "company updated successfully")
 }
 
 // DeleteCompany godoc
 // @Summary Delete a company (admin only)
-// @Description Permanently removes a company from master data.
+// @Description Soft-deactivates a company from master data.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
@@ -284,12 +296,15 @@ func (s *Server) DeleteCompany(c *gin.Context) {
 	}
 
 	var comp models.Company
-	if err := s.DB.Where(queryID, id).First(&comp).Error; err != nil {
+	if err := s.DB.Where("id = ? AND is_active = true", id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}
 
-	if err := s.DB.Delete(&comp).Error; err != nil {
+	if err := s.DB.Model(&comp).Updates(map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now(),
+	}).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to delete company: "+err.Error())
 		return
 	}

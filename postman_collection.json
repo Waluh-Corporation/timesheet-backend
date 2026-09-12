@@ -361,7 +361,13 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Data is array\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));"
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Projects have is_active true\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "  });",
+                  "}"
                 ]
               }
             }
@@ -385,7 +391,14 @@
               "script": {
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"Data is array\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));"
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Departments have is_active true and no company_id\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "    pm.expect(res.data[0]).to.not.have.property(\"company_id\");",
+                  "  });",
+                  "}"
                 ]
               }
             }
@@ -412,6 +425,9 @@
                   "const res = pm.response.json();",
                   "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
                   "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Companies have is_active true\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "  });",
                   "  pm.collectionVariables.set(\"createdCompanyId\", res.data[0].id);",
                   "}"
                 ]
@@ -464,6 +480,9 @@
                   "const res = pm.response.json();",
                   "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
                   "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Approvers have is_active true\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "  });",
                   "  pm.collectionVariables.set(\"createdApproverId\", res.data[0].id);",
                   "}"
                 ]
@@ -628,6 +647,11 @@
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                   "const res = pm.response.json();",
                   "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "pm.test(\"Response payload does not contain user key\", () => {",
+                  "  if (res.data && res.data.length > 0) {",
+                  "    pm.expect(res.data[0]).to.not.have.property(\"user\");",
+                  "  }",
+                  "});",
                   "if (res.data && res.data.length > 0) {",
                   "  pm.collectionVariables.set(\"profileChangeId\", res.data[0].id);",
                   "}"
@@ -970,7 +994,44 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "pm.test(\"Message confirms saved\", () => pm.expect(res.message).to.eql(\"overtime entry saved successfully\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit Overtime (Upsert Update)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"date\":\"2026-09-12\",\"start_time\":\"18:00\",\"end_time\":\"21:00\",\"task_description\":\"Production bug fixing and system deployment updated\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/overtimes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "pm.test(\"Message confirms saved\", () => pm.expect(res.message).to.eql(\"overtime entry saved successfully\"));"
                 ]
               }
             }
@@ -1022,7 +1083,14 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success and deleted is true\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "    pm.expect(res.deleted).to.be.true;",
+                  "  });",
+                  "}"
                 ]
               }
             }
@@ -1156,7 +1224,14 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success and deleted is true\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "    pm.expect(res.deleted).to.be.true;",
+                  "  });",
+                  "}"
                 ]
               }
             }
@@ -1250,7 +1325,14 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success and deleted is true\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "    pm.expect(res.deleted).to.be.true;",
+                  "  });",
+                  "}"
                 ]
               }
             }
@@ -1291,6 +1373,41 @@
                   "if (res.data && res.data.id) {",
                   "  pm.collectionVariables.set(\"createdUserId\", res.data.id);",
                   "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Create User (Pre-check Invalid Company 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"invalid_comp_{{$timestamp}}\",\"email\":\"invalid_{{$timestamp}}@example.com\",\"password\":\"Password123!\",\"name\":\"Invalid Comp User\",\"role\":\"user\",\"company_id\":999999}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/users"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Descriptive error message returned\", () => {",
+                  "  pm.expect(res.error).to.include(\"company not found or inactive\");",
+                  "});"
                 ]
               }
             }
@@ -1426,7 +1543,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test(\"Status 200, 403, or 404\", () => pm.expect([200, 403, 404]).to.include(pm.response.code));"
+                  "pm.test(\"Status 200, 403, or 404\", () => pm.expect([200, 403, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "  });",
+                  "}"
                 ]
               }
             }

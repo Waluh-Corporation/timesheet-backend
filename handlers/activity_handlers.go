@@ -43,14 +43,14 @@ func (s *Server) validateActivityStatus(status string) bool {
 
 func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
 	var proj models.Project
-	if err := s.DB.Where(queryID, refID).First(&proj).Error; err != nil || proj.ID == 0 {
-		return nil, errors.New("invalid project_ref_id: project does not exist")
+	if err := s.DB.Scopes(models.ActiveOnly).Where(queryID, refID).First(&proj).Error; err != nil || proj.ID == 0 {
+		return nil, errors.New("invalid project_ref_id: project does not exist or is inactive")
 	}
 	return &proj, nil
 }
 
 func (s *Server) buildProjectQuery(projectID, projectName string) *gorm.DB {
-	query := s.DB.Model(&models.Project{})
+	query := s.DB.Model(&models.Project{}).Scopes(models.ActiveOnly)
 	if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
 		query = query.Where("id = ? OR code = ?", idNum, projectID)
 	} else if projectID != "" {
@@ -58,7 +58,7 @@ func (s *Server) buildProjectQuery(projectID, projectName string) *gorm.DB {
 	}
 	if projectName != "" {
 		if projectID != "" {
-			query = s.DB.Model(&models.Project{}).Where("(code = ? OR LOWER(name) = LOWER(?))", projectID, projectName)
+			query = s.DB.Model(&models.Project{}).Scopes(models.ActiveOnly).Where("(code = ? OR LOWER(name) = LOWER(?))", projectID, projectName)
 		} else {
 			query = query.Where("LOWER(name) = LOWER(?)", projectName)
 		}
@@ -145,17 +145,30 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		return
 	}
 
-	// Upsert on the (user_id, date) unique index.
-	err = s.DB.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "user_id"}, {Name: "date"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"start_time", "end_time", "status", "activity",
-			"project_name", "project_id", "project_ref_id", "updated_at",
-		}),
-	}).Create(&activity).Error
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, err.Error())
-		return
+	uid := currentUserID(c)
+	var existing models.DailyActivity
+	findErr := s.DB.Where("user_id = ? AND date = ? AND is_active = true", uid, date).First(&existing).Error
+	if findErr == nil {
+		// Existing active record found -> UPDATE
+		existing.StartTime = req.StartTime
+		existing.EndTime = req.EndTime
+		existing.Status = req.Status
+		existing.Activity = req.Activity
+		existing.ProjectName = activity.ProjectName
+		existing.ProjectID = activity.ProjectID
+		existing.ProjectRefID = activity.ProjectRefID
+		existing.UpdatedAt = time.Now()
+		if err := s.DB.Save(&existing).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	} else {
+		// No active record for this date -> INSERT new record with is_active = true
+		activity.IsActive = true
+		if err := s.DB.Create(&activity).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 
 	RespondMessage(c, http.StatusOK, "activity saved successfully")
@@ -184,7 +197,7 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 	}
 
 	var activity models.DailyActivity
-	if err := s.DB.Where(queryID, id).First(&activity).Error; err != nil {
+	if err := s.DB.Where("id = ? AND is_active = true", id).First(&activity).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "activity not found")
 		return
 	}
@@ -312,7 +325,7 @@ func calculateActivityPagination(c *gin.Context, totalRows int64) (int, int, boo
 // @Router /api/v1/activities [get]
 func (s *Server) ListActivities(c *gin.Context) {
 	uid := currentUserID(c)
-	query := s.DB.Model(&models.DailyActivity{}).Where("user_id = ?", uid)
+	query := s.DB.Model(&models.DailyActivity{}).Where("user_id = ? AND is_active = true", uid)
 	query = applyActivityDateFilters(c, query)
 
 	sortOrder := determineActivitySortOrder(c)
@@ -418,11 +431,13 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	end := start.AddDate(0, 1, 0)
 	var activities []models.DailyActivity
 	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Preload("ProjectRef").Preload("StatusRef").Find(&activities)
+		Where("is_active = true").
+		Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Find(&activities)
 
 	var overtimes []models.OvertimeEntry
 	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Preload("TeamLeader").Preload("DepartmentHead").
+		Where("is_active = true").
+		Preload("TeamLeader", models.ActiveOnly).Preload("DepartmentHead", models.ActiveOnly).
 		Order(orderDateAsc).Find(&overtimes)
 
 	// Fetch public holidays for the month so weekends/holidays are reflected in
@@ -643,18 +658,27 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 
 	uid := currentUserID(c)
 	var entry models.OvertimeEntry
+	found := false
 
 	if req.ID != 0 {
-		if err := s.DB.Where("id = ? AND user_id = ?", req.ID, uid).First(&entry).Error; err != nil {
-			RespondError(c, http.StatusNotFound, "overtime entry not found")
-			return
+		if err := s.DB.Where("id = ? AND user_id = ? AND is_active = true", req.ID, uid).First(&entry).Error; err == nil {
+			found = true
 		}
+	}
+	if !found {
+		if err := s.DB.Where("user_id = ? AND date = ? AND is_active = true", uid, date).First(&entry).Error; err == nil {
+			found = true
+		}
+	}
+
+	if found {
 		entry.Date = date
 		entry.StartTime = req.StartTime
 		entry.EndTime = req.EndTime
 		entry.TaskDescription = req.TaskDescription
 		entry.TeamLeaderID = req.TeamLeaderID
 		entry.DepartmentHeadID = req.DepartmentHeadID
+		entry.UpdatedAt = time.Now()
 		if err := s.DB.Save(&entry).Error; err != nil {
 			RespondError(c, http.StatusInternalServerError, err.Error())
 			return
@@ -668,6 +692,7 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 			TaskDescription:  req.TaskDescription,
 			TeamLeaderID:     req.TeamLeaderID,
 			DepartmentHeadID: req.DepartmentHeadID,
+			IsActive:         true,
 		}
 		if err := s.DB.Create(&entry).Error; err != nil {
 			RespondError(c, http.StatusInternalServerError, err.Error())
@@ -698,7 +723,9 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 
 	var overtimes []models.OvertimeEntry
 	if err := s.DB.Where(queryUserDateRange, currentUserID(c), start, end).
-		Preload("TeamLeader").Preload("DepartmentHead").
+		Where("is_active = true").
+		Preload("TeamLeader", models.ActiveOnly).
+		Preload("DepartmentHead", models.ActiveOnly).
 		Order(orderDateAsc).Find(&overtimes).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -741,7 +768,15 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 // @Router /api/v1/overtimes/{id} [delete]
 func (s *Server) DeleteOvertime(c *gin.Context) {
 	id := c.Param("id")
-	if err := s.DB.Where("id = ? AND user_id = ?", id, currentUserID(c)).Delete(&models.OvertimeEntry{}).Error; err != nil {
+	var entry models.OvertimeEntry
+	if err := s.DB.Scopes(models.ActiveOnly).Where("id = ? AND user_id = ?", id, currentUserID(c)).First(&entry).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "overtime entry not found")
+		return
+	}
+	if err := s.DB.Model(&entry).Updates(map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now(),
+	}).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -760,7 +795,7 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 // @Router /api/v1/projects [get]
 func (s *Server) ListProjects(c *gin.Context) {
 	var projects []models.Project
-	query := s.DB.Where(queryIsActive, true)
+	query := s.DB.Scopes(models.ActiveOnly)
 	if err := query.Order(orderNameAsc).Find(&projects).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -780,7 +815,7 @@ func (s *Server) ListProjects(c *gin.Context) {
 // @Router /api/v1/companies [get]
 func (s *Server) ListCompanies(c *gin.Context) {
 	var companies []models.Company
-	if err := s.DB.Preload("Departments").Order("id asc").Find(&companies).Error; err != nil {
+	if err := s.DB.Scopes(models.ActiveOnly).Order("id asc").Find(&companies).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -800,11 +835,8 @@ func (s *Server) ListCompanies(c *gin.Context) {
 // @Router /api/v1/departments [get]
 func (s *Server) ListDepartments(c *gin.Context) {
 	var depts []models.Department
-	query := s.DB.Where(queryIsActive, true)
-	if compID := c.Query("company_id"); compID != "" {
-		query = query.Where("company_id = ?", compID)
-	}
-	if err := query.Preload("Company").Order(orderNameAsc).Find(&depts).Error; err != nil {
+	query := s.DB.Scopes(models.ActiveOnly)
+	if err := query.Order(orderNameAsc).Find(&depts).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -871,7 +903,7 @@ func (s *Server) ListHolidays(c *gin.Context) {
 // @Router /api/v1/approvers [get]
 func (s *Server) ListApprovers(c *gin.Context) {
 	var approvers []models.Approver
-	q := s.DB.Where(queryIsActive, true)
+	q := s.DB.Scopes(models.ActiveOnly)
 	if roleType := c.Query("role_type"); roleType != "" {
 		q = q.Where("role_type = ?", roleType)
 	}

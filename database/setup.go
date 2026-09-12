@@ -33,6 +33,9 @@ func Setup(db *gorm.DB, cfg *config.Config) error {
 	if err := seedDefaultCompanies(db); err != nil {
 		log.Printf("[database] could not seed default companies: %v", err)
 	}
+	if err := seedDefaultDepartments(db); err != nil {
+		log.Printf("[database] could not seed default departments: %v", err)
+	}
 	if err := seedDefaultProjectsAndNormalize(db); err != nil {
 		log.Printf("[database] normalization/project seeding error: %v", err)
 	}
@@ -43,10 +46,10 @@ func Setup(db *gorm.DB, cfg *config.Config) error {
 // seedDefaultCompanies seeds the primary companies on first boot: MII, SDD, Adidata, and NTT.
 func seedDefaultCompanies(db *gorm.DB) error {
 	companies := []models.Company{
-		{Code: "mii", Name: "PT Mitra Integrasi Informatika"},
-		{Code: "sdd", Name: "PT Swadharma Duta Data"},
-		{Code: "adidata", Name: "PT Adidata Informatics"},
-		{Code: "ntt", Name: "PT NTT Data Indonesia"},
+		{Code: "MII", Name: "PT Mitra Integrasi Informatika", IsActive: true},
+		{Code: "SDD", Name: "PT Swadharma Duta Data", IsActive: true},
+		{Code: "Adidata", Name: "PT Adidata Informatika", IsActive: true},
+		{Code: "NTT", Name: "PT NTT Data Indonesia", IsActive: true},
 	}
 	for _, c := range companies {
 		var cnt int64
@@ -55,6 +58,25 @@ func seedDefaultCompanies(db *gorm.DB) error {
 		}
 		if cnt == 0 {
 			if err := db.Create(&c).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// seedDefaultDepartments seeds the default department on first boot.
+func seedDefaultDepartments(db *gorm.DB) error {
+	departments := []models.Department{
+		{Code: "WDL", Name: "Wholesale Channel and Service Delivery", Division: "Wholesale Digital Delivery", IsActive: true},
+	}
+	for _, d := range departments {
+		var cnt int64
+		if err := db.Model(&models.Department{}).Where(queryCode, d.Code).Count(&cnt).Error; err != nil {
+			return err
+		}
+		if cnt == 0 {
+			if err := db.Create(&d).Error; err != nil {
 				return err
 			}
 		}
@@ -81,11 +103,41 @@ func AutoMigrate(db *gorm.DB) error {
 	_ = db.Exec(`ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_company_id_fkey`).Error
 	_ = db.Exec(`DROP INDEX IF EXISTS idx_projects_company_id`).Error
 	_ = db.Exec(`ALTER TABLE projects DROP COLUMN IF EXISTS company_id`).Error
+	// Drop departments company_id foreign key constraint, index, and column if they exist
+	_ = db.Exec(`ALTER TABLE departments DROP CONSTRAINT IF EXISTS departments_company_id_fkey`).Error
+	_ = db.Exec(`ALTER TABLE departments DROP CONSTRAINT IF EXISTS fk_departments_company`).Error
+	_ = db.Exec(`ALTER TABLE departments DROP CONSTRAINT IF EXISTS fk_companies_departments`).Error
+	_ = db.Exec(`ALTER TABLE departments DROP CONSTRAINT IF EXISTS uq_departments_company_name`).Error
+	_ = db.Exec(`DROP INDEX IF EXISTS idx_departments_company_id`).Error
+	_ = db.Exec(`ALTER TABLE departments DROP COLUMN IF EXISTS company_id`).Error
+	// Drop obsolete full unique index on daily_activities(user_id, date) and ensure partial unique index
+	_ = db.Exec(`DROP INDEX IF EXISTS idx_user_date`).Error
+	_ = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_activities_user_date_active ON daily_activities(user_id, date) WHERE is_active = true`).Error
 	// Rename mii_id to bni_id and set comment on users and profile_change_requests if needed
 	_ = db.Exec(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'mii_id') THEN ALTER TABLE users RENAME COLUMN mii_id TO bni_id; END IF; END $$;`).Error
 	_ = db.Exec(`COMMENT ON COLUMN users.bni_id IS 'NPP BNI'`).Error
 	_ = db.Exec(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profile_change_requests' AND column_name = 'mii_id') THEN ALTER TABLE profile_change_requests RENAME COLUMN mii_id TO bni_id; END IF; END $$;`).Error
-	_ = db.Exec(`COMMENT ON COLUMN profile_change_requests.bni_id IS 'NPP BNI'`).Error
+	// Standardize soft delete: backfill is_active from legacy is_delete if present and drop is_delete
+	_ = db.Exec(`
+		DO $$
+		DECLARE
+			tbl text;
+			tables text[] := ARRAY['departments', 'companies', 'projects', 'approvers', 'users', 'daily_activities', 'overtime_entries'];
+		BEGIN
+			FOREACH tbl IN ARRAY tables
+			LOOP
+				IF EXISTS (
+					SELECT 1 FROM information_schema.columns 
+					WHERE table_schema = 'public' AND table_name = tbl AND column_name = 'is_delete'
+				) THEN
+					EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;', tbl);
+					EXECUTE format('UPDATE %I SET is_active = CASE WHEN UPPER(TRIM(is_delete::text)) IN (''Y'', ''YES'', ''1'', ''TRUE'') THEN false ELSE true END;', tbl);
+					EXECUTE format('DROP INDEX IF EXISTS %I;', 'idx_' || tbl || '_is_delete');
+					EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS is_delete;', tbl);
+				END IF;
+			END LOOP;
+		END $$;
+	`).Error
 
 	return db.AutoMigrate(
 		&models.Company{},
@@ -213,6 +265,22 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 	`).Error; err != nil {
 		return err
 	}
+
+	// 8. Synchronize users.company and users.department with master records
+	_ = db.Exec(`
+		UPDATE users 
+		SET company = companies.name 
+		FROM companies 
+		WHERE users.company_id = companies.id
+		  AND (users.company IS NULL OR users.company != companies.name)
+	`).Error
+	_ = db.Exec(`
+		UPDATE users 
+		SET department = departments.name 
+		FROM departments 
+		WHERE users.department_id = departments.id
+		  AND (users.department IS NULL OR users.department != departments.name)
+	`).Error
 
 	return nil
 }

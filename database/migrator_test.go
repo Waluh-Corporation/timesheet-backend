@@ -222,4 +222,55 @@ func TestRunMigrationsOnDB(t *testing.T) {
 	if !hasAdminNoCompanyCheck {
 		t.Errorf("chk_users_admin_no_company constraint should exist on users table after migration 000019")
 	}
+
+	// 12. Verify departments.company_id column is dropped after migration 000020
+	var hasDeptCompanyCol bool
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'departments' AND column_name = 'company_id')`).Scan(&hasDeptCompanyCol)
+	if hasDeptCompanyCol {
+		t.Errorf("departments.company_id column should have been dropped by migration 000020")
+	}
+
+	// 13. Verify is_active columns exist on companies, departments, overtime_entries, daily_activities
+	for _, table := range []string{"companies", "departments", "overtime_entries", "daily_activities"} {
+		var hasActive bool
+		_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = ? AND column_name = 'is_active')`, table).Scan(&hasActive)
+		if !hasActive {
+			t.Errorf("table %s should have column is_active after migration 000020", table)
+		}
+	}
+
+	// 14. Verify partial unique index on daily_activities (user_id, date) WHERE is_active = true
+	var hasPartialUniqueIndex bool
+	_ = db.Raw(`
+		SELECT EXISTS (
+			SELECT 1 FROM pg_indexes 
+			WHERE tablename = 'daily_activities' 
+			  AND indexname = 'idx_daily_activities_user_date_active'
+		)
+	`).Scan(&hasPartialUniqueIndex)
+	if !hasPartialUniqueIndex {
+		t.Errorf("partial unique index idx_daily_activities_user_date_active should exist on daily_activities")
+	}
+
+	// 15. Verify migration 000021: no table has is_delete column
+	for _, table := range []string{"departments", "companies", "projects", "approvers", "users", "daily_activities", "overtime_entries"} {
+		var hasIsDelete bool
+		_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ? AND column_name = 'is_delete')`, table).Scan(&hasIsDelete)
+		if hasIsDelete {
+			t.Errorf("table %s should NOT have column is_delete after migration 000021", table)
+		}
+
+		var hasIsActive bool
+		_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ? AND column_name = 'is_active')`, table).Scan(&hasIsActive)
+		if !hasIsActive {
+			t.Errorf("table %s must have column is_active after migration 000021", table)
+		}
+	}
+
+	// 16. Verify partial active index on projects
+	var hasProjectsActiveIndex bool
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'projects' AND indexname = 'idx_projects_active_lookup')`).Scan(&hasProjectsActiveIndex)
+	if !hasProjectsActiveIndex {
+		t.Errorf("index idx_projects_active_lookup should exist on projects")
+	}
 }

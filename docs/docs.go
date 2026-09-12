@@ -351,7 +351,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Permanently removes an approver from master data.",
+                "description": "Soft-deactivates an approver from master data.",
                 "produces": [
                     "application/json"
                 ],
@@ -546,7 +546,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Permanently removes a company from master data.",
+                "description": "Soft-deactivates a company from master data.",
                 "produces": [
                     "application/json"
                 ],
@@ -2867,14 +2867,11 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
-                "departments": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Department"
-                    }
-                },
                 "id": {
                     "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"
@@ -2890,12 +2887,6 @@ const docTemplate = `{
                 "code": {
                     "description": "e.g. \"WCSD\", \"DEV-01\"",
                     "type": "string"
-                },
-                "company": {
-                    "$ref": "#/definitions/models.Company"
-                },
-                "company_id": {
-                    "type": "integer"
                 },
                 "created_at": {
                     "type": "string"
@@ -3031,9 +3022,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                },
-                "user": {
-                    "$ref": "#/definitions/models.User"
                 },
                 "user_id": {
                     "type": "integer"

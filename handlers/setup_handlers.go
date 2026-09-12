@@ -121,14 +121,14 @@ func (s *Server) isSystemAlreadyInitialized() (bool, error) {
 	return isNew == "N" || adminCount > 0, nil
 }
 
-func seedSetupCompanies(tx *gorm.DB, companies []InitSetupCompanyRequest) (map[string]uint, error) {
-	compMap := make(map[string]uint)
+func seedSetupCompanies(tx *gorm.DB, companies []InitSetupCompanyRequest) error {
 	var existingComps []models.Company
 	if err := tx.Find(&existingComps).Error; err != nil {
-		return nil, err
+		return err
 	}
+	existing := make(map[string]struct{})
 	for _, comp := range existingComps {
-		compMap[strings.ToLower(comp.Code)] = comp.ID
+		existing[strings.ToLower(comp.Code)] = struct{}{}
 	}
 
 	for _, cr := range companies {
@@ -136,42 +136,36 @@ func seedSetupCompanies(tx *gorm.DB, companies []InitSetupCompanyRequest) (map[s
 		if code == "" {
 			continue
 		}
-		if _, exists := compMap[code]; !exists {
+		if _, exists := existing[code]; !exists {
 			newComp := models.Company{
-				Code: code,
-				Name: strings.TrimSpace(cr.Name),
+				Code:     code,
+				Name:     strings.TrimSpace(cr.Name),
+				IsActive: true,
 			}
 			if err := tx.Create(&newComp).Error; err != nil {
-				return nil, err
+				return err
 			}
-			compMap[code] = newComp.ID
+			existing[code] = struct{}{}
 		}
 	}
-	return compMap, nil
+	return nil
 }
 
-func seedSetupDepartments(tx *gorm.DB, departments []InitSetupDepartmentRequest, compMap map[string]uint) error {
+func seedSetupDepartments(tx *gorm.DB, departments []InitSetupDepartmentRequest) error {
 	for _, dr := range departments {
 		code := strings.TrimSpace(dr.Code)
 		if code == "" {
 			continue
-		}
-		var compID *uint
-		if cCode := strings.ToLower(strings.TrimSpace(dr.CompanyCode)); cCode != "" {
-			if id, ok := compMap[cCode]; ok {
-				compID = &id
-			}
 		}
 
 		var count int64
 		_ = tx.Model(&models.Department{}).Where("code = ?", code).Count(&count).Error
 		if count == 0 {
 			newDept := models.Department{
-				Code:      code,
-				Name:      strings.TrimSpace(dr.Name),
-				Division:  strings.TrimSpace(dr.Division),
-				CompanyID: compID,
-				IsActive:  true,
+				Code:     code,
+				Name:     strings.TrimSpace(dr.Name),
+				Division: strings.TrimSpace(dr.Division),
+				IsActive: true,
 			}
 			if err := tx.Create(&newDept).Error; err != nil {
 				return err
@@ -243,11 +237,10 @@ func (s *Server) InitSetup(c *gin.Context) {
 
 	var adminUser models.User
 	err = s.DB.Transaction(func(tx *gorm.DB) error {
-		compMap, err := seedSetupCompanies(tx, req.Companies)
-		if err != nil {
+		if err := seedSetupCompanies(tx, req.Companies); err != nil {
 			return err
 		}
-		if err := seedSetupDepartments(tx, req.Departments, compMap); err != nil {
+		if err := seedSetupDepartments(tx, req.Departments); err != nil {
 			return err
 		}
 		if err := seedSetupApprovers(tx, req.Approvers); err != nil {

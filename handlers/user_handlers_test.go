@@ -309,7 +309,7 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 
 	comp := models.Company{Code: "pc_comp", Name: "PC Company"}
 	_ = tx.Create(&comp)
-	dept := models.Department{CompanyID: &comp.ID, Name: "PC Dept", Division: "PC Div", IsActive: true}
+	dept := models.Department{Name: "PC Dept", Division: "PC Div", IsActive: true}
 	_ = tx.Create(&dept)
 
 	submitBody := fmt.Sprintf(`{"name": "Target New Name", "bni_id": "78910", "employee_id": "EMP-9999", "division": "Fintech", "department": "PC Dept", "department_id": %d, "company_id": %d}`, dept.ID, comp.ID)
@@ -417,7 +417,7 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 	comp := models.Company{Code: "user_test_comp", Name: "User Test Company"}
 	_ = tx.Create(&comp)
 
-	dept := models.Department{CompanyID: &comp.ID, Name: "Product Engineering", IsActive: true}
+	dept := models.Department{Name: "Product Engineering", IsActive: true}
 	_ = tx.Create(&dept)
 
 	adminUser := models.User{

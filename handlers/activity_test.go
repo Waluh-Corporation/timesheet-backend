@@ -370,7 +370,7 @@ func TestActivityHandlers_MasterData(t *testing.T) {
 	comp := models.Company{Code: "test_comp", Name: "Test Company Inc"}
 	_ = tx.Create(&comp)
 
-	dept := models.Department{CompanyID: &comp.ID, Name: "Engineering", IsActive: true}
+	dept := models.Department{Name: "Engineering", IsActive: true}
 	_ = tx.Create(&dept)
 
 	proj := models.Project{Code: "P12345", Name: "Project Apollo", AppImpacted: "Apollo Core", IsActive: true}
@@ -647,8 +647,11 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		}
 
 		// 5. User with assigned CompanyID
-		testComp := models.Company{Code: "MII", Name: "Mitra Integrasi Informatika"}
-		_ = tx.Create(&testComp)
+		var testComp models.Company
+		if err := tx.Where("code = ?", "MII").First(&testComp).Error; err != nil {
+			testComp = models.Company{Code: "MII", Name: "Mitra Integrasi Informatika", IsActive: true}
+			_ = tx.Create(&testComp)
+		}
 		_ = tx.Model(&user).Update("company_id", testComp.ID)
 		wCompID := httptest.NewRecorder()
 		cCompID, _ := gin.CreateTestContext(wCompID)
