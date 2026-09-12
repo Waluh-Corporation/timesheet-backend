@@ -9,32 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- SonarCloud Security & Code Smells: Resolved all leak-period issues including GitHub Actions script injection (S7630), LibreOffice executable PATH resolution (S4036), hardcoded database credential string patterns (S2068), and GORM query/update taint sinks (S3649).
-- WebAuthn Credential Column Mapping: Added explicit `gorm:"column:aaguid"` tag to `WebAuthnCredential.AAGUID` aligning struct field with PostgreSQL schema.
-- Code Complexity & Duplication: Reduced cognitive complexity in `InitSetup`, `resolveUserDepartment`, and `ReviewProfileChange` below threshold (<=15), and deduplicated `"id = ?"` query literals with package-level constant `queryID`.
-
-### Added
-- Extended Automated Test Coverage: Added comprehensive test suites for authentication flows, passkeys, WebPush notifications, daily reminder scheduler, and timesheet report generation, elevating statement coverage across handlers to 71.0% and overall project to 77.1%.
-
 ---
 
 ## [1.1.0] - 2026-09-12
 
 ### Added
-- Multi-Vendor Workbook Metadata: Automated configuration of Excel workbook properties setting `Creator` to "Waluh Corporation" and `LastModifiedBy` dynamically to the requesting user.
-- Activity Detail Endpoint: Dedicated retrieval endpoint for individual daily activity records with complete relational project details (`GET /api/v1/activities/:id`).
-- SonarCloud Quality Gate: Integration of SonarCloud project analysis for static analysis, security hotspot detection, code duplication monitoring, and quality gate badges.
+- **Multi-Vendor Workbook Metadata**: Automated configuration of Excel workbook properties setting `Creator` to "Waluh Corporation" and `LastModifiedBy` dynamically to the requesting user across all generated timesheet workbooks.
+- **Activity Detail Endpoint**: Dedicated retrieval endpoint for individual daily activity records with complete relational project details (`GET /api/v1/activities/:id`).
+- **Activity Ownership Protection**: Restricted daily activity retrieval and management strictly to the authenticated owner to safeguard private activity entries from unauthorized access.
+- **Passkey Authentication Enhancements**: Full support for discoverable and user-scoped WebAuthn/FIDO2 passwordless login ceremonies.
 
-### Changed
-- Spreadsheet Generation Engine: Fully modularized and deduplicated spreadsheet generation across MII, NTT, SDD, and Adidata formats, resolving SonarCloud duplication density and reducing cognitive complexity below threshold.
-- Activity Ownership Enforcement: Restricted daily activity retrieval strictly to the authenticated owner, returning an authorization error when accessing another user's log.
-- Response Formatting: Streamlined daily activity detail payload structure to directly expose normalized project code, project name, and application impacted data.
-- Database Schema Hardening: Applied strict relational foreign keys with cascade constraints, composite unique indexes, and purged redundant denormalized columns (`app_impacted`).
-
-### Fixed
-- Security Hardening: Sanitized numeric route ID parameters and applied parameterized query checks to prevent SQL injection vulnerabilities (SonarCloud S3649).
-- Code Quality & Linter Compliance: Upgraded `golangci-lint` configuration to v2 format, resolved all linter warnings, and elevated automated test coverage across `services` to over 91%.
 
 ---
 
@@ -72,3 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - API Route Versioning: Migrated all routes to the `/api/v1` prefix and decommissioned legacy unversioned endpoints.
 - Decoupled Workbook Engine: Replaced database-stored template grids with dedicated programmatic spreadsheet builders.
+
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.0.0
+
