@@ -12,7 +12,7 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/request"
-	_ "timesheet-backend/dto/response"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
 
@@ -449,7 +449,7 @@ func (s *Server) DeletePasskey(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "User ID"
-// @Success 200 {array} models.WebAuthnCredential
+// @Success 200 {array} response.AdminPasskeyResponse
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
@@ -461,7 +461,15 @@ func (s *Server) AdminListPasskeys(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondSuccess(c, http.StatusOK, creds)
+	resp := make([]response.AdminPasskeyResponse, len(creds))
+	for i, cr := range creds {
+		resp[i] = response.AdminPasskeyResponse{
+			ID:           cr.ID,
+			FriendlyName: cr.FriendlyName,
+			CreatedAt:    cr.CreatedAt,
+		}
+	}
+	RespondSuccess(c, http.StatusOK, resp)
 }
 
 // AdminDeletePasskey godoc

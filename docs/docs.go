@@ -184,7 +184,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves full details of a specific daily activity by ID, including its associated Project and Status.",
+                "description": "Retrieves details of a specific daily activity by ID.",
                 "produces": [
                     "application/json"
                 ],
@@ -205,7 +205,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.DailyActivityDetailResponse"
+                            "$ref": "#/definitions/response.DailyActivityResponse"
                         }
                     },
                     "400": {
@@ -700,7 +700,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.ProfileChangeRequest"
+                                "$ref": "#/definitions/response.AdminProfileChangeResponse"
                             }
                         }
                     },
@@ -807,7 +807,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves all registered user accounts with company and department associations (admin only).",
+                "description": "Retrieves all registered user accounts (admin only).",
                 "produces": [
                     "application/json"
                 ],
@@ -821,7 +821,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.User"
+                                "$ref": "#/definitions/response.AdminUserResponse"
                             }
                         }
                     },
@@ -1069,7 +1069,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.WebAuthnCredential"
+                                "$ref": "#/definitions/response.AdminPasskeyResponse"
                             }
                         }
                     },
@@ -1753,7 +1753,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.OvertimeEntry"
+                                "$ref": "#/definitions/response.OvertimeResponse"
                             }
                         }
                     },
@@ -2884,57 +2884,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.DailyActivity": {
-            "type": "object",
-            "properties": {
-                "activity": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "date": {
-                    "description": "Date is normalised to midnight in Asia/Jakarta.",
-                    "type": "string"
-                },
-                "end_time": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "project_id": {
-                    "type": "string"
-                },
-                "project_name": {
-                    "type": "string"
-                },
-                "project_ref": {
-                    "$ref": "#/definitions/models.Project"
-                },
-                "project_ref_id": {
-                    "type": "integer"
-                },
-                "start_time": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "status_ref": {
-                    "$ref": "#/definitions/models.ActivityStatus"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user": {
-                    "$ref": "#/definitions/models.User"
-                },
-                "user_id": {
-                    "type": "integer"
-                }
-            }
-        },
         "models.Department": {
             "type": "object",
             "properties": {
@@ -3019,58 +2968,6 @@ const docTemplate = `{
                 },
                 "is_religious": {
                     "type": "boolean"
-                }
-            }
-        },
-        "models.OvertimeEntry": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "daily_activity": {
-                    "$ref": "#/definitions/models.DailyActivity"
-                },
-                "daily_activity_id": {
-                    "type": "integer"
-                },
-                "date": {
-                    "type": "string"
-                },
-                "department_head": {
-                    "$ref": "#/definitions/models.Approver"
-                },
-                "department_head_id": {
-                    "type": "integer"
-                },
-                "end_time": {
-                    "description": "\"21:00\"",
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "start_time": {
-                    "description": "\"17:00\"",
-                    "type": "string"
-                },
-                "task_description": {
-                    "type": "string"
-                },
-                "team_leader": {
-                    "$ref": "#/definitions/models.Approver"
-                },
-                "team_leader_id": {
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user": {
-                    "$ref": "#/definitions/models.User"
-                },
-                "user_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -3597,13 +3494,127 @@ const docTemplate = `{
                 }
             }
         },
-        "response.DailyActivityDetailResponse": {
+        "response.AdminPasskeyResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "friendly_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "response.AdminProfileChangeResponse": {
+            "type": "object",
+            "properties": {
+                "bni_id": {
+                    "type": "string"
+                },
+                "company_id": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "department": {
+                    "type": "string"
+                },
+                "department_id": {
+                    "type": "integer"
+                },
+                "division": {
+                    "type": "string"
+                },
+                "employee_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewed_by": {
+                    "type": "integer"
+                },
+                "reviewer_name": {
+                    "type": "string"
+                },
+                "site": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.ProfileStatus"
+                },
+                "user_email": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                },
+                "user_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.AdminUserResponse": {
+            "type": "object",
+            "properties": {
+                "bni_id": {
+                    "type": "string"
+                },
+                "company": {
+                    "type": "string"
+                },
+                "company_id": {
+                    "type": "integer"
+                },
+                "department": {
+                    "type": "string"
+                },
+                "department_id": {
+                    "type": "integer"
+                },
+                "division": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "employee_id": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_active": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "role": {
+                    "$ref": "#/definitions/models.Role"
+                },
+                "site": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.DailyActivityResponse": {
             "type": "object",
             "properties": {
                 "activity": {
-                    "type": "string"
-                },
-                "created_at": {
                     "type": "string"
                 },
                 "date": {
@@ -3621,20 +3632,11 @@ const docTemplate = `{
                 "project_name": {
                     "type": "string"
                 },
-                "project_ref": {
-                    "$ref": "#/definitions/models.Project"
-                },
                 "start_time": {
                     "type": "string"
                 },
-                "status_ref": {
-                    "$ref": "#/definitions/models.ActivityStatus"
-                },
-                "updated_at": {
+                "status": {
                     "type": "string"
-                },
-                "user_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -3713,6 +3715,38 @@ const docTemplate = `{
                     "example": [
                         "https://timesheet.example.com"
                     ]
+                }
+            }
+        },
+        "response.OvertimeResponse": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "department_head_id": {
+                    "type": "integer"
+                },
+                "department_head_name": {
+                    "type": "string"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "task_description": {
+                    "type": "string"
+                },
+                "team_leader_id": {
+                    "type": "integer"
+                },
+                "team_leader_name": {
+                    "type": "string"
                 }
             }
         },

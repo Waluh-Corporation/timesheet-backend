@@ -163,12 +163,12 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 
 // GetDailyActivity godoc
 // @Summary Get daily activity detail
-// @Description Retrieves full details of a specific daily activity by ID, including its associated Project and Status.
+// @Description Retrieves details of a specific daily activity by ID.
 // @Tags Activity
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "Daily Activity ID"
-// @Success 200 {object} response.DailyActivityDetailResponse
+// @Success 200 {object} response.DailyActivityResponse
 // @Failure 400 {object} response.ErrorResponse "Invalid activity ID"
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Forbidden: not authorized to access another user's activity"
@@ -184,7 +184,7 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 	}
 
 	var activity models.DailyActivity
-	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").Where(queryID, id).First(&activity).Error; err != nil {
+	if err := s.DB.Where(queryID, id).First(&activity).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "activity not found")
 		return
 	}
@@ -194,19 +194,15 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 		return
 	}
 
-	resp := response.DailyActivityDetailResponse{
+	resp := response.DailyActivityResponse{
 		ID:          activity.ID,
-		CreatedAt:   activity.CreatedAt,
-		UpdatedAt:   activity.UpdatedAt,
-		UserID:      activity.UserID,
 		Date:        activity.Date,
 		StartTime:   activity.StartTime,
 		EndTime:     activity.EndTime,
 		Activity:    activity.Activity,
 		ProjectName: activity.ProjectName,
 		ProjectID:   activity.ProjectID,
-		ProjectRef:  activity.ProjectRef,
-		StatusRef:   activity.StatusRef,
+		Status:      activity.Status,
 	}
 
 	RespondSuccess(c, http.StatusOK, resp)
@@ -330,7 +326,7 @@ func (s *Server) ListActivities(c *gin.Context) {
 	page, limit, isAll := calculateActivityPagination(c, totalRows)
 
 	activities := make([]models.DailyActivity, 0)
-	dataQuery := query.Preload("ProjectRef").Preload("StatusRef").Order("date " + sortOrder)
+	dataQuery := query.Order("date " + sortOrder)
 
 	if !isAll && limit > 0 {
 		if limit > 100 {
@@ -350,7 +346,21 @@ func (s *Server) ListActivities(c *gin.Context) {
 		return
 	}
 
-	RespondPaginated(c, http.StatusOK, activities, page, limit, totalRows)
+	respItems := make([]response.DailyActivityResponse, len(activities))
+	for i, a := range activities {
+		respItems[i] = response.DailyActivityResponse{
+			ID:          a.ID,
+			Date:        a.Date,
+			StartTime:   a.StartTime,
+			EndTime:     a.EndTime,
+			Activity:    a.Activity,
+			ProjectName: a.ProjectName,
+			ProjectID:   a.ProjectID,
+			Status:      a.Status,
+		}
+	}
+
+	RespondPaginated(c, http.StatusOK, respItems, page, limit, totalRows)
 }
 
 // ListMonthlyActivities delegates to ListActivities for backwards-compatibility.
@@ -675,7 +685,7 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 // @Produce json
 // @Param year query int false "Year (defaults to current year)"
 // @Param month query int false "Month 1-12 (defaults to current month)"
-// @Success 200 {array} models.OvertimeEntry
+// @Success 200 {array} response.OvertimeResponse
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/overtimes [get]
@@ -693,7 +703,29 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondSuccess(c, http.StatusOK, overtimes)
+
+	resp := make([]response.OvertimeResponse, len(overtimes))
+	for i, ot := range overtimes {
+		var tlName, dhName string
+		if ot.TeamLeader != nil {
+			tlName = ot.TeamLeader.Name
+		}
+		if ot.DepartmentHead != nil {
+			dhName = ot.DepartmentHead.Name
+		}
+		resp[i] = response.OvertimeResponse{
+			ID:                 ot.ID,
+			Date:               ot.Date,
+			StartTime:          ot.StartTime,
+			EndTime:            ot.EndTime,
+			TaskDescription:    ot.TaskDescription,
+			TeamLeaderID:       ot.TeamLeaderID,
+			TeamLeaderName:     tlName,
+			DepartmentHeadID:   ot.DepartmentHeadID,
+			DepartmentHeadName: dhName,
+		}
+	}
+	RespondSuccess(c, http.StatusOK, resp)
 }
 
 // DeleteOvertime godoc

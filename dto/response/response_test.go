@@ -3,6 +3,8 @@ package response
 import (
 	"testing"
 	"time"
+
+	"timesheet-backend/models"
 )
 
 func TestResponseDTOs(t *testing.T) {
@@ -49,6 +51,31 @@ func TestResponseDTOs(t *testing.T) {
 	actDetailResp := DailyActivityDetailResponse{ID: 1, Date: time.Now()}
 	if actDetailResp.ID != 1 {
 		t.Errorf("DailyActivityDetailResponse mismatch: %+v", actDetailResp)
+	}
+
+	actResp := DailyActivityResponse{ID: 1, Activity: "Testing", Status: "WFO"}
+	if actResp.Activity != "Testing" || actResp.Status != "WFO" {
+		t.Errorf("DailyActivityResponse mismatch: %+v", actResp)
+	}
+
+	otResp := OvertimeResponse{ID: 1, TaskDescription: "Fixing bugs", TeamLeaderName: "Leader"}
+	if otResp.TaskDescription != "Fixing bugs" || otResp.TeamLeaderName != "Leader" {
+		t.Errorf("OvertimeResponse mismatch: %+v", otResp)
+	}
+
+	adminUserResp := AdminUserResponse{ID: 1, Username: "admin", Role: models.RoleAdmin}
+	if adminUserResp.Username != "admin" || adminUserResp.Role != models.RoleAdmin {
+		t.Errorf("AdminUserResponse mismatch: %+v", adminUserResp)
+	}
+
+	adminProfResp := AdminProfileChangeResponse{ID: 1, UserName: "user1", Status: models.ProfilePending}
+	if adminProfResp.UserName != "user1" || adminProfResp.Status != models.ProfilePending {
+		t.Errorf("AdminProfileChangeResponse mismatch: %+v", adminProfResp)
+	}
+
+	adminPkResp := AdminPasskeyResponse{ID: 1, FriendlyName: "My Key"}
+	if adminPkResp.FriendlyName != "My Key" {
+		t.Errorf("AdminPasskeyResponse mismatch: %+v", adminPkResp)
 	}
 
 	pagResp := PaginatedResponse{

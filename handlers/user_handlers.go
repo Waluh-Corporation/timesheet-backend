@@ -10,7 +10,7 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/request"
-	_ "timesheet-backend/dto/response"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
 
@@ -26,22 +26,41 @@ func isSelf(c *gin.Context, targetID uint) bool {
 
 // ListUsers godoc
 // @Summary List all users (Admin)
-// @Description Retrieves all registered user accounts with company and department associations (admin only).
+// @Description Retrieves all registered user accounts (admin only).
 // @Tags Admin
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {array} models.User
+// @Success 200 {array} response.AdminUserResponse
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users [get]
 func (s *Server) ListUsers(c *gin.Context) {
 	var users []models.User
-	if err := s.DB.Preload("CompanyRel").Preload("DepartmentRel").Order(orderCreatedAtDesc).Find(&users).Error; err != nil {
+	if err := s.DB.Order(orderCreatedAtDesc).Find(&users).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondSuccess(c, http.StatusOK, users)
+	resp := make([]response.AdminUserResponse, len(users))
+	for i, u := range users {
+		resp[i] = response.AdminUserResponse{
+			ID:           u.ID,
+			Username:     u.Username,
+			Email:        u.Email,
+			Role:         u.Role,
+			Name:         u.Name,
+			BniID:        u.BniID,
+			EmployeeID:   u.EmployeeID,
+			Division:     u.Division,
+			Department:   u.Department,
+			DepartmentID: u.DepartmentID,
+			Site:         u.Site,
+			Company:      u.Company,
+			CompanyID:    u.CompanyID,
+			IsActive:     u.IsActive,
+		}
+	}
+	RespondSuccess(c, http.StatusOK, resp)
 }
 
 // CreateUser godoc
@@ -406,14 +425,14 @@ func (s *Server) MyProfileChanges(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param status query string false "Filter by review status (pending, approved, rejected)"
-// @Success 200 {array} models.ProfileChangeRequest
+// @Success 200 {array} response.AdminProfileChangeResponse
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/profile-changes [get]
 func (s *Server) ListProfileChanges(c *gin.Context) {
 	var changes []models.ProfileChangeRequest
-	q := s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").Order(orderCreatedAtDesc)
+	q := s.DB.Preload("User").Preload("Reviewer").Order(orderCreatedAtDesc)
 	if status := c.Query("status"); status != "" {
 		q = q.Where("status = ?", status)
 	}
@@ -421,7 +440,37 @@ func (s *Server) ListProfileChanges(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondSuccess(c, http.StatusOK, changes)
+	resp := make([]response.AdminProfileChangeResponse, len(changes))
+	for i, ch := range changes {
+		var uName, uEmail, revName string
+		if ch.User.ID != 0 {
+			uName = ch.User.Name
+			uEmail = ch.User.Email
+		}
+		if ch.Reviewer != nil {
+			revName = ch.Reviewer.Name
+		}
+		resp[i] = response.AdminProfileChangeResponse{
+			ID:           ch.ID,
+			UserID:       ch.UserID,
+			UserName:     uName,
+			UserEmail:    uEmail,
+			Status:       ch.Status,
+			Name:         ch.Name,
+			BniID:        ch.BniID,
+			EmployeeID:   ch.EmployeeID,
+			Division:     ch.Division,
+			Department:   ch.Department,
+			DepartmentID: ch.DepartmentID,
+			Site:         ch.Site,
+			CompanyID:    ch.CompanyID,
+			ReviewedBy:   ch.ReviewedBy,
+			ReviewerName: revName,
+			ReviewedAt:   ch.ReviewedAt,
+			CreatedAt:    ch.CreatedAt,
+		}
+	}
+	RespondSuccess(c, http.StatusOK, resp)
 }
 
 // ReviewProfileChange godoc
