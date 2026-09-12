@@ -232,7 +232,12 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 		t.Fatalf("failed to create admin user: %v", err)
 	}
 
-	submitBody := `{"name": "Target New Name", "bni_id": "78910", "division": "Fintech"}`
+	comp := models.Company{Code: "pc_comp", Name: "PC Company"}
+	_ = tx.Create(&comp)
+	dept := models.Department{CompanyID: &comp.ID, Name: "PC Dept", Division: "PC Div", IsActive: true}
+	_ = tx.Create(&dept)
+
+	submitBody := fmt.Sprintf(`{"name": "Target New Name", "bni_id": "78910", "division": "Fintech", "department": "PC Dept", "department_id": %d, "company_id": %d}`, dept.ID, comp.ID)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Set(ctxUserID, targetUser.ID)
@@ -372,6 +377,27 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 		if newUserID == 0 {
 			t.Fatal("expected non-zero created user ID")
 		}
+	})
+
+	t.Run("CreateUser with company_id and department_id", func(t *testing.T) {
+		reqBody := fmt.Sprintf(`{
+			"username": "user_with_rel_ids",
+			"email": "user_with_rel_ids@example.com",
+			"name": "User Rel IDs",
+			"role": "user",
+			"company_id": %d,
+			"department_id": %d,
+			"initial_password": "StrongPassword123!"
+		}`, comp.ID, dept.ID)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader([]byte(reqBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.CreateUser(c)
+		assertFatalCode(t, w, http.StatusCreated)
 	})
 
 	t.Run("UpdateUser modifies user attributes", func(t *testing.T) {

@@ -99,6 +99,14 @@ func TestSetupHandlers_InitSuccess(t *testing.T) {
 		Companies: []InitSetupCompanyRequest{
 			{Code: "testcorp", Name: "Test Corporation"},
 		},
+		Departments: []InitSetupDepartmentRequest{
+			{
+				Code:        "ENG",
+				Name:        "Engineering",
+				Division:    "Technology",
+				CompanyCode: "testcorp",
+			},
+		},
 		Approvers: []InitSetupApproverRequest{
 			{
 				Name:        "Test Approver TL",
@@ -123,6 +131,14 @@ func TestSetupHandlers_InitSuccess(t *testing.T) {
 
 	srv.InitSetup(c)
 	assertFatalCode(t, w, http.StatusOK)
+
+	// Second attempt should fail with StatusForbidden (system already initialized)
+	wReinit := httptest.NewRecorder()
+	cReinit, _ := gin.CreateTestContext(wReinit)
+	cReinit.Request = httptest.NewRequest("POST", "/api/v1/setup/init", bytes.NewReader(body))
+	cReinit.Request.Header.Set("Content-Type", "application/json")
+	srv.InitSetup(cReinit)
+	assertResponseCode(t, wReinit, http.StatusForbidden)
 
 	var resp struct {
 		Code int `json:"code"`

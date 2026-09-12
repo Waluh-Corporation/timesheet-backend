@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-webauthn/webauthn/webauthn"
+	"golang.org/x/crypto/bcrypt"
 
 	"timesheet-backend/auth"
 	"timesheet-backend/mailer"
@@ -25,11 +28,9 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 
 	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", time.Hour)
 	m := mailer.New(cfg)
-	srv := &Server{
-		DB:     tx,
-		Cfg:    cfg,
-		Auth:   authSvc,
-		Mailer: m,
+	srv, err := NewServer(tx, cfg, authSvc, m, nil)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
 	}
 
 	rawPass := "MyStr0ngPassw0rd!2026"
@@ -96,6 +97,43 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 
 		srv.Login(c)
 		assertResponseCode(t, w, http.StatusOK)
+	})
+
+	t.Run("Login success with legacy bcrypt hash triggers rehash", func(t *testing.T) {
+		legacyPass := "LegacyPassword123!"
+		bHash, err := bcrypt.GenerateFromPassword([]byte(legacyPass), bcrypt.DefaultCost)
+		if err != nil {
+			t.Fatalf("bcrypt error: %v", err)
+		}
+		legacyUser := models.User{
+			Username:     "legacyuser",
+			Email:        "legacy@example.com",
+			Name:         "Legacy User",
+			PasswordHash: string(bHash),
+			Role:         models.RoleUser,
+			IsActive:     true,
+		}
+		if err := tx.Create(&legacyUser).Error; err != nil {
+			t.Fatalf("failed to create legacy user: %v", err)
+		}
+
+		body, _ := json.Marshal(models.LoginRequest{
+			Identifier: "legacyuser",
+			Password:   legacyPass,
+		})
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.Login(c)
+		assertResponseCode(t, w, http.StatusOK)
+
+		var updated models.User
+		_ = tx.Where(queryID, legacyUser.ID).First(&updated)
+		if !strings.HasPrefix(updated.PasswordHash, "$argon2id$") {
+			t.Errorf("expected upgraded Argon2id hash, got: %s", updated.PasswordHash)
+		}
 	})
 
 	t.Run("Login wrong password", func(t *testing.T) {
@@ -322,5 +360,120 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		}
 		srv.AdminDeletePasskey(cAdminDel404)
 		assertResponseCode(t, wAdminDel404, http.StatusNotFound)
+
+		// BeginPasskeyRegistration
+		wRegBegin := httptest.NewRecorder()
+		cRegBegin, _ := gin.CreateTestContext(wRegBegin)
+		cRegBegin.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/begin", nil)
+		cRegBegin.Set(ctxUserID, testUser.ID)
+		srv.BeginPasskeyRegistration(cRegBegin)
+		assertResponseCode(t, wRegBegin, http.StatusOK)
+
+		// BeginPasskeyRegistration 404 user not found
+		wRegBegin404 := httptest.NewRecorder()
+		cRegBegin404, _ := gin.CreateTestContext(wRegBegin404)
+		cRegBegin404.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/begin", nil)
+		cRegBegin404.Set(ctxUserID, uint(999999))
+		srv.BeginPasskeyRegistration(cRegBegin404)
+		assertResponseCode(t, wRegBegin404, http.StatusNotFound)
+
+		// FinishPasskeyRegistration missing/invalid session
+		wRegFin400 := httptest.NewRecorder()
+		cRegFin400, _ := gin.CreateTestContext(wRegFin400)
+		cRegFin400.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=nonexistent", nil)
+		srv.FinishPasskeyRegistration(cRegFin400)
+		assertResponseCode(t, wRegFin400, http.StatusBadRequest)
+
+		// FinishPasskeyRegistration with session but user not found
+		fakeSid := "fake-reg-session-1"
+		srv.putSession(fakeSid, &webauthn.SessionData{UserID: []byte{1}})
+		wRegFinUser404 := httptest.NewRecorder()
+		cRegFinUser404, _ := gin.CreateTestContext(wRegFinUser404)
+		cRegFinUser404.Request = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/passkey/register/finish?session_id=%s", fakeSid), nil)
+		cRegFinUser404.Set(ctxUserID, uint(999999))
+		srv.FinishPasskeyRegistration(cRegFinUser404)
+		assertResponseCode(t, wRegFinUser404, http.StatusNotFound)
+
+		// FinishPasskeyRegistration with valid session but invalid webauthn request body
+		fakeSid2 := "fake-reg-session-2"
+		srv.putSession(fakeSid2, &webauthn.SessionData{UserID: []byte{1}})
+		wRegFinBad := httptest.NewRecorder()
+		cRegFinBad, _ := gin.CreateTestContext(wRegFinBad)
+		cRegFinBad.Request = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/passkey/register/finish?session_id=%s", fakeSid2), strings.NewReader("{}"))
+		cRegFinBad.Set(ctxUserID, testUser.ID)
+		srv.FinishPasskeyRegistration(cRegFinBad)
+		assertResponseCode(t, wRegFinBad, http.StatusBadRequest)
+
+		// BeginPasskeyLogin (discoverable)
+		wLoginBegin := httptest.NewRecorder()
+		cLoginBegin, _ := gin.CreateTestContext(wLoginBegin)
+		cLoginBegin.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/begin", strings.NewReader("{}"))
+		cLoginBegin.Request.Header.Set("Content-Type", "application/json")
+		srv.BeginPasskeyLogin(cLoginBegin)
+		assertResponseCode(t, wLoginBegin, http.StatusOK)
+
+		// BeginPasskeyLogin (user-scoped without credentials returns 500)
+		wLoginBeginUserNoCreds := httptest.NewRecorder()
+		cLoginBeginUserNoCreds, _ := gin.CreateTestContext(wLoginBeginUserNoCreds)
+		cLoginBeginUserNoCreds.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/begin", strings.NewReader(`{"identifier":"authtest@example.com"}`))
+		cLoginBeginUserNoCreds.Request.Header.Set("Content-Type", "application/json")
+		srv.BeginPasskeyLogin(cLoginBeginUserNoCreds)
+		assertResponseCode(t, wLoginBeginUserNoCreds, http.StatusInternalServerError)
+
+		// Seed a credential for user-scoped login success
+		credLogin := models.WebAuthnCredential{
+			UserID:       testUser.ID,
+			CredentialID: []byte("login-cred-id"),
+			PublicKey:    []byte("login-public-key"),
+			FriendlyName: "Login Key",
+		}
+		if err := tx.Create(&credLogin).Error; err != nil {
+			t.Fatalf("failed to create credential: %v", err)
+		}
+
+		// BeginPasskeyLogin (user-scoped with credentials returns 200)
+		wLoginBeginUser := httptest.NewRecorder()
+		cLoginBeginUser, _ := gin.CreateTestContext(wLoginBeginUser)
+		cLoginBeginUser.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/begin", strings.NewReader(`{"identifier":"authtest@example.com"}`))
+		cLoginBeginUser.Request.Header.Set("Content-Type", "application/json")
+		srv.BeginPasskeyLogin(cLoginBeginUser)
+		assertResponseCode(t, wLoginBeginUser, http.StatusOK)
+
+		// BeginPasskeyLogin (user-scoped non-existent)
+		wLoginBeginGhost := httptest.NewRecorder()
+		cLoginBeginGhost, _ := gin.CreateTestContext(wLoginBeginGhost)
+		cLoginBeginGhost.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/begin", strings.NewReader(`{"identifier":"ghostuser"}`))
+		cLoginBeginGhost.Request.Header.Set("Content-Type", "application/json")
+		srv.BeginPasskeyLogin(cLoginBeginGhost)
+		assertResponseCode(t, wLoginBeginGhost, http.StatusUnauthorized)
+
+		// FinishPasskeyLogin missing session
+		wLoginFin400 := httptest.NewRecorder()
+		cLoginFin400, _ := gin.CreateTestContext(wLoginFin400)
+		cLoginFin400.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/finish?session_id=nonexistent", nil)
+		srv.FinishPasskeyLogin(cLoginFin400)
+		assertResponseCode(t, wLoginFin400, http.StatusBadRequest)
+
+		// FinishPasskeyLogin user not found in session
+		fakeLoginSid := "fake-login-session-1"
+		srv.putSession(fakeLoginSid, &webauthn.SessionData{UserID: []byte{255, 255, 0, 0, 0, 0, 0, 0}})
+		wLoginFinGhost := httptest.NewRecorder()
+		cLoginFinGhost, _ := gin.CreateTestContext(wLoginFinGhost)
+		cLoginFinGhost.Request = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/auth/passkey/login/finish?session_id=%s", fakeLoginSid), strings.NewReader("{}"))
+		srv.FinishPasskeyLogin(cLoginFinGhost)
+		assertResponseCode(t, wLoginFinGhost, http.StatusUnauthorized)
+
+		// FinishPasskeyLogin user found but invalid payload
+		fakeLoginSid2 := "fake-login-session-2"
+		uidBytes := make([]byte, 8)
+		for i := 0; i < 8; i++ {
+			uidBytes[i] = byte(testUser.ID >> (8 * i))
+		}
+		srv.putSession(fakeLoginSid2, &webauthn.SessionData{UserID: uidBytes})
+		wLoginFinBad := httptest.NewRecorder()
+		cLoginFinBad, _ := gin.CreateTestContext(wLoginFinBad)
+		cLoginFinBad.Request = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/v1/auth/passkey/login/finish?session_id=%s", fakeLoginSid2), strings.NewReader("{}"))
+		srv.FinishPasskeyLogin(cLoginFinBad)
+		assertResponseCode(t, wLoginFinBad, http.StatusUnauthorized)
 	})
 }
