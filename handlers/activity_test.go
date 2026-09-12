@@ -586,6 +586,27 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		assertFatalCode(t, wList, http.StatusOK)
 	})
 
+	t.Run("ListActivities filters and pagination matrix", func(t *testing.T) {
+		urls := []string{
+			"/api/v1/activities?all=true",
+			"/api/v1/activities?limit=-1",
+			"/api/v1/activities?limit=150",
+			"/api/v1/activities?sort=desc",
+			"/api/v1/activities?sort=asc",
+			"/api/v1/activities?year=2026",
+			"/api/v1/activities?start_date=2026-09-01&end_date=2026-09-30",
+			"/api/v1/activities?status=Present",
+		}
+		for _, u := range urls {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, u, nil)
+			c.Set(ctxUserID, user.ID)
+			srv.ListActivities(c)
+			assertFatalCode(t, w, http.StatusOK)
+		}
+	})
+
 	t.Run("GenerateTimesheet validation and success", func(t *testing.T) {
 		// 1. Invalid JSON body
 		wBadJSON := httptest.NewRecorder()

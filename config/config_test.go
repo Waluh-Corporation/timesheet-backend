@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"reflect"
 	"testing"
 )
@@ -110,5 +111,57 @@ func TestConfigLoad(t *testing.T) {
 	}
 	if cfg.JWTSecret != "this-is-a-strong-custom-secret-key-32b" {
 		t.Errorf("expected custom JWTSecret, got %s", cfg.JWTSecret)
+	}
+}
+
+func TestLoadDotEnv(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "test_dotenv_*.env")
+	if err != nil {
+		t.Fatalf("create temp error: %v", err)
+	}
+	defer func() {
+		_ = os.Remove(tmpFile.Name())
+	}()
+
+	content := `# Comment line
+TEST_DOTENV_KEY=sample_val
+TEST_DOTENV_QUOTED="quoted_val"
+EMPTY_KEY=
+`
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatalf("write temp error: %v", err)
+	}
+	_ = tmpFile.Close()
+
+	loadDotEnv(tmpFile.Name())
+	if v := os.Getenv("TEST_DOTENV_KEY"); v != "sample_val" {
+		t.Errorf("expected sample_val, got %s", v)
+	}
+	if v := os.Getenv("TEST_DOTENV_QUOTED"); v != "quoted_val" {
+		t.Errorf("expected quoted_val, got %s", v)
+	}
+}
+
+func TestRandomSecretAndValidateSecrets(t *testing.T) {
+	sec := randomSecret(16)
+	if len(sec) != 32 {
+		t.Errorf("expected 32 hex chars for 16 bytes, got %d", len(sec))
+	}
+
+	cfg := &Config{
+		JWTSecret: "dev-secret-change-me",
+	}
+	t.Setenv("GIN_MODE", "debug")
+	cfg.validateSecrets()
+	if cfg.JWTSecret == "dev-secret-change-me" || len(cfg.JWTSecret) == 0 {
+		t.Errorf("expected ephemeral secret to replace weak secret")
+	}
+
+	if isRelease() {
+		t.Error("expected isRelease to be false in debug mode")
+	}
+	t.Setenv("GIN_MODE", "release")
+	if !isRelease() {
+		t.Error("expected isRelease to be true in release mode")
 	}
 }
