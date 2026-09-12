@@ -119,14 +119,16 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center", WrapText: false},
 	})
 
+	const colorGrey = "#AEAAAA"
+
 	holidayLegendStyle, _ := f.NewStyle(&excelize.Style{
-		Fill:   excelize.Fill{Type: "pattern", Color: []string{"#AEAAAA"}, Pattern: 1},
+		Fill:   excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Border: thinBorder,
 	})
 
 	greyDateStyle, _ := f.NewStyle(&excelize.Style{
 		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
-		Fill:         excelize.Fill{Type: "pattern", Color: []string{"#AEAAAA"}, Pattern: 1},
+		Fill:         excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
 		CustomNumFmt: strPtr("d-mmm-yy"),
@@ -134,21 +136,21 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 
 	greyCenterStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Size: 9, Family: "Calibri"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#AEAAAA"}, Pattern: 1},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:    thinBorder,
 	})
 
 	greyCenterWrapStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Size: 9, Family: "Calibri"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#AEAAAA"}, Pattern: 1},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
 		Border:    thinBorder,
 	})
 
 	greyTimeStyle, _ := f.NewStyle(&excelize.Style{
 		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
-		Fill:         excelize.Fill{Type: "pattern", Color: []string{"#AEAAAA"}, Pattern: 1},
+		Fill:         excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
 		CustomNumFmt: strPtr("h:mm"),
@@ -156,7 +158,7 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 
 	greyDecimalStyle, _ := f.NewStyle(&excelize.Style{
 		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
-		Fill:         excelize.Fill{Type: "pattern", Color: []string{"#AEAAAA"}, Pattern: 1},
+		Fill:         excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
 		CustomNumFmt: strPtr("0.00"),

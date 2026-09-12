@@ -487,6 +487,16 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		_ = json.Unmarshal(w.Body.Bytes(), &resp)
 		otID := resp.Data.ID
 
+		// Update existing overtime
+		updateBody := fmt.Sprintf(`{"id":%d,"date":"2026-09-15","start_time":"19:00","end_time":"22:00","task_description":"Updated overtime task"}`, otID)
+		wUp := httptest.NewRecorder()
+		cUp, _ := gin.CreateTestContext(wUp)
+		cUp.Request = httptest.NewRequest(http.MethodPost, "/api/v1/overtimes", strings.NewReader(updateBody))
+		cUp.Request.Header.Set("Content-Type", "application/json")
+		cUp.Set(ctxUserID, user.ID)
+		srv.UpsertOvertime(cUp)
+		assertFatalCode(t, wUp, http.StatusOK)
+
 		// List monthly overtimes
 		wList := httptest.NewRecorder()
 		cList, _ := gin.CreateTestContext(wList)
@@ -574,6 +584,81 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		cList.Set(ctxUserID, user.ID)
 		srv.ListMonthlyActivities(cList)
 		assertFatalCode(t, wList, http.StatusOK)
+	})
+
+	t.Run("ListActivities filters and pagination matrix", func(t *testing.T) {
+		urls := []string{
+			"/api/v1/activities?all=true",
+			"/api/v1/activities?limit=-1",
+			"/api/v1/activities?limit=150",
+			"/api/v1/activities?sort=desc",
+			"/api/v1/activities?sort=asc",
+			"/api/v1/activities?year=2026",
+			"/api/v1/activities?start_date=2026-09-01&end_date=2026-09-30",
+			"/api/v1/activities?status=Present",
+		}
+		for _, u := range urls {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, u, nil)
+			c.Set(ctxUserID, user.ID)
+			srv.ListActivities(c)
+			assertFatalCode(t, w, http.StatusOK)
+		}
+	})
+
+	t.Run("GenerateTimesheet validation and success", func(t *testing.T) {
+		// 1. Invalid JSON body
+		wBadJSON := httptest.NewRecorder()
+		cBadJSON, _ := gin.CreateTestContext(wBadJSON)
+		cBadJSON.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader("invalid-json"))
+		cBadJSON.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(cBadJSON)
+		assertFatalCode(t, wBadJSON, http.StatusBadRequest)
+
+		// 2. User not found
+		validBody := `{"year":2026,"month":9}`
+		wNotFound := httptest.NewRecorder()
+		cNotFound, _ := gin.CreateTestContext(wNotFound)
+		cNotFound.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cNotFound.Request.Header.Set("Content-Type", "application/json")
+		cNotFound.Set(ctxUserID, uint(999999))
+		srv.GenerateTimesheet(cNotFound)
+		assertFatalCode(t, wNotFound, http.StatusNotFound)
+
+		// 3. User with no company assigned
+		wNoComp := httptest.NewRecorder()
+		cNoComp, _ := gin.CreateTestContext(wNoComp)
+		cNoComp.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cNoComp.Request.Header.Set("Content-Type", "application/json")
+		cNoComp.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cNoComp)
+		assertFatalCode(t, wNoComp, http.StatusBadRequest)
+
+		// 4. User with assigned company string "mii"
+		_ = tx.Model(&user).Update("company", "mii")
+		wOk := httptest.NewRecorder()
+		cOk, _ := gin.CreateTestContext(wOk)
+		cOk.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cOk.Request.Header.Set("Content-Type", "application/json")
+		cOk.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cOk)
+		assertFatalCode(t, wOk, http.StatusOK)
+		if wOk.Body.Len() == 0 {
+			t.Error("expected non-empty xlsx payload in response")
+		}
+
+		// 5. User with assigned CompanyID
+		testComp := models.Company{Code: "MII", Name: "Mitra Integrasi Informatika"}
+		_ = tx.Create(&testComp)
+		_ = tx.Model(&user).Update("company_id", testComp.ID)
+		wCompID := httptest.NewRecorder()
+		cCompID, _ := gin.CreateTestContext(wCompID)
+		cCompID.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cCompID.Request.Header.Set("Content-Type", "application/json")
+		cCompID.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cCompID)
+		assertFatalCode(t, wCompID, http.StatusOK)
 	})
 
 	t.Run("sanitize helper", func(t *testing.T) {

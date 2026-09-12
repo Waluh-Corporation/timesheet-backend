@@ -99,6 +99,14 @@ func TestSetupHandlers_InitSuccess(t *testing.T) {
 		Companies: []InitSetupCompanyRequest{
 			{Code: "testcorp", Name: "Test Corporation"},
 		},
+		Departments: []InitSetupDepartmentRequest{
+			{
+				Code:        "ENG",
+				Name:        "Engineering",
+				Division:    "Technology",
+				CompanyCode: "testcorp",
+			},
+		},
 		Approvers: []InitSetupApproverRequest{
 			{
 				Name:        "Test Approver TL",
@@ -123,6 +131,14 @@ func TestSetupHandlers_InitSuccess(t *testing.T) {
 
 	srv.InitSetup(c)
 	assertFatalCode(t, w, http.StatusOK)
+
+	// Second attempt should fail with StatusForbidden (system already initialized)
+	wReinit := httptest.NewRecorder()
+	cReinit, _ := gin.CreateTestContext(wReinit)
+	cReinit.Request = httptest.NewRequest("POST", "/api/v1/setup/init", bytes.NewReader(body))
+	cReinit.Request.Header.Set("Content-Type", "application/json")
+	srv.InitSetup(cReinit)
+	assertResponseCode(t, wReinit, http.StatusForbidden)
 
 	var resp struct {
 		Code int `json:"code"`
@@ -280,4 +296,83 @@ func TestSetupHandlers_SeedStatuses(t *testing.T) {
 			t.Errorf("activity status %s was not seeded", code)
 		}
 	}
+}
+
+func TestSetupHandlers_EdgeCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
+	srv := &Server{
+		DB:   tx,
+		Cfg:  cfg,
+		Auth: authSvc,
+	}
+
+	// 1. Delete is_new setting but insert an admin user to trigger fallback in GetSetupStatus & isSystemAlreadyInitialized
+	_ = tx.Exec("DELETE FROM system_settings WHERE key = 'is_new'").Error
+	adminUser := models.User{
+		Username:     "tempadmin_edge",
+		Email:        "tempadmin_edge@example.com",
+		Role:         models.RoleAdmin,
+		IsActive:     true,
+		PasswordHash: "dummyhash",
+	}
+	_ = tx.Create(&adminUser).Error
+
+	wStatus := httptest.NewRecorder()
+	cStatus, _ := gin.CreateTestContext(wStatus)
+	cStatus.Request = httptest.NewRequest("GET", "/api/v1/setup/status", nil)
+	srv.GetSetupStatus(cStatus)
+	assertResponseCode(t, wStatus, http.StatusOK)
+
+	// Init setup should be rejected because system is initialized via admin fallback
+	wInitReject := httptest.NewRecorder()
+	cInitReject, _ := gin.CreateTestContext(wInitReject)
+	cInitReject.Request = httptest.NewRequest("POST", "/api/v1/setup/init", bytes.NewReader([]byte("{}")))
+	cInitReject.Request.Header.Set("Content-Type", "application/json")
+	srv.InitSetup(cInitReject)
+	assertResponseCode(t, wInitReject, http.StatusForbidden)
+
+	// 2. Clear admin users and set is_new to Y, test invalid JSON
+	_ = tx.Exec("DELETE FROM users WHERE role = 'admin'").Error
+	_ = tx.Save(&models.SystemSetting{Key: "is_new", Value: "Y"}).Error
+
+	wBadJSON := httptest.NewRecorder()
+	cBadJSON, _ := gin.CreateTestContext(wBadJSON)
+	cBadJSON.Request = httptest.NewRequest("POST", "/api/v1/setup/init", bytes.NewReader([]byte("invalid json")))
+	cBadJSON.Request.Header.Set("Content-Type", "application/json")
+	srv.InitSetup(cBadJSON)
+	assertResponseCode(t, wBadJSON, http.StatusBadRequest)
+
+	// 3. Test empty company code, empty department code, empty approver name
+	payload := InitSetupRequest{
+		Admin: InitSetupAdminRequest{
+			Username: "superadmin_empty_items",
+			Email:    "superadmin_empty_items@example.com",
+			Name:     "Super Admin",
+			Password: "SuperSecurePassword123!",
+		},
+		Companies: []InitSetupCompanyRequest{
+			{Code: "", Name: "No Code Corp"},
+			{Code: "valid_corp", Name: "Valid Corp"},
+		},
+		Departments: []InitSetupDepartmentRequest{
+			{Code: "", Name: "No Code Dept"},
+			{Code: "DEV", Name: "Development", CompanyCode: "valid_corp"},
+		},
+		Approvers: []InitSetupApproverRequest{
+			{Name: "", RoleType: models.ApproverRoleTeamLeader},
+			{Name: "Valid Approver", RoleType: models.ApproverRoleDepartmentHead},
+		},
+	}
+	body, _ := json.Marshal(payload)
+	wEmptyItems := httptest.NewRecorder()
+	cEmptyItems, _ := gin.CreateTestContext(wEmptyItems)
+	cEmptyItems.Request = httptest.NewRequest("POST", "/api/v1/setup/init", bytes.NewReader(body))
+	cEmptyItems.Request.Header.Set("Content-Type", "application/json")
+	srv.InitSetup(cEmptyItems)
+	assertResponseCode(t, wEmptyItems, http.StatusOK)
 }

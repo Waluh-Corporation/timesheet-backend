@@ -41,7 +41,7 @@ func (s *Server) validateActivityStatus(status string) bool {
 
 func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
 	var proj models.Project
-	if err := s.DB.Where("id = ?", refID).First(&proj).Error; err != nil || proj.ID == 0 {
+	if err := s.DB.Where(queryID, refID).First(&proj).Error; err != nil || proj.ID == 0 {
 		return nil, errors.New("invalid project_ref_id: project does not exist")
 	}
 	return &proj, nil
@@ -157,7 +157,7 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 	}
 
 	// Preload associations before returning
-	_ = s.DB.Preload("ProjectRef").Preload("StatusRef").First(&activity, activity.ID)
+	_ = s.DB.Preload("ProjectRef").Preload("StatusRef").Where(queryID, activity.ID).First(&activity)
 	RespondSuccess(c, http.StatusOK, activity)
 }
 
@@ -184,7 +184,7 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 	}
 
 	var activity models.DailyActivity
-	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").First(&activity, id).Error; err != nil {
+	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").Where(queryID, id).First(&activity).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "activity not found")
 		return
 	}
@@ -380,7 +380,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := s.DB.First(&user, currentUserID(c)).Error; err != nil {
+	if err := s.DB.Where(queryID, currentUserID(c)).First(&user).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
@@ -390,7 +390,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	var companyName string
 	if user.CompanyID != nil && *user.CompanyID != 0 {
 		var comp models.Company
-		if err := s.DB.First(&comp, *user.CompanyID).Error; err == nil {
+		if err := s.DB.Where(queryID, *user.CompanyID).First(&comp).Error; err == nil {
 			companyCode = strings.ToLower(comp.Code)
 			companyName = comp.Name
 		}
@@ -445,7 +445,9 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 
 	// Email a copy asynchronously so the download isn't blocked on SMTP.
 	go func(to, comp, fn string, data []byte) {
-		_ = s.Mailer.SendTimesheetEmail(to, comp, fn, data)
+		if s.Mailer != nil {
+			_ = s.Mailer.SendTimesheetEmail(to, comp, fn, data)
+		}
 	}(user.Email, companyName, filename, out)
 
 	c.Header("Content-Disposition", "attachment; filename="+filename)
@@ -634,29 +636,40 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 		return
 	}
 
-	entry := models.OvertimeEntry{
-		ID:               req.ID,
-		UserID:           currentUserID(c),
-		Date:             date,
-		StartTime:        req.StartTime,
-		EndTime:          req.EndTime,
-		TaskDescription:  req.TaskDescription,
-		TeamLeaderID:     req.TeamLeaderID,
-		DepartmentHeadID: req.DepartmentHeadID,
-	}
+	uid := currentUserID(c)
+	var entry models.OvertimeEntry
 
-	if entry.ID != 0 {
-		if err := s.DB.Where("id = ? AND user_id = ?", entry.ID, entry.UserID).Updates(&entry).Error; err != nil {
+	if req.ID != 0 {
+		if err := s.DB.Where("id = ? AND user_id = ?", req.ID, uid).First(&entry).Error; err != nil {
+			RespondError(c, http.StatusNotFound, "overtime entry not found")
+			return
+		}
+		entry.Date = date
+		entry.StartTime = req.StartTime
+		entry.EndTime = req.EndTime
+		entry.TaskDescription = req.TaskDescription
+		entry.TeamLeaderID = req.TeamLeaderID
+		entry.DepartmentHeadID = req.DepartmentHeadID
+		if err := s.DB.Save(&entry).Error; err != nil {
 			RespondError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 	} else {
+		entry = models.OvertimeEntry{
+			UserID:           uid,
+			Date:             date,
+			StartTime:        req.StartTime,
+			EndTime:          req.EndTime,
+			TaskDescription:  req.TaskDescription,
+			TeamLeaderID:     req.TeamLeaderID,
+			DepartmentHeadID: req.DepartmentHeadID,
+		}
 		if err := s.DB.Create(&entry).Error; err != nil {
 			RespondError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
-	_ = s.DB.Preload("TeamLeader").Preload("DepartmentHead").First(&entry, entry.ID)
+	_ = s.DB.Preload("TeamLeader").Preload("DepartmentHead").Where(queryID, entry.ID).First(&entry)
 	RespondSuccess(c, http.StatusOK, entry)
 }
 

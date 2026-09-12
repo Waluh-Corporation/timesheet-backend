@@ -54,7 +54,7 @@ func (s *Server) ListUsers(c *gin.Context) {
 func (s *Server) resolveUserCompany(req *models.CreateUserRequest, user *models.User) {
 	if req.CompanyID != nil && *req.CompanyID != 0 {
 		var comp models.Company
-		if err := s.DB.First(&comp, *req.CompanyID).Error; err == nil {
+		if err := s.DB.Where(queryID, *req.CompanyID).First(&comp).Error; err == nil {
 			user.CompanyID = &comp.ID
 			if user.Company == "" {
 				user.Company = comp.Name
@@ -68,26 +68,31 @@ func (s *Server) resolveUserCompany(req *models.CreateUserRequest, user *models.
 	}
 }
 
-func (s *Server) resolveUserDepartment(req *models.CreateUserRequest, user *models.User) {
+func (s *Server) findDepartmentForUser(req *models.CreateUserRequest) *models.Department {
+	var dept models.Department
 	if req.DepartmentID != nil && *req.DepartmentID != 0 {
-		var dept models.Department
-		if err := s.DB.First(&dept, *req.DepartmentID).Error; err == nil {
-			user.DepartmentID = &dept.ID
-			if user.Department == "" {
-				user.Department = dept.Name
-			}
-			if user.Division == "" {
-				user.Division = dept.Division
-			}
+		if err := s.DB.Where(queryID, *req.DepartmentID).First(&dept).Error; err == nil {
+			return &dept
 		}
 	} else if req.Department != "" {
-		var dept models.Department
 		if err := s.DB.Where(queryCodeOrNameLike, req.Department, "%"+req.Department+"%").First(&dept).Error; err == nil {
-			user.DepartmentID = &dept.ID
-			if user.Division == "" && dept.Division != "" {
-				user.Division = dept.Division
-			}
+			return &dept
 		}
+	}
+	return nil
+}
+
+func (s *Server) resolveUserDepartment(req *models.CreateUserRequest, user *models.User) {
+	dept := s.findDepartmentForUser(req)
+	if dept == nil {
+		return
+	}
+	user.DepartmentID = &dept.ID
+	if user.Department == "" {
+		user.Department = dept.Name
+	}
+	if user.Division == "" {
+		user.Division = dept.Division
 	}
 }
 
@@ -170,7 +175,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		_ = s.Mailer.SendSetupEmail(user.Email, user.Username, link)
 	}
 
-	s.DB.Preload("CompanyRel").Preload("DepartmentRel").First(&user, user.ID)
+	s.DB.Preload("CompanyRel").Preload("DepartmentRel").Where(queryID, user.ID).First(&user)
 	RespondSuccess(c, http.StatusCreated, user)
 }
 
@@ -187,45 +192,43 @@ func validateSelfUpdate(c *gin.Context, id uint, req *models.UpdateUserRequest) 
 	return "", 0
 }
 
-func buildUserUpdates(db *gorm.DB, req *models.UpdateUserRequest) map[string]interface{} {
-	updates := map[string]interface{}{}
+func applyUserUpdates(db *gorm.DB, user *models.User, req *models.UpdateUserRequest) {
 	if req.Role != nil {
-		updates["role"] = *req.Role
+		user.Role = *req.Role
 	}
 	if req.IsActive != nil {
-		updates["is_active"] = *req.IsActive
+		user.IsActive = *req.IsActive
 	}
 	if req.Name != nil {
-		updates["name"] = *req.Name
+		user.Name = *req.Name
 	}
 	if req.BniID != nil {
-		updates["bni_id"] = *req.BniID
+		user.BniID = *req.BniID
 	}
 	if req.Division != nil {
-		updates["division"] = *req.Division
+		user.Division = *req.Division
 	}
 	if req.Department != nil {
-		updates["department"] = *req.Department
+		user.Department = *req.Department
 	}
 	if req.DepartmentID != nil {
-		updates["department_id"] = *req.DepartmentID
+		user.DepartmentID = req.DepartmentID
 	}
 	if req.Site != nil {
-		updates["site"] = *req.Site
+		user.Site = *req.Site
 	}
 	if req.CompanyID != nil {
-		updates["company_id"] = *req.CompanyID
+		user.CompanyID = req.CompanyID
 	}
 	if req.Company != nil {
-		updates["company"] = *req.Company
+		user.Company = *req.Company
 		var comp models.Company
 		if err := db.Where(queryCodeOrNameLike, *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
-			updates["company_id"] = comp.ID
+			user.CompanyID = &comp.ID
 		} else {
-			updates["company_id"] = nil
+			user.CompanyID = nil
 		}
 	}
-	return updates
 }
 
 // UpdateUser godoc
@@ -272,11 +275,12 @@ func (s *Server) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	updates := buildUserUpdates(s.DB, &req)
-	if len(updates) > 0 {
-		s.DB.Model(&user).Updates(updates)
+	applyUserUpdates(s.DB, &user, &req)
+	if err := s.DB.Save(&user).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to update user: "+err.Error())
+		return
 	}
-	s.DB.Preload("CompanyRel").Preload("DepartmentRel").First(&user, id)
+	s.DB.Preload("CompanyRel").Preload("DepartmentRel").Where(queryID, id).First(&user)
 	RespondSuccess(c, http.StatusOK, user)
 }
 
@@ -450,22 +454,7 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	now := time.Now()
 
 	if action == "approve" {
-		updates := map[string]interface{}{
-			"name":     change.Name,
-			"bni_id":   change.BniID,
-			"division": change.Division,
-			"site":     change.Site,
-		}
-		if change.Department != "" {
-			updates["department"] = change.Department
-		}
-		if change.DepartmentID != nil {
-			updates["department_id"] = change.DepartmentID
-		}
-		if change.CompanyID != nil {
-			updates["company_id"] = change.CompanyID
-		}
-		s.DB.Model(&models.User{}).Where(queryID, change.UserID).Updates(updates)
+		s.applyApprovedProfileChange(&change)
 		change.Status = models.ProfileApproved
 	} else {
 		change.Status = "rejected"
@@ -474,6 +463,27 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	change.ReviewedAt = &now
 	s.DB.Save(&change)
 
-	_ = s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").First(&change, change.ID)
+	_ = s.DB.Preload("User").Preload("Reviewer").Preload("CompanyRel").Preload("DepartmentRel").Where(queryID, change.ID).First(&change)
 	RespondSuccess(c, http.StatusOK, change)
+}
+
+func (s *Server) applyApprovedProfileChange(change *models.ProfileChangeRequest) {
+	var targetUser models.User
+	if err := s.DB.Where(queryID, change.UserID).First(&targetUser).Error; err != nil {
+		return
+	}
+	targetUser.Name = change.Name
+	targetUser.BniID = change.BniID
+	targetUser.Division = change.Division
+	targetUser.Site = change.Site
+	if change.Department != "" {
+		targetUser.Department = change.Department
+	}
+	if change.DepartmentID != nil {
+		targetUser.DepartmentID = change.DepartmentID
+	}
+	if change.CompanyID != nil {
+		targetUser.CompanyID = change.CompanyID
+	}
+	_ = s.DB.Save(&targetUser).Error
 }

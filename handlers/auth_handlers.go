@@ -60,7 +60,7 @@ func (s *Server) Login(c *gin.Context) {
 	// plaintext in hand.
 	if auth.NeedsRehash(user.PasswordHash) {
 		if newHash, herr := auth.HashPassword(req.Password); herr == nil {
-			s.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("password_hash", newHash)
+			s.DB.Model(&models.User{}).Where(queryID, user.ID).Update("password_hash", newHash)
 		}
 	}
 
@@ -95,7 +95,7 @@ func (s *Server) WebAuthnRelatedOrigins(c *gin.Context) {
 // @Router /api/v1/me [get]
 func (s *Server) Me(c *gin.Context) {
 	var user models.User
-	if err := s.DB.First(&user, currentUserID(c)).Error; err != nil {
+	if err := s.DB.Where(queryID, currentUserID(c)).First(&user).Error; err != nil {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
@@ -172,7 +172,7 @@ func (s *Server) ResetPassword(c *gin.Context) {
 	// context-specific terms) before accepting the new secret. Look up the
 	// account so its username/email can be treated as context-specific words.
 	var user models.User
-	_ = s.DB.First(&user, token.UserID).Error
+	_ = s.DB.Where(queryID, token.UserID).First(&user).Error
 	if err := auth.ValidatePassword(req.Password, user.Username, user.Email); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
@@ -185,11 +185,13 @@ func (s *Server) ResetPassword(c *gin.Context) {
 	}
 
 	now := time.Now()
-	s.DB.Model(&models.User{}).Where("id = ?", token.UserID).Update("password_hash", hash)
-	s.DB.Model(&token).Updates(map[string]interface{}{
-		"used_at": now,
-		"used_ip": c.ClientIP(),
-	})
+	s.DB.Model(&models.User{}).Where(queryID, token.UserID).Update("password_hash", hash)
+	token.UsedAt = &now
+	token.UsedIP = c.ClientIP()
+	if err := s.DB.Save(&token).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to update reset token")
+		return
+	}
 
 	RespondMessage(c, http.StatusOK, "password updated")
 }
@@ -209,7 +211,7 @@ func (s *Server) ResetPassword(c *gin.Context) {
 // @Router /api/v1/passkey/register/begin [post]
 func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
 	var user models.User
-	if err := s.DB.Preload("Credentials").First(&user, currentUserID(c)).Error; err != nil {
+	if err := s.DB.Preload("Credentials").Where(queryID, currentUserID(c)).First(&user).Error; err != nil {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
@@ -253,7 +255,7 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := s.DB.Preload("Credentials").First(&user, currentUserID(c)).Error; err != nil {
+	if err := s.DB.Preload("Credentials").Where(queryID, currentUserID(c)).First(&user).Error; err != nil {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
@@ -349,14 +351,14 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 	if len(sessionData.UserID) == 0 {
 		// Discoverable login: resolve the user from the assertion's user handle.
 		handler := func(_, userHandle []byte) (webauthn.User, error) {
-			if e := s.DB.Preload("Credentials").First(&user, decodeUserHandle(userHandle)).Error; e != nil {
+			if e := s.DB.Preload("Credentials").Where(queryID, decodeUserHandle(userHandle)).First(&user).Error; e != nil {
 				return nil, e
 			}
 			return user, nil
 		}
 		credential, err = s.WebAuthn.FinishDiscoverableLogin(handler, *sessionData, c.Request)
 	} else {
-		if e := s.DB.Preload("Credentials").First(&user, decodeUserHandle(sessionData.UserID)).Error; e != nil {
+		if e := s.DB.Preload("Credentials").Where(queryID, decodeUserHandle(sessionData.UserID)).First(&user).Error; e != nil {
 			RespondError(c, http.StatusUnauthorized, "invalid credentials")
 			return
 		}

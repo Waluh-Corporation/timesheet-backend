@@ -152,9 +152,11 @@ func loadDotEnv(filenames ...string) {
 func Load() *Config {
 	loadDotEnv(".env", "../.env")
 
+	defaultDBURL := "host=" + getEnv("DB_HOST", "localhost") + " user=" + getEnv("DB_USER", "timesheet") + " dbname=" + getEnv("DB_NAME", "timesheet") + " port=" + getEnv("DB_PORT", "5432") + " sslmode=disable TimeZone=Asia/Jakarta"
+
 	cfg := &Config{
 		Port:        getEnv("PORT", "8080"),
-		DatabaseURL: getEnv("DATABASE_URL", "host=localhost user=timesheet password=timesheet dbname=timesheet port=5432 sslmode=disable TimeZone=Asia/Jakarta"),
+		DatabaseURL: getEnv("DATABASE_URL", defaultDBURL),
 
 		JWTSecret:     getEnv("JWT_SECRET", ""),
 		JWTExpiry:     time.Duration(getEnvInt("JWT_EXPIRY_HOURS", 24)) * time.Hour,

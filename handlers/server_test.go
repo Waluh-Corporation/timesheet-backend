@@ -78,6 +78,21 @@ func TestServer_Responses(t *testing.T) {
 	}
 }
 
+func TestNewServer(t *testing.T) {
+	cfg := &config.Config{
+		RPDisplayName: "Test RP",
+		RPID:          "localhost",
+		RPOrigins:     []string{"http://localhost:3000"},
+	}
+	s, err := NewServer(nil, cfg, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
+	if s == nil || s.WebAuthn == nil {
+		t.Fatal("expected non-nil server and webauthn")
+	}
+}
+
 func TestServer_PublicBaseURL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	srv := &Server{
