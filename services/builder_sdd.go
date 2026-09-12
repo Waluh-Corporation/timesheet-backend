@@ -80,37 +80,22 @@ func writeSDDMetadata(f *excelize.File, sheet string, in GenerationInput, st *Bu
 }
 
 func writeSDDHeaders(f *excelize.File, sheet string, st *BuilderStyles) {
-	type colHeader struct {
-		from, to string
-		val      string
+	headers := []HeaderColumn{
+		{From: "A10", To: "A11", Val: "No"},
+		{From: "B10", To: "B11", Val: "Tanggal"},
+		{From: "C10", To: "C11", Val: "Jam Masuk"},
+		{From: "D10", To: "D11", Val: "Jam Pulang"},
+		{From: "E10", To: "E11", Val: "Total Jam Kerja"},
+		{From: "F10", To: "J10", Val: "Status Kehadiran"},
+		{From: "K10", To: "K11", Val: "Project"},
+		{From: "L10", To: "L11", Val: "Project Code"},
+		{From: "M10", To: "M11", Val: "AIP Fitur"},
+		{From: "N10", To: "N11", Val: "Kegiatan"},
 	}
-	mergedHeaders := []colHeader{
-		{"A10", "A11", "No"},
-		{"B10", "B11", "Tanggal"},
-		{"C10", "C11", "Jam Masuk"},
-		{"D10", "D11", "Jam Pulang"},
-		{"E10", "E11", "Total Jam Kerja"},
-		{"F10", "J10", "Status Kehadiran"},
-		{"K10", "K11", "Project"},
-		{"L10", "L11", "Project Code"},
-		{"M10", "M11", "AIP Fitur"},
-		{"N10", "N11", "Kegiatan"},
-	}
-	for _, mh := range mergedHeaders {
-		if mh.from != mh.to {
-			_ = f.MergeCell(sheet, mh.from, mh.to)
-		}
-		_ = f.SetCellValue(sheet, mh.from, mh.val)
-		_ = f.SetCellStyle(sheet, mh.from, mh.to, st.HeaderStyle)
-	}
-
 	subHeaders := map[string]string{
 		"F11": "Hadir", "G11": "Cuti", "H11": "Izin", "I11": "Sakit", "J11": "Lembur",
 	}
-	for cell, val := range subHeaders {
-		_ = f.SetCellValue(sheet, cell, val)
-		_ = f.SetCellStyle(sheet, cell, cell, st.HeaderGreyStyle)
-	}
+	WriteTableHeaders(f, sheet, headers, subHeaders, st)
 }
 
 func writeSDDActRow(f *excelize.File, sheet, rs string, row int, act models.DailyActivity, timeStyle int) {
@@ -141,15 +126,6 @@ func writeSDDActRow(f *excelize.File, sheet, rs string, row int, act models.Dail
 	_ = f.SetRowHeight(sheet, row, h)
 }
 
-func writeSDDHolidayRow(f *excelize.File, sheet, rs string, row int, holiday string) {
-	if holiday != "" {
-		_ = f.SetCellValue(sheet, "N"+rs, holiday)
-	} else {
-		_ = f.SetCellValue(sheet, "N"+rs, "Weekend")
-	}
-	_ = f.SetRowHeight(sheet, row, 15)
-}
-
 func writeSDDDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	byDay := BuildByDayMap(in.Activities)
 
@@ -166,37 +142,14 @@ func writeSDDDailyRows(f *excelize.File, sheet string, in GenerationInput, st *B
 			continue
 		}
 
-		date := time.Date(in.Year, time.Month(in.Month), day, 0, 0, 0, 0, time.UTC)
-		isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
-		holiday := in.Holidays[day]
-		act, hasAct := byDay[day]
-
-		isHolidayOrWeekend := isWeekend || holiday != ""
-
-		centerStyle := st.DataCenterStyle
-		centerWrapStyle := st.DataCenterWrapStyle
-		dateStyle := st.DateStyle
-		timeStyle := st.TimeStyle
-		if isHolidayOrWeekend {
-			centerStyle = st.GreyCenterStyle
-			centerWrapStyle = st.GreyCenterWrapStyle
-			dateStyle = st.GreyDateStyle
-			timeStyle = st.GreyTimeStyle
-		}
-
-		for _, col := range allCols {
-			_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
-		}
-		_ = f.SetCellStyle(sheet, "N"+rs, "N"+rs, centerWrapStyle)
-
+		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
+		ApplyDayRowStyles(f, sheet, "B", rs, allCols, []string{"N"}, dsc)
 		_ = f.SetCellValue(sheet, "A"+rs, day)
-		_ = f.SetCellValue(sheet, "B"+rs, date)
-		_ = f.SetCellStyle(sheet, "B"+rs, "B"+rs, dateStyle)
 
-		if hasAct {
-			writeSDDActRow(f, sheet, rs, row, act, timeStyle)
-		} else if isHolidayOrWeekend {
-			writeSDDHolidayRow(f, sheet, rs, row, holiday)
+		if dsc.HasActivity {
+			writeSDDActRow(f, sheet, rs, row, dsc.Activity, dsc.TimeStyle)
+		} else if dsc.IsHolidayOrWeekend {
+			WriteHolidayRemarkRow(f, sheet, "N", rs, row, dsc.Holiday)
 		}
 	}
 }
@@ -230,6 +183,11 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 
 	sheet := indonesianMonth(in.Month)
 	_ = f.SetSheetName(f.GetSheetName(0), sheet)
+	userName := ""
+	if in.User != nil {
+		userName = in.User.Name
+	}
+	SetWorkbookProperties(f, "Timesheet SDD", userName)
 
 	st, err := NewBuilderStyles(f)
 	if err != nil {

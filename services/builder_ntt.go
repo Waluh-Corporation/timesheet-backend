@@ -53,37 +53,22 @@ func writeNTTMetadata(f *excelize.File, sheet string, in GenerationInput, st *Bu
 }
 
 func writeNTTHeaders(f *excelize.File, sheet string, st *BuilderStyles) {
-	type colHeader struct {
-		from, to string
-		val      string
+	headers := []HeaderColumn{
+		{From: "A9", To: "A10", Val: "DATE"},
+		{From: "B9", To: "C9", Val: "WORKING HOUR"},
+		{From: "D9", To: "D10", Val: "TOTAL HOUR"},
+		{From: "E9", To: "J9", Val: "STATUS  ATTENDANCE"},
+		{From: "K9", To: "K10", Val: "ACTIVITY / REMARK"},
+		{From: "L9", To: "L10", Val: "Project Name"},
+		{From: "M9", To: "M10", Val: "Project Code"},
+		{From: "N9", To: "N10", Val: "Application Name"},
 	}
-	mergedHeaders := []colHeader{
-		{"A9", "A10", "DATE"},
-		{"B9", "C9", "WORKING HOUR"},
-		{"D9", "D10", "TOTAL HOUR"},
-		{"E9", "J9", "STATUS  ATTENDANCE"},
-		{"K9", "K10", "ACTIVITY / REMARK"},
-		{"L9", "L10", "Project Name"},
-		{"M9", "M10", "Project Code"},
-		{"N9", "N10", "Application Name"},
-	}
-	for _, mh := range mergedHeaders {
-		if mh.from != mh.to {
-			_ = f.MergeCell(sheet, mh.from, mh.to)
-		}
-		_ = f.SetCellValue(sheet, mh.from, mh.val)
-		_ = f.SetCellStyle(sheet, mh.from, mh.to, st.HeaderStyle)
-	}
-
 	subHeaders := map[string]string{
 		"B10": "START", "C10": "END",
 		"E10": "Present", "F10": "Sick", "G10": "Business Trip",
 		"H10": "Permit", "I10": "Vacation", "J10": "Not Working",
 	}
-	for cell, val := range subHeaders {
-		_ = f.SetCellValue(sheet, cell, val)
-		_ = f.SetCellStyle(sheet, cell, cell, st.HeaderGreyStyle)
-	}
+	WriteTableHeaders(f, sheet, headers, subHeaders, st)
 }
 
 func writeNTTActRow(f *excelize.File, sheet, rs string, row int, act models.DailyActivity, timeStyle int) {
@@ -110,28 +95,6 @@ func writeNTTActRow(f *excelize.File, sheet, rs string, row int, act models.Dail
 	_ = f.SetRowHeight(sheet, row, h)
 }
 
-func writeNTTHolidayRow(f *excelize.File, sheet, rs string, row int, holiday string) {
-	if holiday != "" {
-		_ = f.SetCellValue(sheet, "K"+rs, holiday)
-	} else {
-		_ = f.SetCellValue(sheet, "K"+rs, "Weekend")
-	}
-	_ = f.SetRowHeight(sheet, row, 15)
-}
-
-func writeNTTMatrixStatus(f *excelize.File, sheet, rs, status string) {
-	statusCol := map[string]string{"P": "E", "S": "F", "BT": "G", "PM": "H", "V": "I", "X": "J"}
-	statusMark := map[string]string{"P": "P", "S": "S", "BT": "BT", "PM": "PM", "V": "V", "X": "x"}
-	matrixCols := []string{"E", "F", "G", "H", "I", "J"}
-
-	for _, col := range matrixCols {
-		_ = f.SetCellValue(sheet, col+rs, "")
-	}
-	if col, ok := statusCol[status]; ok {
-		_ = f.SetCellValue(sheet, col+rs, statusMark[status])
-	}
-}
-
 func writeNTTSingleDayRow(f *excelize.File, sheet string, in GenerationInput, day int, byDay map[int]models.DailyActivity, st *BuilderStyles) {
 	row := 11 + (day - 1)
 	rs := fmt.Sprintf("%d", row)
@@ -143,40 +106,18 @@ func writeNTTSingleDayRow(f *excelize.File, sheet string, in GenerationInput, da
 		return
 	}
 
-	date := time.Date(in.Year, time.Month(in.Month), day, 0, 0, 0, 0, time.UTC)
-	isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
-	holiday := in.Holidays[day]
-	act, hasAct := byDay[day]
-	isHolidayOrWeekend := isWeekend || holiday != ""
-
-	centerStyle := st.DataCenterStyle
-	centerWrapStyle := st.DataCenterWrapStyle
-	dateStyle := st.DateStyle
-	timeStyle := st.TimeStyle
-	if isHolidayOrWeekend {
-		centerStyle = st.GreyCenterStyle
-		centerWrapStyle = st.GreyCenterWrapStyle
-		dateStyle = st.GreyDateStyle
-		timeStyle = st.GreyTimeStyle
-	}
-
-	for _, col := range allCols {
-		_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
-	}
-	_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, centerWrapStyle)
-
-	_ = f.SetCellValue(sheet, "A"+rs, date)
-	_ = f.SetCellStyle(sheet, "A"+rs, "A"+rs, dateStyle)
+	dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
+	ApplyDayRowStyles(f, sheet, "A", rs, allCols, []string{"K"}, dsc)
 
 	status := ""
-	if hasAct {
-		status = strings.ToUpper(strings.TrimSpace(act.Status))
-		writeNTTActRow(f, sheet, rs, row, act, timeStyle)
-	} else if isHolidayOrWeekend {
-		writeNTTHolidayRow(f, sheet, rs, row, holiday)
+	if dsc.HasActivity {
+		status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+		writeNTTActRow(f, sheet, rs, row, dsc.Activity, dsc.TimeStyle)
+	} else if dsc.IsHolidayOrWeekend {
+		WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
 	}
 
-	writeNTTMatrixStatus(f, sheet, rs, status)
+	WriteAttendanceMatrixStatus(f, sheet, rs, status)
 }
 
 func writeNTTDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
@@ -238,18 +179,10 @@ func writeNTTProjectSummary(f *excelize.File, sheet string, st *BuilderStyles) {
 	_ = f.SetCellValue(sheet, "B46", "P24015 - BNI Direct")
 	_ = f.SetCellStyle(sheet, "B46", "D46", st.DataLeftStyle)
 
-	_ = f.SetCellFormula(sheet, "E46", "E42")
-	_ = f.SetCellStyle(sheet, "E46", "E46", st.DataCenterStyle)
-	_ = f.SetCellFormula(sheet, "F46", "F42")
-	_ = f.SetCellStyle(sheet, "F46", "F46", st.DataCenterStyle)
-	_ = f.SetCellFormula(sheet, "G46", "G42")
-	_ = f.SetCellStyle(sheet, "G46", "G46", st.DataCenterStyle)
-	_ = f.SetCellFormula(sheet, "H46", "H42")
-	_ = f.SetCellStyle(sheet, "H46", "H46", st.DataCenterStyle)
-	_ = f.SetCellFormula(sheet, "I46", "I42")
-	_ = f.SetCellStyle(sheet, "I46", "I46", st.DataCenterStyle)
-	_ = f.SetCellFormula(sheet, "J46", "J42")
-	_ = f.SetCellStyle(sheet, "J46", "J46", st.DataCenterStyle)
+	for _, col := range []string{"E", "F", "G", "H", "I", "J"} {
+		_ = f.SetCellFormula(sheet, col+"46", col+"42")
+		_ = f.SetCellStyle(sheet, col+"46", col+"46", st.DataCenterStyle)
+	}
 	_ = f.SetCellFormula(sheet, "K46", "SUM(E46:J46)")
 	_ = f.SetCellStyle(sheet, "K46", "K46", st.BoldCenterStyle)
 	_ = f.SetCellValue(sheet, "L46", "In Progress")
@@ -290,6 +223,11 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 
 	const sheet = "Timesheet"
 	_ = f.SetSheetName(f.GetSheetName(0), sheet)
+	userName := ""
+	if in.User != nil {
+		userName = in.User.Name
+	}
+	SetWorkbookProperties(f, "Timesheet NTT", userName)
 
 	st, err := NewBuilderStyles(f)
 	if err != nil {

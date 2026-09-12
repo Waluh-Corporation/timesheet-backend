@@ -83,41 +83,26 @@ func writeMIIMetadata(f *excelize.File, sheet string, in GenerationInput, st *Bu
 }
 
 func writeMIIHeaders(f *excelize.File, sheet string, st *BuilderStyles) {
-	type colHeader struct {
-		from, to string
-		val      string
+	headers := []HeaderColumn{
+		{From: "A7", To: "A8", Val: "DATE"},
+		{From: "B7", To: "C7", Val: "WORKING HOUR"},
+		{From: "D7", To: "D8", Val: "TOTAL HOUR"},
+		{From: "E7", To: "J7", Val: "STATUS  ATTENDANCE "},
+		{From: "K7", To: "K8", Val: "ACTIVITY / REMARK"},
+		{From: "L7", To: "L8", Val: "Project Name"},
+		{From: "M7", To: "M8", Val: "Project ID"},
+		{From: "N7", To: "N8", Val: "Aplikasi Terdampak"},
+		{From: "O7", To: "O8", Val: "AIP Fitur"},
+		{From: "P7", To: "P8", Val: "Divisi"},
+		{From: "Q7", To: "Q8", Val: "Departement"},
+		{From: "R7", To: "R8", Val: "Sub Departement"},
 	}
-	mergedHeaders := []colHeader{
-		{"A7", "A8", "DATE"},
-		{"B7", "C7", "WORKING HOUR"},
-		{"D7", "D8", "TOTAL HOUR"},
-		{"E7", "J7", "STATUS  ATTENDANCE "},
-		{"K7", "K8", "ACTIVITY / REMARK"},
-		{"L7", "L8", "Project Name"},
-		{"M7", "M8", "Project ID"},
-		{"N7", "N8", "Aplikasi Terdampak"},
-		{"O7", "O8", "AIP Fitur"},
-		{"P7", "P8", "Divisi"},
-		{"Q7", "Q8", "Departement"},
-		{"R7", "R8", "Sub Departement"},
-	}
-	for _, mh := range mergedHeaders {
-		if mh.from != mh.to {
-			_ = f.MergeCell(sheet, mh.from, mh.to)
-		}
-		_ = f.SetCellValue(sheet, mh.from, mh.val)
-		_ = f.SetCellStyle(sheet, mh.from, mh.to, st.HeaderStyle)
-	}
-
 	subHeaders := map[string]string{
 		"B8": "START", "C8": "END",
 		"E8": "Present", "F8": "Sick ", "G8": "Business Trip",
 		"H8": "Permit", "I8": "Vacation", "J8": "Not Working",
 	}
-	for cell, val := range subHeaders {
-		_ = f.SetCellValue(sheet, cell, val)
-		_ = f.SetCellStyle(sheet, cell, cell, st.HeaderGreyStyle)
-	}
+	WriteTableHeaders(f, sheet, headers, subHeaders, st)
 }
 
 func writeMIIActRow(f *excelize.File, sheet, rs string, row int, act models.DailyActivity, timeStyle int) {
@@ -138,28 +123,6 @@ func writeMIIActRow(f *excelize.File, sheet, rs string, row int, act models.Dail
 	_ = f.SetRowHeight(sheet, row, h)
 }
 
-func writeMIIHolidayRow(f *excelize.File, sheet, rs string, row int, holiday string) {
-	if holiday != "" {
-		_ = f.SetCellValue(sheet, "K"+rs, holiday)
-	} else {
-		_ = f.SetCellValue(sheet, "K"+rs, "Weekend")
-	}
-	_ = f.SetRowHeight(sheet, row, 15)
-}
-
-func writeMIIMatrixStatus(f *excelize.File, sheet, rs, status string) {
-	statusCol := map[string]string{"P": "E", "S": "F", "BT": "G", "PM": "H", "V": "I", "X": "J"}
-	statusMark := map[string]string{"P": "P", "S": "S", "BT": "BT", "PM": "PM", "V": "V", "X": "x"}
-	matrixCols := []string{"E", "F", "G", "H", "I", "J"}
-
-	for _, col := range matrixCols {
-		_ = f.SetCellValue(sheet, col+rs, "")
-	}
-	if col, ok := statusCol[status]; ok {
-		_ = f.SetCellValue(sheet, col+rs, statusMark[status])
-	}
-}
-
 func writeMIISingleDayRow(f *excelize.File, sheet string, in GenerationInput, day int, byDay map[int]models.DailyActivity, st *BuilderStyles) {
 	row := 9 + (day - 1)
 	rs := fmt.Sprintf("%d", row)
@@ -171,41 +134,18 @@ func writeMIISingleDayRow(f *excelize.File, sheet string, in GenerationInput, da
 		return
 	}
 
-	date := time.Date(in.Year, time.Month(in.Month), day, 0, 0, 0, 0, time.UTC)
-	isWeekend := date.Weekday() == time.Saturday || date.Weekday() == time.Sunday
-	holiday := in.Holidays[day]
-	act, hasAct := byDay[day]
-	isHolidayOrWeekend := isWeekend || holiday != ""
-
-	centerStyle := st.DataCenterStyle
-	centerWrapStyle := st.DataCenterWrapStyle
-	dateStyle := st.DateStyle
-	timeStyle := st.TimeStyle
-	if isHolidayOrWeekend {
-		centerStyle = st.GreyCenterStyle
-		centerWrapStyle = st.GreyCenterWrapStyle
-		dateStyle = st.GreyDateStyle
-		timeStyle = st.GreyTimeStyle
-	}
-
-	for _, col := range allCols {
-		_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
-	}
-	_ = f.SetCellStyle(sheet, "K"+rs, "K"+rs, centerWrapStyle)
-	_ = f.SetCellStyle(sheet, "Q"+rs, "Q"+rs, centerWrapStyle)
-
-	_ = f.SetCellValue(sheet, "A"+rs, date)
-	_ = f.SetCellStyle(sheet, "A"+rs, "A"+rs, dateStyle)
+	dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
+	ApplyDayRowStyles(f, sheet, "A", rs, allCols, []string{"K", "Q"}, dsc)
 
 	status := ""
-	if hasAct {
-		status = strings.ToUpper(strings.TrimSpace(act.Status))
-		writeMIIActRow(f, sheet, rs, row, act, timeStyle)
-	} else if isHolidayOrWeekend {
-		writeMIIHolidayRow(f, sheet, rs, row, holiday)
+	if dsc.HasActivity {
+		status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+		writeMIIActRow(f, sheet, rs, row, dsc.Activity, dsc.TimeStyle)
+	} else if dsc.IsHolidayOrWeekend {
+		WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
 	}
 
-	writeMIIMatrixStatus(f, sheet, rs, status)
+	WriteAttendanceMatrixStatus(f, sheet, rs, status)
 }
 
 func writeMIIDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
@@ -254,6 +194,11 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 
 	const sheet = "Sheet1"
 	_ = f.SetSheetName(f.GetSheetName(0), sheet)
+	userName := ""
+	if in.User != nil {
+		userName = in.User.Name
+	}
+	SetWorkbookProperties(f, "Timesheet MII", userName)
 
 	st, err := NewBuilderStyles(f)
 	if err != nil {
