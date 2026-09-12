@@ -8,22 +8,12 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"timesheet-backend/assets"
+	"timesheet-backend/models"
 )
 
-// buildNTTWorkbook generates the NTT timesheet Excel document purely from code.
-func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
-	f := excelize.NewFile()
-	defer func() { _ = f.Close() }()
+const nttDatePrefix = "DATE: "
 
-	const sheet = "Timesheet"
-	_ = f.SetSheetName(f.GetSheetName(0), sheet)
-
-	st, err := NewBuilderStyles(f)
-	if err != nil {
-		return nil, fmt.Errorf("create builder styles: %w", err)
-	}
-
-	// 1. Column Widths
+func setNTTColWidths(f *excelize.File, sheet string) {
 	widths := map[string]float64{
 		"A": 12, "B": 8, "C": 8, "D": 11,
 		"E": 8, "F": 8, "G": 13, "H": 8, "I": 8, "J": 12,
@@ -32,13 +22,9 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 	for col, w := range widths {
 		_ = f.SetColWidth(sheet, col, col, w)
 	}
+}
 
-	// 2. Attach Header Logo (N2 - top right header)
-	if len(assets.NTTLogo) > 0 {
-		_ = addHeaderLogo(f, sheet, "N2", assets.NTTLogo, ".png", 0.6, 0.6)
-	}
-
-	// 3. Metadata Header (Rows 4-8)
+func writeNTTMetadata(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	setMeta := func(cellLabel, label, cellVal, val string) {
 		_ = f.SetCellValue(sheet, cellLabel, label)
 		_ = f.SetCellStyle(sheet, cellLabel, cellLabel, st.MetaLabelStyle)
@@ -64,8 +50,9 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 
 	setMeta("A8", "PERIODE", "B8", ": "+periodStr)
 	_ = f.SetCellValue(sheet, "I8", "P = Present; S = Sick;  V = Vacation; BT = Business Trip; PM = Permit; X = Not Working Anymore")
+}
 
-	// 4. Table Headers (Rows 9-10)
+func writeNTTHeaders(f *excelize.File, sheet string, st *BuilderStyles) {
 	type colHeader struct {
 		from, to string
 		val      string
@@ -97,8 +84,42 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellValue(sheet, cell, val)
 		_ = f.SetCellStyle(sheet, cell, cell, st.HeaderGreyStyle)
 	}
+}
 
-	// 5. Daily Rows (Days 1 to 31)
+func writeNTTActRow(f *excelize.File, sheet, rs string, row int, act models.DailyActivity, timeStyle int) {
+	hasStart, hasEnd := WriteTimeCells(f, sheet, "B"+rs, "C"+rs, act.StartTime, act.EndTime, timeStyle)
+	if hasStart && hasEnd {
+		_ = f.SetCellFormula(sheet, "D"+rs, fmt.Sprintf("IF(C%s>B%s,(C%s-B%s),C%s-B%s+1)", rs, rs, rs, rs, rs, rs))
+		_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, timeStyle)
+	}
+
+	_ = f.SetCellValue(sheet, "K"+rs, act.Activity)
+	projName := act.GetProjectName()
+	if projName == "" {
+		projName = "BNI Direct"
+	}
+	projCode := act.GetProjectCode()
+	if projCode == "" {
+		projCode = "P24015"
+	}
+	_ = f.SetCellValue(sheet, "L"+rs, projName)
+	_ = f.SetCellValue(sheet, "M"+rs, projCode)
+	_ = f.SetCellValue(sheet, "N"+rs, act.GetAppImpacted())
+
+	h := calculateRowHeight(act.Activity, projName, projCode, act.GetAppImpacted(), "", "")
+	_ = f.SetRowHeight(sheet, row, h)
+}
+
+func writeNTTHolidayRow(f *excelize.File, sheet, rs string, row int, holiday string) {
+	if holiday != "" {
+		_ = f.SetCellValue(sheet, "K"+rs, holiday)
+	} else {
+		_ = f.SetCellValue(sheet, "K"+rs, "Weekend")
+	}
+	_ = f.SetRowHeight(sheet, row, 15)
+}
+
+func writeNTTDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	byDay := BuildByDayMap(in.Activities)
 
 	statusCol := map[string]string{"P": "E", "S": "F", "BT": "G", "PM": "H", "V": "I", "X": "J"}
@@ -147,36 +168,9 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 		status := ""
 		if hasAct {
 			status = strings.ToUpper(strings.TrimSpace(act.Status))
-			hasStart, hasEnd := WriteTimeCells(f, sheet, "B"+rs, "C"+rs, act.StartTime, act.EndTime, timeStyle)
-
-			// Formula NTT: IF(C11>B11,(C11-B11),C11-B11+1)
-			if hasStart && hasEnd {
-				_ = f.SetCellFormula(sheet, "D"+rs, fmt.Sprintf("IF(C%s>B%s,(C%s-B%s),C%s-B%s+1)", rs, rs, rs, rs, rs, rs))
-				_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, timeStyle)
-			}
-
-			_ = f.SetCellValue(sheet, "K"+rs, act.Activity)
-			projName := act.GetProjectName()
-			if projName == "" {
-				projName = "BNI Direct"
-			}
-			projCode := act.GetProjectCode()
-			if projCode == "" {
-				projCode = "P24015"
-			}
-			_ = f.SetCellValue(sheet, "L"+rs, projName)
-			_ = f.SetCellValue(sheet, "M"+rs, projCode)
-			_ = f.SetCellValue(sheet, "N"+rs, act.GetAppImpacted())
-
-			h := calculateRowHeight(act.Activity, projName, projCode, act.GetAppImpacted(), "", "")
-			_ = f.SetRowHeight(sheet, row, h)
+			writeNTTActRow(f, sheet, rs, row, act, timeStyle)
 		} else if isHolidayOrWeekend {
-			if holiday != "" {
-				_ = f.SetCellValue(sheet, "K"+rs, holiday)
-			} else {
-				_ = f.SetCellValue(sheet, "K"+rs, "Weekend")
-			}
-			_ = f.SetRowHeight(sheet, row, 15)
+			writeNTTHolidayRow(f, sheet, rs, row, holiday)
 		}
 
 		for _, col := range matrixCols {
@@ -186,8 +180,9 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheet, col+rs, statusMark[status])
 		}
 	}
+}
 
-	// 6. Summary Row (Row 42) with COUNTA formulas
+func writeNTTProjectSummary(f *excelize.File, sheet string, st *BuilderStyles) {
 	const sumRow = "42"
 	formulas := map[string]string{
 		"E": `COUNTA(E11:E41)`,
@@ -203,7 +198,6 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
 	}
 
-	// 7. Project Summary Table (Rows 44-51)
 	_ = f.SetCellValue(sheet, "A44", "No.")
 	_ = f.SetCellStyle(sheet, "A44", "A45", st.HeaderStyle)
 	_ = f.MergeCell(sheet, "A44", "A45")
@@ -234,14 +228,12 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 	_ = f.SetCellValue(sheet, "L44", "Status (CR done/ in progress)")
 	_ = f.SetCellStyle(sheet, "L44", "L45", st.HeaderStyle)
 
-	// Sample 1 project line at Row 46
 	_ = f.SetCellValue(sheet, "A46", 1)
 	_ = f.SetCellStyle(sheet, "A46", "A46", st.DataCenterStyle)
 	_ = f.MergeCell(sheet, "B46", "D46")
 	_ = f.SetCellValue(sheet, "B46", "P24015 - BNI Direct")
 	_ = f.SetCellStyle(sheet, "B46", "D46", st.DataLeftStyle)
 
-	// Pull summary counts to Row 46
 	_ = f.SetCellFormula(sheet, "E46", "E42")
 	_ = f.SetCellStyle(sheet, "E46", "E46", st.DataCenterStyle)
 	_ = f.SetCellFormula(sheet, "F46", "F42")
@@ -259,7 +251,6 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 	_ = f.SetCellValue(sheet, "L46", "In Progress")
 	_ = f.SetCellStyle(sheet, "L46", "L46", st.DataCenterStyle)
 
-	// TOTAL row at Row 51
 	_ = f.MergeCell(sheet, "A51", "D51")
 	_ = f.SetCellValue(sheet, "A51", "TOTAL")
 	_ = f.SetCellStyle(sheet, "A51", "D51", st.BoldCenterStyle)
@@ -269,23 +260,49 @@ func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellFormula(sheet, cell, fmt.Sprintf("SUM(%s46:%s50)", col, col))
 		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
 	}
+}
 
-	// 8. Signatures Area (Rows 53-58) matching official NTT template
+func writeNTTSignatures(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	tlName, dhName := ExtractApprovers(in.Overtimes)
 
 	WriteSignaturesLayout(f, sheet, 53, 3, []SignatureParty{
-		{StartCol: "B", EndCol: "E", Title: "TTD PEGAWAI,", Name: in.User.Name, DatePrefix: "DATE: "},
-		{StartCol: "F", EndCol: "I", Title: "DIPERIKSA OLEH,", Name: tlName, DatePrefix: "DATE: "},
-		{StartCol: "J", EndCol: "L", Title: "DISETUJUI OLEH,", Name: dhName, DatePrefix: "DATE: "},
+		{StartCol: "B", EndCol: "E", Title: "TTD PEGAWAI,", Name: in.User.Name, DatePrefix: nttDatePrefix},
+		{StartCol: "F", EndCol: "I", Title: "DIPERIKSA OLEH,", Name: tlName, DatePrefix: nttDatePrefix},
+		{StartCol: "J", EndCol: "L", Title: "DISETUJUI OLEH,", Name: dhName, DatePrefix: nttDatePrefix},
 	}, st)
 
-	// Set row heights for visual balance
 	_ = f.SetRowHeight(sheet, 53, 20)
 	_ = f.SetRowHeight(sheet, 54, 16)
 	_ = f.SetRowHeight(sheet, 55, 16)
 	_ = f.SetRowHeight(sheet, 56, 18)
 	_ = f.SetRowHeight(sheet, 57, 22)
 	_ = f.SetRowHeight(sheet, 58, 18)
+}
+
+// buildNTTWorkbook generates the NTT timesheet Excel document purely from code.
+func buildNTTWorkbook(in GenerationInput) ([]byte, error) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+
+	const sheet = "Timesheet"
+	_ = f.SetSheetName(f.GetSheetName(0), sheet)
+
+	st, err := NewBuilderStyles(f)
+	if err != nil {
+		return nil, fmt.Errorf("create builder styles: %w", err)
+	}
+
+	setNTTColWidths(f, sheet)
+
+	if len(assets.NTTLogo) > 0 {
+		_ = addHeaderLogo(f, sheet, "N2", assets.NTTLogo, ".png", 0.6, 0.6)
+	}
+
+	writeNTTMetadata(f, sheet, in, st)
+	writeNTTHeaders(f, sheet, st)
+	writeNTTDailyRows(f, sheet, in, st)
+	writeNTTProjectSummary(f, sheet, st)
+	writeNTTSignatures(f, sheet, in, st)
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {

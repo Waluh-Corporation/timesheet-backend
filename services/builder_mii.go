@@ -8,6 +8,7 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"timesheet-backend/assets"
+	"timesheet-backend/models"
 )
 
 const (
@@ -17,20 +18,7 @@ const (
 	miiDepartment  = "Wholesale Channel and Service Delivery"
 )
 
-// buildMIIWorkbook generates the MII timesheet Excel document purely from code.
-func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
-	f := excelize.NewFile()
-	defer func() { _ = f.Close() }()
-
-	const sheet = "Sheet1"
-	_ = f.SetSheetName(f.GetSheetName(0), sheet)
-
-	st, err := NewBuilderStyles(f)
-	if err != nil {
-		return nil, fmt.Errorf("create builder styles: %w", err)
-	}
-
-	// 1. Column Widths
+func setMIIColWidths(f *excelize.File, sheet string) {
 	widths := map[string]float64{
 		"A": 12, "B": 8, "C": 8, "D": 11,
 		"E": 8, "F": 8, "G": 13, "H": 8, "I": 8, "J": 12,
@@ -39,13 +27,9 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	for col, w := range widths {
 		_ = f.SetColWidth(sheet, col, col, w)
 	}
+}
 
-	// 2. Attach Header Logo (K1 - top right header: 2.5 cm height x 3.52 cm width)
-	if len(assets.MIILogo) > 0 {
-		_ = addHeaderLogoWithCM(f, sheet, "K1", assets.MIILogo, ".png", 3.52, 2.5)
-	}
-
-	// 3. Metadata Header (Rows 1-6)
+func writeMIIMetadata(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	setMeta := func(cellLabel, label, cellVal, val string) {
 		_ = f.SetCellValue(sheet, cellLabel, label)
 		_ = f.SetCellStyle(sheet, cellLabel, cellLabel, st.MetaLabelStyle)
@@ -96,8 +80,9 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 	setMeta("A6", "PERIODE", "C6", ": "+periodStr)
 
 	_ = f.SetCellValue(sheet, "G6", "P = Present; S = Sick;  V = Vacation; BT = Business Trip; PM = Permit; X = Not Working Anymore")
+}
 
-	// 4. Table Headers (Rows 7-8)
+func writeMIIHeaders(f *excelize.File, sheet string, st *BuilderStyles) {
 	type colHeader struct {
 		from, to string
 		val      string
@@ -133,8 +118,36 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellValue(sheet, cell, val)
 		_ = f.SetCellStyle(sheet, cell, cell, st.HeaderGreyStyle)
 	}
+}
 
-	// 5. Daily Rows (Days 1 to 31)
+func writeMIIActRow(f *excelize.File, sheet, rs string, row int, act models.DailyActivity, timeStyle int) {
+	hasStart, hasEnd := WriteTimeCells(f, sheet, "B"+rs, "C"+rs, act.StartTime, act.EndTime, timeStyle)
+	if hasStart && hasEnd {
+		_ = f.SetCellFormula(sheet, "D"+rs, fmt.Sprintf("C%s-B%s", rs, rs))
+		_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, timeStyle)
+	}
+
+	_ = f.SetCellValue(sheet, "K"+rs, act.Activity)
+	_ = f.SetCellValue(sheet, "L"+rs, miiProjectName)
+	_ = f.SetCellValue(sheet, "M"+rs, miiProjectID)
+	_ = f.SetCellValue(sheet, "N"+rs, NormalizeMIIAppImpacted(act.GetAppImpacted()))
+	_ = f.SetCellValue(sheet, "P"+rs, miiDivision)
+	_ = f.SetCellValue(sheet, "Q"+rs, miiDepartment)
+
+	h := calculateRowHeight(act.Activity, miiProjectName, miiProjectID, act.GetAppImpacted(), miiDivision, miiDepartment)
+	_ = f.SetRowHeight(sheet, row, h)
+}
+
+func writeMIIHolidayRow(f *excelize.File, sheet, rs string, row int, holiday string) {
+	if holiday != "" {
+		_ = f.SetCellValue(sheet, "K"+rs, holiday)
+	} else {
+		_ = f.SetCellValue(sheet, "K"+rs, "Weekend")
+	}
+	_ = f.SetRowHeight(sheet, row, 15)
+}
+
+func writeMIIDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	byDay := BuildByDayMap(in.Activities)
 
 	statusCol := map[string]string{"P": "E", "S": "F", "BT": "G", "PM": "H", "V": "I", "X": "J"}
@@ -172,7 +185,6 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 			timeStyle = st.GreyTimeStyle
 		}
 
-		// Border & background initialization across all columns
 		for _, col := range allCols {
 			_ = f.SetCellStyle(sheet, col+rs, col+rs, centerStyle)
 		}
@@ -185,33 +197,11 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		status := ""
 		if hasAct {
 			status = strings.ToUpper(strings.TrimSpace(act.Status))
-			hasStart, hasEnd := WriteTimeCells(f, sheet, "B"+rs, "C"+rs, act.StartTime, act.EndTime, timeStyle)
-
-			// Formula total hour = C - B
-			if hasStart && hasEnd {
-				_ = f.SetCellFormula(sheet, "D"+rs, fmt.Sprintf("C%s-B%s", rs, rs))
-				_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, timeStyle)
-			}
-
-			_ = f.SetCellValue(sheet, "K"+rs, act.Activity)
-			_ = f.SetCellValue(sheet, "L"+rs, miiProjectName)
-			_ = f.SetCellValue(sheet, "M"+rs, miiProjectID)
-			_ = f.SetCellValue(sheet, "N"+rs, NormalizeMIIAppImpacted(act.GetAppImpacted()))
-			_ = f.SetCellValue(sheet, "P"+rs, miiDivision)
-			_ = f.SetCellValue(sheet, "Q"+rs, miiDepartment)
-
-			h := calculateRowHeight(act.Activity, miiProjectName, miiProjectID, act.GetAppImpacted(), miiDivision, miiDepartment)
-			_ = f.SetRowHeight(sheet, row, h)
+			writeMIIActRow(f, sheet, rs, row, act, timeStyle)
 		} else if isHolidayOrWeekend {
-			if holiday != "" {
-				_ = f.SetCellValue(sheet, "K"+rs, holiday)
-			} else {
-				_ = f.SetCellValue(sheet, "K"+rs, "Weekend")
-			}
-			_ = f.SetRowHeight(sheet, row, 15)
+			writeMIIHolidayRow(f, sheet, rs, row, holiday)
 		}
 
-		// Clear matrix row before marking
 		for _, col := range matrixCols {
 			_ = f.SetCellValue(sheet, col+rs, "")
 		}
@@ -219,8 +209,9 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheet, col+rs, statusMark[status])
 		}
 	}
+}
 
-	// 6. Summary Row (Row 40) with COUNTIF formulas
+func writeMIISummaryAndSignatures(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	const sumRow = "40"
 	formulas := map[string]string{
 		"E": `COUNTIF(E9:E39,"P")`,
@@ -236,22 +227,45 @@ func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
 	}
 
-	// 7. Signature Area (Rows 42-47) matching official MII template
 	tlName, dhName := ExtractApprovers(in.Overtimes)
 
 	WriteSignaturesLayout(f, sheet, 42, 3, []SignatureParty{
-		{StartCol: "A", EndCol: "C", Title: "TTD PEGAWAI,", Name: in.User.Name, DatePrefix: "DATE : "},
-		{StartCol: "D", EndCol: "F", Title: "DIPERIKSA OLEH,", Name: tlName, DatePrefix: "DATE : "},
-		{StartCol: "G", EndCol: "J", Title: "DISETUJUI OLEH,", Name: dhName, DatePrefix: "DATE : "},
+		{StartCol: "A", EndCol: "C", Title: "TTD PEGAWAI,", Name: in.User.Name, DatePrefix: DatePrefixUpper},
+		{StartCol: "D", EndCol: "F", Title: "DIPERIKSA OLEH,", Name: tlName, DatePrefix: DatePrefixUpper},
+		{StartCol: "G", EndCol: "J", Title: "DISETUJUI OLEH,", Name: dhName, DatePrefix: DatePrefixUpper},
 	}, st)
 
-	// Set row heights for visual balance
 	_ = f.SetRowHeight(sheet, 42, 20)
 	_ = f.SetRowHeight(sheet, 43, 16)
 	_ = f.SetRowHeight(sheet, 44, 16)
 	_ = f.SetRowHeight(sheet, 45, 18)
 	_ = f.SetRowHeight(sheet, 46, 22)
 	_ = f.SetRowHeight(sheet, 47, 18)
+}
+
+// buildMIIWorkbook generates the MII timesheet Excel document purely from code.
+func buildMIIWorkbook(in GenerationInput) ([]byte, error) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+
+	const sheet = "Sheet1"
+	_ = f.SetSheetName(f.GetSheetName(0), sheet)
+
+	st, err := NewBuilderStyles(f)
+	if err != nil {
+		return nil, fmt.Errorf("create builder styles: %w", err)
+	}
+
+	setMIIColWidths(f, sheet)
+
+	if len(assets.MIILogo) > 0 {
+		_ = addHeaderLogoWithCM(f, sheet, "K1", assets.MIILogo, ".png", 3.52, 2.5)
+	}
+
+	writeMIIMetadata(f, sheet, in, st)
+	writeMIIHeaders(f, sheet, st)
+	writeMIIDailyRows(f, sheet, in, st)
+	writeMIISummaryAndSignatures(f, sheet, in, st)
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {

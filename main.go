@@ -260,6 +260,23 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	}
 }
 
+const errNotFoundMsg = "not found"
+
+// tryFiles returns the first existing, non-directory candidate.
+func tryFiles(candidates ...string) (string, bool) {
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && !info.IsDir() {
+			return c, true
+		}
+	}
+	return "", false
+}
+
+// isPathWithinRoot checks whether target is contained within the root directory.
+func isPathWithinRoot(root, target string) bool {
+	return target == root || strings.HasPrefix(target, root+string(os.PathSeparator))
+}
+
 // spaHandler serves the statically-exported Next.js site (Next `output: export`)
 // from the Go binary. It resolves a request path to an on-disk file, trying the
 // exact file, then "<path>.html" (Next exports routes like /login -> login.html),
@@ -269,20 +286,10 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 func spaHandler(staticRoot string) gin.HandlerFunc {
 	root := filepath.Clean(staticRoot)
 
-	// tryFiles returns the first existing, non-directory candidate.
-	tryFiles := func(candidates ...string) (string, bool) {
-		for _, c := range candidates {
-			if info, err := os.Stat(c); err == nil && !info.IsDir() {
-				return c, true
-			}
-		}
-		return "", false
-	}
-
 	return func(c *gin.Context) {
 		// Never serve HTML for an unmatched API or Swagger route.
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.HasPrefix(c.Request.URL.Path, "/swagger/") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
 			return
 		}
 
@@ -290,8 +297,8 @@ func spaHandler(staticRoot string) gin.HandlerFunc {
 		// subsequent prefix check is defense-in-depth against escaping the root.
 		rel := filepath.Clean("/" + c.Request.URL.Path)
 		target := filepath.Join(root, filepath.FromSlash(rel))
-		if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		if !isPathWithinRoot(root, target) {
+			c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
 			return
 		}
 
@@ -306,6 +313,6 @@ func spaHandler(staticRoot string) gin.HandlerFunc {
 			c.File(index)
 			return
 		}
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
 	}
 }

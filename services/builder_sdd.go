@@ -8,6 +8,7 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"timesheet-backend/assets"
+	"timesheet-backend/models"
 )
 
 // indonesianMonth returns Indonesian month names for SDD.
@@ -22,20 +23,9 @@ func indonesianMonth(m int) string {
 	return time.Month(m).String()
 }
 
-// buildSDDWorkbook generates the SDD timesheet Excel document purely from code.
-func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
-	f := excelize.NewFile()
-	defer func() { _ = f.Close() }()
+const sddNamePrefix = "Nama : "
 
-	sheet := indonesianMonth(in.Month)
-	_ = f.SetSheetName(f.GetSheetName(0), sheet)
-
-	st, err := NewBuilderStyles(f)
-	if err != nil {
-		return nil, fmt.Errorf("create builder styles: %w", err)
-	}
-
-	// 1. Column Widths
+func setSDDColWidths(f *excelize.File, sheet string) {
 	widths := map[string]float64{
 		"A": 6, "B": 13, "C": 12, "D": 12, "E": 14,
 		"F": 8, "G": 8, "H": 8, "I": 8, "J": 8,
@@ -44,20 +34,15 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 	for col, w := range widths {
 		_ = f.SetColWidth(sheet, col, col, w)
 	}
+}
 
-	// 2. Attach Header Logo (A2 - top left header)
-	if len(assets.SDDLogo) > 0 {
-		_ = addHeaderLogo(f, sheet, "A2", assets.SDDLogo, ".jpg", 0.6, 0.6)
-	}
-
-	// 3. Title (B1)
+func writeSDDMetadata(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	titleStyle, _ := f.NewStyle(&excelize.Style{
 		Font: &excelize.Font{Bold: true, Size: 14, Family: "Calibri"},
 	})
 	_ = f.SetCellValue(sheet, "B1", "ABSENSI MANUAL")
 	_ = f.SetCellStyle(sheet, "B1", "B1", titleStyle)
 
-	// 4. Metadata (Rows 2-7)
 	setMeta := func(cellLabel, label, cellVal, val string) {
 		_ = f.SetCellValue(sheet, cellLabel, label)
 		_ = f.SetCellStyle(sheet, cellLabel, cellLabel, st.MetaLabelStyle)
@@ -85,7 +70,6 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 	setMeta("D6", "KELOMPOK", "F6", ": "+grp)
 	setMeta("D7", "PERIODE ", "F7", fmt.Sprintf(": %s %d", indonesianMonth(in.Month), in.Year))
 
-	// 5. Legend (Row 9)
 	legends := map[string]string{
 		"F9": "H : Hadir", "G9": "C = Cuti", "H9": "I=Izin", "I9": "S = Sakit", "J9": "L = Lembur",
 	}
@@ -93,8 +77,9 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellValue(sheet, cell, leg)
 		_ = f.SetCellStyle(sheet, cell, cell, st.BoldLeftStyle)
 	}
+}
 
-	// 6. Table Headers (Rows 10-11)
+func writeSDDHeaders(f *excelize.File, sheet string, st *BuilderStyles) {
 	type colHeader struct {
 		from, to string
 		val      string
@@ -126,8 +111,46 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellValue(sheet, cell, val)
 		_ = f.SetCellStyle(sheet, cell, cell, st.HeaderGreyStyle)
 	}
+}
 
-	// 7. Daily Rows (Days 1 to 31, starting Row 12)
+func writeSDDActRow(f *excelize.File, sheet, rs string, row int, act models.DailyActivity, timeStyle int) {
+	hasStart, hasEnd := WriteTimeCells(f, sheet, "C"+rs, "D"+rs, act.StartTime, act.EndTime, timeStyle)
+	if hasStart && hasEnd {
+		_ = f.SetCellFormula(sheet, "E"+rs, fmt.Sprintf("D%s-C%s", rs, rs))
+		_ = f.SetCellStyle(sheet, "E"+rs, "E"+rs, timeStyle)
+	}
+
+	switch strings.ToUpper(strings.TrimSpace(act.Status)) {
+	case "H", "P", "HADIR", "PRESENT":
+		_ = f.SetCellValue(sheet, "F"+rs, "v")
+	case "C", "CUTI", "V", "VACATION":
+		_ = f.SetCellValue(sheet, "G"+rs, "v")
+	case "I", "IZIN", "PM", "PERMIT":
+		_ = f.SetCellValue(sheet, "H"+rs, "v")
+	case "S", "SAKIT", "SICK":
+		_ = f.SetCellValue(sheet, "I"+rs, "v")
+	case "L", "LEMBUR":
+		_ = f.SetCellValue(sheet, "J"+rs, "v")
+	}
+
+	_ = f.SetCellValue(sheet, "K"+rs, act.GetProjectName())
+	_ = f.SetCellValue(sheet, "L"+rs, act.GetProjectCode())
+	_ = f.SetCellValue(sheet, "N"+rs, act.Activity)
+
+	h := calculateRowHeight(act.Activity, act.GetProjectName(), act.GetProjectCode(), "", "", "")
+	_ = f.SetRowHeight(sheet, row, h)
+}
+
+func writeSDDHolidayRow(f *excelize.File, sheet, rs string, row int, holiday string) {
+	if holiday != "" {
+		_ = f.SetCellValue(sheet, "N"+rs, holiday)
+	} else {
+		_ = f.SetCellValue(sheet, "N"+rs, "Weekend")
+	}
+	_ = f.SetRowHeight(sheet, row, 15)
+}
+
+func writeSDDDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	byDay := BuildByDayMap(in.Activities)
 
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
@@ -171,45 +194,14 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheet, "B"+rs, "B"+rs, dateStyle)
 
 		if hasAct {
-			hasStart, hasEnd := WriteTimeCells(f, sheet, "C"+rs, "D"+rs, act.StartTime, act.EndTime, timeStyle)
-
-			// Formula total jam kerja = D - C
-			if hasStart && hasEnd {
-				_ = f.SetCellFormula(sheet, "E"+rs, fmt.Sprintf("D%s-C%s", rs, rs))
-				_ = f.SetCellStyle(sheet, "E"+rs, "E"+rs, timeStyle)
-			}
-
-			// Mapping Status SDD: F=Hadir, G=Cuti, H=Izin, I=Sakit, J=Lembur
-			switch strings.ToUpper(strings.TrimSpace(act.Status)) {
-			case "H", "P", "HADIR", "PRESENT":
-				_ = f.SetCellValue(sheet, "F"+rs, "v")
-			case "C", "CUTI", "V", "VACATION":
-				_ = f.SetCellValue(sheet, "G"+rs, "v")
-			case "I", "IZIN", "PM", "PERMIT":
-				_ = f.SetCellValue(sheet, "H"+rs, "v")
-			case "S", "SAKIT", "SICK":
-				_ = f.SetCellValue(sheet, "I"+rs, "v")
-			case "L", "LEMBUR":
-				_ = f.SetCellValue(sheet, "J"+rs, "v")
-			}
-
-			_ = f.SetCellValue(sheet, "K"+rs, act.GetProjectName())
-			_ = f.SetCellValue(sheet, "L"+rs, act.GetProjectCode())
-			_ = f.SetCellValue(sheet, "N"+rs, act.Activity)
-
-			h := calculateRowHeight(act.Activity, act.GetProjectName(), act.GetProjectCode(), "", "", "")
-			_ = f.SetRowHeight(sheet, row, h)
+			writeSDDActRow(f, sheet, rs, row, act, timeStyle)
 		} else if isHolidayOrWeekend {
-			if holiday != "" {
-				_ = f.SetCellValue(sheet, "N"+rs, holiday)
-			} else {
-				_ = f.SetCellValue(sheet, "N"+rs, "Weekend")
-			}
-			_ = f.SetRowHeight(sheet, row, 15)
+			writeSDDHolidayRow(f, sheet, rs, row, holiday)
 		}
 	}
+}
 
-	// 8. Summary Row (Row 43) with COUNTIF formulas
+func writeSDDSummaryAndSignatures(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
 	const sumRow = "43"
 	formulas := map[string]string{
 		"F": `COUNTIF(F12:F42,"v")`,
@@ -224,12 +216,36 @@ func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
 	}
 
-	// 9. Signatures Area (Rows 46-52) matching official SDD template
 	WriteSignaturesLayout(f, sheet, 46, 5, []SignatureParty{
-		{StartCol: "C", EndCol: "G", Title: "Pemohon", Name: in.User.Name, DatePrefix: "Nama : "},
-		{StartCol: "H", EndCol: "K", Title: "Diperiksa,", Name: "", DatePrefix: "Nama : "},
-		{StartCol: "L", EndCol: "M", Title: "Disetujui,", Name: "", DatePrefix: "Nama : "},
+		{StartCol: "C", EndCol: "G", Title: "Pemohon", Name: in.User.Name, DatePrefix: sddNamePrefix},
+		{StartCol: "H", EndCol: "K", Title: "Diperiksa,", Name: "", DatePrefix: sddNamePrefix},
+		{StartCol: "L", EndCol: "M", Title: "Disetujui,", Name: "", DatePrefix: sddNamePrefix},
 	}, st)
+}
+
+// buildSDDWorkbook generates the SDD timesheet Excel document purely from code.
+func buildSDDWorkbook(in GenerationInput) ([]byte, error) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+
+	sheet := indonesianMonth(in.Month)
+	_ = f.SetSheetName(f.GetSheetName(0), sheet)
+
+	st, err := NewBuilderStyles(f)
+	if err != nil {
+		return nil, fmt.Errorf("create builder styles: %w", err)
+	}
+
+	setSDDColWidths(f, sheet)
+
+	if len(assets.SDDLogo) > 0 {
+		_ = addHeaderLogo(f, sheet, "A2", assets.SDDLogo, ".jpg", 0.6, 0.6)
+	}
+
+	writeSDDMetadata(f, sheet, in, st)
+	writeSDDHeaders(f, sheet, st)
+	writeSDDDailyRows(f, sheet, in, st)
+	writeSDDSummaryAndSignatures(f, sheet, in, st)
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {

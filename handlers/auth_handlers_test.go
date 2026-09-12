@@ -24,20 +24,13 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		c.Request = httptest.NewRequest(http.MethodGet, "/.well-known/webauthn", nil)
 
 		srv.WebAuthnRelatedOrigins(c)
-		if w.Code != http.StatusOK {
-			t.Errorf("expected 200, got %d", w.Code)
-		}
+		assertResponseCode(t, w, http.StatusOK)
 
 		var resp map[string]interface{}
-		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("failed to decode json: %v", err)
-		}
-		data, ok := resp["data"].(map[string]interface{})
-		if !ok {
-			t.Fatalf("missing data envelope in response")
-		}
-		origins, ok := data["origins"].([]interface{})
-		if !ok || len(origins) != 2 {
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		data, _ := resp["data"].(map[string]interface{})
+		origins, _ := data["origins"].([]interface{})
+		if len(origins) != 2 {
 			t.Errorf("expected 2 origins, got %v", data["origins"])
 		}
 	})
@@ -49,9 +42,7 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		c.Request.Header.Set("Content-Type", "application/json")
 
 		srv.Login(c)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("expected 400 for empty login payload, got %d", w.Code)
-		}
+		assertResponseCode(t, w, http.StatusBadRequest)
 	})
 
 	t.Run("ForgotPassword rejects empty payload", func(t *testing.T) {
@@ -61,9 +52,7 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		c.Request.Header.Set("Content-Type", "application/json")
 
 		srv.ForgotPassword(c)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("expected 400 for empty forgot-password, got %d", w.Code)
-		}
+		assertResponseCode(t, w, http.StatusBadRequest)
 	})
 
 	t.Run("ResetPassword rejects invalid payload", func(t *testing.T) {
@@ -73,9 +62,7 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		c.Request.Header.Set("Content-Type", "application/json")
 
 		srv.ResetPassword(c)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("expected 400 for empty reset-password, got %d", w.Code)
-		}
+		assertResponseCode(t, w, http.StatusBadRequest)
 	})
 
 	t.Run("BeginPasskeyLogin without webauthn returns 500", func(t *testing.T) {
@@ -85,9 +72,7 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		c.Request.Header.Set("Content-Type", "application/json")
 
 		srv.BeginPasskeyLogin(c)
-		if w.Code != http.StatusInternalServerError {
-			t.Errorf("expected 500 when webauthn not configured, got %d", w.Code)
-		}
+		assertResponseCode(t, w, http.StatusInternalServerError)
 	})
 
 	t.Run("FinishPasskeyLogin rejects empty payload", func(t *testing.T) {
@@ -97,8 +82,6 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		c.Request.Header.Set("Content-Type", "application/json")
 
 		srv.FinishPasskeyLogin(c)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("expected 400 for empty finish login, got %d", w.Code)
-		}
+		assertResponseCode(t, w, http.StatusBadRequest)
 	})
 }

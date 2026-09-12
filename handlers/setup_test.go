@@ -26,6 +26,20 @@ func setupTestDB(t *testing.T) (*gorm.DB, *config.Config) {
 	return db, cfg
 }
 
+func assertResponseCode(t *testing.T, w *httptest.ResponseRecorder, expected int) {
+	t.Helper()
+	if w.Code != expected {
+		t.Errorf("expected status %d, got %d (body: %s)", expected, w.Code, w.Body.String())
+	}
+}
+
+func assertFatalCode(t *testing.T, w *httptest.ResponseRecorder, expected int) {
+	t.Helper()
+	if w.Code != expected {
+		t.Fatalf("expected status %d, got %d (body: %s)", expected, w.Code, w.Body.String())
+	}
+}
+
 func TestSetupHandlers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

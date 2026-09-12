@@ -149,12 +149,15 @@ func WriteSignaturesLayout(f *excelize.File, sheet string, headerRow int, boxRow
 	}
 }
 
+// DatePrefixUpper is the standard uppercase prefix used in timesheet signature blocks.
+const DatePrefixUpper = "DATE : "
+
 // WriteSignaturesBlock renders the 3-party signature section (Employee, Team Leader, Dept Head).
 func WriteSignaturesBlock(f *excelize.File, sheet string, startRow int, userName, tlName, dhName string, st *BuilderStyles) {
 	WriteSignaturesLayout(f, sheet, startRow, 3, []SignatureParty{
-		{StartCol: "A", EndCol: "C", Title: "Prepared by :", Name: userName, DatePrefix: "DATE : "},
-		{StartCol: "D", EndCol: "F", Title: "Approved by :", Name: tlName, DatePrefix: "DATE : "},
-		{StartCol: "G", EndCol: "J", Title: "Approved by :", Name: dhName, DatePrefix: "DATE : "},
+		{StartCol: "A", EndCol: "C", Title: "Prepared by :", Name: userName, DatePrefix: DatePrefixUpper},
+		{StartCol: "D", EndCol: "F", Title: "Approved by :", Name: tlName, DatePrefix: DatePrefixUpper},
+		{StartCol: "G", EndCol: "J", Title: "Approved by :", Name: dhName, DatePrefix: DatePrefixUpper},
 	}, st)
 
 	_ = f.SetRowHeight(sheet, startRow, 20)
