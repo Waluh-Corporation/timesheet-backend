@@ -188,7 +188,6 @@ func TestDailyActivity_ProjectGetters(t *testing.T) {
 	actFallback := DailyActivity{
 		ProjectID:   "PRJ-01",
 		ProjectName: "Project Alpha",
-		AppImpacted: "Core App",
 	}
 	if actFallback.GetProjectCode() != "PRJ-01" {
 		t.Errorf("expected PRJ-01, got %s", actFallback.GetProjectCode())
@@ -196,15 +195,14 @@ func TestDailyActivity_ProjectGetters(t *testing.T) {
 	if actFallback.GetProjectName() != "Project Alpha" {
 		t.Errorf("expected Project Alpha, got %s", actFallback.GetProjectName())
 	}
-	if actFallback.GetAppImpacted() != "Core App" {
-		t.Errorf("expected Core App, got %s", actFallback.GetAppImpacted())
+	if actFallback.GetAppImpacted() != "" {
+		t.Errorf("expected empty string without ProjectRef, got %s", actFallback.GetAppImpacted())
 	}
 
-	// Referenced Project takes precedence
+	// Referenced Project takes precedence and provides canonical AppImpacted
 	actRef := DailyActivity{
 		ProjectID:   "PRJ-OLD",
 		ProjectName: "Name Old",
-		AppImpacted: "App Old",
 		ProjectRef: &Project{
 			Code:        "PRJ-NEW",
 			Name:        "Name New",
@@ -222,8 +220,7 @@ func TestDailyActivity_ProjectGetters(t *testing.T) {
 	}
 }
 
-func TestDTOs(t *testing.T) {
-	// Verify struct instantiations compile and fields are accessible
+func TestResponseDTOs(t *testing.T) {
 	resp := APIResponse{Code: 200, Status: "success", Message: "ok", Data: "test"}
 	if resp.Code != 200 || resp.Status != "success" {
 		t.Errorf("APIResponse mismatch: %+v", resp)
@@ -264,6 +261,28 @@ func TestDTOs(t *testing.T) {
 		t.Errorf("PasskeySessionResponse mismatch: %+v", passkeySess)
 	}
 
+	pageResp := PaginatedResponse{
+		Code:       200,
+		Status:     "success",
+		Pagination: PaginationMeta{Page: 1, Limit: 10, TotalRows: 100, TotalPages: 10},
+	}
+	if pageResp.Pagination.TotalPages != 10 {
+		t.Errorf("PaginatedResponse mismatch: %+v", pageResp)
+	}
+
+	holDTO := HolidayDTO{Date: "2026-01-01", Description: "New Year"}
+	if holDTO.Date != "2026-01-01" {
+		t.Errorf("HolidayDTO mismatch: %+v", holDTO)
+	}
+
+	kItem := KemendesaHolidayItem{Date: "2026-01-01", Name: "Tahun Baru"}
+	kResp := KemendesaHolidayResponse{Data: []KemendesaHolidayItem{kItem}}
+	if len(kResp.Data) != 1 {
+		t.Errorf("KemendesaHolidayResponse mismatch: %+v", kResp)
+	}
+}
+
+func TestRequestDTOs(t *testing.T) {
 	loginReq := LoginRequest{Identifier: "admin", Password: "pwd"}
 	if loginReq.Identifier != "admin" {
 		t.Errorf("LoginRequest mismatch: %+v", loginReq)
@@ -314,15 +333,6 @@ func TestDTOs(t *testing.T) {
 		t.Errorf("UnsubscribeRequest mismatch: %+v", unsubReq)
 	}
 
-	pageResp := PaginatedResponse{
-		Code:       200,
-		Status:     "success",
-		Pagination: PaginationMeta{Page: 1, Limit: 10, TotalRows: 100, TotalPages: 10},
-	}
-	if pageResp.Pagination.TotalPages != 10 {
-		t.Errorf("PaginatedResponse mismatch: %+v", pageResp)
-	}
-
 	entry := DailyEntry{Day: 1, Status: "P"}
 	if entry.Day != 1 {
 		t.Errorf("DailyEntry mismatch: %+v", entry)
@@ -333,18 +343,8 @@ func TestDTOs(t *testing.T) {
 		t.Errorf("TimesheetRequest mismatch: %+v", tsReq)
 	}
 
-	holDTO := HolidayDTO{Date: "2026-01-01", Description: "New Year"}
-	if holDTO.Date != "2026-01-01" {
-		t.Errorf("HolidayDTO mismatch: %+v", holDTO)
-	}
-
 	kItem := KemendesaHolidayItem{Date: "2026-01-01", Name: "Tahun Baru"}
 	if kItem.Date != "2026-01-01" {
 		t.Errorf("KemendesaHolidayItem mismatch: %+v", kItem)
-	}
-
-	kResp := KemendesaHolidayResponse{Data: []KemendesaHolidayItem{kItem}}
-	if len(kResp.Data) != 1 {
-		t.Errorf("KemendesaHolidayResponse mismatch: %+v", kResp)
 	}
 }

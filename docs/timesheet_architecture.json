@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Timesheet Backend — System Architecture",
+    "output": "docs/architecture.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "request-lifecycle",
+        "label": "API Request Lifecycle",
+        "focus": ["clients", "proxy", "api", "auth", "db"],
+        "note": "Clients authenticate via JWT or WebAuthn passkeys before hitting protected REST endpoints backed by PostgreSQL."
+      },
+      {
+        "id": "timesheet-generation",
+        "label": "Timesheet Generation & Email",
+        "focus": ["api", "services", "smtp", "db"],
+        "note": "Dedicated company builders assemble normalized activity data into formatted Excel workbooks and deliver them via SMTP."
+      },
+      {
+        "id": "background-jobs",
+        "label": "Background Services & Integrations",
+        "focus": ["scheduler", "webpush", "services", "holidays_api", "db"],
+        "note": "Scheduled cron tasks trigger daily Web Push reminders at 17:00 WIB and synchronize public holidays from Kemendesa."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "clients",
+      "type": "external",
+      "label": "Web & API Clients",
+      "sublabel": "Browser / Swagger UI",
+      "pos": [40, 260],
+      "size": [140, 60]
+    },
+    {
+      "id": "proxy",
+      "type": "cloud",
+      "label": "Reverse Proxy",
+      "sublabel": "Port 80/443 -> :8080",
+      "brand": "docker",
+      "pos": [240, 260],
+      "size": [140, 60]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Auth Service",
+      "sublabel": "Argon2id + JWT + Passkeys",
+      "tag": "FIDO2 / RBAC",
+      "pos": [450, 110],
+      "size": [150, 64]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Gin REST API",
+      "sublabel": "HTTP Handlers :8080",
+      "brand": "go",
+      "pos": [450, 260],
+      "size": [150, 60]
+    },
+    {
+      "id": "services",
+      "type": "backend",
+      "label": "Core Services",
+      "sublabel": "Excel Builders & Holiday Client",
+      "tag": "Excelize & PDF",
+      "pos": [680, 260],
+      "size": [160, 60]
+    },
+    {
+      "id": "scheduler",
+      "type": "backend",
+      "label": "Cron Scheduler",
+      "sublabel": "17:00 WIB & Token GC",
+      "tag": "robfig/cron",
+      "pos": [450, 420],
+      "size": [150, 60]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL 16",
+      "sublabel": "3NF Relational DB :5432",
+      "brand": "postgresql",
+      "tag": "GORM & Migrations",
+      "pos": [680, 420],
+      "size": [160, 60]
+    },
+    {
+      "id": "holidays_api",
+      "type": "external",
+      "label": "Kemendesa API",
+      "sublabel": "Public Holiday Sync",
+      "pos": [920, 260],
+      "size": [140, 60]
+    },
+    {
+      "id": "smtp",
+      "type": "external",
+      "label": "SMTP / Mailpit",
+      "sublabel": "Transactional Mail",
+      "pos": [920, 110],
+      "size": [140, 60]
+    },
+    {
+      "id": "webpush",
+      "type": "external",
+      "label": "WebPush Service",
+      "sublabel": "VAPID Push Reminders",
+      "pos": [920, 420],
+      "size": [140, 60]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Timesheet Backend Service Boundary",
+      "wraps": ["proxy", "auth", "api", "services", "scheduler", "db"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "clients-to-proxy",
+      "from": "clients",
+      "to": "proxy",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "proxy-to-api",
+      "from": "proxy",
+      "to": "api",
+      "label": "proxy pass"
+    },
+    {
+      "id": "api-to-auth",
+      "from": "api",
+      "to": "auth",
+      "label": "verify token",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "api-to-services",
+      "from": "api",
+      "to": "services",
+      "label": "delegate"
+    },
+    {
+      "id": "api-to-db",
+      "from": "api",
+      "to": "db",
+      "label": "GORM query",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "scheduler-to-db",
+      "from": "scheduler",
+      "to": "db",
+      "label": "clean tokens",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "scheduler-to-webpush",
+      "from": "scheduler",
+      "to": "webpush",
+      "label": "push alert",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "variant": "dashed"
+    },
+    {
+      "id": "services-to-smtp",
+      "from": "services",
+      "to": "smtp",
+      "label": "email .xlsx",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "services-to-holidays",
+      "from": "services",
+      "to": "holidays_api",
+      "label": "fetch sync",
+      "fromSide": "right",
+      "toSide": "left"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Ingress & Authentication",
+      "items": [
+        "Gin REST API protected by Argon2id password hashing and WebAuthn (FIDO2 passkeys)",
+        "Role-Based Access Control (RBAC) with user and admin access boundaries",
+        "Consistent JSON response envelopes and sanitized route parameter validation"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Business Engine & Storage",
+      "items": [
+        "Dedicated multi-company workbook builders (MII, NTT, SDD, Adidata) via Excelize v2",
+        "Pure 3NF normalized PostgreSQL schema with canonical foreign keys and domain CHECK constraints",
+        "Embedded versioned database migrations with automatic execution and connection pooling"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Background & External Integrations",
+      "items": [
+        "Daily cron scheduler firing at 17:00 WIB for unsubmitted timesheet push alerts",
+        "Transactional email notifications via SMTP / Mailpit for password resets and onboarding",
+        "Automated Indonesian national public holiday synchronization via Kemendesa API"
+      ]
+    }
+  ]
+}

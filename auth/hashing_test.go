@@ -51,4 +51,12 @@ func TestCheckPasswordRejectsGarbage(t *testing.T) {
 	if CheckPassword("", "whatever") {
 		t.Fatal("empty hash should never verify")
 	}
+
+	// Oversized hash (> 1024 bytes)
+	salt := "c2FsdHNhbHRzYWx0c2FsdA" // 16 bytes base64
+	oversizedWant := strings.Repeat("A", 1400)
+	hugeHash := "$argon2id$v=19$m=65536,t=3,p=2$" + salt + "$" + oversizedWant
+	if CheckPassword(hugeHash, "whatever") {
+		t.Fatal("oversized hash should never verify")
+	}
 }

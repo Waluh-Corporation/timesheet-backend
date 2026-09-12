@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/models"
 )
+
+const queryID = "id = ?"
 
 // CreateApproverRequest carries fields to add a new approver.
 type CreateApproverRequest struct {
@@ -95,16 +98,26 @@ func (s *Server) CreateApprover(c *gin.Context) {
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/approvers/{id} [patch]
 func (s *Server) UpdateApprover(c *gin.Context) {
-	id := c.Param("id")
-	var appr models.Approver
-	if err := s.DB.First(&appr, id).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "approver not found")
-		return
-	}
-
 	var req UpdateApproverRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid approver ID, expected positive integer")
+		return
+	}
+
+	if s.DB == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
+	}
+
+	var appr models.Approver
+	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&appr).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
 
@@ -147,9 +160,14 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/approvers/{id} [delete]
 func (s *Server) DeleteApprover(c *gin.Context) {
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid approver ID, expected positive integer")
+		return
+	}
+
 	var appr models.Approver
-	if err := s.DB.First(&appr, id).Error; err != nil {
+	if err := s.DB.Where(queryID, id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
@@ -211,16 +229,26 @@ func (s *Server) CreateCompany(c *gin.Context) {
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/companies/{id} [patch]
 func (s *Server) UpdateCompany(c *gin.Context) {
-	id := c.Param("id")
-	var comp models.Company
-	if err := s.DB.First(&comp, id).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "company not found")
-		return
-	}
-
 	var req UpdateCompanyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid company ID, expected positive integer")
+		return
+	}
+
+	if s.DB == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
+	}
+
+	var comp models.Company
+	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&comp).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}
 
@@ -255,9 +283,14 @@ func (s *Server) UpdateCompany(c *gin.Context) {
 // @Failure 500 {object} models.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/companies/{id} [delete]
 func (s *Server) DeleteCompany(c *gin.Context) {
-	id := c.Param("id")
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid company ID, expected positive integer")
+		return
+	}
+
 	var comp models.Company
-	if err := s.DB.First(&comp, id).Error; err != nil {
+	if err := s.DB.Where(queryID, id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}

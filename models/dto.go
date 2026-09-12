@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // APIResponse represents the standard enterprise response envelope.
 type APIResponse struct {
 	Code    int         `json:"code" example:"200"`
@@ -126,6 +128,22 @@ type DailyActivityRequest struct {
 	ProjectID    string `json:"project_id" example:"P24015"`
 	AppImpacted  string `json:"app_impacted" example:"BNI Mobile"`
 	ProjectRefID *uint  `json:"project_ref_id" example:"1"`
+}
+
+// DailyActivityDetailResponse represents the response payload for GET /api/v1/activities/:id.
+type DailyActivityDetailResponse struct {
+	ID          uint            `json:"id"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	UserID      uint            `json:"user_id"`
+	Date        time.Time       `json:"date"`
+	StartTime   string          `json:"start_time"`
+	EndTime     string          `json:"end_time"`
+	Activity    string          `json:"activity"`
+	ProjectName string          `json:"project_name"`
+	ProjectID   string          `json:"project_id"`
+	ProjectRef  *Project        `json:"project_ref,omitempty"`
+	StatusRef   *ActivityStatus `json:"status_ref,omitempty"`
 }
 
 // GenerateRequest specifies parameters to render and download a timesheet workbook.

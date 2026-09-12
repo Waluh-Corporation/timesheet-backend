@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -17,6 +18,11 @@ import (
 	"timesheet-backend/push"
 )
 
+type webAuthnSessionEntry struct {
+	data      *webauthn.SessionData
+	createdAt time.Time
+}
+
 // Server carries the shared dependencies used by all HTTP handlers.
 type Server struct {
 	DB       *gorm.DB
@@ -28,7 +34,7 @@ type Server struct {
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
-	webAuthnSessions map[string]*webauthn.SessionData
+	webAuthnSessions map[string]*webAuthnSessionEntry
 	sessionsMu       sync.Mutex
 }
 
@@ -49,24 +55,40 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		Mailer:           m,
 		Push:             p,
 		WebAuthn:         wa,
-		webAuthnSessions: make(map[string]*webauthn.SessionData),
+		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
 	}, nil
 }
 
 func (s *Server) putSession(id string, data *webauthn.SessionData) {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
-	s.webAuthnSessions[id] = data
+
+	// Proactively clean up expired sessions (> 5 minutes old)
+	cutoff := time.Now().Add(-5 * time.Minute)
+	for k, v := range s.webAuthnSessions {
+		if v.createdAt.Before(cutoff) {
+			delete(s.webAuthnSessions, k)
+		}
+	}
+
+	s.webAuthnSessions[id] = &webAuthnSessionEntry{
+		data:      data,
+		createdAt: time.Now(),
+	}
 }
 
 func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
-	data, ok := s.webAuthnSessions[id]
+	entry, ok := s.webAuthnSessions[id]
 	if ok {
 		delete(s.webAuthnSessions, id)
+		if time.Since(entry.createdAt) > 5*time.Minute {
+			return nil, false
+		}
+		return entry.data, true
 	}
-	return data, ok
+	return nil, false
 }
 
 const (
@@ -151,12 +173,18 @@ func firstHeaderValue(v string) string {
 // CORSMiddleware sets up cross-origin resource sharing headers.
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		} else {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Request-ID")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
 
-		if c.Request.Method == "OPTIONS" {
+		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}

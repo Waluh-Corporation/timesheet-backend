@@ -11,6 +11,8 @@ import (
 	"timesheet-backend/config"
 )
 
+const contentTypeHTML = "text/html"
+
 // Mailer sends transactional and delivery email over SMTP.
 type Mailer struct {
 	cfg *config.Config
@@ -49,7 +51,7 @@ func (m *Mailer) SendSetupEmail(to, username, setupLink string) error {
 <p>If you were not expecting this email you can safely ignore it.</p>`,
 		username, setupLink, setupLink,
 	)
-	msg.SetBody("text/html", body)
+	msg.SetBody(contentTypeHTML, body)
 	return m.send(msg)
 }
 
@@ -65,7 +67,7 @@ func (m *Mailer) SendResetEmail(to, resetLink string) error {
 <p>This link expires soon. If you did not request a reset, ignore this email.</p>`,
 		resetLink,
 	)
-	msg.SetBody("text/html", body)
+	msg.SetBody(contentTypeHTML, body)
 	return m.send(msg)
 }
 
@@ -81,10 +83,14 @@ func (m *Mailer) SendTimesheetEmail(to, company, filename string, data []byte) e
 		subject = fmt.Sprintf("Your %s Timesheet is Ready", trimmed)
 	}
 	msg.SetHeader("Subject", subject)
-	msg.SetBody("text/html", "<p>Attached is your generated timesheet. A copy has also been downloaded in your browser.</p>")
+	msg.SetBody(contentTypeHTML, "<p>Attached is your generated timesheet. A copy has also been downloaded in your browser.</p>")
 	msg.Attach(filename, gomail.SetCopyFunc(func(w io.Writer) error {
 		_, err := w.Write(data)
 		return err
 	}))
-	return m.send(msg)
+	if err := m.send(msg); err != nil {
+		return err
+	}
+	log.Printf("[mailer] timesheet email successfully sent to %s (file: %s)", to, filename)
+	return nil
 }
