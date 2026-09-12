@@ -7,14 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] - 2026-09-12
+## [Unreleased]
+
+---
+
+## [1.1.0] - 2026-09-12
 
 ### Added
-- Activity Detail Endpoint: Added dedicated retrieval endpoint for individual daily activity records with complete relational project details (`GET /api/v1/activities/:id`).
+- Multi-Vendor Workbook Metadata: Automated configuration of Excel workbook properties setting `Creator` to "Waluh Corporation" and `LastModifiedBy` dynamically to the requesting user.
+- Activity Detail Endpoint: Dedicated retrieval endpoint for individual daily activity records with complete relational project details (`GET /api/v1/activities/:id`).
+- SonarCloud Quality Gate: Integration of SonarCloud project analysis for static analysis, security hotspot detection, code duplication monitoring, and quality gate badges.
 
 ### Changed
-- Activity Ownership Enforcement: Restricted daily activity retrieval to the authenticated owner, returning an authorization error if attempting to access another user's activity log.
+- Spreadsheet Generation Engine: Fully modularized and deduplicated spreadsheet generation across MII, NTT, SDD, and Adidata formats, resolving SonarCloud duplication density and reducing cognitive complexity below threshold.
+- Activity Ownership Enforcement: Restricted daily activity retrieval strictly to the authenticated owner, returning an authorization error when accessing another user's log.
 - Response Formatting: Streamlined daily activity detail payload structure to directly expose normalized project code, project name, and application impacted data.
+- Database Schema Hardening: Applied strict relational foreign keys with cascade constraints, composite unique indexes, and purged redundant denormalized columns (`app_impacted`).
+
+### Fixed
+- Security Hardening: Sanitized numeric route ID parameters and applied parameterized query checks to prevent SQL injection vulnerabilities (SonarCloud S3649).
+- Code Quality & Linter Compliance: Upgraded `golangci-lint` configuration to v2 format, resolved all linter warnings, and elevated automated test coverage across `services` to over 91%.
 
 ---
 
