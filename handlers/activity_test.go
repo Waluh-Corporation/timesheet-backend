@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -356,4 +357,229 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 
 func itoa(n uint) string {
 	return strconv.FormatUint(uint64(n), 10)
+}
+
+func TestActivityHandlers_MasterData(t *testing.T) {
+	db, cfg := setupTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	srv := &Server{
+		DB:  tx,
+		Cfg: cfg,
+	}
+
+	comp := models.Company{Code: "test_comp", Name: "Test Company Inc"}
+	_ = tx.Create(&comp)
+
+	dept := models.Department{CompanyID: &comp.ID, Name: "Engineering", IsActive: true}
+	_ = tx.Create(&dept)
+
+	proj := models.Project{Code: "P12345", Name: "Project Apollo", AppImpacted: "Apollo Core", IsActive: true}
+	_ = tx.Create(&proj)
+
+	approver := models.Approver{Name: "Leader John", RoleType: models.ApproverRoleTeamLeader, Title: "Team Lead", IsActive: true}
+	_ = tx.Create(&approver)
+
+	holidayDate, _ := time.Parse("2006-01-02", "2099-12-31")
+	holiday := models.Holiday{Date: holidayDate, Description: "Future Holiday", IsCivic: true}
+	_ = tx.Where("date = ?", holidayDate).FirstOrCreate(&holiday)
+
+	t.Run("ListProjects returns active projects", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+		srv.ListProjects(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+
+	t.Run("ListCompanies returns active companies", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/companies", nil)
+		srv.ListCompanies(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+
+	t.Run("ListDepartments with and without company_id filter", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/departments?company_id=%d", comp.ID), nil)
+		srv.ListDepartments(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Request = httptest.NewRequest(http.MethodGet, "/api/v1/departments", nil)
+		srv.ListDepartments(c2)
+		assertFatalCode(t, w2, http.StatusOK)
+	})
+
+	t.Run("ListActivityStatuses returns status codes", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/activity-statuses", nil)
+		srv.ListActivityStatuses(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+
+	t.Run("ListApprovers with and without role filter", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/approvers?role_type=team_leader", nil)
+		srv.ListApprovers(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Request = httptest.NewRequest(http.MethodGet, "/api/v1/approvers", nil)
+		srv.ListApprovers(c2)
+		assertFatalCode(t, w2, http.StatusOK)
+	})
+
+	t.Run("ListHolidays with and without year filter", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/holidays/all?year=2099", nil)
+		srv.ListHolidays(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Request = httptest.NewRequest(http.MethodGet, "/api/v1/holidays/all", nil)
+		srv.ListHolidays(c2)
+		assertFatalCode(t, w2, http.StatusOK)
+	})
+}
+
+func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
+	db, cfg := setupTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	srv := &Server{
+		DB:  tx,
+		Cfg: cfg,
+	}
+
+	user := models.User{
+		Username: "overtime_user_test",
+		Email:    "overtime_test@example.com",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+	_ = tx.Create(&user)
+
+	t.Run("UpsertOvertime creates and updates entry", func(t *testing.T) {
+		body := `{"date":"2026-09-15","start_time":"18:00","end_time":"21:00","task_description":"Deploying hotfix"}`
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/overtimes", strings.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, user.ID)
+
+		srv.UpsertOvertime(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		var resp struct {
+			Data models.OvertimeEntry `json:"data"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		otID := resp.Data.ID
+
+		// List monthly overtimes
+		wList := httptest.NewRecorder()
+		cList, _ := gin.CreateTestContext(wList)
+		cList.Request = httptest.NewRequest(http.MethodGet, "/api/v1/overtimes?year=2026&month=9", nil)
+		cList.Set(ctxUserID, user.ID)
+		srv.ListMonthlyOvertimes(cList)
+		assertFatalCode(t, wList, http.StatusOK)
+
+		// Delete overtime
+		wDel := httptest.NewRecorder()
+		cDel, _ := gin.CreateTestContext(wDel)
+		cDel.Params = gin.Params{{Key: "id", Value: itoa(otID)}}
+		cDel.Set(ctxUserID, user.ID)
+		srv.DeleteOvertime(cDel)
+		assertFatalCode(t, wDel, http.StatusOK)
+	})
+
+	t.Run("findProjectByRefID error on non-existent", func(t *testing.T) {
+		_, err := srv.findProjectByRefID(999999)
+		if err == nil {
+			t.Error("expected error for non-existent project_ref_id, got nil")
+		}
+	})
+
+	t.Run("buildProjectQuery coverage", func(t *testing.T) {
+		q1 := srv.buildProjectQuery("10", "Project A")
+		if q1 == nil {
+			t.Error("expected valid query")
+		}
+		q2 := srv.buildProjectQuery("PRJ", "Project B")
+		if q2 == nil {
+			t.Error("expected valid query")
+		}
+		q3 := srv.buildProjectQuery("", "Project C")
+		if q3 == nil {
+			t.Error("expected valid query")
+		}
+		q4 := srv.buildProjectQuery("PRJ", "")
+		if q4 == nil {
+			t.Error("expected valid query")
+		}
+	})
+
+	t.Run("Holiday helpers", func(t *testing.T) {
+		dtos := []models.HolidayDTO{
+			{Date: "2026-08-17", Description: "Independence Day", IsCivic: true},
+			{Date: "2026-01-01", Description: "New Year", IsCivic: true},
+		}
+		filtered := filterHolidaysByMonth(dtos, 2026, 8)
+		if len(filtered) != 1 {
+			t.Errorf("expected 1 holiday for August, got %d", len(filtered))
+		}
+
+		cnt := saveYearlyHolidays(tx, dtos)
+		if cnt != 2 {
+			t.Errorf("expected 2 holidays saved, got %d", cnt)
+		}
+
+		dbFetched := fetchDBHolidays(tx, 2026, 8)
+		if len(dbFetched) == 0 {
+			t.Error("expected fetched holidays from DB, got 0")
+		}
+	})
+
+	t.Run("GetHolidays and SyncHolidays endpoints", func(t *testing.T) {
+		wGet := httptest.NewRecorder()
+		cGet, _ := gin.CreateTestContext(wGet)
+		cGet.Request = httptest.NewRequest(http.MethodGet, "/api/v1/holidays?year=2099&month=12", nil)
+		srv.GetHolidays(cGet)
+		assertFatalCode(t, wGet, http.StatusOK)
+
+		wSync := httptest.NewRecorder()
+		cSync, _ := gin.CreateTestContext(wSync)
+		cSync.Request = httptest.NewRequest(http.MethodPost, "/api/v1/holidays/sync?year=2026", nil)
+		srv.SyncHolidays(cSync)
+		if wSync.Code != http.StatusOK && wSync.Code != http.StatusBadGateway {
+			t.Errorf("expected 200 or 502 for SyncHolidays, got %d", wSync.Code)
+		}
+	})
+
+	t.Run("ListMonthlyActivities returns month list", func(t *testing.T) {
+		wList := httptest.NewRecorder()
+		cList, _ := gin.CreateTestContext(wList)
+		cList.Request = httptest.NewRequest(http.MethodGet, "/api/v1/activities/monthly?year=2026&month=9", nil)
+		cList.Set(ctxUserID, user.ID)
+		srv.ListMonthlyActivities(cList)
+		assertFatalCode(t, wList, http.StatusOK)
+	})
+
+	t.Run("sanitize helper", func(t *testing.T) {
+		s := sanitize("Hello\r\nWorld\t!")
+		if s != "HelloWorld" {
+			t.Errorf("unexpected sanitized string: %q", s)
+		}
+	})
 }

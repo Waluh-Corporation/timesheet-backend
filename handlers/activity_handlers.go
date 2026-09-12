@@ -41,7 +41,7 @@ func (s *Server) validateActivityStatus(status string) bool {
 
 func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
 	var proj models.Project
-	if err := s.DB.First(&proj, refID).Error; err != nil || proj.ID == 0 {
+	if err := s.DB.Where("id = ?", refID).First(&proj).Error; err != nil || proj.ID == 0 {
 		return nil, errors.New("invalid project_ref_id: project does not exist")
 	}
 	return &proj, nil

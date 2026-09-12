@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/auth"
+	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 )
 
@@ -303,4 +304,111 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/profile-changes/"+req2IDStr+"/review?action=reject", nil)
 	srv.ReviewProfileChange(c)
 	assertFatalCode(t, w, http.StatusOK)
+
+	// ReviewProfileChange with invalid action
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: req2IDStr}}
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/profile-changes/"+req2IDStr+"/review?action=invalid_action", nil)
+	srv.ReviewProfileChange(c)
+	assertFatalCode(t, w, http.StatusBadRequest)
+}
+
+func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
+	srv := &Server{
+		DB:     tx,
+		Cfg:    cfg,
+		Auth:   authSvc,
+		Mailer: mailer.New(cfg),
+	}
+
+	comp := models.Company{Code: "user_test_comp", Name: "User Test Company"}
+	_ = tx.Create(&comp)
+
+	dept := models.Department{CompanyID: &comp.ID, Name: "Product Engineering", IsActive: true}
+	_ = tx.Create(&dept)
+
+	adminUser := models.User{
+		Username: "admin_test_flow",
+		Email:    "admin_flow@example.com",
+		Role:     models.RoleAdmin,
+		IsActive: true,
+	}
+	_ = tx.Create(&adminUser)
+
+	var newUserID uint
+
+	t.Run("CreateUser with company, department, and password", func(t *testing.T) {
+		reqBody := `{
+			"username": "new_created_user",
+			"email": "new_created_user@example.com",
+			"name": "New Created User",
+			"role": "user",
+			"company": "user_test_comp",
+			"department": "Product Engineering",
+			"initial_password": "StrongPassword123!"
+		}`
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader([]byte(reqBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.CreateUser(c)
+		assertFatalCode(t, w, http.StatusCreated)
+
+		var resp struct {
+			Data models.User `json:"data"`
+		}
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		newUserID = resp.Data.ID
+		if newUserID == 0 {
+			t.Fatal("expected non-zero created user ID")
+		}
+	})
+
+	t.Run("UpdateUser modifies user attributes", func(t *testing.T) {
+		newName := "Updated New User Name"
+		reqBody := fmt.Sprintf(`{"name": "%s", "company": "user_test_comp", "department": "Product Engineering"}`, newName)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", newUserID)}}
+		c.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/admin/users/%d", newUserID), bytes.NewReader([]byte(reqBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.UpdateUser(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+
+	t.Run("ListUsers returns paginated users", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users?page=1&limit=10", nil)
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.ListUsers(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+
+	t.Run("DeleteUser deactivates user", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", newUserID)}}
+		c.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%d", newUserID), nil)
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.DeleteUser(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
 }
