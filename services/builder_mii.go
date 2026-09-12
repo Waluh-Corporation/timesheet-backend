@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/xuri/excelize/v2"
@@ -30,22 +29,12 @@ func setMIIColWidths(f *excelize.File, sheet string) {
 }
 
 func writeMIIMetadata(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
-	setMeta := func(cellLabel, label, cellVal, val string) {
-		_ = f.SetCellValue(sheet, cellLabel, label)
-		_ = f.SetCellStyle(sheet, cellLabel, cellLabel, st.MetaLabelStyle)
-		_ = f.SetCellValue(sheet, cellVal, val)
-		_ = f.SetCellStyle(sheet, cellVal, cellVal, st.MetaValueStyle)
-	}
-
 	div := in.User.Division
 	if div == "" {
 		div = miiDivision
 	}
 	name := in.User.Name
-	empID := in.User.EmployeeID
-	if empID == "" {
-		empID = in.User.BniID
-	}
+	empID := ResolveEmployeeID(in.User)
 	site := in.User.Site
 	if site == "" {
 		site = "BNI - RDTX"
@@ -54,22 +43,22 @@ func writeMIIMetadata(f *excelize.File, sheet string, in GenerationInput, st *Bu
 
 	_ = f.MergeCell(sheet, "A1", "B1")
 	_ = f.MergeCell(sheet, "C1", "G1")
-	setMeta("A1", "NAME of PROJECT", "C1", ": "+miiProjectName)
+	WriteMetaField(f, sheet, "A1", "NAME of PROJECT", "C1", ": "+miiProjectName, st)
 
 	_ = f.MergeCell(sheet, "A2", "B2")
 	_ = f.MergeCell(sheet, "C2", "E2")
-	setMeta("A2", "UNIT/DIVISION", "C2", ": "+div)
+	WriteMetaField(f, sheet, "A2", "UNIT/DIVISION", "C2", ": "+div, st)
 
 	_ = f.MergeCell(sheet, "A3", "B3")
 	_ = f.MergeCell(sheet, "C3", "F3")
-	setMeta("A3", "NAME", "C3", ": "+name)
+	WriteMetaField(f, sheet, "A3", "NAME", "C3", ": "+name, st)
 
 	_ = f.MergeCell(sheet, "A4", "B4")
-	setMeta("A4", "MII ID", "C4", ": "+empID)
+	WriteMetaField(f, sheet, "A4", "MII ID", "C4", ": "+empID, st)
 
 	_ = f.MergeCell(sheet, "A5", "B5")
 	_ = f.MergeCell(sheet, "C5", "F5")
-	setMeta("A5", "SITE", "C5", ": "+site)
+	WriteMetaField(f, sheet, "A5", "SITE", "C5", ": "+site, st)
 
 	_ = f.SetCellStyle(sheet, "G5", "G5", st.HolidayLegendStyle)
 
@@ -77,7 +66,7 @@ func writeMIIMetadata(f *excelize.File, sheet string, in GenerationInput, st *Bu
 	_ = f.SetCellValue(sheet, "H5", ": Holiday")
 
 	_ = f.MergeCell(sheet, "A6", "B6")
-	setMeta("A6", "PERIODE", "C6", ": "+periodStr)
+	WriteMetaField(f, sheet, "A6", "PERIODE", "C6", ": "+periodStr, st)
 
 	_ = f.SetCellValue(sheet, "G6", "P = Present; S = Sick;  V = Vacation; BT = Business Trip; PM = Permit; X = Not Working Anymore")
 }
@@ -123,40 +112,14 @@ func writeMIIActRow(f *excelize.File, sheet, rs string, row int, act models.Dail
 	_ = f.SetRowHeight(sheet, row, h)
 }
 
-func writeMIISingleDayRow(f *excelize.File, sheet string, in GenerationInput, day int, byDay map[int]models.DailyActivity, st *BuilderStyles) {
-	row := 9 + (day - 1)
-	rs := fmt.Sprintf("%d", row)
-	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
-
-	daysInMonth := GetDaysInMonth(in.Year, in.Month)
-	if day > daysInMonth {
-		ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"K", "Q"}, st)
-		return
-	}
-
-	dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-	ApplyDayRowStyles(f, sheet, "A", rs, allCols, []string{"K", "Q"}, dsc)
-
-	status := ""
-	if dsc.HasActivity {
-		status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
-		writeMIIActRow(f, sheet, rs, row, dsc.Activity, dsc.TimeStyle)
-	} else if dsc.IsHolidayOrWeekend {
-		WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
-	}
-
-	WriteAttendanceMatrixStatus(f, sheet, rs, status)
-}
-
 func writeMIIDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
-	byDay := BuildByDayMap(in.Activities)
-	for day := 1; day <= 31; day++ {
-		writeMIISingleDayRow(f, sheet, in, day, byDay, st)
-	}
+	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
+	WriteBuilderDailyRows(f, sheet, in, 9, allCols, []string{"K", "Q"}, st, func(rs string, row int, dsc DayStyleContext) {
+		writeMIIActRow(f, sheet, rs, row, dsc.Activity, dsc.TimeStyle)
+	})
 }
 
 func writeMIISummaryAndSignatures(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
-	const sumRow = "40"
 	formulas := map[string]string{
 		"E": `COUNTIF(E9:E39,"P")`,
 		"F": `COUNTIF(F9:F39,"S")`,
@@ -165,11 +128,7 @@ func writeMIISummaryAndSignatures(f *excelize.File, sheet string, in GenerationI
 		"I": `COUNTIF(I9:I39,"V")`,
 		"J": `COUNTIF(J9:J39,"x")`,
 	}
-	for col, formula := range formulas {
-		cell := col + sumRow
-		_ = f.SetCellFormula(sheet, cell, formula)
-		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
-	}
+	WriteColumnFormulas(f, sheet, "40", formulas, st.BoldCenterStyle)
 
 	tlName, dhName := ExtractApprovers(in.Overtimes)
 

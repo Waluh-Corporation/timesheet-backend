@@ -43,17 +43,7 @@ func writeSDDMetadata(f *excelize.File, sheet string, in GenerationInput, st *Bu
 	_ = f.SetCellValue(sheet, "B1", "ABSENSI MANUAL")
 	_ = f.SetCellStyle(sheet, "B1", "B1", titleStyle)
 
-	setMeta := func(cellLabel, label, cellVal, val string) {
-		_ = f.SetCellValue(sheet, cellLabel, label)
-		_ = f.SetCellStyle(sheet, cellLabel, cellLabel, st.MetaLabelStyle)
-		_ = f.SetCellValue(sheet, cellVal, val)
-		_ = f.SetCellStyle(sheet, cellVal, cellVal, st.MetaValueStyle)
-	}
-
-	empID := in.User.EmployeeID
-	if empID == "" {
-		empID = in.User.BniID
-	}
+	empID := ResolveEmployeeID(in.User)
 	dept := in.User.Department
 	if dept == "" {
 		dept = "WCH / WDL"
@@ -63,12 +53,12 @@ func writeSDDMetadata(f *excelize.File, sheet string, in GenerationInput, st *Bu
 		grp = "Junior Programmer"
 	}
 
-	setMeta("D2", "NAMA", "F2", ": "+in.User.Name)
-	setMeta("D3", "NPP BNI", "F3", ": "+empID)
-	setMeta("D4", "DIVISI", "F4", ": "+in.User.Division)
-	setMeta("D5", "DEPARTEMEN", "F5", ": "+dept)
-	setMeta("D6", "KELOMPOK", "F6", ": "+grp)
-	setMeta("D7", "PERIODE ", "F7", fmt.Sprintf(": %s %d", indonesianMonth(in.Month), in.Year))
+	WriteMetaField(f, sheet, "D2", "NAMA", "F2", ": "+in.User.Name, st)
+	WriteMetaField(f, sheet, "D3", "NPP BNI", "F3", ": "+empID, st)
+	WriteMetaField(f, sheet, "D4", "DIVISI", "F4", ": "+in.User.Division, st)
+	WriteMetaField(f, sheet, "D5", "DEPARTEMEN", "F5", ": "+dept, st)
+	WriteMetaField(f, sheet, "D6", "KELOMPOK", "F6", ": "+grp, st)
+	WriteMetaField(f, sheet, "D7", "PERIODE ", "F7", fmt.Sprintf(": %s %d", indonesianMonth(in.Month), in.Year), st)
 
 	legends := map[string]string{
 		"F9": "H : Hadir", "G9": "C = Cuti", "H9": "I=Izin", "I9": "S = Sakit", "J9": "L = Lembur",
@@ -155,7 +145,6 @@ func writeSDDDailyRows(f *excelize.File, sheet string, in GenerationInput, st *B
 }
 
 func writeSDDSummaryAndSignatures(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
-	const sumRow = "43"
 	formulas := map[string]string{
 		"F": `COUNTIF(F12:F42,"v")`,
 		"G": `COUNTIF(G12:G42,"v")`,
@@ -163,11 +152,7 @@ func writeSDDSummaryAndSignatures(f *excelize.File, sheet string, in GenerationI
 		"I": `COUNTIF(I12:I42,"v")`,
 		"J": `COUNTIF(J12:J42,"v")`,
 	}
-	for col, formula := range formulas {
-		cell := col + sumRow
-		_ = f.SetCellFormula(sheet, cell, formula)
-		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
-	}
+	WriteColumnFormulas(f, sheet, "43", formulas, st.BoldCenterStyle)
 
 	WriteSignaturesLayout(f, sheet, 46, 5, []SignatureParty{
 		{StartCol: "C", EndCol: "G", Title: "Pemohon", Name: in.User.Name, DatePrefix: sddNamePrefix},

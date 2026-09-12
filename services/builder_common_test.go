@@ -196,3 +196,98 @@ func TestSetWorkbookProperties(t *testing.T) {
 		}
 	})
 }
+
+func TestResolveEmployeeID(t *testing.T) {
+	t.Run("nil user", func(t *testing.T) {
+		if got := ResolveEmployeeID(nil); got != "" {
+			t.Errorf("expected empty string for nil user, got %q", got)
+		}
+	})
+
+	t.Run("with employee id", func(t *testing.T) {
+		u := &models.User{EmployeeID: "EMP001", BniID: "BNI001"}
+		if got := ResolveEmployeeID(u); got != "EMP001" {
+			t.Errorf("expected EMP001, got %q", got)
+		}
+	})
+
+	t.Run("with bni id fallback", func(t *testing.T) {
+		u := &models.User{BniID: "BNI002"}
+		if got := ResolveEmployeeID(u); got != "BNI002" {
+			t.Errorf("expected BNI002, got %q", got)
+		}
+	})
+}
+
+func TestBuilderCommon_NewHelpers(t *testing.T) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	sheet := "Sheet1"
+	st, _ := NewBuilderStyles(f)
+
+	// WriteMetaField
+	WriteMetaField(f, sheet, "A1", "NAME", "B1", ": Alice", st)
+	vA1, _ := f.GetCellValue(sheet, "A1")
+	vB1, _ := f.GetCellValue(sheet, "B1")
+	if vA1 != "NAME" || vB1 != ": Alice" {
+		t.Errorf("WriteMetaField failed, got %q, %q", vA1, vB1)
+	}
+
+	// WriteActivityProjectCells
+	WriteActivityProjectCells(f, sheet, "10", 10, "Dev Task", "Proj A", "P01", "App X")
+	vK, _ := f.GetCellValue(sheet, "K10")
+	vL, _ := f.GetCellValue(sheet, "L10")
+	if vK != "Dev Task" || vL != "Proj A" {
+		t.Errorf("WriteActivityProjectCells failed, got %q, %q", vK, vL)
+	}
+
+	// WriteColumnFormulas
+	WriteColumnFormulas(f, sheet, "40", map[string]string{
+		"E": `COUNTIF(E9:E39,"P")`,
+	}, st.BoldCenterStyle)
+	formulaE, _ := f.GetCellFormula(sheet, "E40")
+	if formulaE != `COUNTIF(E9:E39,"P")` {
+		t.Errorf("expected formula COUNTIF, got %q", formulaE)
+	}
+
+	// WriteSignaturesLayout with Position
+	WriteSignaturesLayout(f, sheet, 42, 5, []SignatureParty{
+		{StartCol: "A", EndCol: "C", Title: "TTD PEGAWAI,", Name: "Alice", Position: "Developer"},
+	}, st)
+	title, _ := f.GetCellValue(sheet, "A42")
+	name, _ := f.GetCellValue(sheet, "A48")
+	pos, _ := f.GetCellValue(sheet, "A49")
+	if title != "TTD PEGAWAI," || name != "Alice" || pos != "Developer" {
+		t.Errorf("WriteSignaturesLayout failed, got title=%q name=%q pos=%q", title, name, pos)
+	}
+
+	// WriteBuilderDailyRows
+	in := GenerationInput{
+		Year:  2026,
+		Month: 2, // 28 days
+		User:  &models.User{Name: "Alice"},
+		Activities: []models.DailyActivity{
+			{Date: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), Activity: "Feature X", Status: "P"},
+		},
+		Holidays: map[int]string{
+			2: "Public Holiday",
+		},
+	}
+	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
+	called := false
+	WriteBuilderDailyRows(f, sheet, in, 10, allCols, []string{"K"}, st, func(rs string, row int, dsc DayStyleContext) {
+		called = true
+		_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
+	})
+	if !called {
+		t.Errorf("expected writeAct to be called for day 1")
+	}
+	vK10, _ := f.GetCellValue(sheet, "K10")
+	if vK10 != "Feature X" {
+		t.Errorf("expected 'Feature X', got %q", vK10)
+	}
+	vK11, _ := f.GetCellValue(sheet, "K11")
+	if vK11 != "Public Holiday" {
+		t.Errorf("expected 'Public Holiday', got %q", vK11)
+	}
+}

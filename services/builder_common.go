@@ -210,6 +210,7 @@ type SignatureParty struct {
 	Title      string
 	Name       string
 	DatePrefix string
+	Position   string
 }
 
 // WriteSignaturesLayout renders a configurable multi-party signature section.
@@ -244,11 +245,93 @@ func WriteSignaturesLayout(f *excelize.File, sheet string, headerRow int, boxRow
 		styleMergedRange(f, sheet, p.StartCol+rName, p.EndCol+rName, nameStyle)
 		_ = f.SetCellValue(sheet, p.StartCol+rName, nameVal)
 
-		// Date (if provided)
-		if p.DatePrefix != "" && !strings.HasPrefix(p.DatePrefix, "Nama :") {
+		// Position (if provided)
+		if p.Position != "" {
+			styleMergedRange(f, sheet, p.StartCol+rDate, p.EndCol+rDate, st.BoldCenterStyle)
+			_ = f.SetCellValue(sheet, p.StartCol+rDate, p.Position)
+		} else if p.DatePrefix != "" && !strings.HasPrefix(p.DatePrefix, "Nama :") {
+			// Date (if provided and not position)
 			styleMergedRange(f, sheet, p.StartCol+rDate, p.EndCol+rDate, st.DataLeftStyle)
 			_ = f.SetCellValue(sheet, p.StartCol+rDate, p.DatePrefix)
 		}
+	}
+}
+
+// WriteMetaField writes a label and value cell pair with their respective styles.
+func WriteMetaField(f *excelize.File, sheet, lblCell, lblVal, valCell, valStr string, st *BuilderStyles) {
+	_ = f.SetCellValue(sheet, lblCell, lblVal)
+	_ = f.SetCellStyle(sheet, lblCell, lblCell, st.MetaLabelStyle)
+	_ = f.SetCellValue(sheet, valCell, valStr)
+	_ = f.SetCellStyle(sheet, valCell, valCell, st.MetaValueStyle)
+}
+
+// ResolveEmployeeID returns the user's EmployeeID or falls back to BniID.
+func ResolveEmployeeID(u *models.User) string {
+	if u == nil {
+		return ""
+	}
+	if u.EmployeeID != "" {
+		return u.EmployeeID
+	}
+	return u.BniID
+}
+
+// WriteActivityProjectCells populates activity and project fields (cols K, L, M, N) and sets calculated row height.
+func WriteActivityProjectCells(f *excelize.File, sheet, rs string, row int, activity, projName, projCode, appImpacted string) {
+	_ = f.SetCellValue(sheet, "K"+rs, activity)
+	_ = f.SetCellValue(sheet, "L"+rs, projName)
+	_ = f.SetCellValue(sheet, "M"+rs, projCode)
+	_ = f.SetCellValue(sheet, "N"+rs, appImpacted)
+	h := calculateRowHeight(activity, projName, projCode, appImpacted, "", "")
+	_ = f.SetRowHeight(sheet, row, h)
+}
+
+// WriteColumnFormulas sets formulas and styles for a map of column letters to formula expressions on targetRow.
+func WriteColumnFormulas(f *excelize.File, sheet, targetRow string, formulas map[string]string, styleID int) {
+	for col, formula := range formulas {
+		cell := col + targetRow
+		_ = f.SetCellFormula(sheet, cell, formula)
+		_ = f.SetCellStyle(sheet, cell, cell, styleID)
+	}
+}
+
+// WriteBuilderDailyRows writes all 31 days for timesheet builders, handling padding, styles, and activities.
+func WriteBuilderDailyRows(
+	f *excelize.File,
+	sheet string,
+	in GenerationInput,
+	startRow int,
+	allCols []string,
+	wrapCols []string,
+	st *BuilderStyles,
+	writeAct func(rs string, row int, dsc DayStyleContext),
+) {
+	byDay := BuildByDayMap(in.Activities)
+	daysInMonth := GetDaysInMonth(in.Year, in.Month)
+
+	for day := 1; day <= 31; day++ {
+		row := startRow + (day - 1)
+		rs := fmt.Sprintf("%d", row)
+
+		if day > daysInMonth {
+			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
+			continue
+		}
+
+		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
+		ApplyDayRowStyles(f, sheet, "A", rs, allCols, wrapCols, dsc)
+
+		status := ""
+		if dsc.HasActivity {
+			status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+			if writeAct != nil {
+				writeAct(rs, row, dsc)
+			}
+		} else if dsc.IsHolidayOrWeekend {
+			WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
+		}
+
+		WriteAttendanceMatrixStatus(f, sheet, rs, status)
 	}
 }
 

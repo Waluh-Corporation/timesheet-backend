@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/xuri/excelize/v2"
 
@@ -60,28 +59,18 @@ func setAdidataColWidths(f *excelize.File, sheet string) {
 }
 
 func writeAdidataMetadata(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) string {
-	setMeta := func(cellLabel, label, cellVal, val string) {
-		_ = f.SetCellValue(sheet, cellLabel, label)
-		_ = f.SetCellStyle(sheet, cellLabel, cellLabel, st.MetaLabelStyle)
-		_ = f.SetCellValue(sheet, cellVal, val)
-		_ = f.SetCellStyle(sheet, cellVal, cellVal, st.MetaValueStyle)
-	}
-
-	empID := in.User.EmployeeID
-	if empID == "" {
-		empID = in.User.BniID
-	}
+	empID := ResolveEmployeeID(in.User)
 	div := in.User.Division
 	if div == "" {
 		div = "BDD / WDL"
 	}
 	periodStr := fmt.Sprintf("%s %d", indonesianMonth(in.Month), in.Year)
 
-	setMeta("A1", "NAME of PROJECT", "C1", ": PT BANK NEGARA INDONESIA (PERSERO) Tbk")
-	setMeta("A2", "UNIT/DIVISION", "C2", ": "+div)
-	setMeta("A3", "NAME", "C3", ": "+in.User.Name)
-	setMeta("A4", "NPP", "C4", ": "+empID)
-	setMeta("A5", "PERIODE", "C5", ": "+periodStr)
+	WriteMetaField(f, sheet, "A1", "NAME of PROJECT", "C1", ": PT BANK NEGARA INDONESIA (PERSERO) Tbk", st)
+	WriteMetaField(f, sheet, "A2", "UNIT/DIVISION", "C2", ": "+div, st)
+	WriteMetaField(f, sheet, "A3", "NAME", "C3", ": "+in.User.Name, st)
+	WriteMetaField(f, sheet, "A4", "NPP", "C4", ": "+empID, st)
+	WriteMetaField(f, sheet, "A5", "PERIODE", "C5", ": "+periodStr, st)
 
 	_ = f.SetCellValue(sheet, "G6", "P = Present; S = Sick; V = Vacation; BT = Business Trip; PM = Permit; X = Not Working Anymore")
 	return empID
@@ -114,49 +103,17 @@ func writeAdidataActRow(f *excelize.File, sheet, rs string, row int, act models.
 		_ = f.SetCellStyle(sheet, "D"+rs, "D"+rs, decimalStyle)
 	}
 
-	_ = f.SetCellValue(sheet, "K"+rs, act.Activity)
-	_ = f.SetCellValue(sheet, "L"+rs, act.GetProjectName())
-	_ = f.SetCellValue(sheet, "M"+rs, act.GetProjectCode())
-	_ = f.SetCellValue(sheet, "N"+rs, act.GetAppImpacted())
-
-	h := calculateRowHeight(act.Activity, act.GetProjectName(), act.GetProjectCode(), act.GetAppImpacted(), "", "")
-	_ = f.SetRowHeight(sheet, row, h)
-}
-
-func writeAdidataSingleDayRow(f *excelize.File, sheet string, in GenerationInput, day int, byDay map[int]models.DailyActivity, st *BuilderStyles) {
-	row := 9 + (day - 1)
-	rs := fmt.Sprintf("%d", row)
-	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"}
-
-	daysInMonth := GetDaysInMonth(in.Year, in.Month)
-	if day > daysInMonth {
-		ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"K"}, st)
-		return
-	}
-
-	dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-	ApplyDayRowStyles(f, sheet, "A", rs, allCols, []string{"K"}, dsc)
-
-	status := ""
-	if dsc.HasActivity {
-		status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
-		writeAdidataActRow(f, sheet, rs, row, dsc.Activity, dsc.TimeStyle, dsc.DecimalStyle)
-	} else if dsc.IsHolidayOrWeekend {
-		WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
-	}
-
-	WriteAttendanceMatrixStatus(f, sheet, rs, status)
+	WriteActivityProjectCells(f, sheet, rs, row, act.Activity, act.GetProjectName(), act.GetProjectCode(), act.GetAppImpacted())
 }
 
 func writeAdidataDailyRows(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
-	byDay := BuildByDayMap(in.Activities)
-	for day := 1; day <= 31; day++ {
-		writeAdidataSingleDayRow(f, sheet, in, day, byDay, st)
-	}
+	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"}
+	WriteBuilderDailyRows(f, sheet, in, 9, allCols, []string{"K"}, st, func(rs string, row int, dsc DayStyleContext) {
+		writeAdidataActRow(f, sheet, rs, row, dsc.Activity, dsc.TimeStyle, dsc.DecimalStyle)
+	})
 }
 
 func writeAdidataSummaryRow(f *excelize.File, sheet string, st *BuilderStyles) {
-	const sumRow = "40"
 	formulas := map[string]string{
 		"E": `COUNTIF(E9:E39,"P")`,
 		"F": `COUNTIF(F9:F39,"S")`,
@@ -165,56 +122,21 @@ func writeAdidataSummaryRow(f *excelize.File, sheet string, st *BuilderStyles) {
 		"I": `COUNTIF(I9:I39,"V")`,
 		"J": `COUNTIF(J9:J39,"x")`,
 	}
-	for col, formula := range formulas {
-		cell := col + sumRow
-		_ = f.SetCellFormula(sheet, cell, formula)
-		_ = f.SetCellStyle(sheet, cell, cell, st.BoldCenterStyle)
-	}
+	WriteColumnFormulas(f, sheet, "40", formulas, st.BoldCenterStyle)
 }
 
 func writeAdidataSignatures(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
-	// Headers (Row 42)
-	styleMergedRange(f, sheet, "A42", "C42", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "A42", "TTD PEGAWAI,")
-	styleMergedRange(f, sheet, "D42", "F42", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "D42", "DIPERIKSA OLEH,")
-	styleMergedRange(f, sheet, "G42", "J42", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "G42", "DISETUJUI OLEH,")
-
-	// Empty Signature Spaces with Borders (Rows 43-47)
-	styleMergedRange(f, sheet, "A43", "C47", st.DataCenterStyle)
-	styleMergedRange(f, sheet, "D43", "F47", st.DataCenterStyle)
-	styleMergedRange(f, sheet, "G43", "J47", st.DataCenterStyle)
-
-	// Names (Row 48)
-	styleMergedRange(f, sheet, "A48", "C48", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "A48", "( "+in.User.Name+" )")
-
 	tlName, dhName := ExtractApprovers(in.Overtimes)
-	tlCell, dhCell := "", ""
-	if tlName != "" {
-		tlCell = "( " + tlName + " )"
-	}
-	if dhName != "" {
-		dhCell = "( " + dhName + " )"
-	}
-
-	styleMergedRange(f, sheet, "D48", "F48", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "D48", tlCell)
-	styleMergedRange(f, sheet, "G48", "J48", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "G48", dhCell)
-
-	// Positions (Row 49)
 	posTitle := in.User.Position
 	if posTitle == "" {
 		posTitle = "Junior Programmer"
 	}
-	styleMergedRange(f, sheet, "A49", "C49", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "A49", posTitle)
-	styleMergedRange(f, sheet, "D49", "F49", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "D49", "TEAM LEADER")
-	styleMergedRange(f, sheet, "G49", "J49", st.BoldCenterStyle)
-	_ = f.SetCellValue(sheet, "G49", "DEPARTEMEN HEAD")
+
+	WriteSignaturesLayout(f, sheet, 42, 5, []SignatureParty{
+		{StartCol: "A", EndCol: "C", Title: "TTD PEGAWAI,", Name: in.User.Name, Position: posTitle},
+		{StartCol: "D", EndCol: "F", Title: "DIPERIKSA OLEH,", Name: tlName, Position: "TEAM LEADER"},
+		{StartCol: "G", EndCol: "J", Title: "DISETUJUI OLEH,", Name: dhName, Position: "DEPARTEMEN HEAD"},
+	}, st)
 }
 
 func writeAdidataSingleSPL(f *excelize.File, splSheet string, in GenerationInput, ot models.OvertimeEntry, empID string, st *BuilderStyles) {
@@ -292,34 +214,22 @@ func writeAdidataSingleSPL(f *excelize.File, splSheet string, in GenerationInput
 }
 
 func writeAdidataSPLSignatures(f *excelize.File, splSheet string, in GenerationInput, ot models.OvertimeEntry, pos string, st *BuilderStyles) {
-	_ = f.MergeCell(splSheet, "C21", "E21")
-	_ = f.SetCellValue(splSheet, "C21", "( "+in.User.Name+" )")
-	_ = f.SetCellStyle(splSheet, "C21", "E21", st.BoldCenterStyle)
-	_ = f.MergeCell(splSheet, "C22", "E22")
-	_ = f.SetCellValue(splSheet, "C22", pos)
-	_ = f.SetCellStyle(splSheet, "C22", "E22", st.DataCenterStyle)
-
-	tlLabel := ""
-	if ot.TeamLeader != nil && ot.TeamLeader.Name != "" {
-		tlLabel = "( " + ot.TeamLeader.Name + " )"
+	tlName, dhName := ExtractApprovers([]models.OvertimeEntry{ot})
+	parties := []SignatureParty{
+		{StartCol: "C", EndCol: "E", Name: in.User.Name, Position: pos},
+		{StartCol: "G", EndCol: "J", Name: tlName, Position: "TEAM LEADER"},
+		{StartCol: "L", EndCol: "N", Name: dhName, Position: "DEPARTMENT HEAD"},
 	}
-	_ = f.MergeCell(splSheet, "G21", "J21")
-	_ = f.SetCellValue(splSheet, "G21", tlLabel)
-	_ = f.SetCellStyle(splSheet, "G21", "J21", st.BoldCenterStyle)
-	_ = f.MergeCell(splSheet, "G22", "J22")
-	_ = f.SetCellValue(splSheet, "G22", "TEAM LEADER")
-	_ = f.SetCellStyle(splSheet, "G22", "J22", st.DataCenterStyle)
-
-	dhLabel := ""
-	if ot.DepartmentHead != nil && ot.DepartmentHead.Name != "" {
-		dhLabel = "( " + ot.DepartmentHead.Name + " )"
+	for _, p := range parties {
+		nameVal := ""
+		if p.Name != "" {
+			nameVal = "( " + p.Name + " )"
+		}
+		styleMergedRange(f, splSheet, p.StartCol+"21", p.EndCol+"21", st.BoldCenterStyle)
+		_ = f.SetCellValue(splSheet, p.StartCol+"21", nameVal)
+		styleMergedRange(f, splSheet, p.StartCol+"22", p.EndCol+"22", st.DataCenterStyle)
+		_ = f.SetCellValue(splSheet, p.StartCol+"22", p.Position)
 	}
-	_ = f.MergeCell(splSheet, "L21", "N21")
-	_ = f.SetCellValue(splSheet, "L21", dhLabel)
-	_ = f.SetCellStyle(splSheet, "L21", "N21", st.BoldCenterStyle)
-	_ = f.MergeCell(splSheet, "L22", "N22")
-	_ = f.SetCellValue(splSheet, "L22", "DEPARTMENT HEAD")
-	_ = f.SetCellStyle(splSheet, "L22", "N22", st.DataCenterStyle)
 }
 
 func writeAdidataSPLSheets(f *excelize.File, in GenerationInput, empID string, st *BuilderStyles) {
