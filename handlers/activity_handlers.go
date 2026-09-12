@@ -14,6 +14,7 @@ import (
 
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
+	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/services"
 )
@@ -472,12 +473,14 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 
 	filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitize(user.Username), req.Month, req.Year)
 
+	period := mailer.FormatMonthYearIndonesian(req.Month, req.Year)
+
 	// Email a copy asynchronously so the download isn't blocked on SMTP.
-	go func(to, comp, fn string, data []byte) {
+	go func(to, uname, comp, per, fn string, data []byte) {
 		if s.Mailer != nil {
-			_ = s.Mailer.SendTimesheetEmail(to, comp, fn, data)
+			_ = s.Mailer.SendTimesheetEmailWithDetails(to, uname, comp, per, fn, data)
 		}
-	}(user.Email, companyName, filename, out)
+	}(user.Email, user.Username, companyName, period, filename, out)
 
 	c.Header("Content-Disposition", "attachment; filename="+filename)
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)

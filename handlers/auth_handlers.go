@@ -139,7 +139,7 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 				CreatedIP: c.ClientIP(),
 			})
 			link := s.publicBaseURL(c) + "/reset-password?token=" + raw
-			_ = s.Mailer.SendResetEmail(user.Email, link)
+			_ = s.Mailer.SendResetEmailWithUser(user.Email, user.Username, link)
 		}
 	}
 	RespondMessage(c, http.StatusOK, "if the email exists, a reset link has been sent")
@@ -193,6 +193,12 @@ func (s *Server) ResetPassword(c *gin.Context) {
 	if err := s.DB.Save(&token).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to update reset token")
 		return
+	}
+
+	if s.Mailer != nil && user.Email != "" {
+		go func(to, username string) {
+			_ = s.Mailer.SendPasswordChangedEmail(to, username)
+		}(user.Email, user.Username)
 	}
 
 	RespondMessage(c, http.StatusOK, "password updated")
