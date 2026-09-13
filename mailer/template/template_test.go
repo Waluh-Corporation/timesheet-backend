@@ -7,13 +7,14 @@ import (
 
 func TestRenderSetupEmail(t *testing.T) {
 	data := SetupEmailData{
-		AppName:      "Timesheet Test",
-		Username:     "johndoe",
-		Email:        "john@example.com",
-		SetupURL:     "https://timesheet.example.com/setup?token=xyz",
-		ExpireDays:   7,
-		SupportEmail: "support@example.com",
-		PortalURL:    "https://timesheet.example.com",
+		AppName:         "Timesheet Test",
+		Username:        "johndoe",
+		Email:           "john@example.com",
+		InitialPassword: "SecretPass123!@",
+		SetupURL:        "https://timesheet.example.com/setup?token=xyz",
+		ExpireDays:      7,
+		SupportEmail:    "support@example.com",
+		PortalURL:       "https://timesheet.example.com",
 	}
 
 	html, text, err := RenderSetupEmail(data)
@@ -24,17 +25,32 @@ func TestRenderSetupEmail(t *testing.T) {
 	if !strings.Contains(html, "johndoe") {
 		t.Errorf("HTML should contain username johndoe")
 	}
+	if !strings.Contains(html, "SecretPass123!@") {
+		t.Errorf("HTML should contain InitialPassword")
+	}
+	if strings.Contains(html, "Aktivasi Akun &amp; Atur Password") {
+		t.Errorf("HTML should NOT contain wording 'Aktivasi Akun & Atur Password'")
+	}
+	if !strings.Contains(html, "Masuk ke Portal") {
+		t.Errorf("HTML should contain button wording 'Masuk ke Portal'")
+	}
 	if !strings.Contains(html, "https://timesheet.example.com/setup?token=xyz") {
 		t.Errorf("HTML should contain setup URL")
-	}
-	if !strings.Contains(html, "Aktivasi Akun") {
-		t.Errorf("HTML should contain badge 'Aktivasi Akun'")
 	}
 	if !strings.Contains(html, "Passkey") {
 		t.Errorf("HTML should contain Passkey notice")
 	}
 	if !strings.Contains(text, "johndoe") || !strings.Contains(text, "https://timesheet.example.com/setup?token=xyz") {
 		t.Errorf("text should contain username and setup URL")
+	}
+	if !strings.Contains(text, "SecretPass123!@") {
+		t.Errorf("text should contain InitialPassword")
+	}
+	if strings.Contains(text, "Aktivasi Akun & Atur Password") {
+		t.Errorf("text should NOT contain wording 'Aktivasi Akun & Atur Password'")
+	}
+	if !strings.Contains(text, "Tautan Login:") {
+		t.Errorf("text should contain 'Tautan Login:'")
 	}
 }
 

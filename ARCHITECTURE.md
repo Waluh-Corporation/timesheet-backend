@@ -49,8 +49,7 @@ Versioned migrations run automatically via `RunMigrations(db)` in `backend/datab
 
 - **Password login** (`/api/auth/login`): username **or** email + password
   verified against an **Argon2id** hash → signed JWT (`backend/auth`). Hashes are
-  PHC-encoded; legacy bcrypt hashes still verify and are transparently upgraded
-  to Argon2id on the next successful login.
+  PHC-encoded adhering to OWASP recommendations.
 - **Passkey login** (WebAuthn assertion): `/api/auth/passkey/login/{begin,finish}`
   using `go-webauthn/webauthn`. Registration (`/api/passkey/register/*`) requires
   an existing session, so passkeys are added from the dashboard.

@@ -28,8 +28,8 @@ func TestRenderSetupEmail(t *testing.T) {
 	if !strings.Contains(html, "https://timesheet.example.com/setup?token=xyz") {
 		t.Errorf("HTML should contain setup URL")
 	}
-	if !strings.Contains(html, "Aktivasi Akun") {
-		t.Errorf("HTML should contain badge 'Aktivasi Akun'")
+	if !strings.Contains(html, "Masuk ke Portal") {
+		t.Errorf("HTML should contain button 'Masuk ke Portal'")
 	}
 	if !strings.Contains(html, "Passkey") {
 		t.Errorf("HTML should contain Passkey notice")

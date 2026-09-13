@@ -12,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/webauthn"
-	"golang.org/x/crypto/bcrypt"
 
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/request"
@@ -100,27 +99,34 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		assertResponseCode(t, w, http.StatusOK)
 	})
 
-	t.Run("Login success with legacy bcrypt hash triggers rehash", func(t *testing.T) {
-		legacyPass := "LegacyPassword123!"
-		bHash, err := bcrypt.GenerateFromPassword([]byte(legacyPass), bcrypt.DefaultCost)
+	t.Run("Login success with weaker Argon2id hash triggers rehash", func(t *testing.T) {
+		weakerPass := "WeakerPassword123!"
+		weakHasher := auth.NewArgon2idHasher(auth.Argon2idParams{
+			Memory:      32 * 1024,
+			Iterations:  2,
+			Parallelism: 1,
+			SaltLength:  16,
+			KeyLength:   32,
+		})
+		wHash, err := weakHasher.Hash(weakerPass)
 		if err != nil {
-			t.Fatalf("bcrypt error: %v", err)
+			t.Fatalf("weakHasher error: %v", err)
 		}
-		legacyUser := models.User{
-			Username:     "legacyuser",
-			Email:        "legacy@example.com",
-			Name:         "Legacy User",
-			PasswordHash: string(bHash),
+		weakerUser := models.User{
+			Username:     "weakeruser",
+			Email:        "weaker@example.com",
+			Name:         "Weaker User",
+			PasswordHash: wHash,
 			Role:         models.RoleUser,
 			IsActive:     true,
 		}
-		if err := tx.Create(&legacyUser).Error; err != nil {
-			t.Fatalf("failed to create legacy user: %v", err)
+		if err := tx.Create(&weakerUser).Error; err != nil {
+			t.Fatalf("failed to create weaker user: %v", err)
 		}
 
 		body, _ := json.Marshal(request.LoginRequest{
-			Identifier: "legacyuser",
-			Password:   legacyPass,
+			Identifier: "weakeruser",
+			Password:   weakerPass,
 		})
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -131,9 +137,12 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		assertResponseCode(t, w, http.StatusOK)
 
 		var updated models.User
-		_ = tx.Where(queryID, legacyUser.ID).First(&updated)
+		_ = tx.Where(queryID, weakerUser.ID).First(&updated)
 		if !strings.HasPrefix(updated.PasswordHash, "$argon2id$") {
 			t.Errorf("expected upgraded Argon2id hash, got: %s", updated.PasswordHash)
+		}
+		if auth.NeedsRehash(updated.PasswordHash) {
+			t.Errorf("upgraded hash should not need rehash anymore: %s", updated.PasswordHash)
 		}
 	})
 

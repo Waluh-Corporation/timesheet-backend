@@ -16,6 +16,8 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
+	"timesheet-backend/internal/repository"
+	"timesheet-backend/internal/service"
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/push"
@@ -34,6 +36,9 @@ type Server struct {
 	Mailer   *mailer.Mailer
 	Push     *push.Service
 	WebAuthn *webauthn.WebAuthn
+	Hasher   auth.PasswordHasher
+	UserRepo repository.UserRepository
+	UserSvc  service.UserService
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
@@ -51,6 +56,9 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	if err != nil {
 		return nil, err
 	}
+	userRepo := repository.NewUserRepository(db)
+	userSvc := service.NewUserService(userRepo, auth.DefaultHasher, m)
+
 	return &Server{
 		DB:               db,
 		Cfg:              cfg,
@@ -58,6 +66,9 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		Mailer:           m,
 		Push:             p,
 		WebAuthn:         wa,
+		Hasher:           auth.DefaultHasher,
+		UserRepo:         userRepo,
+		UserSvc:          userSvc,
 		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
 	}, nil
 }

@@ -165,3 +165,20 @@ func TestRandomSecretAndValidateSecrets(t *testing.T) {
 		t.Error("expected isRelease to be true in release mode")
 	}
 }
+
+func TestLoad_AppConfigEnv(t *testing.T) {
+	t.Setenv("APP_NAME", "Custom Portal Name")
+	t.Setenv("FRONTEND_URL", "https://timesheet.custom.org")
+	t.Setenv("ADMIN_EMAIL", "superadmin@custom.org")
+
+	cfg := Load()
+	if cfg.AppName != "Custom Portal Name" {
+		t.Errorf("expected AppName to be 'Custom Portal Name', got %q", cfg.AppName)
+	}
+	if cfg.FrontendURL != "https://timesheet.custom.org" {
+		t.Errorf("expected FrontendURL to be 'https://timesheet.custom.org', got %q", cfg.FrontendURL)
+	}
+	if cfg.AdminEmail != "superadmin@custom.org" {
+		t.Errorf("expected AdminEmail to be 'superadmin@custom.org', got %q", cfg.AdminEmail)
+	}
+}

@@ -7,16 +7,17 @@ import (
 	"time"
 )
 
-// SetupEmailData holds data needed to render an account activation email.
+// SetupEmailData holds data needed to render an account welcome/setup email.
 type SetupEmailData struct {
-	AppName      string
-	Username     string
-	Email        string
-	SetupURL     string
-	ExpireDays   int
-	ExpiresAt    string
-	SupportEmail string
-	PortalURL    string
+	AppName         string
+	Username        string
+	Email           string
+	InitialPassword string
+	SetupURL        string
+	ExpireDays      int
+	ExpiresAt       string
+	SupportEmail    string
+	PortalURL       string
 }
 
 //go:embed setup.html
@@ -24,7 +25,7 @@ var setupHTML string
 
 var setupTmpl = htmltemplate.Must(htmltemplate.New("setup").Parse(setupHTML))
 
-// RenderSetupEmail generates both HTML and plain-text activation email content.
+// RenderSetupEmail generates both HTML and plain-text welcome email content.
 func RenderSetupEmail(data SetupEmailData) (htmlBody string, textBody string, err error) {
 	if data.AppName == "" {
 		data.AppName = "Timesheet Portal"
@@ -38,9 +39,9 @@ func RenderSetupEmail(data SetupEmailData) (htmlBody string, textBody string, er
 
 	layout := BaseLayoutData{
 		AppName:      data.AppName,
-		Preheader:    fmt.Sprintf("Aktivasi akun %s Anda dan atur kata sandi baru.", data.AppName),
-		Subject:      fmt.Sprintf("Aktivasi Akun %s - Selamat Datang!", data.AppName),
-		BadgeText:    "Aktivasi Akun",
+		Preheader:    fmt.Sprintf("Akun %s Anda telah aktif dan siap digunakan.", data.AppName),
+		Subject:      fmt.Sprintf("Selamat Datang di %s", data.AppName),
+		BadgeText:    "Akun Baru",
 		BadgeColor:   "indigo",
 		HeaderTitle:  "Selamat Datang di " + data.AppName,
 		SupportEmail: data.SupportEmail,
@@ -52,24 +53,37 @@ func RenderSetupEmail(data SetupEmailData) (htmlBody string, textBody string, er
 		return "", "", err
 	}
 
+	passLine := ""
+	if data.InitialPassword != "" {
+		passLine = fmt.Sprintf("- Password Awal: %s\n", data.InitialPassword)
+	}
+	emailLine := ""
+	if data.Email != "" {
+		emailLine = fmt.Sprintf("- Email: %s\n", data.Email)
+	}
+
 	textBody = fmt.Sprintf(`Halo %s,
 
-Administrator telah membuat akun baru untuk Anda pada %s.
-Silakan selesaikan aktivasi akun dengan mengatur kata sandi Anda melalui tautan berikut:
+Selamat datang di %s! Administrator telah membuat akun baru untuk Anda dan akun Anda saat ini telah berstatus aktif.
+Silakan gunakan kredensial berikut untuk masuk ke portal:
 
+Detail Kredensial Akun:
+- Username: %s
+%s%s- Status Akun: Aktif
+
+Tautan Login:
 %s
 
-Detail Akun:
-- Username: %s
-- Berlaku Hingga: %s (%d hari)
+PENTING - IMBAUAN KEAMANAN:
+Demi menjaga keamanan akun Anda, silakan segera ganti kata sandi awal ini melalui menu Profil/Akun setelah Anda berhasil masuk pertama kali.
 
-Setelah mengatur kata sandi, Anda juga dapat mendaftarkan Passkey (biometrik) pada menu Profil untuk login yang lebih cepat dan aman.
+Setelah mengatur kata sandi, Anda juga dapat mendaftarkan Passkey (biometrik) pada menu Profil untuk proses masuk yang lebih cepat dan aman.
 
 Jika Anda tidak merasa meminta akun ini, Anda dapat mengabaikan email ini.
 
 --
 %s
-`, data.Username, data.AppName, data.SetupURL, data.Username, data.ExpiresAt, data.ExpireDays, data.AppName)
+`, data.Username, data.AppName, data.Username, emailLine, passLine, data.SetupURL, data.AppName)
 
 	return htmlBody, textBody, nil
 }

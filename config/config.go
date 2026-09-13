@@ -13,6 +13,7 @@ import (
 // Config aggregates all runtime configuration, sourced from environment
 // variables with sensible development defaults.
 type Config struct {
+	AppName     string
 	Port        string
 	DatabaseURL string
 
@@ -154,7 +155,10 @@ func Load() *Config {
 
 	defaultDBURL := "host=" + getEnv("DB_HOST", "localhost") + " user=" + getEnv("DB_USER", "timesheet") + " dbname=" + getEnv("DB_NAME", "timesheet") + " port=" + getEnv("DB_PORT", "5432") + " sslmode=disable TimeZone=Asia/Jakarta"
 
+	appName := getEnv("APP_NAME", "Timesheet Portal")
+
 	cfg := &Config{
+		AppName:     appName,
 		Port:        getEnv("PORT", "8080"),
 		DatabaseURL: getEnv("DATABASE_URL", defaultDBURL),
 
@@ -162,7 +166,7 @@ func Load() *Config {
 		JWTExpiry:     time.Duration(getEnvInt("JWT_EXPIRY_HOURS", 24)) * time.Hour,
 		ResetTokenTTL: time.Duration(getEnvInt("RESET_TOKEN_TTL_MINUTES", 60)) * time.Minute,
 
-		RPDisplayName: getEnv("WEBAUTHN_RP_NAME", "Timesheet Portal"),
+		RPDisplayName: getEnv("WEBAUTHN_RP_NAME", appName),
 		RPID:          sanitizeRPID(getEnv("WEBAUTHN_RP_ID", "localhost")),
 		// WEBAUTHN_RP_ORIGIN accepts a comma-separated list so passkeys can be
 		// used across multiple domains/origins under the same relying party.
@@ -172,7 +176,7 @@ func Load() *Config {
 		SMTPPort: getEnvInt("SMTP_PORT", 1025),
 		SMTPUser: getEnv("SMTP_USER", ""),
 		SMTPPass: getEnv("SMTP_PASS", ""),
-		MailFrom: getEnv("MAIL_FROM", "Timesheet Portal <no-reply@timesheet.local>"),
+		MailFrom: getEnv("MAIL_FROM", appName+" <no-reply@timesheet.local>"),
 
 		VAPIDPublicKey:  getEnv("VAPID_PUBLIC_KEY", ""),
 		VAPIDPrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
@@ -181,7 +185,7 @@ func Load() *Config {
 		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:3000"),
 		Timezone:    getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
 
-		AdminEmail:    getEnv("BOOTSTRAP_ADMIN_EMAIL", "admin@timesheet.local"),
+		AdminEmail:    getEnv("ADMIN_EMAIL", getEnv("BOOTSTRAP_ADMIN_EMAIL", "admin@timesheet.local")),
 		AdminUsername: getEnv("BOOTSTRAP_ADMIN_USERNAME", "admin"),
 		AdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", ""),
 

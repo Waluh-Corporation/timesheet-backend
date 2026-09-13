@@ -38,6 +38,9 @@ func (m *Mailer) send(msg *gomail.Message) error {
 }
 
 func (m *Mailer) appName() string {
+	if m.cfg != nil && m.cfg.AppName != "" {
+		return m.cfg.AppName
+	}
 	if m.cfg != nil && m.cfg.RPDisplayName != "" {
 		return m.cfg.RPDisplayName
 	}
@@ -52,6 +55,9 @@ func (m *Mailer) frontendURL() string {
 }
 
 func (m *Mailer) supportEmail() string {
+	if m.cfg != nil && m.cfg.AdminEmail != "" {
+		return m.cfg.AdminEmail
+	}
 	if m.cfg != nil && m.cfg.MailFrom != "" {
 		if addr, err := mail.ParseAddress(m.cfg.MailFrom); err == nil && addr.Address != "" {
 			return addr.Address
@@ -107,7 +113,42 @@ func (m *Mailer) SendSetupEmail(to, username, setupLink string) error {
 	msg := gomail.NewMessage()
 	msg.SetHeader("From", m.cfg.MailFrom)
 	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", fmt.Sprintf("Aktivasi Akun %s - Siap Digunakan", m.appName()))
+	msg.SetHeader("Subject", fmt.Sprintf("Selamat Datang di %s", m.appName()))
+	m.setMessageContent(msg, htmlBody, textBody)
+	return m.send(msg)
+}
+
+// SendAccountWelcomeEmail delivers an activation notification with initial password and instructions to a newly created user,
+// completely separated from the password reset flow.
+func (m *Mailer) SendAccountWelcomeEmail(to, username, initialPassword, loginLink string) error {
+	if loginLink == "" && m.frontendURL() != "" {
+		loginLink = strings.TrimRight(m.frontendURL(), "/") + "/login"
+	}
+
+	loc := m.timeLocation()
+	now := time.Now().In(loc)
+	expiresAt := now.Add(30 * 24 * time.Hour).Format("02 Jan 2006, 15:04 WIB")
+
+	htmlBody, textBody, err := RenderSetupEmail(SetupEmailData{
+		AppName:         m.appName(),
+		Username:        username,
+		Email:           to,
+		InitialPassword: initialPassword,
+		SetupURL:        loginLink,
+		ExpireDays:      30,
+		ExpiresAt:       expiresAt,
+		SupportEmail:    m.supportEmail(),
+		PortalURL:       m.frontendURL(),
+	})
+	if err != nil {
+		log.Printf("[mailer] failed to render welcome email template: %v", err)
+		return err
+	}
+
+	msg := gomail.NewMessage()
+	msg.SetHeader("From", m.cfg.MailFrom)
+	msg.SetHeader("To", to)
+	msg.SetHeader("Subject", fmt.Sprintf("Selamat Datang di %s", m.appName()))
 	m.setMessageContent(msg, htmlBody, textBody)
 	return m.send(msg)
 }

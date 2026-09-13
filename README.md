@@ -23,7 +23,7 @@ Timesheet Backend automates monthly corporate timesheet generation across multi-
 - **Automated Landscape PDF Export**: Converts generated spreadsheets into landscape PDFs using headless LibreOffice.
 
 ### Authentication & Security
-- **Dual Authentication**: Argon2id password hashing with transparent migration from legacy bcrypt, coupled with FIDO2 / WebAuthn passkey assertion (`go-webauthn/webauthn`).
+- **Dual Authentication**: Modern Argon2id password hashing adhering to OWASP guidelines, coupled with FIDO2 / WebAuthn passkey assertion (`go-webauthn/webauthn`).
 - **Role-Based Access Control (RBAC)**: JWT authentication with strict `admin` and `user` authorization boundaries.
 - **NIST SP 800-63B Password Policy**: Enforces password length, dictionary checks, and safe bootstrapping.
 - **Strict Data Ownership & IDOR Protection**: Parameterized route queries and ownership guards ensure users can only view and mutate their own activity records.

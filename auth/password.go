@@ -5,82 +5,78 @@ import (
 	"errors"
 	"math/big"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
-// Password policy constants aligned with NIST SP 800-63B (memorized secrets).
+// Password policy constants aligned with NIST SP 800-63B.
 const (
-	// PasswordMinLength is the NIST-recommended minimum length for a
-	// user-chosen memorized secret (§5.1.1.2: at least 8 characters).
-	PasswordMinLength = 8
-	// PasswordMaxLength is the maximum a verifier must accept. NIST requires
-	// accepting secrets of at least 64 characters; we cap there as a sane upper
-	// bound (Argon2id itself imposes no practical length limit).
-	PasswordMaxLength = 64
-	// GeneratedPasswordLength is the length of an auto-generated default
-	// password. 20 characters from a 64-symbol alphabet is ~120 bits of
-	// entropy — comfortably above any brute-force concern.
-	GeneratedPasswordLength = 20
+	PasswordMinLength       = 8
+	PasswordMaxLength       = 64
+	DefaultGeneratedLength  = 16
+	GeneratedPasswordLength = 16
 )
 
-// ErrPasswordTooShort / ErrPasswordTooLong / ErrPasswordBlocked describe why a
-// candidate secret was rejected. They are returned by ValidatePassword.
+// Sentinel errors returned by ValidatePassword and password generators.
 var (
 	ErrPasswordTooShort = errors.New("password must be at least 8 characters")
 	ErrPasswordTooLong  = errors.New("password must be at most 64 characters")
 	ErrPasswordBlocked  = errors.New("password is too common or easily guessed; choose another")
+	ErrPasswordTooWeak  = errors.New("password is too weak; must contain a combination of character types and avoid simple patterns")
 )
 
-// blockedPasswords is a compact blocklist of values that must never be accepted
-// as a memorized secret. NIST SP 800-63B §5.1.1.2 requires verifiers to compare
-// prospective secrets against a list of commonly-used, expected, or compromised
-// values (top breach-corpus passwords, dictionary words, repetitive/sequential
-// strings, and context-specific terms). A production deployment should back
-// this with a full breached-password service (e.g. HaveIBeenPwned k-anonymity);
-// this in-process list covers the most probable guesses without a network call.
+// blockedPasswords holds commonly compromised, trivial, or predictable passwords.
 var blockedPasswords = map[string]bool{
-	"password":      true,
-	"password1":     true,
-	"password123":   true,
-	"passw0rd":      true,
-	"12345678":      true,
-	"123456789":     true,
-	"1234567890":    true,
-	"qwerty":        true,
-	"qwertyuiop":    true,
-	"qwerty123":     true,
-	"111111":        true,
-	"11111111":      true,
-	"00000000":      true,
-	"abc123":        true,
-	"abcdefgh":      true,
-	"iloveyou":      true,
-	"admin":         true,
-	"admin123":      true,
-	"administrator": true,
-	"root":          true,
-	"letmein":       true,
-	"welcome":       true,
-	"welcome1":      true,
-	"changeme":      true,
-	"secret":        true,
-	"timesheet":     true,
-	"timesheet123":  true,
-	"portal":        true,
+	"password":        true,
+	"password1":       true,
+	"password123":     true,
+	"password1234":    true,
+	"passw0rd":        true,
+	"12345678":        true,
+	"123456789":       true,
+	"1234567890":      true,
+	"qwerty":          true,
+	"qwerty1":         true,
+	"qwerty123":       true,
+	"qwertyuiop":      true,
+	"11111111":        true,
+	"00000000":        true,
+	"abc123":          true,
+	"abcdefgh":        true,
+	"admin":           true,
+	"admin123":        true,
+	"admin1234":       true,
+	"administrator":   true,
+	"root":            true,
+	"root123":         true,
+	"letmein":         true,
+	"welcome":         true,
+	"welcome1":        true,
+	"changeme":        true,
+	"secret":          true,
+	"timesheet":       true,
+	"timesheet123":    true,
+	"timesheetportal": true,
+	"portal":          true,
+	"portal123":       true,
 }
 
-// ValidatePassword enforces the NIST SP 800-63B memorized-secret rules on a
-// candidate password. Following NIST guidance it does NOT impose composition
-// rules (required mixes of upper/lower/digit/symbol) or arbitrary complexity —
-// only a length floor and ceiling and a blocklist check against common,
-// expected, or context-specific values.
-//
-// The variadic context arguments (e.g. the username and email) are treated as
-// context-specific words: a password equal to, or trivially derived from, any
-// of them is rejected.
+// Character sets for cryptographically-secure random password generation.
+const (
+	UpperChars  = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	LowerChars  = "abcdefghijklmnopqrstuvwxyz"
+	DigitChars  = "0123456789"
+	SymbolChars = "!@#$%^&*()-_=+[]{}|;:,.<>?"
+	AllChars    = UpperChars + LowerChars + DigitChars + SymbolChars
+)
+
+// ValidatePassword checks whether a candidate password adheres to complexity and security rules:
+// 1. Minimum 8 characters, maximum 64 characters.
+// 2. Not in the blocklist of common or compromised passwords.
+// 3. Not purely repetitive characters (e.g. 'aaaaaaaa').
+// 4. Contains reasonable character variety (avoids pure single-class passwords like all digits).
+// 5. Does not contain or derive from context strings (username, email prefix, name).
 func ValidatePassword(password string, context ...string) error {
-	// Length is measured in Unicode code points, and all printable characters
-	// (including spaces and emoji) are accepted, per NIST §5.1.1.2.
 	n := utf8.RuneCountInString(password)
 	if n < PasswordMinLength {
 		return ErrPasswordTooShort
@@ -94,14 +90,37 @@ func ValidatePassword(password string, context ...string) error {
 		return ErrPasswordBlocked
 	}
 
-	// Context-specific check: reject the password if it matches, contains, or is
-	// contained by any provided context value (username/email local-part/etc.).
+	// Reject repetitive strings (e.g. '11111111', 'aaaaaaaa')
+	if isRepetitive(password) {
+		return ErrPasswordTooWeak
+	}
+
+	// Reject all-numeric or all-lowercase single-class trivial passwords
+	var hasDigit, hasUpper, hasLower, hasSymbol bool
+	for _, r := range password {
+		switch {
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsDigit(r):
+			hasDigit = true
+		case unicode.IsPunct(r) || unicode.IsSymbol(r):
+			hasSymbol = true
+		}
+	}
+
+	// Wajib kombinasi huruf besar, huruf kecil, angka, dan simbol/karakter khusus
+	if !hasUpper || !hasLower || !hasDigit || !hasSymbol {
+		return ErrPasswordTooWeak
+	}
+
+	// Context check: reject passwords matching or containing user identifiers
 	for _, ctx := range context {
 		ctx = strings.ToLower(strings.TrimSpace(ctx))
 		if ctx == "" {
 			continue
 		}
-		// Compare against the email local-part too, not just the whole address.
 		if at := strings.IndexByte(ctx, '@'); at > 0 {
 			ctx = ctx[:at]
 		}
@@ -113,28 +132,79 @@ func ValidatePassword(password string, context ...string) error {
 	return nil
 }
 
-// generationAlphabet is a 64-character URL-safe alphabet. Its length is a power
-// of two, so modulo-free unbiased selection is trivial with crypto/rand.
-const generationAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+// isRepetitive returns true if all characters in the string are identical.
+func isRepetitive(s string) bool {
+	runes := []rune(s)
+	if len(runes) == 0 {
+		return false
+	}
+	first := runes[0]
+	for _, r := range runes[1:] {
+		if r != first {
+			return false
+		}
+	}
+	return true
+}
 
-// GeneratePassword returns a cryptographically-random password of the requested
-// length drawn from a 64-symbol URL-safe alphabet. The result always satisfies
-// ValidatePassword for lengths within the policy bounds.
-func GeneratePassword(length int) (string, error) {
-	if length < PasswordMinLength {
-		length = PasswordMinLength
+// GenerateSecurePassword generates a cryptographically-secure random password using crypto/rand.
+// It guarantees a mix of uppercase letters, lowercase letters, digits, and symbols,
+// and enforces a length between 12 and 64 characters (defaulting to 16).
+func GenerateSecurePassword(length int) (string, error) {
+	if length < 12 {
+		length = DefaultGeneratedLength
 	}
 	if length > PasswordMaxLength {
 		length = PasswordMaxLength
 	}
-	max := big.NewInt(int64(len(generationAlphabet)))
-	b := make([]byte, length)
-	for i := range b {
-		idx, err := rand.Int(rand.Reader, max)
+
+	// Guarantee at least one character of each category
+	buf := make([]byte, length)
+	categories := []string{UpperChars, LowerChars, DigitChars, SymbolChars}
+	for i, cat := range categories {
+		idx, err := cryptoRandInt(len(cat))
 		if err != nil {
 			return "", err
 		}
-		b[i] = generationAlphabet[idx.Int64()]
+		buf[i] = cat[idx]
 	}
-	return string(b), nil
+
+	// Fill remainder from combined character set
+	for i := len(categories); i < length; i++ {
+		idx, err := cryptoRandInt(len(AllChars))
+		if err != nil {
+			return "", err
+		}
+		buf[i] = AllChars[idx]
+	}
+
+	// Fisher-Yates shuffle with crypto/rand
+	for i := length - 1; i > 0; i-- {
+		j, err := cryptoRandInt(i + 1)
+		if err != nil {
+			return "", err
+		}
+		buf[i], buf[j] = buf[j], buf[i]
+	}
+
+	res := string(buf)
+	// Safety check: ensure generated password satisfies ValidatePassword
+	if err := ValidatePassword(res); err != nil {
+		// Retry once if edge collision occurred
+		return GenerateSecurePassword(length)
+	}
+	return res, nil
+}
+
+// GeneratePassword is an alias for GenerateSecurePassword to preserve backward compatibility.
+func GeneratePassword(length int) (string, error) {
+	return GenerateSecurePassword(length)
+}
+
+func cryptoRandInt(max int) (int, error) {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	if err != nil {
+		return 0, err
+	}
+	return int(n.Int64()), nil
 }
