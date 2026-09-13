@@ -17,7 +17,6 @@ type BaseLayoutData struct {
 	BadgeText    string
 	BadgeColor   string // e.g. indigo, emerald, amber, sky
 	HeaderTitle  string
-	ContentHTML  htmltemplate.HTML
 	SupportEmail string
 	PortalURL    string
 	CurrentYear  int
@@ -29,14 +28,13 @@ var baseLayoutHTML string
 
 var baseTmpl = htmltemplate.Must(htmltemplate.New("base").Parse(baseLayoutHTML))
 
-func renderWithLayout(layout BaseLayoutData, contentTmpl *htmltemplate.Template, data any) (string, error) {
-	var contentBuf bytes.Buffer
-	if err := contentTmpl.Execute(&contentBuf, data); err != nil {
-		return "", fmt.Errorf("failed to render content template: %w", err)
-	}
+func buildEmailTemplate(contentHTML string) *htmltemplate.Template {
+	tmpl := htmltemplate.Must(baseTmpl.Clone())
+	htmltemplate.Must(tmpl.New("content").Parse(contentHTML))
+	return tmpl
+}
 
-	//nolint:gosec // G203: contentBuf is pre-rendered and auto-escaped by html/template
-	layout.ContentHTML = htmltemplate.HTML(contentBuf.String())
+func renderWithLayout(layout BaseLayoutData, tmpl *htmltemplate.Template, data any) (string, error) {
 	if layout.CurrentYear <= 0 {
 		layout.CurrentYear = time.Now().Year()
 	}
@@ -44,12 +42,20 @@ func renderWithLayout(layout BaseLayoutData, contentTmpl *htmltemplate.Template,
 		layout.AppName = "Timesheet Portal"
 	}
 
-	var finalBuf bytes.Buffer
-	if err := baseTmpl.Execute(&finalBuf, layout); err != nil {
-		return "", fmt.Errorf("failed to render base email layout: %w", err)
+	ctx := struct {
+		BaseLayoutData
+		Data any
+	}{
+		BaseLayoutData: layout,
+		Data:           data,
 	}
 
-	return finalBuf.String(), nil
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, ctx); err != nil {
+		return "", fmt.Errorf("failed to render email layout: %w", err)
+	}
+
+	return buf.String(), nil
 }
 
 // FormatMonthYearIndonesian converts numeric month and year to Indonesian string (e.g. 9, 2026 -> "September 2026").

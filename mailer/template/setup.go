@@ -3,7 +3,6 @@ package template
 import (
 	_ "embed"
 	"fmt"
-	htmltemplate "html/template"
 	"time"
 )
 
@@ -23,7 +22,7 @@ type SetupEmailData struct {
 //go:embed setup.html
 var setupHTML string
 
-var setupTmpl = htmltemplate.Must(htmltemplate.New("setup").Parse(setupHTML))
+var setupTmpl = buildEmailTemplate(setupHTML)
 
 // RenderSetupEmail generates both HTML and plain-text welcome email content.
 func RenderSetupEmail(data SetupEmailData) (htmlBody string, textBody string, err error) {
