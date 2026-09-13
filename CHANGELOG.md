@@ -11,14 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Admin User Provisioning Endpoint**: Direct administrative user creation (`POST /api/v1/admin/users`) with CSPRNG password generation, 409 Conflict duplicate checks, and welcome email dispatch.
-- **Self-Service Change Password Endpoint**: Authenticated user password update endpoint (`POST /api/v1/users/change-password`) with current password verification and security notification alert.
-- **Argon2id Hashing Engine**: Upgraded password hashing architecture to Argon2id across the entire repository with transparent legacy hash verification.
-- **Database Hardening Migration**: Migration `000022` expanding `password_hash` column to `VARCHAR(255)` and enforcing unique constraints on `email` and `username`.
-- **Dynamic Application Configurations**: Added `APP_NAME`, `FRONTEND_URL`, and `ADMIN_EMAIL` environment configurations.
+- **Self-Service Change Password Endpoint**: Authenticated user password update endpoint (`POST /api/v1/users/change-password`) with current password verification and automated security notification email alerts.
+- **Modern Responsive Email Notification System**: Redesigned transactional emails (account setup, password reset, timesheet delivery, daily reminder, and password change confirmations) with mobile-responsive layouts, localized expiration timestamps, and secure fallback links.
+- **Automated Timesheet Approver Filling**: Timesheet workbooks across all company templates now dynamically resolve and populate designated approver names from the master approver directory.
 
 ### Changed
-- **Welcome Email Template**: Updated onboarding email layout to present initial credentials clearly and remove activation requirements for admin-provisioned accounts.
-- **CI/CD Workflow**: Configured CI quality gate pipelines to run on Pull Requests targeting the `development` branch.
+- **Flexible Department Management**: Decoupled departments from single-company constraints, enabling departments to span multiple companies, and isolated administrative roles from company assignments.
+- **Optimized API Payloads**: Streamlined response structures for daily activities, overtimes, and admin user listings to reduce payload size and enhance client performance.
+- **Welcome Email Redesign**: Refreshed onboarding email template to present initial login credentials clearly and remove activation steps for administrator-created accounts.
+
+### Security
+- **Argon2id Password Hashing**: Upgraded password hashing architecture to Argon2id across the entire application with transparent legacy hash verification.
+- **API Protection & Origin Validation**: Restricted CORS origins to configured allowlists, prevented host header poisoning via `X-Forwarded-Host` validation, and enforced rate limiting across all authentication and password reset routes.
+- **Account Uniqueness & Schema Hardening**: Enforced database-level unique constraints on email and username to prevent account collisions.
 
 ---
 
