@@ -3,7 +3,6 @@ package template
 import (
 	_ "embed"
 	"fmt"
-	htmltemplate "html/template"
 )
 
 // TimesheetEmailData holds data needed to render a timesheet delivery email.
@@ -21,7 +20,7 @@ type TimesheetEmailData struct {
 //go:embed timesheet.html
 var timesheetHTML string
 
-var timesheetTmpl = htmltemplate.Must(htmltemplate.New("timesheet").Parse(timesheetHTML))
+var timesheetTmpl = buildEmailTemplate(timesheetHTML)
 
 // RenderTimesheetEmail generates both HTML and plain-text timesheet delivery email content.
 func RenderTimesheetEmail(data TimesheetEmailData) (htmlBody string, textBody string, err error) {

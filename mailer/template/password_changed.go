@@ -3,7 +3,6 @@ package template
 import (
 	_ "embed"
 	"fmt"
-	htmltemplate "html/template"
 	"time"
 )
 
@@ -21,7 +20,7 @@ type PasswordChangedEmailData struct {
 //go:embed password_changed.html
 var passwordChangedHTML string
 
-var passwordChangedTmpl = htmltemplate.Must(htmltemplate.New("pwd_changed").Parse(passwordChangedHTML))
+var passwordChangedTmpl = buildEmailTemplate(passwordChangedHTML)
 
 // RenderPasswordChangedEmail generates both HTML and plain-text password changed notification email content.
 func RenderPasswordChangedEmail(data PasswordChangedEmailData) (htmlBody string, textBody string, err error) {

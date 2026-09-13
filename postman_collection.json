@@ -659,6 +659,78 @@
               }
             }
           ]
+        },
+        {
+          "name": "User Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"old_password\":\"Password123!\",\"new_password\":\"NewSecurePass123!@\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/users/change-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 400\", () => pm.expect([200, 400]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Code is 200\", () => pm.expect(res.code).to.eql(200));",
+                  "  pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "  pm.test(\"Password changed message\", () => pm.expect(res.message).to.include(\"password changed\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User Change Password (Weak Password Rejection 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"old_password\":\"Password123!\",\"new_password\":\"123\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/users/change-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Rejection message returned\", () => {",
+                  "  pm.expect(res.error).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -1359,7 +1431,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"username\":\"mcptest_{{$timestamp}}\",\"email\":\"mcptest_{{$timestamp}}@example.com\",\"password\":\"Password123!\",\"name\":\"MCP Test User\",\"role\":\"user\",\"company_id\":1,\"department_id\":1}"
+              "raw": "{\"username\":\"mcptest_{{$timestamp}}\",\"email\":\"mcptest_{{$timestamp}}@example.com\",\"name\":\"MCP Test User\",\"role\":\"user\",\"company_id\":1,\"department_id\":1}"
             },
             "url": "{{baseUrl}}/api/v1/admin/users"
           },
@@ -1370,7 +1442,16 @@
                 "exec": [
                   "pm.test(\"Status 200, 201, or 409\", () => pm.expect([200, 201, 409]).to.include(pm.response.code));",
                   "const res = pm.response.json();",
-                  "if (res.data && res.data.id) {",
+                  "if (res.code === 201 && res.data) {",
+                  "  pm.test(\"Initial password is NOT exposed in response (delivered via email)\", () => {",
+                  "    pm.expect(res.data).to.not.have.property(\"initial_password\");",
+                  "  });",
+                  "  if (res.data.user && res.data.user.id) {",
+                  "    pm.collectionVariables.set(\"createdUserId\", res.data.user.id);",
+                  "  } else if (res.data.id) {",
+                  "    pm.collectionVariables.set(\"createdUserId\", res.data.id);",
+                  "  }",
+                  "} else if (res.data && res.data.id) {",
                   "  pm.collectionVariables.set(\"createdUserId\", res.data.id);",
                   "}"
                 ]
@@ -1394,7 +1475,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"username\":\"invalid_comp_{{$timestamp}}\",\"email\":\"invalid_{{$timestamp}}@example.com\",\"password\":\"Password123!\",\"name\":\"Invalid Comp User\",\"role\":\"user\",\"company_id\":999999}"
+              "raw": "{\"username\":\"invalid_comp_{{$timestamp}}\",\"email\":\"invalid_{{$timestamp}}@example.com\",\"name\":\"Invalid Comp User\",\"role\":\"user\",\"company_id\":999999}"
             },
             "url": "{{baseUrl}}/api/v1/admin/users"
           },
@@ -1406,7 +1487,7 @@
                   "pm.test(\"Status 400 Bad Request\", () => pm.response.to.have.status(400));",
                   "const res = pm.response.json();",
                   "pm.test(\"Descriptive error message returned\", () => {",
-                  "  pm.expect(res.error).to.include(\"company not found or inactive\");",
+                  "  pm.expect(res.error.toLowerCase()).to.include(\"not found or inactive\");",
                   "});"
                 ]
               }

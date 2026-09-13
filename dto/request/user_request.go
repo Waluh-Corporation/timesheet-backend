@@ -15,7 +15,12 @@ type CreateUserRequest struct {
 	Site         string      `json:"site" example:"Jakarta"`
 	Company      string      `json:"company" example:"MII"`
 	CompanyID    *uint       `json:"company_id" example:"1"`
-	Password     string      `json:"password" example:"TempPass123!"`
+}
+
+// ChangePasswordRequest represents the payload for changing the user's password.
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password" binding:"required" example:"CurrentPass123!"`
+	NewPassword string `json:"new_password" binding:"required,min=8" example:"NewStrongPass123!"`
 }
 
 // UpdateUserRequest represents the admin-driven user update payload.

@@ -57,9 +57,8 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	// Opportunistically upgrade legacy/weaker hashes (e.g. bcrypt from before the
-	// Argon2id migration) to the current Argon2id parameters now that we have the
-	// plaintext in hand.
+	// Opportunistically upgrade weaker hashes (e.g. from previous Argon2id parameter
+	// configurations) to the current Argon2id parameters now that we have the plaintext in hand.
 	if auth.NeedsRehash(user.PasswordHash) {
 		if newHash, herr := auth.HashPassword(req.Password); herr == nil {
 			s.DB.Model(&models.User{}).Where(queryID, user.ID).Update("password_hash", newHash)

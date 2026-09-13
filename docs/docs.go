@@ -851,7 +851,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a new user account with role, departmental assignment, and optional initial password.",
+                "description": "Creates a new user account with role, departmental assignment, and initial password.",
                 "consumes": [
                     "application/json"
                 ],
@@ -877,11 +877,11 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.MessageResponse"
+                            "$ref": "#/definitions/response.CreateUserResponse"
                         }
                     },
                     "400": {
-                        "description": "Invalid payload or password policy failure",
+                        "description": "Invalid payload or policy failure",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -1009,7 +1009,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/response.MessageResponse"
+                            "$ref": "#/definitions/response.UpdateUserResponse"
                         }
                     },
                     "400": {
@@ -2108,7 +2108,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/response.MessageResponse"
+                            "$ref": "#/definitions/response.SubmitProfileChangeResponse"
                         }
                     },
                     "400": {
@@ -2505,6 +2505,75 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Generation failed",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/change-password": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes the password of the currently authenticated user or admin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "Change password",
+                "parameters": [
+                    {
+                        "description": "Change password payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.ChangePasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.ChangePasswordResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid payload, old password mismatch, or policy violation",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Account is disabled",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -3174,6 +3243,24 @@ const docTemplate = `{
                 }
             }
         },
+        "request.ChangePasswordRequest": {
+            "type": "object",
+            "required": [
+                "new_password",
+                "old_password"
+            ],
+            "properties": {
+                "new_password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "example": "NewStrongPass123!"
+                },
+                "old_password": {
+                    "type": "string",
+                    "example": "CurrentPass123!"
+                }
+            }
+        },
         "request.CreateUserRequest": {
             "type": "object",
             "required": [
@@ -3213,10 +3300,6 @@ const docTemplate = `{
                 "name": {
                     "type": "string",
                     "example": "John Doe"
-                },
-                "password": {
-                    "type": "string",
-                    "example": "TempPass123!"
                 },
                 "role": {
                     "enum": [
@@ -3599,6 +3682,51 @@ const docTemplate = `{
                 }
             }
         },
+        "response.ChangePasswordResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "message": {
+                    "type": "string",
+                    "example": "password changed successfully"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
+        "response.CreateUserData": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "user created successfully"
+                },
+                "user": {
+                    "$ref": "#/definitions/response.UserResponse"
+                }
+            }
+        },
+        "response.CreateUserResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 201
+                },
+                "data": {
+                    "$ref": "#/definitions/response.CreateUserData"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
         "response.DailyActivityResponse": {
             "type": "object",
             "properties": {
@@ -3783,6 +3911,187 @@ const docTemplate = `{
                 "session_id": {
                     "type": "string",
                     "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                }
+            }
+        },
+        "response.ProfileChangeResponse": {
+            "type": "object",
+            "properties": {
+                "bni_id": {
+                    "type": "string"
+                },
+                "company_id": {
+                    "type": "integer"
+                },
+                "company_rel": {
+                    "$ref": "#/definitions/models.Company"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "department": {
+                    "type": "string"
+                },
+                "department_id": {
+                    "type": "integer"
+                },
+                "department_rel": {
+                    "$ref": "#/definitions/models.Department"
+                },
+                "division": {
+                    "type": "string"
+                },
+                "employee_id": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "string"
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewed_by": {
+                    "type": "integer"
+                },
+                "site": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.ProfileStatus"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "response.SubmitProfileChangeResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 201
+                },
+                "data": {
+                    "$ref": "#/definitions/response.ProfileChangeResponse"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "profile change request submitted"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
+        "response.UpdateUserResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "$ref": "#/definitions/response.UserResponse"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "user updated successfully"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
+        "response.UserResponse": {
+            "type": "object",
+            "properties": {
+                "bni_id": {
+                    "type": "string",
+                    "example": "12345678"
+                },
+                "company": {
+                    "type": "string",
+                    "example": "MII"
+                },
+                "company_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "department": {
+                    "type": "string",
+                    "example": "Core Banking"
+                },
+                "department_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "division": {
+                    "type": "string",
+                    "example": "Application Development Division"
+                },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "employee_id": {
+                    "type": "string",
+                    "example": "EMP-001"
+                },
+                "group_name": {
+                    "type": "string",
+                    "example": "SDD"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "is_active": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "position": {
+                    "type": "string",
+                    "example": "Software Engineer"
+                },
+                "role": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.Role"
+                        }
+                    ],
+                    "example": "user"
+                },
+                "site": {
+                    "type": "string",
+                    "example": "Jakarta"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "john_doe"
                 }
             }
         },

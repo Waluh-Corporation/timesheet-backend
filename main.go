@@ -224,6 +224,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	authed.Use(s.AuthMiddleware())
 	{
 		authed.GET("/me", s.Me)
+		authed.POST("/users/change-password", s.ChangePassword)
 		authed.POST("/profile/change", s.SubmitProfileChange)
 		authed.GET("/profile/changes", s.MyProfileChanges)
 

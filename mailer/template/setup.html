@@ -8,7 +8,7 @@
   "
 >
   Halo <strong>{{.Username}}</strong>, Administrator telah membuat akun baru untuk Anda pada <strong>{{.AppName}}</strong>.
-  Konfirmasikan alamat email Anda dan selesaikan aktivasi akun dengan mengatur kata sandi melalui tautan di bawah ini.
+  Akun Anda saat ini telah berstatus <strong>Aktif</strong> dan langsung dapat digunakan untuk masuk ke sistem. Silakan gunakan kredensial awal di bawah ini untuk masuk ke portal melalui tautan di bawah.
 </p>
 
 <!-- DETAILS BOX -->
@@ -33,15 +33,50 @@
           <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Username</td>
           <td width="65%" style="padding: 5px 0; font-size: 14px; font-weight: bold; color: #111827;">{{.Username}}</td>
         </tr>
+        {{if .Email}}
         <tr>
-          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Berlaku Hingga</td>
-          <td width="65%" style="padding: 5px 0; font-size: 13px; font-weight: 500; color: #111827;">{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}{{.ExpireDays}} hari{{end}}</td>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Email Terdaftar</td>
+          <td width="65%" style="padding: 5px 0; font-size: 14px; font-weight: 500; color: #111827;">{{.Email}}</td>
         </tr>
+        {{end}}
+        {{if .InitialPassword}}
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Password Awal</td>
+          <td width="65%" style="padding: 5px 0; font-size: 14px; font-weight: bold; color: #4f46e5; font-family: 'Courier New', Courier, monospace; letter-spacing: 0.5px;">{{.InitialPassword}}</td>
+        </tr>
+        {{end}}
         <tr>
           <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Status Akun</td>
-          <td width="65%" style="padding: 5px 0; font-size: 13px; font-weight: bold; color: #d97706;">Menunggu Aktivasi</td>
+          <td width="65%" style="padding: 5px 0; font-size: 13px; font-weight: bold; color: #059669;">Aktif (Langsung Bisa Digunakan)</td>
         </tr>
       </table>
+    </td>
+  </tr>
+</table>
+
+<!-- SECURITY ADVISORY NOTICE -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  style="
+    width: 100%;
+    margin-top: 18px;
+    background-color: #fef3c7;
+    border-left: 3px solid #f59e0b;
+    border-radius: 0 6px 6px 0;
+  "
+>
+  <tr>
+    <td style="padding: 12px 14px;">
+      <p style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #92400e;">
+        Imbauan Keamanan Akun
+      </p>
+      <p style="margin: 0; font-size: 12px; color: #b45309; line-height: 1.5;">
+        Demi menjaga keamanan akun dan privasi data Anda, harap segera ganti kata sandi awal ini melalui menu Akun / Profil setelah berhasil masuk untuk pertama kali.
+      </p>
     </td>
   </tr>
 </table>
@@ -69,7 +104,7 @@
       >
         <w:anchorlock />
         <center style="color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: bold">
-          Aktivasi Akun &amp; Atur Password
+          Masuk ke Portal
         </center>
       </v:roundrect>
       <![endif]-->
@@ -92,7 +127,7 @@
           border-radius: 8px;
           background-color: #4f46e5;
         "
-      >Aktivasi Akun &amp; Atur Password</a>
+      >Masuk ke Portal</a>
       <!--<![endif]-->
     </td>
   </tr>
@@ -175,7 +210,7 @@
           line-height: 1.6;
         "
       >
-        Jika Anda tidak merasa meminta pembuatan akun ini, Anda dapat mengabaikan email ini dengan aman. Tautan aktivasi ini hanya dapat digunakan satu kali.
+        Jika Anda tidak merasa memiliki akun ini, Anda dapat mengabaikan email ini dengan aman.
       </p>
     </td>
   </tr>

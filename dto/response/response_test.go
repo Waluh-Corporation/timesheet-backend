@@ -87,3 +87,79 @@ func TestResponseDTOs(t *testing.T) {
 		t.Errorf("PaginatedResponse mismatch: %+v", pagResp)
 	}
 }
+
+func TestUserResponseDTOs(t *testing.T) {
+	u := &models.User{
+		Username: "alice",
+		Email:    "alice@example.com",
+		Role:     models.RoleUser,
+		Name:     "Alice Wonderland",
+		IsActive: true,
+	}
+	u.ID = 42
+
+	userResp := ToUserResponse(u)
+	if userResp.ID != 42 || userResp.Username != "alice" || userResp.Email != "alice@example.com" {
+		t.Fatalf("ToUserResponse mismatch: %+v", userResp)
+	}
+
+	createData := CreateUserData{
+		Message: "user created",
+		User:    userResp,
+	}
+	createResp := CreateUserResponse{
+		Code:   201,
+		Status: "success",
+		Data:   createData,
+	}
+	if createResp.Code != 201 || createResp.Data.User.ID != 42 {
+		t.Errorf("CreateUserResponse mismatch: %+v", createResp)
+	}
+
+	changeResp := ChangePasswordResponse{
+		Code:    200,
+		Status:  "success",
+		Message: "password changed",
+	}
+	if changeResp.Code != 200 || changeResp.Message != "password changed" {
+		t.Errorf("ChangePasswordResponse mismatch: %+v", changeResp)
+	}
+
+	updateResp := UpdateUserResponse{
+		Code:    200,
+		Status:  "success",
+		Message: "user updated",
+		Data:    &userResp,
+	}
+	if updateResp.Code != 200 || updateResp.Data == nil || updateResp.Data.Username != "alice" {
+		t.Errorf("UpdateUserResponse mismatch: %+v", updateResp)
+	}
+
+	submitResp := SubmitProfileChangeResponse{
+		Code:    201,
+		Status:  "success",
+		Message: "profile change request submitted",
+		Data:    &ProfileChangeResponse{ID: 10, UserID: 42, Status: models.ProfilePending},
+	}
+	if submitResp.Code != 201 || submitResp.Data == nil || submitResp.Data.ID != 10 {
+		t.Errorf("SubmitProfileChangeResponse mismatch: %+v", submitResp)
+	}
+
+	detailResp := UserDetailResponse{
+		Code:   200,
+		Status: "success",
+		Data:   userResp,
+	}
+	if detailResp.Code != 200 || detailResp.Data.ID != 42 {
+		t.Errorf("UserDetailResponse mismatch: %+v", detailResp)
+	}
+
+	listResp := UserListResponse{
+		Code:   200,
+		Status: "success",
+		Data:   []UserResponse{userResp},
+	}
+	if listResp.Code != 200 || len(listResp.Data) != 1 {
+		t.Errorf("UserListResponse mismatch: %+v", listResp)
+	}
+}

@@ -35,9 +35,8 @@ type User struct {
 
 	Username string `gorm:"uniqueIndex;size:64;not null" json:"username"`
 	Email    string `gorm:"uniqueIndex;size:255;not null" json:"email"`
-	// PasswordHash is an Argon2id PHC-encoded hash (legacy bcrypt hashes are
-	// still verified and upgraded on next login). It may be empty for
-	// passwordless (passkey-only) accounts that have not yet set a password.
+	// PasswordHash is an Argon2id PHC-encoded hash adhering to OWASP recommendations.
+	// It may be empty for passwordless (passkey-only) accounts that have not yet set a password.
 	PasswordHash string `gorm:"size:255" json:"-"`
 	Role         Role   `gorm:"size:16;not null;default:user;index:idx_users_role_active,priority:1;check:role IN ('admin', 'user')" json:"role"`
 	IsActive     bool   `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_users_role_active,priority:2" json:"is_active"`

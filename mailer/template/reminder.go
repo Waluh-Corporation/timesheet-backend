@@ -3,7 +3,6 @@ package template
 import (
 	_ "embed"
 	"fmt"
-	htmltemplate "html/template"
 	"time"
 )
 
@@ -21,7 +20,7 @@ type ReminderEmailData struct {
 //go:embed reminder.html
 var reminderHTML string
 
-var reminderTmpl = htmltemplate.Must(htmltemplate.New("reminder").Parse(reminderHTML))
+var reminderTmpl = buildEmailTemplate(reminderHTML)
 
 // RenderReminderEmail generates both HTML and plain-text reminder email content.
 func RenderReminderEmail(data ReminderEmailData) (htmlBody string, textBody string, err error) {

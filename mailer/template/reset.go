@@ -3,7 +3,6 @@ package template
 import (
 	_ "embed"
 	"fmt"
-	htmltemplate "html/template"
 	"time"
 )
 
@@ -23,7 +22,7 @@ type ResetEmailData struct {
 //go:embed reset.html
 var resetHTML string
 
-var resetTmpl = htmltemplate.Must(htmltemplate.New("reset").Parse(resetHTML))
+var resetTmpl = buildEmailTemplate(resetHTML)
 
 // RenderResetEmail generates both HTML and plain-text password reset email content.
 func RenderResetEmail(data ResetEmailData) (htmlBody string, textBody string, err error) {

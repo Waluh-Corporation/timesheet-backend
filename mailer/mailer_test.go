@@ -63,6 +63,12 @@ func TestMailer_SendMethodsFailGracefullyWithoutServer(t *testing.T) {
 		t.Error("expected error dialing unreachable port for SendSetupEmail")
 	}
 
+	// SendAccountWelcomeEmail
+	err = m.SendAccountWelcomeEmail("test@example.com", "testuser", "InitialSecret123!", "http://localhost/login")
+	if err == nil {
+		t.Error("expected error dialing unreachable port for SendAccountWelcomeEmail")
+	}
+
 	// SendResetEmail
 	err = m.SendResetEmail("test@example.com", "http://localhost/reset")
 	if err == nil {
