@@ -35,6 +35,7 @@ func renderWithLayout(layout BaseLayoutData, contentTmpl *htmltemplate.Template,
 		return "", fmt.Errorf("failed to render content template: %w", err)
 	}
 
+	//nolint:gosec // G203: contentBuf is pre-rendered and auto-escaped by html/template
 	layout.ContentHTML = htmltemplate.HTML(contentBuf.String())
 	if layout.CurrentYear <= 0 {
 		layout.CurrentYear = time.Now().Year()

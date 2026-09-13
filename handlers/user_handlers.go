@@ -124,7 +124,7 @@ func (s *Server) resolveUserDepartment(req *request.CreateUserRequest, user *mod
 	return "", 0
 }
 
-func (s *Server) handleInitialPassword(req *request.CreateUserRequest, user *models.User) (string, string, int) {
+func (s *Server) handleInitialPassword(user *models.User) (string, string, int) {
 	plain, err := auth.GenerateSecurePassword(auth.GeneratedPasswordLength)
 	if err != nil {
 		return "", "failed to generate initial password", http.StatusInternalServerError
@@ -193,7 +193,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	plainPass, errMsg, code := s.handleInitialPassword(&req, &user)
+	plainPass, errMsg, code := s.handleInitialPassword(&user)
 	if code != 0 {
 		RespondError(c, code, errMsg)
 		return
