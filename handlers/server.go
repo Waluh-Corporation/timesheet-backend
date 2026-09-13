@@ -128,11 +128,17 @@ const (
 func (s *Server) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
-		if header == "" || !strings.HasPrefix(header, "Bearer ") {
+		var token string
+		if strings.HasPrefix(header, "Bearer ") {
+			token = strings.TrimPrefix(header, "Bearer ")
+		} else if cookieToken, err := c.Cookie("ts_token"); err == nil && cookieToken != "" {
+			token = cookieToken
+		}
+
+		if token == "" {
 			RespondAbortError(c, http.StatusUnauthorized, "missing bearer token")
 			return
 		}
-		token := strings.TrimPrefix(header, "Bearer ")
 		claims, err := s.Auth.ParseToken(token)
 		if err != nil {
 			RespondAbortError(c, http.StatusUnauthorized, "invalid or expired token")
