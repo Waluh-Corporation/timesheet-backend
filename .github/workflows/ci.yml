@@ -8,6 +8,7 @@ on:
     types: [opened, synchronize, reopened]
     branches:
       - "main"
+      - "development"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
