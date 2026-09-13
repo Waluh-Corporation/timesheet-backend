@@ -1,0 +1,121 @@
+<p
+  style="
+    margin: 16px 0 0;
+    color: #4b5563;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  "
+>
+  Halo <strong>{{.Username}}</strong>, ini adalah pengingat harian otomatis dari <strong>{{.AppName}}</strong>. Kami melihat Anda belum mencatat aktivitas kerja untuk hari ini.
+</p>
+
+<!-- DETAILS BOX -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  style="
+    width: 100%;
+    margin: 24px 0 0;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  "
+>
+  <tr>
+    <td style="padding: 16px 20px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Tanggal</td>
+          <td width="65%" style="padding: 5px 0; font-size: 14px; font-weight: bold; color: #111827;">{{.Date}}</td>
+        </tr>
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Status Log</td>
+          <td width="65%" style="padding: 5px 0; font-size: 13px; font-weight: bold; color: #e11d48;">Belum Diisi</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- ACTION BUTTON -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 26px 0 0;">
+  <tr>
+    <td
+      align="center"
+      bgcolor="#4f46e5"
+      style="
+        background-color: #4f46e5;
+        border-radius: 8px;
+      "
+    >
+      <!--[if mso]>
+      <v:roundrect
+        xmlns:v="urn:schemas-microsoft-com:vml"
+        xmlns:w="urn:schemas-microsoft-com:office:word"
+        href="{{.ActivityURL}}"
+        style="height: 48px; v-text-anchor: middle; width: 220px"
+        arcsize="17%"
+        strokecolor="#4f46e5"
+        fillcolor="#4f46e5"
+      >
+        <w:anchorlock />
+        <center style="color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: bold">
+          Isi Aktivitas Hari Ini
+        </center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-->
+      <a
+        href="{{.ActivityURL}}"
+        target="_blank"
+        class="confirm-button"
+        style="
+          display: inline-block;
+          padding: 14px 26px;
+          color: #ffffff;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 15px;
+          font-weight: bold;
+          line-height: 18px;
+          text-align: center;
+          text-decoration: none;
+          white-space: nowrap;
+          border-radius: 8px;
+          background-color: #4f46e5;
+        "
+      >Isi Aktivitas Hari Ini</a>
+      <!--<![endif]-->
+    </td>
+  </tr>
+</table>
+
+<!-- TIP NOTICE -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  style="
+    width: 100%;
+    margin-top: 22px;
+    background-color: #f0f9ff;
+    border-left: 3px solid #0ea5e9;
+    border-radius: 0 6px 6px 0;
+  "
+>
+  <tr>
+    <td style="padding: 12px 14px;">
+      <p style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #0369a1;">
+        Tips Pencatatan
+      </p>
+      <p style="margin: 0; font-size: 12px; color: #0c4a6e; line-height: 1.5;">
+        Mencatat aktivitas kerja secara rutin setiap hari membantu menjaga akurasi laporan dan mempermudah saat batas waktu rekapitulasi (cutoff) tiba.
+      </p>
+    </td>
+  </tr>
+</table>

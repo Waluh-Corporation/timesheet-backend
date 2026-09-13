@@ -154,10 +154,12 @@ func writeSDDSummaryAndSignatures(f *excelize.File, sheet string, in GenerationI
 	}
 	WriteColumnFormulas(f, sheet, "43", formulas, st.BoldCenterStyle)
 
+	tlName, dhName := ResolveApprovers(in)
+
 	WriteSignaturesLayout(f, sheet, 46, 5, []SignatureParty{
 		{StartCol: "C", EndCol: "G", Title: "Pemohon", Name: in.User.Name, DatePrefix: sddNamePrefix},
-		{StartCol: "H", EndCol: "K", Title: "Diperiksa,", Name: "", DatePrefix: sddNamePrefix},
-		{StartCol: "L", EndCol: "M", Title: "Disetujui,", Name: "", DatePrefix: sddNamePrefix},
+		{StartCol: "H", EndCol: "K", Title: "Diperiksa,", Name: tlName, DatePrefix: sddNamePrefix},
+		{StartCol: "L", EndCol: "M", Title: "Disetujui,", Name: dhName, DatePrefix: sddNamePrefix},
 	}, st)
 }
 

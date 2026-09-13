@@ -18,8 +18,14 @@ func ConvertExcelToPDF(excelBytes []byte, filename string) ([]byte, error) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
+	// Sanitize filename to prevent directory traversal
+	cleanName := filepath.Base(filename)
+	if cleanName == "" || cleanName == "." || cleanName == "/" || cleanName == "\\" {
+		cleanName = "timesheet.xlsx"
+	}
+
 	// Write Excel bytes to temporary file
-	inputPath := filepath.Join(tmpDir, filename)
+	inputPath := filepath.Join(tmpDir, cleanName)
 	if err := os.WriteFile(inputPath, excelBytes, 0600); err != nil {
 		return nil, fmt.Errorf("failed to write excel bytes to temp file: %w", err)
 	}
@@ -40,7 +46,7 @@ func ConvertExcelToPDF(excelBytes []byte, filename string) ([]byte, error) {
 	}
 
 	// Locate the generated PDF
-	baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
+	baseName := strings.TrimSuffix(cleanName, filepath.Ext(cleanName))
 	outputPath := filepath.Join(tmpDir, baseName+".pdf")
 
 	pdfBytes, err := os.ReadFile(outputPath)

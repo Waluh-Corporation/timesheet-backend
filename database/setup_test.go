@@ -31,7 +31,7 @@ func TestSetup_SeedFunctions(t *testing.T) {
 		}
 
 		var count int64
-		_ = tx.Model(&models.Company{}).Where("code IN ?", []string{"mii", "sdd", "adidata", "ntt"}).Count(&count)
+		_ = tx.Model(&models.Company{}).Where("LOWER(code) IN ?", []string{"mii", "sdd", "adidata", "ntt"}).Count(&count)
 		if count < 4 {
 			t.Errorf("expected at least 4 default companies, got %d", count)
 		}

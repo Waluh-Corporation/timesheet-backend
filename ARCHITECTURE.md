@@ -20,8 +20,8 @@ daily entry, SMTP delivery, and daily Web Push reminders.
                         │  push (webpush-go)       services (excelize)│
                         └───┬───────────────┬───────────────┬─────────┘
                             │               │               │
-                     PostgreSQL         Mailpit/SMTP     Push Services
-                     (GORM)             (email)          (browser vendors)
+                     PostgreSQL             SMTP         Push Services
+                     (GORM)                 (email)      (browser vendors)
 ```
 
 ## 1. Database schema (GORM & 3NF Normalization)
@@ -49,8 +49,7 @@ Versioned migrations run automatically via `RunMigrations(db)` in `backend/datab
 
 - **Password login** (`/api/auth/login`): username **or** email + password
   verified against an **Argon2id** hash → signed JWT (`backend/auth`). Hashes are
-  PHC-encoded; legacy bcrypt hashes still verify and are transparently upgraded
-  to Argon2id on the next successful login.
+  PHC-encoded adhering to OWASP recommendations.
 - **Passkey login** (WebAuthn assertion): `/api/auth/passkey/login/{begin,finish}`
   using `go-webauthn/webauthn`. Registration (`/api/passkey/register/*`) requires
   an existing session, so passkeys are added from the dashboard.
@@ -151,9 +150,8 @@ each rendered by a dedicated strict-typed generator keyed off `Template.Builtin`
   exported `login.html` / `dashboard.html` / … documents (with safe path
   handling), so no separate web server or second container is needed.
   `docker-compose.prod.yml` runs just this image + PostgreSQL.
-- **Dev stack** (`docker-compose.yml`): PostgreSQL, pgAdmin (DBeaver can also
-  attach on 5432), Mailpit (SMTP + web UI on 8025), and hot-reloading backend +
-  frontend as separate containers.
+- **Dev stack** (`docker-compose.yml`): PostgreSQL (DBeaver can also
+  attach on 5432) and the Go backend service.
 - `deploy_and_commit.sh`: validates a Conventional Commit, commits + pushes,
   SSHes to `192.168.0.2:222`, **scans upward from port 2000** for a free port on
   the host, and brings the stack up there.

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -91,10 +90,10 @@ func TestUserHandlers_SelfProtectionAndValidation(t *testing.T) {
 		assertResponseCode(t, w, http.StatusBadRequest)
 	})
 
-	t.Run("CreateUser rejects weak password", func(t *testing.T) {
+	t.Run("CreateUser rejects invalid email", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		body := `{"username":"testweak","email":"testweak@example.com","name":"Weak","password":"123","role":"user"}`
+		body := `{"username":"testauto","email":"not-an-email","role":"user"}`
 		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader([]byte(body)))
 		c.Request.Header.Set("Content-Type", "application/json")
 
@@ -206,6 +205,71 @@ func TestUserHandlers_UserCRUDIntegration(t *testing.T) {
 		srv.DeleteUser(c)
 		assertFatalCode(t, w, http.StatusNotFound)
 	})
+
+	t.Run("CreateUser with admin role ignores company and enforces no company relation", func(t *testing.T) {
+		comp := models.Company{Code: "admin_test_comp", Name: "Admin Test Comp"}
+		_ = tx.Create(&comp)
+
+		createAdminBody := fmt.Sprintf(`{"username":"new_admin_nocomp","email":"admin_nocomp@example.com","role":"admin","name":"Admin No Comp","company_id":%d,"company":"Admin Test Comp"}`, comp.ID)
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(ctxUserID, adminUser.ID)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader([]byte(createAdminBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.CreateUser(c)
+		assertFatalCode(t, w, http.StatusCreated)
+
+		var createdAdmin models.User
+		if err := tx.Where("username = ?", "new_admin_nocomp").First(&createdAdmin).Error; err != nil {
+			t.Fatalf("failed to find created admin: %v", err)
+		}
+		if createdAdmin.CompanyID != nil {
+			t.Errorf("expected admin company_id to be nil, got %v", createdAdmin.CompanyID)
+		}
+		if createdAdmin.Company != "" {
+			t.Errorf("expected admin company to be empty, got %q", createdAdmin.Company)
+		}
+	})
+
+	t.Run("UpdateUser to admin role clears any existing company relation", func(t *testing.T) {
+		comp := models.Company{Code: "upd_admin_comp", Name: "Upd Admin Comp"}
+		_ = tx.Create(&comp)
+		regularUser := models.User{
+			Username:  "regular_to_admin",
+			Email:     "reg2admin@example.com",
+			Role:      models.RoleUser,
+			Name:      "Regular User",
+			Company:   comp.Name,
+			CompanyID: &comp.ID,
+			IsActive:  true,
+		}
+		if err := tx.Create(&regularUser).Error; err != nil {
+			t.Fatalf("failed to create user: %v", err)
+		}
+
+		updateBody := `{"role": "admin"}`
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(ctxUserID, adminUser.ID)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", regularUser.ID)}}
+		c.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/admin/users/%d", regularUser.ID), bytes.NewReader([]byte(updateBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.UpdateUser(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		var reloaded models.User
+		if err := tx.Where("id = ?", regularUser.ID).First(&reloaded).Error; err != nil {
+			t.Fatalf("failed to reload user: %v", err)
+		}
+		if reloaded.CompanyID != nil {
+			t.Errorf("expected promoted admin company_id to be nil, got %v", reloaded.CompanyID)
+		}
+		if reloaded.Company != "" {
+			t.Errorf("expected promoted admin company to be empty, got %q", reloaded.Company)
+		}
+	})
 }
 
 func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
@@ -245,10 +309,10 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 
 	comp := models.Company{Code: "pc_comp", Name: "PC Company"}
 	_ = tx.Create(&comp)
-	dept := models.Department{CompanyID: &comp.ID, Name: "PC Dept", Division: "PC Div", IsActive: true}
+	dept := models.Department{Name: "PC Dept", Division: "PC Div", IsActive: true}
 	_ = tx.Create(&dept)
 
-	submitBody := fmt.Sprintf(`{"name": "Target New Name", "bni_id": "78910", "division": "Fintech", "department": "PC Dept", "department_id": %d, "company_id": %d}`, dept.ID, comp.ID)
+	submitBody := fmt.Sprintf(`{"name": "Target New Name", "bni_id": "78910", "employee_id": "EMP-9999", "division": "Fintech", "department": "PC Dept", "department_id": %d, "company_id": %d}`, dept.ID, comp.ID)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Set(ctxUserID, targetUser.ID)
@@ -258,11 +322,11 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	srv.SubmitProfileChange(c)
 	assertFatalCode(t, w, http.StatusCreated)
 
-	var respEnvelope struct {
-		Data models.ProfileChangeRequest `json:"data"`
+	var lastReq models.ProfileChangeRequest
+	if err := srv.DB.Where("user_id = ?", targetUser.ID).Order("id desc").First(&lastReq).Error; err != nil {
+		t.Fatalf("failed to find created profile change request: %v", err)
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &respEnvelope)
-	reqIDStr := fmt.Sprintf("%d", respEnvelope.Data.ID)
+	reqIDStr := fmt.Sprintf("%d", lastReq.ID)
 
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
@@ -293,6 +357,12 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	srv.ReviewProfileChange(c)
 	assertFatalCode(t, w, http.StatusOK)
 
+	var updatedTarget models.User
+	srv.DB.First(&updatedTarget, targetUser.ID)
+	if updatedTarget.EmployeeID != "EMP-9999" {
+		t.Errorf("expected employee_id 'EMP-9999', got %s", updatedTarget.EmployeeID)
+	}
+
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
 	c.Set(ctxUserID, adminUser.ID)
@@ -307,11 +377,11 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/profile/change", bytes.NewReader([]byte(submitBody)))
 	c.Request.Header.Set("Content-Type", "application/json")
 	srv.SubmitProfileChange(c)
-	var respEnvelope2 struct {
-		Data models.ProfileChangeRequest `json:"data"`
+	var lastReq2 models.ProfileChangeRequest
+	if err := srv.DB.Where("user_id = ?", targetUser.ID).Order("id desc").First(&lastReq2).Error; err != nil {
+		t.Fatalf("failed to find created profile change request: %v", err)
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &respEnvelope2)
-	req2IDStr := fmt.Sprintf("%d", respEnvelope2.Data.ID)
+	req2IDStr := fmt.Sprintf("%d", lastReq2.ID)
 
 	w = httptest.NewRecorder()
 	c, _ = gin.CreateTestContext(w)
@@ -347,7 +417,7 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 	comp := models.Company{Code: "user_test_comp", Name: "User Test Company"}
 	_ = tx.Create(&comp)
 
-	dept := models.Department{CompanyID: &comp.ID, Name: "Product Engineering", IsActive: true}
+	dept := models.Department{Name: "Product Engineering", IsActive: true}
 	_ = tx.Create(&dept)
 
 	adminUser := models.User{
@@ -380,11 +450,11 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 		srv.CreateUser(c)
 		assertFatalCode(t, w, http.StatusCreated)
 
-		var resp struct {
-			Data models.User `json:"data"`
+		var createdUser models.User
+		if err := srv.DB.Where("username = ?", "new_created_user").First(&createdUser).Error; err != nil {
+			t.Fatalf("failed to query created user: %v", err)
 		}
-		_ = json.Unmarshal(w.Body.Bytes(), &resp)
-		newUserID = resp.Data.ID
+		newUserID = createdUser.ID
 		if newUserID == 0 {
 			t.Fatal("expected non-zero created user ID")
 		}

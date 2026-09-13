@@ -341,3 +341,65 @@ func TestBuildNTTWorkbook(t *testing.T) {
 		t.Errorf("E42 formula = %q, want 'COUNTA(E11:E41)'", formulaE42)
 	}
 }
+
+func TestTemplateBuilders_MasterApproversSignaturesWithoutOvertime(t *testing.T) {
+	user := &models.User{
+		Name:       "Test Employee",
+		EmployeeID: "EMP-100",
+		BniID:      "BNI-100",
+	}
+	masterApprovers := []models.Approver{
+		{Name: "Budi TeamLeader", RoleType: models.ApproverRoleTeamLeader, IsActive: true},
+		{Name: "Dewi DeptHead", RoleType: models.ApproverRoleDepartmentHead, IsActive: true},
+	}
+
+	testCases := []struct {
+		company   string
+		sheetName string
+		tlCell    string
+		dhCell    string
+		wantTL    string
+		wantDH    string
+	}{
+		{company: "mii", sheetName: "Sheet1", tlCell: "D46", dhCell: "G46", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
+		{company: "sdd", sheetName: "Juni", tlCell: "H52", dhCell: "L52", wantTL: "Nama : Budi TeamLeader", wantDH: "Nama : Dewi DeptHead"},
+		{company: "adidata", sheetName: "TIMESHEET", tlCell: "D48", dhCell: "G48", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
+		{company: "ntt", sheetName: "Timesheet", tlCell: "F57", dhCell: "J57", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.company, func(t *testing.T) {
+			in := GenerationInput{
+				CompanyCode: tc.company,
+				User:        user,
+				Month:       6,
+				Year:        2026,
+				Activities:  []models.DailyActivity{},
+				Overtimes:   nil, // NO overtime entries!
+				Approvers:   masterApprovers,
+				Holidays:    map[int]string{},
+			}
+
+			out, err := GenerateFromTemplate(in)
+			if err != nil {
+				t.Fatalf("GenerateFromTemplate(%s) failed: %v", tc.company, err)
+			}
+
+			f, err := excelize.OpenReader(bytes.NewReader(out))
+			if err != nil {
+				t.Fatalf("Open output workbook for %s: %v", tc.company, err)
+			}
+			defer func() { _ = f.Close() }()
+
+			tlVal, _ := f.GetCellValue(tc.sheetName, tc.tlCell)
+			if tlVal != tc.wantTL {
+				t.Errorf("[%s] TL signature at %s = %q, want %q", tc.company, tc.tlCell, tlVal, tc.wantTL)
+			}
+
+			dhVal, _ := f.GetCellValue(tc.sheetName, tc.dhCell)
+			if dhVal != tc.wantDH {
+				t.Errorf("[%s] DH signature at %s = %q, want %q", tc.company, tc.dhCell, dhVal, tc.wantDH)
+			}
+		})
+	}
+}

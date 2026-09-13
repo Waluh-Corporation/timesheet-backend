@@ -4,9 +4,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	_ "timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
 
@@ -48,11 +50,11 @@ type UpdateCompanyRequest struct {
 // @Accept json
 // @Produce json
 // @Param request body handlers.CreateApproverRequest true "Approver data"
-// @Success 201 {object} models.Approver
-// @Failure 400 {object} models.ErrorResponse "Bad request"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Forbidden"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 201 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Bad request"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Forbidden"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/approvers [post]
 func (s *Server) CreateApprover(c *gin.Context) {
 	var req CreateApproverRequest
@@ -78,7 +80,7 @@ func (s *Server) CreateApprover(c *gin.Context) {
 		return
 	}
 
-	RespondSuccess(c, http.StatusCreated, appr)
+	RespondMessage(c, http.StatusCreated, "approver created successfully")
 }
 
 // UpdateApprover godoc
@@ -90,12 +92,12 @@ func (s *Server) CreateApprover(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Approver ID"
 // @Param request body handlers.UpdateApproverRequest true "Approver update data"
-// @Success 200 {object} models.Approver
-// @Failure 400 {object} models.ErrorResponse "Bad request"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Forbidden"
-// @Failure 404 {object} models.ErrorResponse "Approver not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Bad request"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Forbidden"
+// @Failure 404 {object} response.ErrorResponse "Approver not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/approvers/{id} [patch]
 func (s *Server) UpdateApprover(c *gin.Context) {
 	var req UpdateApproverRequest
@@ -116,45 +118,51 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 	}
 
 	var appr models.Approver
-	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&appr).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
 
+	hasUpdates := false
 	if req.Name != nil {
 		appr.Name = strings.TrimSpace(*req.Name)
+		hasUpdates = true
 	}
 	if req.RoleType != nil {
 		appr.RoleType = *req.RoleType
+		hasUpdates = true
 	}
 	if req.Title != nil {
 		appr.Title = strings.TrimSpace(*req.Title)
+		hasUpdates = true
 	}
 	if req.IsActive != nil {
 		appr.IsActive = *req.IsActive
+		hasUpdates = true
 	}
 
-	if err := s.DB.Save(&appr).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
-		return
+	if hasUpdates {
+		if err := s.DB.WithContext(c.Request.Context()).Save(&appr).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
+			return
+		}
 	}
 
-	_ = s.DB.Where(queryID, appr.ID).First(&appr)
-	RespondSuccess(c, http.StatusOK, appr)
+	RespondMessage(c, http.StatusOK, "approver updated successfully")
 }
 
 // DeleteApprover godoc
 // @Summary Delete an approver (admin only)
-// @Description Permanently removes an approver from master data.
+// @Description Soft-deactivates an approver from master data.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "Approver ID"
-// @Success 200 {object} models.DeleteResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Forbidden"
-// @Failure 404 {object} models.ErrorResponse "Approver not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.DeleteResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Forbidden"
+// @Failure 404 {object} response.ErrorResponse "Approver not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/approvers/{id} [delete]
 func (s *Server) DeleteApprover(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -164,12 +172,15 @@ func (s *Server) DeleteApprover(c *gin.Context) {
 	}
 
 	var appr models.Approver
-	if err := s.DB.Where(queryID, id).First(&appr).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
 
-	if err := s.DB.Delete(&appr).Error; err != nil {
+	if err := s.DB.Model(&appr).Updates(map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now(),
+	}).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to delete approver: "+err.Error())
 		return
 	}
@@ -184,11 +195,11 @@ func (s *Server) DeleteApprover(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body handlers.CreateCompanyRequest true "Company data"
-// @Success 201 {object} models.Company
-// @Failure 400 {object} models.ErrorResponse "Bad request"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Forbidden"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 201 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Bad request"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Forbidden"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/companies [post]
 func (s *Server) CreateCompany(c *gin.Context) {
 	var req CreateCompanyRequest
@@ -198,15 +209,16 @@ func (s *Server) CreateCompany(c *gin.Context) {
 	}
 
 	comp := models.Company{
-		Code: strings.ToLower(strings.TrimSpace(req.Code)),
-		Name: strings.TrimSpace(req.Name),
+		Code:     strings.ToLower(strings.TrimSpace(req.Code)),
+		Name:     strings.TrimSpace(req.Name),
+		IsActive: true,
 	}
 
 	if err := s.DB.Create(&comp).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to create company: "+err.Error())
 		return
 	}
-	RespondSuccess(c, http.StatusCreated, comp)
+	RespondMessage(c, http.StatusCreated, "company created successfully")
 }
 
 // UpdateCompany godoc
@@ -218,12 +230,12 @@ func (s *Server) CreateCompany(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Company ID"
 // @Param request body handlers.UpdateCompanyRequest true "Company update data"
-// @Success 200 {object} models.Company
-// @Failure 400 {object} models.ErrorResponse "Bad request"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Forbidden"
-// @Failure 404 {object} models.ErrorResponse "Company not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Bad request"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Forbidden"
+// @Failure 404 {object} response.ErrorResponse "Company not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/companies/{id} [patch]
 func (s *Server) UpdateCompany(c *gin.Context) {
 	var req UpdateCompanyRequest
@@ -244,37 +256,43 @@ func (s *Server) UpdateCompany(c *gin.Context) {
 	}
 
 	var comp models.Company
-	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&comp).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}
 
+	hasUpdates := false
 	if req.Code != nil {
 		comp.Code = strings.ToLower(strings.TrimSpace(*req.Code))
+		hasUpdates = true
 	}
 	if req.Name != nil {
 		comp.Name = strings.TrimSpace(*req.Name)
+		hasUpdates = true
 	}
 
-	if err := s.DB.Save(&comp).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
-		return
+	if hasUpdates {
+		if err := s.DB.WithContext(c.Request.Context()).Save(&comp).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
+			return
+		}
 	}
-	RespondSuccess(c, http.StatusOK, comp)
+
+	RespondMessage(c, http.StatusOK, "company updated successfully")
 }
 
 // DeleteCompany godoc
 // @Summary Delete a company (admin only)
-// @Description Permanently removes a company from master data.
+// @Description Soft-deactivates a company from master data.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "Company ID"
-// @Success 200 {object} models.DeleteResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Forbidden"
-// @Failure 404 {object} models.ErrorResponse "Company not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.DeleteResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Forbidden"
+// @Failure 404 {object} response.ErrorResponse "Company not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/companies/{id} [delete]
 func (s *Server) DeleteCompany(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
@@ -284,12 +302,15 @@ func (s *Server) DeleteCompany(c *gin.Context) {
 	}
 
 	var comp models.Company
-	if err := s.DB.Where(queryID, id).First(&comp).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}
 
-	if err := s.DB.Delete(&comp).Error; err != nil {
+	if err := s.DB.Model(&comp).Updates(map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now(),
+	}).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to delete company: "+err.Error())
 		return
 	}

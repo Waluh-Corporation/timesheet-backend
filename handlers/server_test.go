@@ -12,6 +12,7 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
 
@@ -69,7 +70,7 @@ func TestServer_Responses(t *testing.T) {
 	if wPage.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", wPage.Code)
 	}
-	var pageResp models.PaginatedResponse
+	var pageResp response.PaginatedResponse
 	if err := json.Unmarshal(wPage.Body.Bytes(), &pageResp); err != nil {
 		t.Fatalf("failed to decode paginated response: %v", err)
 	}
@@ -98,6 +99,7 @@ func TestServer_PublicBaseURL(t *testing.T) {
 	srv := &Server{
 		Cfg: &config.Config{
 			FrontendURL: "http://localhost:3000/",
+			RPOrigins:   []string{"https://portal.example.com", "http://insecure.example.com"},
 		},
 	}
 
@@ -109,7 +111,7 @@ func TestServer_PublicBaseURL(t *testing.T) {
 		t.Errorf("expected http://localhost:3000, got %s", u)
 	}
 
-	// 2. X-Forwarded-Host and X-Forwarded-Proto
+	// 2. X-Forwarded-Host and X-Forwarded-Proto for trusted domain
 	w2 := httptest.NewRecorder()
 	c2, _ := gin.CreateTestContext(w2)
 	c2.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -119,13 +121,23 @@ func TestServer_PublicBaseURL(t *testing.T) {
 		t.Errorf("expected https://portal.example.com, got %s", u)
 	}
 
-	// 3. X-Forwarded-Host without Proto (non-TLS)
+	// 3. X-Forwarded-Host without Proto (non-TLS) for trusted domain
 	w3 := httptest.NewRecorder()
 	c3, _ := gin.CreateTestContext(w3)
 	c3.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
 	c3.Request.Header.Set("X-Forwarded-Host", "insecure.example.com")
 	if u := srv.publicBaseURL(c3); u != "http://insecure.example.com" {
 		t.Errorf("expected http://insecure.example.com, got %s", u)
+	}
+
+	// 4. Untrusted host header poisoning attempt is rejected and falls back safely
+	w4 := httptest.NewRecorder()
+	c4, _ := gin.CreateTestContext(w4)
+	c4.Request = httptest.NewRequest(http.MethodGet, "/test", nil)
+	c4.Request.Header.Set("X-Forwarded-Host", "attacker.evil.com")
+	c4.Request.Header.Set("X-Forwarded-Proto", "https")
+	if u := srv.publicBaseURL(c4); u != "http://localhost:3000" {
+		t.Errorf("expected fallback to http://localhost:3000, got %s", u)
 	}
 }
 
@@ -176,7 +188,7 @@ func TestServer_Middlewares(t *testing.T) {
 	r.Use(CORSMiddleware())
 	r.OPTIONS("/cors", func(c *gin.Context) {})
 
-	// Test CORS OPTIONS preflight
+	// Test CORS OPTIONS preflight without Origin
 	reqOpts := httptest.NewRequest(http.MethodOptions, "/cors", nil)
 	wOpts := httptest.NewRecorder()
 	r.ServeHTTP(wOpts, reqOpts)
@@ -185,6 +197,30 @@ func TestServer_Middlewares(t *testing.T) {
 	}
 	if wOpts.Header().Get("Access-Control-Allow-Origin") != "*" {
 		t.Errorf("expected Access-Control-Allow-Origin: *")
+	}
+
+	// Test CORS allowed origin (e.g. localhost:3000 in dev)
+	reqAllowed := httptest.NewRequest(http.MethodOptions, "/cors", nil)
+	reqAllowed.Header.Set("Origin", "http://localhost:3000")
+	wAllowed := httptest.NewRecorder()
+	r.ServeHTTP(wAllowed, reqAllowed)
+	if wAllowed.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" {
+		t.Errorf("expected Access-Control-Allow-Origin to match allowed origin")
+	}
+	if wAllowed.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Errorf("expected Access-Control-Allow-Credentials: true for allowed origin")
+	}
+
+	// Test CORS untrusted origin (must not be allowed with credentials)
+	reqUntrusted := httptest.NewRequest(http.MethodOptions, "/cors", nil)
+	reqUntrusted.Header.Set("Origin", "http://attacker.evil.com")
+	wUntrusted := httptest.NewRecorder()
+	r.ServeHTTP(wUntrusted, reqUntrusted)
+	if wUntrusted.Header().Get("Access-Control-Allow-Credentials") == "true" {
+		t.Errorf("untrusted origin must not receive Access-Control-Allow-Credentials: true")
+	}
+	if wUntrusted.Header().Get("Access-Control-Allow-Origin") == "http://attacker.evil.com" {
+		t.Errorf("untrusted origin must not be reflected in Access-Control-Allow-Origin")
 	}
 
 	// Test AuthMiddleware & AdminOnly

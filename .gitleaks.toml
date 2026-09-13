@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignore mock JWT tokens in postman_collection.json"
+paths = [
+    '''postman_collection\.json''',
+]

@@ -130,7 +130,7 @@ func writeMIISummaryAndSignatures(f *excelize.File, sheet string, in GenerationI
 	}
 	WriteColumnFormulas(f, sheet, "40", formulas, st.BoldCenterStyle)
 
-	tlName, dhName := ExtractApprovers(in.Overtimes)
+	tlName, dhName := ResolveApprovers(in)
 
 	WriteSignaturesLayout(f, sheet, 42, 3, []SignatureParty{
 		{StartCol: "A", EndCol: "C", Title: "TTD PEGAWAI,", Name: in.User.Name, DatePrefix: DatePrefixUpper},

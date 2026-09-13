@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-09-13
+
+### Added
+- **Admin User Provisioning Endpoint**: Direct administrative user creation (`POST /api/v1/admin/users`) with CSPRNG password generation, 409 Conflict duplicate checks, and welcome email dispatch.
+- **Self-Service Change Password Endpoint**: Authenticated user password update endpoint (`POST /api/v1/users/change-password`) with current password verification and automated security notification email alerts.
+- **Modern Responsive Email Notification System**: Redesigned transactional emails (account setup, password reset, timesheet delivery, daily reminder, and password change confirmations) with mobile-responsive layouts, localized expiration timestamps, and secure fallback links.
+- **Automated Timesheet Approver Filling**: Timesheet workbooks across all company templates now dynamically resolve and populate designated approver names from the master approver directory.
+
+### Changed
+- **Flexible Department Management**: Decoupled departments from single-company constraints, enabling departments to span multiple companies, and isolated administrative roles from company assignments.
+- **Optimized API Payloads**: Streamlined response structures for daily activities, overtimes, and admin user listings to reduce payload size and enhance client performance.
+- **Welcome Email Redesign**: Refreshed onboarding email template to present initial login credentials clearly and remove activation steps for administrator-created accounts.
+
+### Security
+- **Argon2id Password Hashing**: Upgraded password hashing architecture to Argon2id across the entire application with transparent legacy hash verification.
+- **API Protection & Origin Validation**: Restricted CORS origins to configured allowlists, prevented host header poisoning via `X-Forwarded-Host` validation, and enforced rate limiting across all authentication and password reset routes.
+- **Account Uniqueness & Schema Hardening**: Enforced database-level unique constraints on email and username to prevent account collisions.
+
+---
+
 ## [1.1.0] - 2026-09-12
 
 ### Added
@@ -57,7 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API Route Versioning: Migrated all routes to the `/api/v1` prefix and decommissioned legacy unversioned endpoints.
 - Decoupled Workbook Engine: Replaced database-stored template grids with dedicated programmatic spreadsheet builders.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.0.0
 

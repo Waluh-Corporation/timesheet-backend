@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/config"
+	"timesheet-backend/dto/request"
 	"timesheet-backend/models"
 	"timesheet-backend/push"
 )
@@ -81,9 +82,9 @@ func TestPushHandlers_Extended(t *testing.T) {
 	uid := testUser.ID
 
 	t.Run("Subscribe valid payload", func(t *testing.T) {
-		payload := models.SubscribeRequest{
+		payload := request.SubscribeRequest{
 			Endpoint: "https://fcm.googleapis.com/fcm/send/test-endpoint-1",
-			Keys: models.PushKeyPayload{
+			Keys: request.PushKeyPayload{
 				P256dh: "test-p256dh-key",
 				Auth:   "test-auth-secret",
 			},
@@ -110,7 +111,7 @@ func TestPushHandlers_Extended(t *testing.T) {
 	})
 
 	t.Run("Unsubscribe specific endpoint", func(t *testing.T) {
-		payload := models.UnsubscribeRequest{
+		payload := request.UnsubscribeRequest{
 			Endpoint: "https://fcm.googleapis.com/fcm/send/test-endpoint-1",
 		}
 		body, _ := json.Marshal(payload)

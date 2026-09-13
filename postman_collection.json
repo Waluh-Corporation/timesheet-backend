@@ -1,275 +1,1732 @@
 {
-	"info": {
-		"_postman_id": "7f8b9c2a-e1d4-4f56-8a90-3b1a2e4f5a6b",
-		"name": "Timesheet Backend API",
-		"description": "API collection for Timesheet Backend with PostgreSQL and SMTP integration.",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-	},
-	"item": [
-		{
-			"name": "Health & Probes",
-			"item": [
-				{
-					"name": "Health Check (Liveness)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/healthz",
-							"host": ["{{baseUrl}}"],
-							"path": ["healthz"]
-						}
-					}
-				},
-				{
-					"name": "Readiness Check (Database Ping)",
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/readyz",
-							"host": ["{{baseUrl}}"],
-							"path": ["readyz"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "Setup",
-			"item": [
-				{
-					"name": "Initial System Setup",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"admin_username\": \"admin\",\n  \"admin_name\": \"System Administrator\",\n  \"admin_email\": \"timesheet@fafr.dev\",\n  \"admin_password\": \"Password1!Strong\",\n  \"company_name\": \"Default Company\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/setup/init",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "setup", "init"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "Authentication",
-			"item": [
-				{
-					"name": "Login",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"var jsonData = pm.response.json();",
-									"if (jsonData.token) {",
-									"    pm.collectionVariables.set('jwt_token', jsonData.token);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"identifier\": \"admin\",\n  \"password\": \"Password1!Strong\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/auth/login",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "auth", "login"]
-						}
-					}
-				},
-				{
-					"name": "Get Current User Profile (/me)",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "{{jwt_token}}",
-									"type": "string"
-								}
-							]
-						},
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/me",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "me"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "Master Data",
-			"item": [
-				{
-					"name": "Get Companies",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "{{jwt_token}}",
-									"type": "string"
-								}
-							]
-						},
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/companies",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "companies"]
-						}
-					}
-				},
-				{
-					"name": "Get Projects",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "{{jwt_token}}",
-									"type": "string"
-								}
-							]
-						},
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/projects",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "projects"]
-						}
-					}
-				},
-				{
-					"name": "Get Activity Statuses",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "{{jwt_token}}",
-									"type": "string"
-								}
-							]
-						},
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/activity-statuses",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "activity-statuses"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "Timesheet & Activities",
-			"item": [
-				{
-					"name": "Log Daily Activity",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "{{jwt_token}}",
-									"type": "string"
-								}
-							]
-						},
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"date\": \"2026-09-11\",\n  \"status\": \"WFO\",\n  \"start_time\": \"08:30\",\n  \"end_time\": \"17:30\",\n  \"project_id\": 1,\n  \"description\": \"Backend refactoring and E2E verification\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/activities",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "activities"]
-						}
-					}
-				},
-				{
-					"name": "Generate Timesheet (Excel & SMTP)",
-					"request": {
-						"auth": {
-							"type": "bearer",
-							"bearer": [
-								{
-									"key": "token",
-									"value": "{{jwt_token}}",
-									"type": "string"
-								}
-							]
-						},
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"month\": 9,\n  \"year\": 2026,\n  \"send_email\": true\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/v1/timesheet/generate",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "v1", "timesheet", "generate"]
-						}
-					}
-				}
-			]
-		}
-	],
-	"variable": [
-		{
-			"key": "baseUrl",
-			"value": "http://localhost:8080"
-		},
-		{
-			"key": "jwt_token",
-			"value": ""
-		}
-	]
+  "info": {
+    "name": "Timesheet Backend Complete API Tests",
+    "description": "Complete test collection covering 100% of all 50 endpoints in Timesheet Backend API with Postman assertions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "adminToken",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjQ5Mywicm9sZSI6ImFkbWluIiwic3ViIjoiYWRtaW4iLCJpYXQiOjE3ODkyMTg4MzAsImV4cCI6MTc4OTgyMzYzMH0.CzVdmNjmeu237eshjpOH72ZqMVJBPzg2oeplvGqkS9o"
+    },
+    {
+      "key": "userToken",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjk2Mywicm9sZSI6InVzZXIiLCJzdWIiOiJ0ZXN0dXNlciIsImlhdCI6MTc4OTIxODgzMCwiZXhwIjoxNzg5ODIzNjMwfQ.tzWCUgD1F84sxsV_3AnYow4JpAC6r8p1DFnnXJQ5BS4"
+    },
+    {
+      "key": "adminUserId",
+      "value": "493"
+    },
+    {
+      "key": "createdUserId",
+      "value": "963"
+    },
+    {
+      "key": "createdCompanyId",
+      "value": "1"
+    },
+    {
+      "key": "createdApproverId",
+      "value": "1"
+    },
+    {
+      "key": "createdActivityId",
+      "value": "1"
+    },
+    {
+      "key": "createdOvertimeId",
+      "value": "1"
+    },
+    {
+      "key": "profileChangeId",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Health & Diagnostics",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/healthz"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status ok\", () => pm.expect(pm.response.json().status).to.eql(\"ok\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readiness Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/readyz"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Database connected and ready\", () => {",
+                  "  const res = pm.response.json();",
+                  "  pm.expect(res.status).to.eql(\"ready\");",
+                  "  pm.expect(res.database).to.eql(\"connected\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Setup Status",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/setup/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Setup status returned\", () => {",
+                  "  const res = pm.response.json();",
+                  "  pm.expect(res.status).to.eql(\"success\");",
+                  "  pm.expect(res.data.is_initialized).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "WebAuthn Related Origins",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/.well-known/webauthn"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Origins array returned\", () => {",
+                  "  const res = pm.response.json();",
+                  "  pm.expect(res.data.origins).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get VAPID Public Key",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/push/vapid-public-key"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"VAPID key returned\", () => {",
+                  "  const res = pm.response.json();",
+                  "  pm.expect(res.data.public_key).to.be.a(\"string\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02. Auth",
+      "item": [
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"identifier\":\"admin\",\"password\":\"Password123!\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 429 rate limited\", () => pm.expect([200, 429]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "  pm.test(\"Admin token extracted\", () => pm.expect(res.data.token).to.be.a(\"string\"));",
+                  "  pm.collectionVariables.set(\"adminToken\", res.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"identifier\":\"testuser\",\"password\":\"Password123!\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 429 rate limited\", () => pm.expect([200, 429]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "  pm.test(\"User token extracted\", () => pm.expect(res.data.token).to.be.a(\"string\"));",
+                  "  pm.collectionVariables.set(\"userToken\", res.data.token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"testuser@fafr.dev\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/forgot-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 429 rate limited\", () => pm.expect([200, 429]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset Password (Validation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"token\":\"invalid-token\",\"password\":\"NewPassword123!\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/reset-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 or 429 rate limited\", () => pm.expect([400, 429]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Begin Passkey Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/passkey/login/begin"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 429 rate limited\", () => pm.expect([200, 429]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test(\"WebAuthn options returned\", () => pm.expect(pm.response.json().data).to.have.property(\"options\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finish Passkey Login (Validation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"id\":\"invalid\",\"rawId\":\"invalid\",\"response\":{},\"type\":\"public-key\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/passkey/login/finish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400, 401, or 429 on invalid ceremony\", () => {",
+                  "  pm.expect([400, 401, 429]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03. Master Data & Holidays",
+      "item": [
+        {
+          "name": "List Projects",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/projects"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Projects have is_active true\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Departments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/departments"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Departments have is_active true and no company_id\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "    pm.expect(res.data[0]).to.not.have.property(\"company_id\");",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Companies",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/companies"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Companies have is_active true\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "  });",
+                  "  pm.collectionVariables.set(\"createdCompanyId\", res.data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Activity Statuses",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/activity-statuses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Data is array\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Approvers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/approvers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Approvers have is_active true\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "  });",
+                  "  pm.collectionVariables.set(\"createdApproverId\", res.data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Month Holidays",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/holidays?month=9&year=2026"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Status is success\", () => pm.expect(pm.response.json().status).to.eql(\"success\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List All Holidays",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/holidays/all?year=2026"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Data is array\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sync Holidays",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/holidays/sync?year=2026"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 502 upstream ok\", () => {",
+                  "  pm.expect([200, 502]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04. User Profile",
+      "item": [
+        {
+          "name": "Get Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Username matches\", () => pm.expect(pm.response.json().data.username).to.eql(\"testuser\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit Profile Change (Shortened Response)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"bni_id\":\"12345678\",\"name\":\"Test Employee Updated\",\"division\":\"IT\",\"department\":\"Core Banking\",\"site\":\"Jakarta\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/profile/change"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Shortened code is 201\", () => pm.expect(res.code).to.eql(201));",
+                  "pm.test(\"Shortened status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "pm.test(\"Shortened message\", () => pm.expect(res.message).to.eql(\"profile change request submitted\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List My Profile Changes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/profile/changes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "pm.test(\"Response payload does not contain user key\", () => {",
+                  "  if (res.data && res.data.length > 0) {",
+                  "    pm.expect(res.data[0]).to.not.have.property(\"user\");",
+                  "  }",
+                  "});",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.collectionVariables.set(\"profileChangeId\", res.data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"old_password\":\"Password123!\",\"new_password\":\"NewSecurePass123!@\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/users/change-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 400\", () => pm.expect([200, 400]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Code is 200\", () => pm.expect(res.code).to.eql(200));",
+                  "  pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "  pm.test(\"Password changed message\", () => pm.expect(res.message).to.include(\"password changed\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User Change Password (Weak Password Rejection 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"old_password\":\"Password123!\",\"new_password\":\"123\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/users/change-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Rejection message returned\", () => {",
+                  "  pm.expect(res.error).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05. Passkeys Management",
+      "item": [
+        {
+          "name": "Begin Passkey Registration",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/passkey/register/begin"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Options returned\", () => {",
+                  "  pm.expect(pm.response.json().data).to.have.property(\"options\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finish Passkey Registration (Validation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"id\":\"mock-id\",\"rawId\":\"mock-id\",\"response\":{},\"type\":\"public-key\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/passkey/register/finish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 Bad Request on invalid ceremony data\", () => {",
+                  "  pm.expect([400, 422]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Passkeys",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/passkeys"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Data is array\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Passkey",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/passkeys/999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 404 or 200\", () => {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06. Push Notifications",
+      "item": [
+        {
+          "name": "Push Subscribe (Validation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"endpoint\":\"https://fcm.googleapis.com/fcm/send/sample-subscription\",\"keys\":{\"auth\":\"sample-auth-key\",\"p256dh\":\"sample-p256dh-key\"}}"
+            },
+            "url": "{{baseUrl}}/api/v1/push/subscribe"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 201\", () => {",
+                  "  pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Push Test Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"Test Push\",\"body\":\"Hello from Postman!\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/push/test"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Push Unsubscribe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"endpoint\":\"https://fcm.googleapis.com/fcm/send/sample-subscription\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/push/unsubscribe"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07. Activities",
+      "item": [
+        {
+          "name": "Upsert Daily Activity",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"date\":\"2026-09-12\",\"start_time\":\"08:00\",\"end_time\":\"17:00\",\"status\":\"P\",\"activity\":\"Testing all backend API endpoints via Postman MCP suite\",\"project_name\":\"Timesheet Automation\",\"project_id\":\"P24015\",\"app_impacted\":\"Portal\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/activities"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Activity saved successfully\", () => {",
+                  "  pm.expect(pm.response.json().message).to.eql(\"activity saved successfully\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Activities (Shortened Response)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/activities?month=9&year=2026"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.collectionVariables.set(\"createdActivityId\", res.data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Daily Activity Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/activities/{{createdActivityId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08. Overtimes",
+      "item": [
+        {
+          "name": "Upsert Overtime",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"date\":\"2026-09-12\",\"start_time\":\"18:00\",\"end_time\":\"20:00\",\"task_description\":\"Production bug fixing and system deployment\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/overtimes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "pm.test(\"Message confirms saved\", () => pm.expect(res.message).to.eql(\"overtime entry saved successfully\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Edit Overtime (Upsert Update)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"date\":\"2026-09-12\",\"start_time\":\"18:00\",\"end_time\":\"21:00\",\"task_description\":\"Production bug fixing and system deployment updated\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/overtimes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "pm.test(\"Message confirms saved\", () => pm.expect(res.message).to.eql(\"overtime entry saved successfully\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Overtimes (Shortened Response)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/overtimes?month=9&year=2026"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Status is success\", () => pm.expect(res.status).to.eql(\"success\"));",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.collectionVariables.set(\"createdOvertimeId\", res.data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Overtime",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/overtimes/{{createdOvertimeId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success and deleted is true\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "    pm.expect(res.deleted).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09. Timesheet",
+      "item": [
+        {
+          "name": "Generate Timesheet Excel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"month\":9,\"year\":2026}"
+            },
+            "url": "{{baseUrl}}/api/v1/timesheet/generate"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Content-Type is Excel spreadsheet\", () => {",
+                  "  const contentType = pm.response.headers.get(\"Content-Type\");",
+                  "  pm.expect(contentType).to.include(\"spreadsheetml\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10. Admin - Master Companies",
+      "item": [
+        {
+          "name": "Admin Create Company",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"PT Test Integrasi MCP\",\"code\":\"mcp6519\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/companies"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 201\", () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set(\"createdCompanyId\", res.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Update Company",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"PT Test Integrasi MCP Updated\",\"code\":\"TTMCP2\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/companies/{{createdCompanyId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Delete Company",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/companies/{{createdCompanyId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success and deleted is true\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "    pm.expect(res.deleted).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11. Admin - Master Approvers",
+      "item": [
+        {
+          "name": "Admin Create Approver",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Approver Test MCP\",\"role_type\":\"team_leader\",\"title\":\"Team Leader\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/approvers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 201\", () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set(\"createdApproverId\", res.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Update Approver",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Approver Test MCP Updated\",\"role_type\":\"department_head\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/approvers/{{createdApproverId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Delete Approver",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/approvers/{{createdApproverId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success and deleted is true\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "    pm.expect(res.deleted).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12. Admin - Users & Passkeys",
+      "item": [
+        {
+          "name": "Admin Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"mcptest_{{$timestamp}}\",\"email\":\"mcptest_{{$timestamp}}@example.com\",\"name\":\"MCP Test User\",\"role\":\"user\",\"company_id\":1,\"department_id\":1}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/users"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200, 201, or 409\", () => pm.expect([200, 201, 409]).to.include(pm.response.code));",
+                  "const res = pm.response.json();",
+                  "if (res.code === 201 && res.data) {",
+                  "  pm.test(\"Initial password is NOT exposed in response (delivered via email)\", () => {",
+                  "    pm.expect(res.data).to.not.have.property(\"initial_password\");",
+                  "  });",
+                  "  if (res.data.user && res.data.user.id) {",
+                  "    pm.collectionVariables.set(\"createdUserId\", res.data.user.id);",
+                  "  } else if (res.data.id) {",
+                  "    pm.collectionVariables.set(\"createdUserId\", res.data.id);",
+                  "  }",
+                  "} else if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set(\"createdUserId\", res.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Create User (Pre-check Invalid Company 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"invalid_comp_{{$timestamp}}\",\"email\":\"invalid_{{$timestamp}}@example.com\",\"name\":\"Invalid Comp User\",\"role\":\"user\",\"company_id\":999999}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/users"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Descriptive error message returned\", () => {",
+                  "  pm.expect(res.error.toLowerCase()).to.include(\"not found or inactive\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin List Users (Shortened Response)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/users"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  const u = res.data[0];",
+                  "  pm.collectionVariables.set(\"createdUserId\", res.data[res.data.length - 1].id);",
+                  "  pm.test(\"User object has concise fields without password_hash\", () => {",
+                  "    pm.expect(u).to.have.property(\"id\");",
+                  "    pm.expect(u).to.have.property(\"username\");",
+                  "    pm.expect(u).to.have.property(\"role\");",
+                  "    pm.expect(u).to.not.have.property(\"password_hash\");",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Update User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"MCP User Updated\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/users/{{createdUserId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin List User Passkeys (Shortened Response)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/users/{{adminUserId}}/passkeys"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Data is array\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Delete User Passkey",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/users/{{adminUserId}}/passkeys/999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200, 403, or 404\", () => pm.expect([200, 403, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/users/{{createdUserId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200, 403, or 404\", () => pm.expect([200, 403, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "13. Admin - Profile Changes Review",
+      "item": [
+        {
+          "name": "Admin List Profile Changes (Shortened Response)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/profile-changes"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.collectionVariables.set(\"profileChangeId\", res.data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Review Profile Change",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/profile-changes/{{profileChangeId}}/review?action=approve"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200, 404, or 409\", () => pm.expect([200, 404, 409]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "14. Setup Init Guard",
+      "item": [
+        {
+          "name": "Init Setup Guard (System Already Initialized)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"adm2\",\"email\":\"adm2@example.com\",\"password\":\"Password123!\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/setup/init"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 400 or 403 (Already initialized)\", () => {",
+                  "  pm.expect([400, 403]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

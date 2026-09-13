@@ -126,7 +126,7 @@ func writeAdidataSummaryRow(f *excelize.File, sheet string, st *BuilderStyles) {
 }
 
 func writeAdidataSignatures(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
-	tlName, dhName := ExtractApprovers(in.Overtimes)
+	tlName, dhName := ResolveApprovers(in)
 	posTitle := in.User.Position
 	if posTitle == "" {
 		posTitle = "Junior Programmer"

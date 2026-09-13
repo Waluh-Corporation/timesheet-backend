@@ -153,7 +153,7 @@ func writeNTTProjectSummary(f *excelize.File, sheet string, st *BuilderStyles) {
 }
 
 func writeNTTSignatures(f *excelize.File, sheet string, in GenerationInput, st *BuilderStyles) {
-	tlName, dhName := ExtractApprovers(in.Overtimes)
+	tlName, dhName := ResolveApprovers(in)
 
 	WriteSignaturesLayout(f, sheet, 53, 3, []SignatureParty{
 		{StartCol: "B", EndCol: "E", Title: "TTD PEGAWAI,", Name: in.User.Name, DatePrefix: nttDatePrefix},

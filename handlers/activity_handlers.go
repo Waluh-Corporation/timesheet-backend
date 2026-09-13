@@ -12,6 +12,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"timesheet-backend/dto/request"
+	"timesheet-backend/dto/response"
+	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/services"
 )
@@ -41,14 +44,14 @@ func (s *Server) validateActivityStatus(status string) bool {
 
 func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
 	var proj models.Project
-	if err := s.DB.Where(queryID, refID).First(&proj).Error; err != nil || proj.ID == 0 {
-		return nil, errors.New("invalid project_ref_id: project does not exist")
+	if err := s.DB.Scopes(models.ActiveOnly).Where(queryID, refID).First(&proj).Error; err != nil || proj.ID == 0 {
+		return nil, errors.New("invalid project_ref_id: project does not exist or is inactive")
 	}
 	return &proj, nil
 }
 
 func (s *Server) buildProjectQuery(projectID, projectName string) *gorm.DB {
-	query := s.DB.Model(&models.Project{})
+	query := s.DB.Model(&models.Project{}).Scopes(models.ActiveOnly)
 	if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
 		query = query.Where("id = ? OR code = ?", idNum, projectID)
 	} else if projectID != "" {
@@ -56,7 +59,7 @@ func (s *Server) buildProjectQuery(projectID, projectName string) *gorm.DB {
 	}
 	if projectName != "" {
 		if projectID != "" {
-			query = s.DB.Model(&models.Project{}).Where("(code = ? OR LOWER(name) = LOWER(?))", projectID, projectName)
+			query = s.DB.Model(&models.Project{}).Scopes(models.ActiveOnly).Where("(code = ? OR LOWER(name) = LOWER(?))", projectID, projectName)
 		} else {
 			query = query.Where("LOWER(name) = LOWER(?)", projectName)
 		}
@@ -64,7 +67,7 @@ func (s *Server) buildProjectQuery(projectID, projectName string) *gorm.DB {
 	return query
 }
 
-func (s *Server) resolveDailyActivityProject(req *models.DailyActivityRequest, activity *models.DailyActivity) error {
+func (s *Server) resolveDailyActivityProject(req *request.DailyActivityRequest, activity *models.DailyActivity) error {
 	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
 		proj, err := s.findProjectByRefID(*req.ProjectRefID)
 		if err != nil {
@@ -97,14 +100,14 @@ func (s *Server) resolveDailyActivityProject(req *models.DailyActivityRequest, a
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param request body models.DailyActivityRequest true "Daily activity payload"
-// @Success 200 {object} models.DailyActivity
-// @Failure 400 {object} models.ErrorResponse "Invalid date format or payload"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Param request body request.DailyActivityRequest true "Daily activity payload"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid date format or payload"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/activities [post]
 func (s *Server) UpsertDailyActivity(c *gin.Context) {
-	var req models.DailyActivityRequest
+	var req request.DailyActivityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
@@ -143,37 +146,48 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		return
 	}
 
-	// Upsert on the (user_id, date) unique index.
-	err = s.DB.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "user_id"}, {Name: "date"}},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"start_time", "end_time", "status", "activity",
-			"project_name", "project_id", "project_ref_id", "updated_at",
-		}),
-	}).Create(&activity).Error
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, err.Error())
-		return
+	uid := currentUserID(c)
+	var existing models.DailyActivity
+	findErr := s.DB.Where("user_id = ? AND date = ? AND is_active = true", uid, date).First(&existing).Error
+	if findErr == nil {
+		// Existing active record found -> UPDATE
+		existing.StartTime = req.StartTime
+		existing.EndTime = req.EndTime
+		existing.Status = req.Status
+		existing.Activity = req.Activity
+		existing.ProjectName = activity.ProjectName
+		existing.ProjectID = activity.ProjectID
+		existing.ProjectRefID = activity.ProjectRefID
+		existing.UpdatedAt = time.Now()
+		if err := s.DB.Save(&existing).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, err.Error())
+			return
+		}
+	} else {
+		// No active record for this date -> INSERT new record with is_active = true
+		activity.IsActive = true
+		if err := s.DB.Create(&activity).Error; err != nil {
+			RespondError(c, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 
-	// Preload associations before returning
-	_ = s.DB.Preload("ProjectRef").Preload("StatusRef").Where(queryID, activity.ID).First(&activity)
-	RespondSuccess(c, http.StatusOK, activity)
+	RespondMessage(c, http.StatusOK, "activity saved successfully")
 }
 
 // GetDailyActivity godoc
 // @Summary Get daily activity detail
-// @Description Retrieves full details of a specific daily activity by ID, including its associated Project and Status.
+// @Description Retrieves details of a specific daily activity by ID.
 // @Tags Activity
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "Daily Activity ID"
-// @Success 200 {object} models.DailyActivityDetailResponse
-// @Failure 400 {object} models.ErrorResponse "Invalid activity ID"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 403 {object} models.ErrorResponse "Forbidden: not authorized to access another user's activity"
-// @Failure 404 {object} models.ErrorResponse "Activity not found"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.DailyActivityResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid activity ID"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Forbidden: not authorized to access another user's activity"
+// @Failure 404 {object} response.ErrorResponse "Activity not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/activities/{id} [get]
 func (s *Server) GetDailyActivity(c *gin.Context) {
 	idParam := c.Param("id")
@@ -184,7 +198,7 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 	}
 
 	var activity models.DailyActivity
-	if err := s.DB.Preload("ProjectRef").Preload("StatusRef").Where(queryID, id).First(&activity).Error; err != nil {
+	if err := s.DB.Where("id = ? AND is_active = true", id).First(&activity).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "activity not found")
 		return
 	}
@@ -194,19 +208,15 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 		return
 	}
 
-	resp := models.DailyActivityDetailResponse{
+	resp := response.DailyActivityResponse{
 		ID:          activity.ID,
-		CreatedAt:   activity.CreatedAt,
-		UpdatedAt:   activity.UpdatedAt,
-		UserID:      activity.UserID,
 		Date:        activity.Date,
 		StartTime:   activity.StartTime,
 		EndTime:     activity.EndTime,
 		Activity:    activity.Activity,
 		ProjectName: activity.ProjectName,
 		ProjectID:   activity.ProjectID,
-		ProjectRef:  activity.ProjectRef,
-		StatusRef:   activity.StatusRef,
+		Status:      activity.Status,
 	}
 
 	RespondSuccess(c, http.StatusOK, resp)
@@ -225,9 +235,9 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 // @Param start_date query string false "Start date filter (YYYY-MM-DD)"
 // @Param end_date query string false "End date filter (YYYY-MM-DD)"
 // @Param sort query string false "Sort order: asc or desc (default: desc, or asc when filtering by month)"
-// @Success 200 {object} models.PaginatedResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.PaginatedResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 func applyActivityDateFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
 	if startDateStr := c.Query("start_date"); startDateStr != "" {
 		if startDate, err := time.ParseInLocation(dateFormatYYYYMMDD, startDateStr, jakarta()); err == nil {
@@ -310,13 +320,13 @@ func calculateActivityPagination(c *gin.Context, totalRows int64) (int, int, boo
 // @Param start_date query string false "Start date filter (YYYY-MM-DD)"
 // @Param end_date query string false "End date filter (YYYY-MM-DD)"
 // @Param sort query string false "Sort order: asc or desc (default: desc, or asc when filtering by month)"
-// @Success 200 {object} models.PaginatedResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.PaginatedResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/activities [get]
 func (s *Server) ListActivities(c *gin.Context) {
 	uid := currentUserID(c)
-	query := s.DB.Model(&models.DailyActivity{}).Where("user_id = ?", uid)
+	query := s.DB.Model(&models.DailyActivity{}).Where("user_id = ? AND is_active = true", uid)
 	query = applyActivityDateFilters(c, query)
 
 	sortOrder := determineActivitySortOrder(c)
@@ -330,7 +340,7 @@ func (s *Server) ListActivities(c *gin.Context) {
 	page, limit, isAll := calculateActivityPagination(c, totalRows)
 
 	activities := make([]models.DailyActivity, 0)
-	dataQuery := query.Preload("ProjectRef").Preload("StatusRef").Order("date " + sortOrder)
+	dataQuery := query.Order("date " + sortOrder)
 
 	if !isAll && limit > 0 {
 		if limit > 100 {
@@ -350,7 +360,21 @@ func (s *Server) ListActivities(c *gin.Context) {
 		return
 	}
 
-	RespondPaginated(c, http.StatusOK, activities, page, limit, totalRows)
+	respItems := make([]response.DailyActivityResponse, len(activities))
+	for i, a := range activities {
+		respItems[i] = response.DailyActivityResponse{
+			ID:          a.ID,
+			Date:        a.Date,
+			StartTime:   a.StartTime,
+			EndTime:     a.EndTime,
+			Activity:    a.Activity,
+			ProjectName: a.ProjectName,
+			ProjectID:   a.ProjectID,
+			Status:      a.Status,
+		}
+	}
+
+	RespondPaginated(c, http.StatusOK, respItems, page, limit, totalRows)
 }
 
 // ListMonthlyActivities delegates to ListActivities for backwards-compatibility.
@@ -365,15 +389,15 @@ func (s *Server) ListMonthlyActivities(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-// @Param request body models.GenerateRequest true "Generation parameters"
+// @Param request body request.GenerateRequest true "Generation parameters"
 // @Success 200 {file} binary "Generated Excel workbook (.xlsx)"
-// @Failure 400 {object} models.ErrorResponse "Template or company mapping missing"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 404 {object} models.ErrorResponse "User not found"
-// @Failure 500 {object} models.ErrorResponse "Generation failed"
+// @Failure 400 {object} response.ErrorResponse "Template or company mapping missing"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 404 {object} response.ErrorResponse "User not found"
+// @Failure 500 {object} response.ErrorResponse "Generation failed"
 // @Router /api/v1/timesheet/generate [post]
 func (s *Server) GenerateTimesheet(c *gin.Context) {
-	var req models.GenerateRequest
+	var req request.GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
@@ -408,11 +432,13 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	end := start.AddDate(0, 1, 0)
 	var activities []models.DailyActivity
 	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Preload("ProjectRef").Preload("StatusRef").Find(&activities)
+		Scopes(models.ActiveOnly).
+		Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Find(&activities)
 
 	var overtimes []models.OvertimeEntry
 	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Preload("TeamLeader").Preload("DepartmentHead").
+		Scopes(models.ActiveOnly).
+		Preload("TeamLeader", models.ActiveOnly).Preload("DepartmentHead", models.ActiveOnly).
 		Order(orderDateAsc).Find(&overtimes)
 
 	// Fetch public holidays for the month so weekends/holidays are reflected in
@@ -427,6 +453,9 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		}
 	}
 
+	var approvers []models.Approver
+	s.DB.Where(queryIsActive, true).Order("id asc").Find(&approvers)
+
 	out, err := services.GenerateFromTemplate(services.GenerationInput{
 		CompanyCode: companyCode,
 		User:        &user,
@@ -434,6 +463,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		Year:        req.Year,
 		Activities:  activities,
 		Overtimes:   overtimes,
+		Approvers:   approvers,
 		Holidays:    holidays,
 	})
 	if err != nil {
@@ -443,12 +473,14 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 
 	filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitize(user.Username), req.Month, req.Year)
 
+	period := mailer.FormatMonthYearIndonesian(req.Month, req.Year)
+
 	// Email a copy asynchronously so the download isn't blocked on SMTP.
-	go func(to, comp, fn string, data []byte) {
+	go func(to, uname, comp, per, fn string, data []byte) {
 		if s.Mailer != nil {
-			_ = s.Mailer.SendTimesheetEmail(to, comp, fn, data)
+			_ = s.Mailer.SendTimesheetEmailWithDetails(to, uname, comp, per, fn, data)
 		}
-	}(user.Email, companyName, filename, out)
+	}(user.Email, user.Username, companyName, period, filename, out)
 
 	c.Header("Content-Disposition", "attachment; filename="+filename)
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
@@ -517,7 +549,7 @@ func fetchDBHolidays(db *gorm.DB, year, month int) []models.HolidayDTO {
 // @Param year query int false "Year (defaults to current year)"
 // @Param month query int false "Month 1-12 (defaults to current month)"
 // @Success 200 {array} models.HolidayDTO
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Router /api/v1/holidays [get]
 func (s *Server) GetHolidays(c *gin.Context) {
 	now := time.Now().In(jakarta())
@@ -548,9 +580,9 @@ func (s *Server) GetHolidays(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param year query int false "Year to sync (defaults to current year)"
-// @Success 200 {object} map[string]any
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 502 {object} models.ErrorResponse "Bad gateway"
+// @Success 200 {object} response.MessageResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 502 {object} response.ErrorResponse "Bad gateway"
 // @Router /api/v1/holidays/sync [post]
 func (s *Server) SyncHolidays(c *gin.Context) {
 	now := time.Now().In(jakarta())
@@ -562,22 +594,13 @@ func (s *Server) SyncHolidays(c *gin.Context) {
 		return
 	}
 	if len(yearlyHolidays) == 0 {
-		RespondSuccess(c, http.StatusOK, gin.H{
-			"message": fmt.Sprintf("no holidays found for year %d", year),
-			"synced":  0,
-			"year":    year,
-		})
+		RespondMessage(c, http.StatusOK, fmt.Sprintf("no holidays found for year %d", year))
 		return
 	}
 
 	syncedCount := saveYearlyHolidays(s.DB, yearlyHolidays)
 
-	RespondSuccess(c, http.StatusOK, gin.H{
-		"message": fmt.Sprintf("successfully synchronized %d holidays for year %d", syncedCount, year),
-		"synced":  syncedCount,
-		"year":    year,
-		"data":    yearlyHolidays,
-	})
+	RespondMessage(c, http.StatusOK, fmt.Sprintf("successfully synchronized %d holidays for year %d", syncedCount, year))
 }
 
 func queryIntDefault(c *gin.Context, key string, def int) int {
@@ -619,10 +642,10 @@ type OvertimeRequest struct {
 // @Accept json
 // @Produce json
 // @Param request body handlers.OvertimeRequest true "Overtime entry data"
-// @Success 200 {object} models.OvertimeEntry
-// @Failure 400 {object} models.ErrorResponse "Invalid payload or date format"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid payload or date format"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/overtimes [post]
 func (s *Server) UpsertOvertime(c *gin.Context) {
 	var req OvertimeRequest
@@ -638,18 +661,27 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 
 	uid := currentUserID(c)
 	var entry models.OvertimeEntry
+	found := false
 
 	if req.ID != 0 {
-		if err := s.DB.Where("id = ? AND user_id = ?", req.ID, uid).First(&entry).Error; err != nil {
-			RespondError(c, http.StatusNotFound, "overtime entry not found")
-			return
+		if err := s.DB.Where("id = ? AND user_id = ? AND is_active = true", req.ID, uid).First(&entry).Error; err == nil {
+			found = true
 		}
+	}
+	if !found {
+		if err := s.DB.Where("user_id = ? AND date = ? AND is_active = true", uid, date).First(&entry).Error; err == nil {
+			found = true
+		}
+	}
+
+	if found {
 		entry.Date = date
 		entry.StartTime = req.StartTime
 		entry.EndTime = req.EndTime
 		entry.TaskDescription = req.TaskDescription
 		entry.TeamLeaderID = req.TeamLeaderID
 		entry.DepartmentHeadID = req.DepartmentHeadID
+		entry.UpdatedAt = time.Now()
 		if err := s.DB.Save(&entry).Error; err != nil {
 			RespondError(c, http.StatusInternalServerError, err.Error())
 			return
@@ -663,14 +695,14 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 			TaskDescription:  req.TaskDescription,
 			TeamLeaderID:     req.TeamLeaderID,
 			DepartmentHeadID: req.DepartmentHeadID,
+			IsActive:         true,
 		}
 		if err := s.DB.Create(&entry).Error; err != nil {
 			RespondError(c, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
-	_ = s.DB.Preload("TeamLeader").Preload("DepartmentHead").Where(queryID, entry.ID).First(&entry)
-	RespondSuccess(c, http.StatusOK, entry)
+	RespondMessage(c, http.StatusOK, "overtime entry saved successfully")
 }
 
 // ListMonthlyOvertimes godoc
@@ -681,9 +713,9 @@ func (s *Server) UpsertOvertime(c *gin.Context) {
 // @Produce json
 // @Param year query int false "Year (defaults to current year)"
 // @Param month query int false "Month 1-12 (defaults to current month)"
-// @Success 200 {array} models.OvertimeEntry
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {array} response.OvertimeResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/overtimes [get]
 func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 	year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
@@ -694,12 +726,36 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 
 	var overtimes []models.OvertimeEntry
 	if err := s.DB.Where(queryUserDateRange, currentUserID(c), start, end).
-		Preload("TeamLeader").Preload("DepartmentHead").
+		Scopes(models.ActiveOnly).
+		Preload("TeamLeader", models.ActiveOnly).
+		Preload("DepartmentHead", models.ActiveOnly).
 		Order(orderDateAsc).Find(&overtimes).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	RespondSuccess(c, http.StatusOK, overtimes)
+
+	resp := make([]response.OvertimeResponse, len(overtimes))
+	for i, ot := range overtimes {
+		var tlName, dhName string
+		if ot.TeamLeader != nil {
+			tlName = ot.TeamLeader.Name
+		}
+		if ot.DepartmentHead != nil {
+			dhName = ot.DepartmentHead.Name
+		}
+		resp[i] = response.OvertimeResponse{
+			ID:                 ot.ID,
+			Date:               ot.Date,
+			StartTime:          ot.StartTime,
+			EndTime:            ot.EndTime,
+			TaskDescription:    ot.TaskDescription,
+			TeamLeaderID:       ot.TeamLeaderID,
+			TeamLeaderName:     tlName,
+			DepartmentHeadID:   ot.DepartmentHeadID,
+			DepartmentHeadName: dhName,
+		}
+	}
+	RespondSuccess(c, http.StatusOK, resp)
 }
 
 // DeleteOvertime godoc
@@ -709,13 +765,21 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "Overtime Entry ID"
-// @Success 200 {object} models.DeleteResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Success 200 {object} response.DeleteResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/overtimes/{id} [delete]
 func (s *Server) DeleteOvertime(c *gin.Context) {
 	id := c.Param("id")
-	if err := s.DB.Where("id = ? AND user_id = ?", id, currentUserID(c)).Delete(&models.OvertimeEntry{}).Error; err != nil {
+	var entry models.OvertimeEntry
+	if err := s.DB.Scopes(models.ActiveOnly).Where("id = ? AND user_id = ?", id, currentUserID(c)).First(&entry).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "overtime entry not found")
+		return
+	}
+	if err := s.DB.Model(&entry).Updates(map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now(),
+	}).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -729,12 +793,12 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {array} models.Project
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/projects [get]
 func (s *Server) ListProjects(c *gin.Context) {
 	var projects []models.Project
-	query := s.DB.Where(queryIsActive, true)
+	query := s.DB.Scopes(models.ActiveOnly)
 	if err := query.Order(orderNameAsc).Find(&projects).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -749,12 +813,12 @@ func (s *Server) ListProjects(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {array} models.Company
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/companies [get]
 func (s *Server) ListCompanies(c *gin.Context) {
 	var companies []models.Company
-	if err := s.DB.Preload("Departments").Order("id asc").Find(&companies).Error; err != nil {
+	if err := s.DB.Scopes(models.ActiveOnly).Order("id asc").Find(&companies).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -769,16 +833,13 @@ func (s *Server) ListCompanies(c *gin.Context) {
 // @Produce json
 // @Param company_id query int false "Company ID filter"
 // @Success 200 {array} models.Department
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/departments [get]
 func (s *Server) ListDepartments(c *gin.Context) {
 	var depts []models.Department
-	query := s.DB.Where(queryIsActive, true)
-	if compID := c.Query("company_id"); compID != "" {
-		query = query.Where("company_id = ?", compID)
-	}
-	if err := query.Preload("Company").Order(orderNameAsc).Find(&depts).Error; err != nil {
+	query := s.DB.Scopes(models.ActiveOnly)
+	if err := query.Order(orderNameAsc).Find(&depts).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -792,8 +853,8 @@ func (s *Server) ListDepartments(c *gin.Context) {
 // @Security BearerAuth
 // @Produce json
 // @Success 200 {array} models.ActivityStatus
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/activity-statuses [get]
 func (s *Server) ListActivityStatuses(c *gin.Context) {
 	var statuses []models.ActivityStatus
@@ -812,8 +873,8 @@ func (s *Server) ListActivityStatuses(c *gin.Context) {
 // @Produce json
 // @Param year query int false "Year filter"
 // @Success 200 {array} models.Holiday
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/holidays/all [get]
 func (s *Server) ListHolidays(c *gin.Context) {
 	var holidays []models.Holiday
@@ -840,12 +901,12 @@ func (s *Server) ListHolidays(c *gin.Context) {
 // @Produce json
 // @Param role_type query string false "Role type filter (team_leader, department_head)"
 // @Success 200 {array} models.Approver
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/approvers [get]
 func (s *Server) ListApprovers(c *gin.Context) {
 	var approvers []models.Approver
-	q := s.DB.Where(queryIsActive, true)
+	q := s.DB.Scopes(models.ActiveOnly)
 	if roleType := c.Query("role_type"); roleType != "" {
 		q = q.Where("role_type = ?", roleType)
 	}

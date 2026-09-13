@@ -59,6 +59,9 @@ func TestSecurityHeaders(t *testing.T) {
 	if w.Header().Get("X-Frame-Options") != "DENY" {
 		t.Errorf("expected X-Frame-Options: DENY")
 	}
+	if w.Header().Get("Content-Security-Policy") == "" {
+		t.Errorf("expected Content-Security-Policy to be set")
+	}
 }
 
 func TestRateLimiter(t *testing.T) {
