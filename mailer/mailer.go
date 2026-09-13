@@ -24,7 +24,7 @@ func New(cfg *config.Config) *Mailer {
 }
 
 func (m *Mailer) dialer() *gomail.Dialer {
-	// Mailpit and other dev relays speak plain SMTP without auth; gomail only
+	// Dev relays and internal servers speak plain SMTP without auth; gomail only
 	// attempts auth when a username is configured.
 	return gomail.NewDialer(m.cfg.SMTPHost, m.cfg.SMTPPort, m.cfg.SMTPUser, m.cfg.SMTPPass)
 }

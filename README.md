@@ -36,7 +36,7 @@ Timesheet Backend automates monthly corporate timesheet generation across multi-
 ### Background Services & Integrations
 - **Web Push Reminders (VAPID)**: Daily cron task running at 17:00 WIB (`Asia/Jakarta`) to notify active users with unsubmitted daily entries.
 - **Kemendesa Public Holiday API**: Automated synchronization with `api.kemendesa.link/libur-nasional` with civic, religious, and joint leave classifications and yearly bulk caching.
-- **Transactional SMTP Delivery**: Asynchronous delivery of generated timesheets, onboarding invitations, and password reset links via gomail (Mailpit supported for development).
+- **Transactional SMTP Delivery**: Asynchronous delivery of generated timesheets, onboarding invitations, and password reset links via gomail.
 
 ---
 
@@ -72,7 +72,7 @@ Timesheet Backend automates monthly corporate timesheet generation across multi-
 ├── scheduler/              # Cron background jobs (reminders and token housekeeping)
 ├── services/               # Company Excel builders, PDF conversion, and holiday sync
 ├── Dockerfile              # Multi-stage hardened production Docker build
-├── docker-compose.yml      # Local development stack (PostgreSQL, Mailpit, Backend)
+├── docker-compose.yml      # Local development stack (PostgreSQL, Backend)
 ├── main.go                 # Application entry point
 └── CHANGELOG.md            # Documented project release history
 ```
@@ -87,7 +87,7 @@ Timesheet Backend automates monthly corporate timesheet generation across multi-
 
 ### Option 1: Running with Docker Compose (Recommended)
 
-Launch the full service topology (PostgreSQL, Mailpit SMTP, and the Go backend service):
+Launch the full service topology (PostgreSQL and the Go backend service):
 
 ```bash
 docker compose up --build
@@ -96,8 +96,7 @@ docker compose up --build
 Access the development services:
 - **Backend API**: `http://localhost:8080`
 - **Swagger Documentation**: `http://localhost:8080/swagger/index.html`
-- **Mailpit Web UI**: `http://localhost:8025`
-- **PostgreSQL**: `localhost:5432` (`postgres` / `postgres`)
+- **PostgreSQL**: `localhost:5432` (`timesheet` / `timesheet`)
 
 ### Option 2: Running Locally with Go
 
@@ -210,7 +209,7 @@ flowchart TD
 
     subgraph Integrations["External Integrations"]
         HolidayAPI["Kemendesa Public Holiday API<br/><i>api.kemendesa.link/libur-nasional</i>"]
-        SMTPServer["SMTP / Mailpit<br/><i>Transactional Email Dispatch</i>"]
+        SMTPServer["SMTP Server<br/><i>Transactional Email Dispatch</i>"]
         PushService["Browser Push Service<br/><i>VAPID WebPush Notifications</i>"]
     end
 

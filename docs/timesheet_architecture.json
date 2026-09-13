@@ -101,7 +101,7 @@
     {
       "id": "smtp",
       "type": "external",
-      "label": "SMTP / Mailpit",
+      "label": "SMTP Server",
       "sublabel": "Transactional Mail",
       "pos": [920, 110],
       "size": [140, 60]
@@ -218,7 +218,7 @@
       "title": "Background & External Integrations",
       "items": [
         "Daily cron scheduler firing at 17:00 WIB for unsubmitted timesheet push alerts",
-        "Transactional email notifications via SMTP / Mailpit for password resets and onboarding",
+        "Transactional email notifications via SMTP for password resets and onboarding",
         "Automated Indonesian national public holiday synchronization via Kemendesa API"
       ]
     }

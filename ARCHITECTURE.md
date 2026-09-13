@@ -20,8 +20,8 @@ daily entry, SMTP delivery, and daily Web Push reminders.
                         │  push (webpush-go)       services (excelize)│
                         └───┬───────────────┬───────────────┬─────────┘
                             │               │               │
-                     PostgreSQL         Mailpit/SMTP     Push Services
-                     (GORM)             (email)          (browser vendors)
+                     PostgreSQL             SMTP         Push Services
+                     (GORM)                 (email)      (browser vendors)
 ```
 
 ## 1. Database schema (GORM & 3NF Normalization)
@@ -150,9 +150,8 @@ each rendered by a dedicated strict-typed generator keyed off `Template.Builtin`
   exported `login.html` / `dashboard.html` / … documents (with safe path
   handling), so no separate web server or second container is needed.
   `docker-compose.prod.yml` runs just this image + PostgreSQL.
-- **Dev stack** (`docker-compose.yml`): PostgreSQL, pgAdmin (DBeaver can also
-  attach on 5432), Mailpit (SMTP + web UI on 8025), and hot-reloading backend +
-  frontend as separate containers.
+- **Dev stack** (`docker-compose.yml`): PostgreSQL (DBeaver can also
+  attach on 5432) and the Go backend service.
 - `deploy_and_commit.sh`: validates a Conventional Commit, commits + pushes,
   SSHes to `192.168.0.2:222`, **scans upward from port 2000** for a free port on
   the host, and brings the stack up there.
