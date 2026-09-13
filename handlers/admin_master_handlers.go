@@ -118,27 +118,31 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 	}
 
 	var appr models.Approver
-	if err := s.DB.WithContext(c.Request.Context()).Where("id = ? AND is_active = true", id).First(&appr).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
 
-	updates := make(map[string]interface{})
+	hasUpdates := false
 	if req.Name != nil {
-		updates["name"] = strings.TrimSpace(*req.Name)
+		appr.Name = strings.TrimSpace(*req.Name)
+		hasUpdates = true
 	}
 	if req.RoleType != nil {
-		updates["role_type"] = *req.RoleType
+		appr.RoleType = *req.RoleType
+		hasUpdates = true
 	}
 	if req.Title != nil {
-		updates["title"] = strings.TrimSpace(*req.Title)
+		appr.Title = strings.TrimSpace(*req.Title)
+		hasUpdates = true
 	}
 	if req.IsActive != nil {
-		updates["is_active"] = *req.IsActive
+		appr.IsActive = *req.IsActive
+		hasUpdates = true
 	}
 
-	if len(updates) > 0 {
-		if err := s.DB.WithContext(c.Request.Context()).Model(&models.Approver{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+	if hasUpdates {
+		if err := s.DB.WithContext(c.Request.Context()).Save(&appr).Error; err != nil {
 			RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
 			return
 		}
@@ -168,7 +172,7 @@ func (s *Server) DeleteApprover(c *gin.Context) {
 	}
 
 	var appr models.Approver
-	if err := s.DB.Where("id = ? AND is_active = true", id).First(&appr).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&appr).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "approver not found")
 		return
 	}
@@ -252,21 +256,23 @@ func (s *Server) UpdateCompany(c *gin.Context) {
 	}
 
 	var comp models.Company
-	if err := s.DB.WithContext(c.Request.Context()).Where("id = ? AND is_active = true", id).First(&comp).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}
 
-	updates := make(map[string]interface{})
+	hasUpdates := false
 	if req.Code != nil {
-		updates["code"] = strings.ToLower(strings.TrimSpace(*req.Code))
+		comp.Code = strings.ToLower(strings.TrimSpace(*req.Code))
+		hasUpdates = true
 	}
 	if req.Name != nil {
-		updates["name"] = strings.TrimSpace(*req.Name)
+		comp.Name = strings.TrimSpace(*req.Name)
+		hasUpdates = true
 	}
 
-	if len(updates) > 0 {
-		if err := s.DB.WithContext(c.Request.Context()).Model(&models.Company{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+	if hasUpdates {
+		if err := s.DB.WithContext(c.Request.Context()).Save(&comp).Error; err != nil {
 			RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
 			return
 		}
@@ -296,7 +302,7 @@ func (s *Server) DeleteCompany(c *gin.Context) {
 	}
 
 	var comp models.Company
-	if err := s.DB.Where("id = ? AND is_active = true", id).First(&comp).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&comp).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "company not found")
 		return
 	}

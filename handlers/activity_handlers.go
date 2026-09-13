@@ -432,12 +432,12 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	end := start.AddDate(0, 1, 0)
 	var activities []models.DailyActivity
 	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Where("is_active = true").
+		Scopes(models.ActiveOnly).
 		Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Find(&activities)
 
 	var overtimes []models.OvertimeEntry
 	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Where("is_active = true").
+		Scopes(models.ActiveOnly).
 		Preload("TeamLeader", models.ActiveOnly).Preload("DepartmentHead", models.ActiveOnly).
 		Order(orderDateAsc).Find(&overtimes)
 
@@ -726,7 +726,7 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 
 	var overtimes []models.OvertimeEntry
 	if err := s.DB.Where(queryUserDateRange, currentUserID(c), start, end).
-		Where("is_active = true").
+		Scopes(models.ActiveOnly).
 		Preload("TeamLeader", models.ActiveOnly).
 		Preload("DepartmentHead", models.ActiveOnly).
 		Order(orderDateAsc).Find(&overtimes).Error; err != nil {
