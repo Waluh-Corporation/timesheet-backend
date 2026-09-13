@@ -24,12 +24,13 @@ import (
 )
 
 const (
-	dateFormatYYYYMMDD = "2006-01-02"
-	queryDateRange     = "date >= ? AND date < ?"
-	queryUserDateRange = "user_id = ? AND date >= ? AND date < ?"
-	orderDateAsc       = "date asc"
-	orderNameAsc       = "name asc"
-	queryIsActive      = "is_active = ?"
+	dateFormatYYYYMMDD               = "2006-01-02"
+	queryDateRange                   = "date >= ? AND date < ?"
+	queryUserDateRange               = "user_id = ? AND date >= ? AND date < ?"
+	orderDateAsc                     = "date asc"
+	orderNameAsc                     = "name asc"
+	queryIsActive                    = "is_active = ?"
+	errActivityServiceNotInitialized = "activity service not initialized"
 )
 
 // jakarta returns the Asia/Jakarta location, falling back to a fixed +07:00.
@@ -105,7 +106,7 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 
 	svc := s.getActivityService()
 	if svc == nil {
-		RespondError(c, http.StatusInternalServerError, "activity service not initialized")
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
 		return
 	}
 
@@ -146,7 +147,7 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 
 	svc := s.getActivityService()
 	if svc == nil {
-		RespondError(c, http.StatusInternalServerError, "activity service not initialized")
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
 		return
 	}
 
@@ -178,6 +179,63 @@ func determineActivitySortOrder(c *gin.Context) string {
 	return "desc"
 }
 
+func parseDateQuery(c *gin.Context, param string) *time.Time {
+	val := c.Query(param)
+	if val == "" {
+		return nil
+	}
+	t, err := time.ParseInLocation(dateFormatYYYYMMDD, val, jakarta())
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func parsePeriodFilter(c *gin.Context, filter *repository.ActivityFilter) {
+	hasMonth := c.Query("month") != ""
+	hasYear := c.Query("year") != ""
+	if hasMonth || hasYear {
+		year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
+		filter.Year = &year
+		if hasMonth {
+			month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
+			filter.Month = &month
+		}
+		return
+	}
+	if c.Query("page") == "" && c.Query("limit") == "" && c.Query("start_date") == "" && c.Query("end_date") == "" {
+		filter.IsCurrentMonthDefault = true
+	}
+}
+
+func parsePaginationFilter(c *gin.Context, filter *repository.ActivityFilter) {
+	page := queryIntDefault(c, "page", 1)
+	if page < 1 {
+		page = 1
+	}
+
+	limit := queryIntDefault(c, "limit", 10)
+	filter.IsAll = c.Query("all") == "true" || limit == -1
+	filter.Page = page
+	filter.Limit = limit
+
+	if c.Query("page") == "" && c.Query("limit") == "" {
+		filter.Limit = -1
+		filter.IsAll = true
+	}
+}
+
+func parseActivityFilter(c *gin.Context) repository.ActivityFilter {
+	var filter repository.ActivityFilter
+	filter.StartDate = parseDateQuery(c, "start_date")
+	filter.EndDate = parseDateQuery(c, "end_date")
+	parsePeriodFilter(c, &filter)
+	filter.Status = c.Query("status")
+	filter.SortOrder = determineActivitySortOrder(c)
+	parsePaginationFilter(c, &filter)
+	return filter
+}
+
 // ListActivities godoc
 // @Summary List daily activities with pagination
 // @Description Retrieves daily activities for the authenticated user with pagination and optional filtering by year, month, date range, or status.
@@ -199,52 +257,11 @@ func (s *Server) ListActivities(c *gin.Context) {
 	uid := currentUserID(c)
 	svc := s.getActivityService()
 	if svc == nil {
-		RespondError(c, http.StatusInternalServerError, "activity service not initialized")
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
 		return
 	}
 
-	var filter repository.ActivityFilter
-	if startDateStr := c.Query("start_date"); startDateStr != "" {
-		if startDate, err := time.ParseInLocation(dateFormatYYYYMMDD, startDateStr, jakarta()); err == nil {
-			filter.StartDate = &startDate
-		}
-	}
-	if endDateStr := c.Query("end_date"); endDateStr != "" {
-		if endDate, err := time.ParseInLocation(dateFormatYYYYMMDD, endDateStr, jakarta()); err == nil {
-			filter.EndDate = &endDate
-		}
-	}
-
-	hasMonth := c.Query("month") != ""
-	hasYear := c.Query("year") != ""
-	if hasMonth || hasYear {
-		year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
-		filter.Year = &year
-		if hasMonth {
-			month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
-			filter.Month = &month
-		}
-	} else if c.Query("page") == "" && c.Query("limit") == "" && c.Query("start_date") == "" && c.Query("end_date") == "" {
-		filter.IsCurrentMonthDefault = true
-	}
-
-	filter.Status = c.Query("status")
-	filter.SortOrder = determineActivitySortOrder(c)
-
-	page := queryIntDefault(c, "page", 1)
-	if page < 1 {
-		page = 1
-	}
-
-	limit := queryIntDefault(c, "limit", 10)
-	filter.IsAll = c.Query("all") == "true" || limit == -1
-	filter.Page = page
-	filter.Limit = limit
-
-	if c.Query("page") == "" && c.Query("limit") == "" {
-		filter.Limit = -1
-		filter.IsAll = true
-	}
+	filter := parseActivityFilter(c)
 
 	respItems, meta, err := svc.ListActivities(reqContext(c), uid, filter)
 	if err != nil {

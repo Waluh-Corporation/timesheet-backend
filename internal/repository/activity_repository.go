@@ -78,6 +78,31 @@ func jakartaLocation() *time.Location {
 	return loc
 }
 
+const (
+	queryDateBetween = "date >= ? AND date < ?"
+)
+
+func resolvePeriodRange(filter ActivityFilter, loc *time.Location) (time.Time, time.Time, bool) {
+	if filter.Month != nil || filter.Year != nil {
+		year := time.Now().In(loc).Year()
+		if filter.Year != nil {
+			year = *filter.Year
+		}
+		if filter.Month != nil {
+			start := time.Date(year, time.Month(*filter.Month), 1, 0, 0, 0, 0, loc)
+			return start, start.AddDate(0, 1, 0), true
+		}
+		start := time.Date(year, 1, 1, 0, 0, 0, 0, loc)
+		return start, start.AddDate(1, 0, 0), true
+	}
+	if filter.IsCurrentMonthDefault {
+		now := time.Now().In(loc)
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+		return start, start.AddDate(0, 1, 0), true
+	}
+	return time.Time{}, time.Time{}, false
+}
+
 func (r *activityRepository) ListActiveByUser(ctx context.Context, userID uint, filter ActivityFilter) ([]models.DailyActivity, int64, error) {
 	loc := jakartaLocation()
 	query := r.db.WithContext(ctx).Model(&models.DailyActivity{}).Where("user_id = ? AND is_active = true", userID)
@@ -88,25 +113,8 @@ func (r *activityRepository) ListActiveByUser(ctx context.Context, userID uint, 
 	if filter.EndDate != nil {
 		query = query.Where("date <= ?", *filter.EndDate)
 	}
-	if filter.Month != nil || filter.Year != nil {
-		year := time.Now().In(loc).Year()
-		if filter.Year != nil {
-			year = *filter.Year
-		}
-		if filter.Month != nil {
-			start := time.Date(year, time.Month(*filter.Month), 1, 0, 0, 0, 0, loc)
-			end := start.AddDate(0, 1, 0)
-			query = query.Where("date >= ? AND date < ?", start, end)
-		} else {
-			start := time.Date(year, 1, 1, 0, 0, 0, 0, loc)
-			end := start.AddDate(1, 0, 0)
-			query = query.Where("date >= ? AND date < ?", start, end)
-		}
-	} else if filter.IsCurrentMonthDefault {
-		now := time.Now().In(loc)
-		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
-		end := start.AddDate(0, 1, 0)
-		query = query.Where("date >= ? AND date < ?", start, end)
+	if start, end, ok := resolvePeriodRange(filter, loc); ok {
+		query = query.Where(queryDateBetween, start, end)
 	}
 	if filter.Status != "" {
 		query = query.Where("status = ?", filter.Status)

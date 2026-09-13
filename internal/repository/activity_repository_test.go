@@ -2,6 +2,7 @@ package repository_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -92,7 +93,8 @@ func TestActivityRepository(t *testing.T) {
 		t.Fatalf("repo.Update not reflected, got: %v, err: %v", refreshed, err)
 	}
 
-	// 5. ListActiveByUser
+	// 5. ListActiveByUser with various filters
+	// 5a. Default filter
 	filter := repository.ActivityFilter{
 		Page:  1,
 		Limit: 10,
@@ -105,30 +107,115 @@ func TestActivityRepository(t *testing.T) {
 		t.Fatalf("expected at least 1 record in list, got total=%d, len=%d", total, len(list))
 	}
 
+	// 5b. StartDate & EndDate filter, with limit capping > 100 and sortOrder asc
+	startDate := date.AddDate(0, 0, -1)
+	endDate := date.AddDate(0, 0, 1)
+	filterDates := repository.ActivityFilter{
+		StartDate: &startDate,
+		EndDate:   &endDate,
+		Status:    "P",
+		SortOrder: "asc",
+		Page:      1,
+		Limit:     150, // tests limit > 100 capping
+	}
+	listDates, totalDates, err := repo.ListActiveByUser(ctx, user.ID, filterDates)
+	if err != nil || totalDates < 1 || len(listDates) < 1 {
+		t.Fatalf("ListActiveByUser with date range failed: %v", err)
+	}
+
+	// 5c. Month & Year filter with sortOrder desc
+	month := int(date.Month())
+	year := date.Year()
+	filterMonthYear := repository.ActivityFilter{
+		Month:     &month,
+		Year:      &year,
+		SortOrder: "desc",
+		Page:      1,
+		Limit:     10,
+	}
+	listMY, totalMY, err := repo.ListActiveByUser(ctx, user.ID, filterMonthYear)
+	if err != nil || totalMY < 1 || len(listMY) < 1 {
+		t.Fatalf("ListActiveByUser with Month/Year failed: %v", err)
+	}
+
+	// 5d. Year only filter with fallback sortOrder
+	filterYearOnly := repository.ActivityFilter{
+		Year:      &year,
+		SortOrder: "invalid_sort", // tests default fallback to "desc"
+		Page:      1,
+		Limit:     10,
+	}
+	listY, totalY, err := repo.ListActiveByUser(ctx, user.ID, filterYearOnly)
+	if err != nil || totalY < 1 || len(listY) < 1 {
+		t.Fatalf("ListActiveByUser with Year only failed: %v", err)
+	}
+
+	// 5e. IsCurrentMonthDefault and IsAll
+	filterDefaultMonth := repository.ActivityFilter{
+		IsCurrentMonthDefault: true,
+		IsAll:                 true,
+	}
+	_, _, err = repo.ListActiveByUser(ctx, user.ID, filterDefaultMonth)
+	if err != nil {
+		t.Fatalf("ListActiveByUser with IsCurrentMonthDefault failed: %v", err)
+	}
+
 	// 6. ValidateStatus
 	isValid, err := repo.ValidateStatus(ctx, "P")
-	if err != nil {
-		t.Fatalf("repo.ValidateStatus failed: %v", err)
-	}
-	if !isValid {
+	if err != nil || !isValid {
 		t.Error("expected status P to be valid")
+	}
+	isInvalid, err := repo.ValidateStatus(ctx, "NON_EXISTENT_STATUS_XYZ")
+	if err != nil || isInvalid {
+		t.Error("expected non-existent status to be invalid")
 	}
 
 	// 7. FindActiveProjectByRefID
 	foundProj, err := repo.FindActiveProjectByRefID(ctx, proj.ID)
-	if err != nil {
+	if err != nil || foundProj.Code != proj.Code {
 		t.Fatalf("repo.FindActiveProjectByRefID failed: %v", err)
 	}
-	if foundProj.Code != proj.Code {
-		t.Errorf("expected project code %s, got %s", proj.Code, foundProj.Code)
+	_, err = repo.FindActiveProjectByRefID(ctx, 999999)
+	if err == nil {
+		t.Error("expected error for non-existent project refID, got nil")
 	}
 
 	// 8. FindActiveProjectByCodeOrName
+	// 8a. By name
 	foundByName, err := repo.FindActiveProjectByCodeOrName(ctx, "", proj.Name)
-	if err != nil {
-		t.Fatalf("repo.FindActiveProjectByCodeOrName failed: %v", err)
+	if err != nil || foundByName.ID != proj.ID {
+		t.Fatalf("repo.FindActiveProjectByCodeOrName by name failed: %v", err)
 	}
-	if foundByName.ID != proj.ID {
-		t.Errorf("expected project ID %d, got %d", proj.ID, foundByName.ID)
+	// 8b. By numeric ID string
+	foundByNumID, err := repo.FindActiveProjectByCodeOrName(ctx, strconv.Itoa(int(proj.ID)), "")
+	if err != nil || foundByNumID.ID != proj.ID {
+		t.Fatalf("repo.FindActiveProjectByCodeOrName by numeric ID failed: %v", err)
+	}
+	// 8c. By code only
+	foundByCode, err := repo.FindActiveProjectByCodeOrName(ctx, proj.Code, "")
+	if err != nil || foundByCode.ID != proj.ID {
+		t.Fatalf("repo.FindActiveProjectByCodeOrName by code failed: %v", err)
+	}
+	// 8d. By both code and name
+	foundByBoth, err := repo.FindActiveProjectByCodeOrName(ctx, proj.Code, proj.Name)
+	if err != nil || foundByBoth.ID != proj.ID {
+		t.Fatalf("repo.FindActiveProjectByCodeOrName by both failed: %v", err)
+	}
+	// 8e. Non-existent project
+	_, err = repo.FindActiveProjectByCodeOrName(ctx, "NON_EXISTENT_CODE", "NON_EXISTENT_NAME")
+	if err == nil {
+		t.Error("expected error for non-existent project code/name, got nil")
+	}
+
+	// 9. FindActiveByID not found
+	_, err = repo.FindActiveByID(ctx, 999999)
+	if err == nil {
+		t.Error("expected error for non-existent activity ID, got nil")
+	}
+
+	// 10. FindActiveByUserAndDate not found
+	_, err = repo.FindActiveByUserAndDate(ctx, user.ID, time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err == nil {
+		t.Error("expected error for non-existent user and date, got nil")
 	}
 }

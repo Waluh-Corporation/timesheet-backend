@@ -278,4 +278,81 @@ func TestActivityService_ListActivities(t *testing.T) {
 	if meta.TotalRows != 2 || meta.TotalPages != 1 || meta.Page != 1 {
 		t.Errorf("pagination meta mismatch: %+v", meta)
 	}
+
+	// 2. IsAll = true with totalRows > 0
+	listAll, metaAll, err := svc.ListActivities(ctx, 100, repository.ActivityFilter{IsAll: true})
+	if err != nil || len(listAll) != 2 || metaAll.Limit != 2 {
+		t.Fatalf("expected IsAll to set limit to 2, got: %+v", metaAll)
+	}
+
+	// 3. IsAll = true with 0 rows
+	listEmpty, metaEmpty, err := svc.ListActivities(ctx, 9999, repository.ActivityFilter{IsAll: true})
+	if err != nil || len(listEmpty) != 0 || metaEmpty.Limit != 1 {
+		t.Fatalf("expected IsAll with 0 rows to set limit to 1, got: %+v", metaEmpty)
+	}
+
+	// 4. Limit <= 0 and Page < 1
+	_, metaDefault, err := svc.ListActivities(ctx, 100, repository.ActivityFilter{Page: 0, Limit: -1})
+	if err != nil || metaDefault.Page != 1 || metaDefault.Limit != 10 {
+		t.Fatalf("expected default page=1 and limit=10, got: %+v", metaDefault)
+	}
+
+	// 5. Limit > 100
+	_, metaCap, err := svc.ListActivities(ctx, 100, repository.ActivityFilter{Page: 1, Limit: 200})
+	if err != nil || metaCap.Limit != 100 {
+		t.Fatalf("expected capped limit=100, got: %+v", metaCap)
+	}
+
+	// 6. Repo list error
+	repo.listErr = errors.New("db query failed")
+	_, _, err = svc.ListActivities(ctx, 100, filter)
+	if err == nil {
+		t.Fatal("expected error on repo.ListActiveByUser failure, got nil")
+	}
+}
+
+func TestActivityService_UpsertProjectResolution(t *testing.T) {
+	repo := newMockActivityRepo()
+	svc := NewActivityService(repo)
+	ctx := context.Background()
+
+	proj := &models.Project{
+		ID:       55,
+		Code:     "PRJ-55",
+		Name:     "Project Beta",
+		IsActive: true,
+	}
+	repo.projects[proj.ID] = proj
+
+	// Resolve by code/name
+	req := &request.DailyActivityRequest{
+		Date:        "2026-09-21",
+		StartTime:   "08:00",
+		EndTime:     "17:00",
+		ProjectID:   "PRJ-55",
+		ProjectName: "Project Beta",
+		Activity:    "Beta development",
+	}
+	if err := svc.UpsertDailyActivity(ctx, 10, req); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	saved := repo.activities[1]
+	if saved.ProjectRefID == nil || *saved.ProjectRefID != 55 {
+		t.Errorf("expected ProjectRefID 55, got: %v", saved.ProjectRefID)
+	}
+
+	// Empty project code and name
+	reqEmptyProj := &request.DailyActivityRequest{
+		Date:      "2026-09-22",
+		StartTime: "08:00",
+		EndTime:   "17:00",
+		Activity:  "No project activity",
+	}
+	if err := svc.UpsertDailyActivity(ctx, 10, reqEmptyProj); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	savedEmpty := repo.activities[2]
+	if savedEmpty.ProjectRefID != nil {
+		t.Errorf("expected nil ProjectRefID, got: %v", savedEmpty.ProjectRefID)
+	}
 }
