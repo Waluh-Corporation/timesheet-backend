@@ -30,5 +30,4 @@ sshpass.py
 # Keep these scripts tracked despite the blanket *.sh ignore above.
 !deploy_and_commit.sh
 !scripts/*.sh
-
-
+.agents

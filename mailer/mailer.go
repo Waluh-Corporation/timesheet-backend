@@ -31,12 +31,30 @@ func (m *Mailer) dialer() *gomail.Dialer {
 	return gomail.NewDialer(m.cfg.SMTPHost, m.cfg.SMTPPort, m.cfg.SMTPUser, m.cfg.SMTPPass)
 }
 
+const maxSendRetries = 3
+
 func (m *Mailer) send(msg *gomail.Message) error {
-	if err := m.dialer().DialAndSend(msg); err != nil {
-		log.Printf("[mailer] failed to send mail: %v", err)
-		return err
+	msg.SetHeader("Auto-Submitted", "auto-generated")
+	msg.SetHeader("X-Mailer", "Timesheet-Portal-Mailer")
+
+	dialer := m.dialer()
+	var lastErr error
+	backoff := 50 * time.Millisecond
+
+	for attempt := 1; attempt <= maxSendRetries; attempt++ {
+		if err := dialer.DialAndSend(msg); err != nil {
+			lastErr = err
+			if attempt < maxSendRetries {
+				time.Sleep(backoff)
+				backoff *= 2
+			}
+			continue
+		}
+		return nil
 	}
-	return nil
+
+	log.Printf("[mailer] failed to send mail after %d attempts: %v", maxSendRetries, lastErr)
+	return lastErr
 }
 
 func (m *Mailer) appName() string {
