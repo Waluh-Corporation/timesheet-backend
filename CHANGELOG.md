@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Admin User Provisioning Endpoint**: Direct administrative user creation (`POST /api/v1/admin/users`) with CSPRNG password generation, 409 Conflict duplicate checks, and welcome email dispatch.
+- **Self-Service Change Password Endpoint**: Authenticated user password update endpoint (`POST /api/v1/users/change-password`) with current password verification and security notification alert.
+- **Argon2id Hashing Engine**: Upgraded password hashing architecture to Argon2id across the entire repository with transparent legacy hash verification.
+- **Database Hardening Migration**: Migration `000022` expanding `password_hash` column to `VARCHAR(255)` and enforcing unique constraints on `email` and `username`.
+- **Dynamic Application Configurations**: Added `APP_NAME`, `FRONTEND_URL`, and `ADMIN_EMAIL` environment configurations.
+
+### Changed
+- **Welcome Email Template**: Updated onboarding email layout to present initial credentials clearly and remove activation requirements for admin-provisioned accounts.
+- **CI/CD Workflow**: Configured CI quality gate pipelines to run on Pull Requests targeting the `development` branch.
+
 ---
 
 ## [1.1.0] - 2026-09-12
