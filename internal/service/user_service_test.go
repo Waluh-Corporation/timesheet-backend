@@ -16,6 +16,8 @@ type mockUserRepo struct {
 	users          map[uint]*models.User
 	updatedPass    map[uint]string
 	updatedAtTimes map[uint]time.Time
+	createErr      error
+	updatePassErr  error
 }
 
 func newMockUserRepo() *mockUserRepo {
@@ -44,12 +46,18 @@ func (m *mockUserRepo) FindByUsernameOrEmail(ctx context.Context, identifier str
 }
 
 func (m *mockUserRepo) Create(ctx context.Context, user *models.User) error {
+	if m.createErr != nil {
+		return m.createErr
+	}
 	user.ID = uint(len(m.users) + 1)
 	m.users[user.ID] = user
 	return nil
 }
 
 func (m *mockUserRepo) UpdatePassword(ctx context.Context, id uint, passwordHash string, updatedAt time.Time) error {
+	if m.updatePassErr != nil {
+		return m.updatePassErr
+	}
 	m.updatedPass[id] = passwordHash
 	m.updatedAtTimes[id] = updatedAt
 	if u, ok := m.users[id]; ok {
@@ -183,4 +191,28 @@ func TestUserService_ChangePassword(t *testing.T) {
 			t.Fatal("expected updated_at time to be set")
 		}
 	})
+
+	t.Run("Repo UpdatePassword error", func(t *testing.T) {
+		repo.updatePassErr = errors.New("update password db failure")
+		defer func() { repo.updatePassErr = nil }()
+		err := svc.ChangePassword(context.Background(), 1, "SuperSecretNewPassword123!@#", "AnotherValidNewPass123!@#")
+		if err == nil || !strings.Contains(err.Error(), "failed to update password") {
+			t.Fatalf("expected update password failure, got: %v", err)
+		}
+	})
+}
+
+func TestUserService_CreateUserByAdmin_RepoError(t *testing.T) {
+	repo := newMockUserRepo()
+	repo.createErr = errors.New("failed to persist user")
+	svc := NewUserService(repo, nil, nil) // tests nil hasher fallback to DefaultHasher
+
+	user := &models.User{
+		Username: "dbfailuser",
+		Email:    "dbfail@example.com",
+	}
+	_, err := svc.CreateUserByAdmin(context.Background(), user, "http://localhost/login")
+	if err == nil || !strings.Contains(err.Error(), "failed to persist user") {
+		t.Fatalf("expected create error, got: %v", err)
+	}
 }

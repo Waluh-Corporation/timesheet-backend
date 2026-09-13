@@ -94,3 +94,61 @@ func TestArgon2idHasher_ConcurrentThreadSafety(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestArgon2idHasher_ConstructorDefaults(t *testing.T) {
+	hasher := NewArgon2idHasher(Argon2idParams{})
+	def := DefaultArgon2idParams()
+	if hasher.params.Memory != def.Memory || hasher.params.Iterations != def.Iterations || hasher.params.Parallelism != def.Parallelism {
+		t.Fatalf("expected defaults %+v, got %+v", def, hasher.params)
+	}
+}
+
+func TestArgon2idHasher_VerifyMalformedHashes(t *testing.T) {
+	hasher := DefaultHasher
+
+	cases := []struct {
+		name string
+		hash string
+	}{
+		{"wrong_prefix", "$pbkdf2$v=19$m=65536,t=3,p=2$c2FsdA$aGFzaA"},
+		{"parts_count_mismatch", "$argon2id$v=19$m=65536,t=3,p=2"},
+		{"wrong_algo_tag", "$argon2i$v=19$m=65536,t=3,p=2$c2FsdA$aGFzaA"},
+		{"bad_version_format", "$argon2id$v=abc$m=65536,t=3,p=2$c2FsdA$aGFzaA"},
+		{"unsupported_version", "$argon2id$v=18$m=65536,t=3,p=2$c2FsdA$aGFzaA"},
+		{"malformed_params", "$argon2id$v=19$m=bad,t=3,p=2$c2FsdA$aGFzaA"},
+		{"invalid_b64_salt", "$argon2id$v=19$m=65536,t=3,p=2$invalid_b64!!$aGFzaA"},
+		{"invalid_b64_key", "$argon2id$v=19$m=65536,t=3,p=2$c2FsdA$invalid_b64!!"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if hasher.Verify(tc.hash, "somePassword123!") {
+				t.Fatalf("expected Verify to return false for %q", tc.hash)
+			}
+		})
+	}
+}
+
+func TestArgon2idHasher_NeedsRehashBranches(t *testing.T) {
+	hasher := DefaultHasher
+
+	cases := []struct {
+		name       string
+		hash       string
+		wantRehash bool
+	}{
+		{"not_argon2id", "$2a$10$somestring", true},
+		{"parts_count_short", "$argon2id$v=19$m=65536", true},
+		{"bad_version_str", "$argon2id$v=bad$m=65536,t=3,p=2$c2FsdA$aGFzaA", true},
+		{"version_mismatch", "$argon2id$v=18$m=65536,t=3,p=2$c2FsdA$aGFzaA", true},
+		{"malformed_params", "$argon2id$v=19$m=notanumber,t=3,p=2$c2FsdA$aGFzaA", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasher.NeedsRehash(tc.hash); got != tc.wantRehash {
+				t.Fatalf("NeedsRehash(%q) = %v, want %v", tc.hash, got, tc.wantRehash)
+			}
+		})
+	}
+}

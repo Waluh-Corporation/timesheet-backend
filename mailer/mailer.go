@@ -13,6 +13,8 @@ import (
 	"timesheet-backend/config"
 )
 
+const defaultTimeFormatWIB = "02 Jan 2006, 15:04 WIB"
+
 // Mailer sends transactional and delivery email over SMTP.
 type Mailer struct {
 	cfg *config.Config
@@ -93,7 +95,7 @@ func (m *Mailer) setMessageContent(msg *gomail.Message, htmlBody, textBody strin
 func (m *Mailer) SendSetupEmail(to, username, setupLink string) error {
 	loc := m.timeLocation()
 	now := time.Now().In(loc)
-	expiresAt := now.Add(7 * 24 * time.Hour).Format("02 Jan 2006, 15:04 WIB")
+	expiresAt := now.Add(7 * 24 * time.Hour).Format(defaultTimeFormatWIB)
 
 	htmlBody, textBody, err := RenderSetupEmail(SetupEmailData{
 		AppName:      m.appName(),
@@ -127,7 +129,7 @@ func (m *Mailer) SendAccountWelcomeEmail(to, username, initialPassword, loginLin
 
 	loc := m.timeLocation()
 	now := time.Now().In(loc)
-	expiresAt := now.Add(30 * 24 * time.Hour).Format("02 Jan 2006, 15:04 WIB")
+	expiresAt := now.Add(30 * 24 * time.Hour).Format(defaultTimeFormatWIB)
 
 	htmlBody, textBody, err := RenderSetupEmail(SetupEmailData{
 		AppName:         m.appName(),
@@ -168,8 +170,8 @@ func (m *Mailer) SendResetEmailWithUser(to, username, resetLink string) error {
 
 	loc := m.timeLocation()
 	now := time.Now().In(loc)
-	requestedAt := now.Format("02 Jan 2006, 15:04 WIB")
-	expiresAt := now.Add(ttl).Format("02 Jan 2006, 15:04 WIB")
+	requestedAt := now.Format(defaultTimeFormatWIB)
+	expiresAt := now.Add(ttl).Format(defaultTimeFormatWIB)
 
 	htmlBody, textBody, err := RenderResetEmail(ResetEmailData{
 		AppName:       m.appName(),
@@ -281,7 +283,7 @@ func (m *Mailer) SendPasswordChangedEmail(to, username string) error {
 		AppName:      m.appName(),
 		Username:     username,
 		Email:        to,
-		ChangedAt:    time.Now().Format("02 Jan 2006, 15:04 WIB"),
+		ChangedAt:    time.Now().Format(defaultTimeFormatWIB),
 		LoginURL:     loginURL,
 		SupportEmail: m.supportEmail(),
 		PortalURL:    m.frontendURL(),

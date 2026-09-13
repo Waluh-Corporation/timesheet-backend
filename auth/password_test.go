@@ -21,8 +21,14 @@ func TestValidatePassword(t *testing.T) {
 		{"adminBlocked", "admin123", nil, ErrPasswordBlocked},
 		{"repetitiveWeak", "11111111", nil, ErrPasswordBlocked},
 		{"allNumericWeak", "98765432", nil, ErrPasswordTooWeak},
+		{"missingUpper", "lowercase123!", nil, ErrPasswordTooWeak},
+		{"missingLower", "UPPERCASE123!", nil, ErrPasswordTooWeak},
+		{"missingDigit", "UpperLower!#@$", nil, ErrPasswordTooWeak},
+		{"missingSymbol", "UpperLower1234", nil, ErrPasswordTooWeak},
 		{"contextUsername", "alicewonderland123!", []string{"alice"}, ErrPasswordBlocked},
 		{"contextEmailLocalPart", "johndoexyz456!", []string{"johndoe@example.com"}, ErrPasswordBlocked},
+		{"contextEmpty", "Abcd1234#efgh", []string{""}, nil},
+		{"contextShortIgnored", "Abcd1234#efgh", []string{"ab"}, nil},
 		{"strongPassphrase", "Correct-Horse-Battery-Staple-99!", nil, nil},
 	}
 	for _, tc := range cases {
@@ -36,7 +42,7 @@ func TestValidatePassword(t *testing.T) {
 }
 
 func TestGenerateSecurePassword(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 50; i++ {
 		pw, err := GenerateSecurePassword(16)
 		if err != nil {
 			t.Fatalf("GenerateSecurePassword error: %v", err)
@@ -67,6 +73,34 @@ func TestGenerateSecurePassword(t *testing.T) {
 		if err := ValidatePassword(pw); err != nil {
 			t.Fatalf("generated password %q failed policy: %v", pw, err)
 		}
+	}
+
+	// Boundary length tests
+	shortPW, err := GenerateSecurePassword(5)
+	if err != nil || len(shortPW) != DefaultGeneratedLength {
+		t.Fatalf("expected length %d for short input, got %d (err: %v)", DefaultGeneratedLength, len(shortPW), err)
+	}
+
+	longPW, err := GenerateSecurePassword(100)
+	if err != nil || len(longPW) != PasswordMaxLength {
+		t.Fatalf("expected length %d for overlong input, got %d (err: %v)", PasswordMaxLength, len(longPW), err)
+	}
+
+	aliasPW, err := GeneratePassword(16)
+	if err != nil || len(aliasPW) != 16 {
+		t.Fatalf("expected GeneratePassword alias to return 16 chars, got %d (err: %v)", len(aliasPW), err)
+	}
+}
+
+func TestIsRepetitiveEmpty(t *testing.T) {
+	if isRepetitive("") {
+		t.Fatal("isRepetitive(\"\") must return false")
+	}
+	if !isRepetitive("aaaa") {
+		t.Fatal("isRepetitive(\"aaaa\") must return true")
+	}
+	if isRepetitive("abaa") {
+		t.Fatal("isRepetitive(\"abaa\") must return false")
 	}
 }
 

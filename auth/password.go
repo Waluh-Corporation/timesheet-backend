@@ -95,7 +95,20 @@ func ValidatePassword(password string, context ...string) error {
 		return ErrPasswordTooWeak
 	}
 
-	// Reject all-numeric or all-lowercase single-class trivial passwords
+	// Must be combination of uppercase, lowercase, number, and symbol/special character
+	if !hasRequiredCharacterClasses(password) {
+		return ErrPasswordTooWeak
+	}
+
+	// Context check: reject passwords matching or containing user identifiers
+	if containsContextIdentifier(lower, context) {
+		return ErrPasswordBlocked
+	}
+
+	return nil
+}
+
+func hasRequiredCharacterClasses(password string) bool {
 	var hasDigit, hasUpper, hasLower, hasSymbol bool
 	for _, r := range password {
 		switch {
@@ -109,13 +122,10 @@ func ValidatePassword(password string, context ...string) error {
 			hasSymbol = true
 		}
 	}
+	return hasUpper && hasLower && hasDigit && hasSymbol
+}
 
-	// Wajib kombinasi huruf besar, huruf kecil, angka, dan simbol/karakter khusus
-	if !hasUpper || !hasLower || !hasDigit || !hasSymbol {
-		return ErrPasswordTooWeak
-	}
-
-	// Context check: reject passwords matching or containing user identifiers
+func containsContextIdentifier(lowerPassword string, context []string) bool {
 	for _, ctx := range context {
 		ctx = strings.ToLower(strings.TrimSpace(ctx))
 		if ctx == "" {
@@ -124,12 +134,11 @@ func ValidatePassword(password string, context ...string) error {
 		if at := strings.IndexByte(ctx, '@'); at > 0 {
 			ctx = ctx[:at]
 		}
-		if len(ctx) >= 4 && (lower == ctx || strings.Contains(lower, ctx) || strings.Contains(ctx, lower)) {
-			return ErrPasswordBlocked
+		if len(ctx) >= 4 && (lowerPassword == ctx || strings.Contains(lowerPassword, ctx) || strings.Contains(ctx, lowerPassword)) {
+			return true
 		}
 	}
-
-	return nil
+	return false
 }
 
 // isRepetitive returns true if all characters in the string are identical.

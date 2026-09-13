@@ -20,8 +20,11 @@ import (
 )
 
 const (
-	orderCreatedAtDesc  = "created_at desc"
-	queryCodeOrNameLike = "LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)"
+	orderCreatedAtDesc          = "created_at desc"
+	queryCodeOrNameLike         = "LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)"
+	queryIDAndIsActive          = "id = ? AND is_active = true"
+	queryCodeOrNameLikeIsActive = "(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true"
+	errCompanyDeptNotFound      = "Company or Department not found or inactive"
 )
 
 // isSelf reports whether targetID refers to the authenticated caller.
@@ -80,18 +83,18 @@ func (s *Server) resolveUserCompany(req *request.CreateUserRequest, user *models
 	}
 	if req.CompanyID != nil && *req.CompanyID != 0 {
 		var comp models.Company
-		if err := s.DB.Where("id = ? AND is_active = true", *req.CompanyID).First(&comp).Error; err != nil {
-			return "Company or Department not found or inactive", http.StatusBadRequest
+		if err := s.DB.Where(queryIDAndIsActive, *req.CompanyID).First(&comp).Error; err != nil {
+			return errCompanyDeptNotFound, http.StatusBadRequest
 		}
 		user.CompanyID = &comp.ID
 		user.Company = comp.Name
 	} else if req.Company != "" {
 		var comp models.Company
-		if err := s.DB.Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
+		if err := s.DB.Where(queryCodeOrNameLikeIsActive, req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
 			user.CompanyID = &comp.ID
 			user.Company = comp.Name
 		} else {
-			return "Company or Department not found or inactive", http.StatusBadRequest
+			return errCompanyDeptNotFound, http.StatusBadRequest
 		}
 	} else {
 		user.CompanyID = nil
@@ -103,8 +106,8 @@ func (s *Server) resolveUserCompany(req *request.CreateUserRequest, user *models
 func (s *Server) resolveUserDepartment(req *request.CreateUserRequest, user *models.User) (string, int) {
 	if req.DepartmentID != nil && *req.DepartmentID != 0 {
 		var dept models.Department
-		if err := s.DB.Where("id = ? AND is_active = true", *req.DepartmentID).First(&dept).Error; err != nil {
-			return "Company or Department not found or inactive", http.StatusBadRequest
+		if err := s.DB.Where(queryIDAndIsActive, *req.DepartmentID).First(&dept).Error; err != nil {
+			return errCompanyDeptNotFound, http.StatusBadRequest
 		}
 		user.DepartmentID = &dept.ID
 		user.Department = dept.Name
@@ -113,7 +116,7 @@ func (s *Server) resolveUserDepartment(req *request.CreateUserRequest, user *mod
 		}
 	} else if req.Department != "" {
 		var dept models.Department
-		if err := s.DB.Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", req.Department, "%"+req.Department+"%").First(&dept).Error; err == nil {
+		if err := s.DB.Where(queryCodeOrNameLikeIsActive, req.Department, "%"+req.Department+"%").First(&dept).Error; err == nil {
 			user.DepartmentID = &dept.ID
 			user.Department = dept.Name
 			if user.Division == "" {
@@ -258,6 +261,58 @@ func validateSelfUpdate(c *gin.Context, id uint, req *request.UpdateUserRequest)
 	return "", 0
 }
 
+func updateUserDepartment(db *gorm.DB, user *models.User, req *request.UpdateUserRequest) (string, int) {
+	if req.Department != nil {
+		user.Department = *req.Department
+	}
+	if req.DepartmentID != nil {
+		if *req.DepartmentID != 0 {
+			var dept models.Department
+			if err := db.Where(queryIDAndIsActive, *req.DepartmentID).First(&dept).Error; err != nil {
+				return errCompanyDeptNotFound, http.StatusBadRequest
+			}
+			user.DepartmentID = &dept.ID
+			user.Department = dept.Name
+			if user.Division == "" {
+				user.Division = dept.Division
+			}
+		} else {
+			user.DepartmentID = nil
+		}
+	}
+	return "", 0
+}
+
+func updateUserCompany(db *gorm.DB, user *models.User, req *request.UpdateUserRequest) (string, int) {
+	if req.CompanyID != nil {
+		if *req.CompanyID != 0 {
+			var comp models.Company
+			if err := db.Where(queryIDAndIsActive, *req.CompanyID).First(&comp).Error; err != nil {
+				return errCompanyDeptNotFound, http.StatusBadRequest
+			}
+			user.CompanyID = &comp.ID
+			user.Company = comp.Name
+		} else {
+			user.CompanyID = nil
+			user.Company = ""
+		}
+	} else if req.Company != nil {
+		if *req.Company != "" {
+			var comp models.Company
+			if err := db.Where(queryCodeOrNameLikeIsActive, *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
+				user.CompanyID = &comp.ID
+				user.Company = comp.Name
+			} else {
+				return errCompanyDeptNotFound, http.StatusBadRequest
+			}
+		} else {
+			user.CompanyID = nil
+			user.Company = ""
+		}
+	}
+	return "", 0
+}
+
 func applyUserUpdates(db *gorm.DB, user *models.User, req *request.UpdateUserRequest) (string, int) {
 	if req.Role != nil {
 		user.Role = *req.Role
@@ -274,53 +329,17 @@ func applyUserUpdates(db *gorm.DB, user *models.User, req *request.UpdateUserReq
 	if req.Division != nil {
 		user.Division = *req.Division
 	}
-	if req.Department != nil {
-		user.Department = *req.Department
-	}
-	if req.DepartmentID != nil {
-		if *req.DepartmentID != 0 {
-			var dept models.Department
-			if err := db.Where("id = ? AND is_active = true", *req.DepartmentID).First(&dept).Error; err != nil {
-				return "Company or Department not found or inactive", http.StatusBadRequest
-			}
-			user.DepartmentID = &dept.ID
-			user.Department = dept.Name
-			if user.Division == "" {
-				user.Division = dept.Division
-			}
-		} else {
-			user.DepartmentID = nil
-		}
-	}
 	if req.Site != nil {
 		user.Site = *req.Site
 	}
-	if req.CompanyID != nil {
-		if *req.CompanyID != 0 {
-			var comp models.Company
-			if err := db.Where("id = ? AND is_active = true", *req.CompanyID).First(&comp).Error; err != nil {
-				return "Company or Department not found or inactive", http.StatusBadRequest
-			}
-			user.CompanyID = &comp.ID
-			user.Company = comp.Name
-		} else {
-			user.CompanyID = nil
-			user.Company = ""
-		}
-	} else if req.Company != nil {
-		if *req.Company != "" {
-			var comp models.Company
-			if err := db.Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
-				user.CompanyID = &comp.ID
-				user.Company = comp.Name
-			} else {
-				return "Company or Department not found or inactive", http.StatusBadRequest
-			}
-		} else {
-			user.CompanyID = nil
-			user.Company = ""
-		}
+
+	if msg, code := updateUserDepartment(db, user, req); code != 0 {
+		return msg, code
 	}
+	if msg, code := updateUserCompany(db, user, req); code != 0 {
+		return msg, code
+	}
+
 	if user.Role == models.RoleAdmin {
 		user.Company = ""
 		user.CompanyID = nil
@@ -368,7 +387,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 
 	var user models.User
 	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&user).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "user not found")
+		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
@@ -409,8 +428,8 @@ func (s *Server) DeleteUser(c *gin.Context) {
 		return
 	}
 	var user models.User
-	if err := s.DB.Where("id = ? AND is_active = true", id).First(&user).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "user not found")
+	if err := s.DB.Where(queryIDAndIsActive, id).First(&user).Error; err != nil {
+		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 	if err := s.DB.Model(&user).Updates(map[string]interface{}{
@@ -636,7 +655,7 @@ func (s *Server) applyApprovedProfileChange(change *models.ProfileChangeRequest)
 	targetUser.Site = change.Site
 	if change.DepartmentID != nil && *change.DepartmentID != 0 {
 		var dept models.Department
-		if err := s.DB.Where("id = ? AND is_active = true", *change.DepartmentID).First(&dept).Error; err == nil {
+		if err := s.DB.Where(queryIDAndIsActive, *change.DepartmentID).First(&dept).Error; err == nil {
 			targetUser.DepartmentID = &dept.ID
 			targetUser.Department = dept.Name
 			if targetUser.Division == "" {
@@ -650,7 +669,7 @@ func (s *Server) applyApprovedProfileChange(change *models.ProfileChangeRequest)
 	if targetUser.Role != models.RoleAdmin {
 		if change.CompanyID != nil && *change.CompanyID != 0 {
 			var comp models.Company
-			if err := s.DB.Where("id = ? AND is_active = true", *change.CompanyID).First(&comp).Error; err == nil {
+			if err := s.DB.Where(queryIDAndIsActive, *change.CompanyID).First(&comp).Error; err == nil {
 				targetUser.CompanyID = &comp.ID
 				targetUser.Company = comp.Name
 			}
@@ -697,7 +716,7 @@ func (s *Server) ChangePassword(c *gin.Context) {
 
 	if err := svc.ChangePassword(c.Request.Context(), uid, req.OldPassword, req.NewPassword); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			RespondError(c, http.StatusNotFound, "user not found")
+			RespondError(c, http.StatusNotFound, errUserNotFound)
 			return
 		}
 		if errors.Is(err, domain.ErrAccountDisabled) {

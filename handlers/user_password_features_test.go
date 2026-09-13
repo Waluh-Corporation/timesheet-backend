@@ -314,3 +314,195 @@ func TestUserHandlers_CreateUser_NoResetTokenFlow(t *testing.T) {
 		}
 	})
 }
+
+func TestUserHandlers_ErrorBranchesAndEdgeCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	srv := &Server{
+		DB:     tx,
+		Cfg:    cfg,
+		Hasher: auth.DefaultHasher,
+	}
+
+	disabledPass := "DisabledValidSecret123!"
+	disabledHash, _ := auth.HashPassword(disabledPass)
+	disabledUser := models.User{
+		Username:     "disabled_user_test",
+		Email:        "disabled_test@example.com",
+		Name:         "Disabled User",
+		Role:         models.RoleUser,
+		PasswordHash: disabledHash,
+	}
+	if err := tx.Create(&disabledUser).Error; err != nil {
+		t.Fatalf("failed to create disabled user: %v", err)
+	}
+	if err := tx.Model(&disabledUser).Update("is_active", false).Error; err != nil {
+		t.Fatalf("failed to deactivate user: %v", err)
+	}
+
+	activeUser := models.User{
+		Username:     "active_user_branch_test",
+		Email:        "active_branch@example.com",
+		Name:         "Active User",
+		Role:         models.RoleUser,
+		PasswordHash: "$argon2id$v=19$m=65536,t=3,p=2$c2FsdHNhbHQ$aGFzaGhhc2g",
+		IsActive:     true,
+	}
+	if err := tx.Create(&activeUser).Error; err != nil {
+		t.Fatalf("failed to create active user: %v", err)
+	}
+
+	t.Run("ChangePassword invalid json returns 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(ctxUserID, activeUser.ID)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/users/change-password", bytes.NewReader([]byte("{invalid-json")))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.ChangePassword(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("ChangePassword user not found returns 404", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(ctxUserID, uint(99999999))
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/users/change-password", bytes.NewReader([]byte(`{"old_password":"ValidOldSecret123!","new_password":"ValidNewSecret456!"}`)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.ChangePassword(c)
+		assertResponseCode(t, w, http.StatusNotFound)
+	})
+
+	t.Run("ChangePassword user disabled returns 403", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Set(ctxUserID, disabledUser.ID)
+		body := fmt.Sprintf(`{"old_password":"%s","new_password":"ValidNewSecret456!"}`, disabledPass)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/users/change-password", bytes.NewReader([]byte(body)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.ChangePassword(c)
+		assertResponseCode(t, w, http.StatusForbidden)
+	})
+
+	t.Run("UpdateUser invalid id param returns 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "invalid"}}
+		c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/invalid", bytes.NewReader([]byte(`{}`)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.UpdateUser(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("UpdateUser invalid json payload returns 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", activeUser.ID)}}
+		c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/"+fmt.Sprintf("%d", activeUser.ID), bytes.NewReader([]byte(`{invalid-json`)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.UpdateUser(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("UpdateUser non-existent user returns 404", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "99999999"}}
+		c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/99999999", bytes.NewReader([]byte(`{"name":"New Name"}`)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.UpdateUser(c)
+		assertResponseCode(t, w, http.StatusNotFound)
+	})
+
+	t.Run("UpdateUser invalid department ID returns 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", activeUser.ID)}}
+		c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/"+fmt.Sprintf("%d", activeUser.ID), bytes.NewReader([]byte(`{"department_id":99999999}`)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.UpdateUser(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("UpdateUser invalid company ID returns 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", activeUser.ID)}}
+		c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/"+fmt.Sprintf("%d", activeUser.ID), bytes.NewReader([]byte(`{"company_id":99999999}`)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.UpdateUser(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("UpdateUser invalid company name returns 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", activeUser.ID)}}
+		c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/"+fmt.Sprintf("%d", activeUser.ID), bytes.NewReader([]byte(`{"company":"NonExistentCompanyXYZ"}`)))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.UpdateUser(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("DeleteUser invalid id returns 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "invalid"}}
+		c.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/invalid", nil)
+
+		srv.DeleteUser(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("DeleteUser non-existent user returns 404", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "99999999"}}
+		c.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/99999999", nil)
+
+		srv.DeleteUser(c)
+		assertResponseCode(t, w, http.StatusNotFound)
+	})
+
+	t.Run("ReviewProfileChange invalid id returns 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "0"}}
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/profile-changes/0/review?action=approve", nil)
+
+		srv.ReviewProfileChange(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("ReviewProfileChange invalid action returns 400", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "1"}}
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/profile-changes/1/review?action=unknown", nil)
+
+		srv.ReviewProfileChange(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("ReviewProfileChange not found returns 404", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "99999999"}}
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/profile-changes/99999999/review?action=approve", nil)
+
+		srv.ReviewProfileChange(c)
+		assertResponseCode(t, w, http.StatusNotFound)
+	})
+}
