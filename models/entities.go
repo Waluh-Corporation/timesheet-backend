@@ -46,12 +46,16 @@ type User struct {
 	BniID         string      `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
 	EmployeeID    string      `gorm:"size:64" json:"employee_id"`            // NPP or Vendor ID
 	Division      string      `gorm:"size:255" json:"division"`
+	DivisionID    *uint       `gorm:"index" json:"division_id,omitempty"`
+	DivisionRel   *Division   `gorm:"foreignKey:DivisionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"division_rel,omitempty"`
 	Department    string      `gorm:"size:255" json:"department"`
 	DepartmentID  *uint       `gorm:"index" json:"department_id"`
 	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
 	GroupName     string      `gorm:"size:255" json:"group_name"` // Kelompok (SDD)
 	Position      string      `gorm:"size:128" json:"position"`
 	Site          string      `gorm:"size:128" json:"site"`
+	SiteID        *uint       `gorm:"index" json:"site_id,omitempty"`
+	SiteRel       *Site       `gorm:"foreignKey:SiteID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"site_rel,omitempty"`
 	Company       string      `gorm:"size:64" json:"company"`
 	CompanyID     *uint       `gorm:"index" json:"company_id"`
 	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
@@ -62,6 +66,26 @@ type User struct {
 	ProfileRequests   []ProfileChangeRequest `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	Overtimes         []OvertimeEntry        `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	DailyActivities   []DailyActivity        `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
+}
+
+// Site represents a company branch, office, or client placement location (e.g. Jakarta, BNI - RDTX).
+type Site struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Code      string    `gorm:"uniqueIndex:uq_sites_code;size:64;not null" json:"code"`
+	Name      string    `gorm:"size:255;not null" json:"name"`
+	IsActive  bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_sites_active" json:"is_active"`
+}
+
+// Division represents an organizational business or technology division (e.g. Wholesale Digital Delivery).
+type Division struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Code      string    `gorm:"uniqueIndex:uq_divisions_code;size:64;not null" json:"code"`
+	Name      string    `gorm:"size:255;not null" json:"name"`
+	IsActive  bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_divisions_active" json:"is_active"`
 }
 
 // Company represents a vendor/organization (e.g. MII, SDD, Adidata).
@@ -76,13 +100,15 @@ type Company struct {
 
 // Department represents an organizational department or unit within the company portal.
 type Department struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Code      string    `gorm:"size:64;index" json:"code"`                                     // e.g. "WCSD", "DEV-01"
-	Name      string    `gorm:"size:255;not null;uniqueIndex:uq_departments_name" json:"name"` // e.g. "Wholesale Channel and Service Delivery"
-	Division  string    `gorm:"size:255" json:"division"`                                      // e.g. "Wholesale Digital Delivery"
-	IsActive  bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_departments_active" json:"is_active"`
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Code        string    `gorm:"size:64;index" json:"code"`                                     // e.g. "WCSD", "DEV-01"
+	Name        string    `gorm:"size:255;not null;uniqueIndex:uq_departments_name" json:"name"` // e.g. "Wholesale Channel and Service Delivery"
+	Division    string    `gorm:"size:255" json:"division"`                                      // e.g. "Wholesale Digital Delivery"
+	DivisionID  *uint     `gorm:"index" json:"division_id,omitempty"`
+	DivisionRel *Division `gorm:"foreignKey:DivisionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"division_rel,omitempty"`
+	IsActive    bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_departments_active" json:"is_active"`
 }
 
 // ActivityStatus represents a normalized status option for daily timesheet activity.
@@ -288,12 +314,16 @@ type ProfileChangeRequest struct {
 	BniID         string      `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
 	EmployeeID    string      `gorm:"size:64" json:"employee_id"`
 	Division      string      `gorm:"size:255" json:"division"`
+	DivisionID    *uint       `gorm:"index" json:"division_id,omitempty"`
+	DivisionRel   *Division   `gorm:"foreignKey:DivisionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"division_rel,omitempty"`
 	Department    string      `gorm:"size:255" json:"department"`
 	DepartmentID  *uint       `gorm:"index" json:"department_id"`
 	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
 	GroupName     string      `gorm:"size:255" json:"group_name"`
 	Position      string      `gorm:"size:128" json:"position"`
 	Site          string      `gorm:"size:128" json:"site"`
+	SiteID        *uint       `gorm:"index" json:"site_id,omitempty"`
+	SiteRel       *Site       `gorm:"foreignKey:SiteID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"site_rel,omitempty"`
 	CompanyID     *uint       `gorm:"index" json:"company_id"`
 	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
 

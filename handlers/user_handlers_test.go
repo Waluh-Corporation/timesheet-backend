@@ -603,6 +603,132 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 		assertFatalCode(t, w, http.StatusOK)
 	})
 
+	t.Run("CreateUser and UpdateUser with site_id and division_id returns human-readable names and IDs", func(t *testing.T) {
+		site1 := models.Site{Code: "sby_test", Name: "Surabaya Hub", IsActive: true}
+		_ = tx.Create(&site1)
+		site2 := models.Site{Code: "bdg_test", Name: "Bandung Hub", IsActive: true}
+		_ = tx.Create(&site2)
+
+		div1 := models.Division{Code: "it_ops", Name: "IT Operations", IsActive: true}
+		_ = tx.Create(&div1)
+		div2 := models.Division{Code: "fin_tech", Name: "Financial Technology", IsActive: true}
+		_ = tx.Create(&div2)
+
+		reqBody := fmt.Sprintf(`{
+			"username": "user_site_div_test",
+			"email": "user_site_div@example.com",
+			"name": "User Site Div",
+			"role": "user",
+			"company": "user_test_comp",
+			"department": "Product Engineering",
+			"site_id": %d,
+			"division_id": %d,
+			"initial_password": "StrongPassword123!"
+		}`, site1.ID, div1.ID)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader([]byte(reqBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.CreateUser(c)
+		assertFatalCode(t, w, http.StatusCreated)
+
+		var resp struct {
+			Data struct {
+				Message string                `json:"message"`
+				User    response.UserResponse `json:"user"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Data.User.Site != "Surabaya Hub" {
+			t.Errorf("expected site 'Surabaya Hub', got %q", resp.Data.User.Site)
+		}
+		if resp.Data.User.SiteID == nil || *resp.Data.User.SiteID != site1.ID {
+			t.Errorf("expected site_id %d, got %v", site1.ID, resp.Data.User.SiteID)
+		}
+		if resp.Data.User.Division != "IT Operations" {
+			t.Errorf("expected division 'IT Operations', got %q", resp.Data.User.Division)
+		}
+		if resp.Data.User.DivisionID == nil || *resp.Data.User.DivisionID != div1.ID {
+			t.Errorf("expected division_id %d, got %v", div1.ID, resp.Data.User.DivisionID)
+		}
+
+		// Update to site2 and div2
+		updateBody := fmt.Sprintf(`{"site_id": %d, "division_id": %d}`, site2.ID, div2.ID)
+		w = httptest.NewRecorder()
+		c, _ = gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", resp.Data.User.ID)}}
+		c.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/admin/users/%d", resp.Data.User.ID), bytes.NewReader([]byte(updateBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.UpdateUser(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		var updatedUser models.User
+		if err := srv.DB.Where("id = ?", resp.Data.User.ID).First(&updatedUser).Error; err != nil {
+			t.Fatalf("failed to query updated user: %v", err)
+		}
+		if updatedUser.Site != "Bandung Hub" {
+			t.Errorf("expected updated site 'Bandung Hub', got %q", updatedUser.Site)
+		}
+		if updatedUser.SiteID == nil || *updatedUser.SiteID != site2.ID {
+			t.Errorf("expected updated site_id %d, got %v", site2.ID, updatedUser.SiteID)
+		}
+		if updatedUser.Division != "Financial Technology" {
+			t.Errorf("expected updated division 'Financial Technology', got %q", updatedUser.Division)
+		}
+		if updatedUser.DivisionID == nil || *updatedUser.DivisionID != div2.ID {
+			t.Errorf("expected updated division_id %d, got %v", div2.ID, updatedUser.DivisionID)
+		}
+
+		// Verify ListUsers returns human-readable fields and IDs
+		wList := httptest.NewRecorder()
+		cList, _ := gin.CreateTestContext(wList)
+		cList.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
+		cList.Set(ctxUserID, adminUser.ID)
+		cList.Set(ctxRole, models.RoleAdmin)
+
+		srv.ListUsers(cList)
+		assertFatalCode(t, wList, http.StatusOK)
+
+		var listResp struct {
+			Data []response.AdminUserResponse `json:"data"`
+		}
+		if err := json.Unmarshal(wList.Body.Bytes(), &listResp); err != nil {
+			t.Fatalf("failed to decode list response: %v", err)
+		}
+		var foundUser *response.AdminUserResponse
+		for i := range listResp.Data {
+			if listResp.Data[i].ID == resp.Data.User.ID {
+				foundUser = &listResp.Data[i]
+				break
+			}
+		}
+		if foundUser == nil {
+			t.Fatal("user not found in ListUsers")
+		}
+		if foundUser.Site != "Bandung Hub" {
+			t.Errorf("expected site 'Bandung Hub', got %q", foundUser.Site)
+		}
+		if foundUser.SiteID == nil || *foundUser.SiteID != site2.ID {
+			t.Errorf("expected site_id %d, got %v", site2.ID, foundUser.SiteID)
+		}
+		if foundUser.Division != "Financial Technology" {
+			t.Errorf("expected division 'Financial Technology', got %q", foundUser.Division)
+		}
+		if foundUser.DivisionID == nil || *foundUser.DivisionID != div2.ID {
+			t.Errorf("expected division_id %d, got %v", div2.ID, foundUser.DivisionID)
+		}
+	})
+
 	t.Run("DeleteUser deactivates user", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)

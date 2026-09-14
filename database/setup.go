@@ -36,6 +36,9 @@ func Setup(db *gorm.DB, cfg *config.Config) error {
 	if err := seedDefaultDepartments(db); err != nil {
 		log.Printf("[database] could not seed default departments: %v", err)
 	}
+	if err := seedDefaultSitesAndDivisions(db); err != nil {
+		log.Printf("[database] could not seed default sites and divisions: %v", err)
+	}
 	if err := seedDefaultProjectsAndNormalize(db); err != nil {
 		log.Printf("[database] normalization/project seeding error: %v", err)
 	}
@@ -73,6 +76,42 @@ func seedDefaultDepartments(db *gorm.DB) error {
 	for _, d := range departments {
 		var cnt int64
 		if err := db.Model(&models.Department{}).Where(queryCode, d.Code).Count(&cnt).Error; err != nil {
+			return err
+		}
+		if cnt == 0 {
+			if err := db.Create(&d).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// seedDefaultSitesAndDivisions seeds default sites and divisions on first boot.
+func seedDefaultSitesAndDivisions(db *gorm.DB) error {
+	sites := []models.Site{
+		{Code: "ctcn", Name: "Citicon", IsActive: true},
+		{Code: "rdtx", Name: "RDTX", IsActive: true},
+		{Code: "pjp", Name: "Pejompongan", IsActive: true},
+	}
+	for _, s := range sites {
+		var cnt int64
+		if err := db.Model(&models.Site{}).Where(queryCode, s.Code).Count(&cnt).Error; err != nil {
+			return err
+		}
+		if cnt == 0 {
+			if err := db.Create(&s).Error; err != nil {
+				return err
+			}
+		}
+	}
+
+	divisions := []models.Division{
+		{Code: "wdd", Name: "Wholesale Digital Delivery", IsActive: true},
+	}
+	for _, d := range divisions {
+		var cnt int64
+		if err := db.Model(&models.Division{}).Where(queryCode, d.Code).Count(&cnt).Error; err != nil {
 			return err
 		}
 		if cnt == 0 {
@@ -140,6 +179,8 @@ func AutoMigrate(db *gorm.DB) error {
 	`).Error
 
 	return db.AutoMigrate(
+		&models.Site{},
+		&models.Division{},
 		&models.Company{},
 		&models.Department{},
 		&models.ActivityStatus{},
@@ -280,6 +321,44 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 		FROM departments 
 		WHERE users.department_id = departments.id
 		  AND (users.department IS NULL OR users.department != departments.name)
+	`).Error
+
+	// 9. Backfill users.site_id and users.division_id
+	_ = db.Exec(`
+		UPDATE users 
+		SET site_id = (
+			SELECT id FROM sites 
+			WHERE LOWER(sites.name) = LOWER(users.site) 
+			   OR LOWER(sites.code) = LOWER(users.site) 
+			LIMIT 1
+		) 
+		WHERE (site_id IS NULL OR site_id = 0) 
+		  AND site IS NOT NULL AND site != ''
+	`).Error
+
+	_ = db.Exec(`
+		UPDATE users 
+		SET division_id = (
+			SELECT id FROM divisions 
+			WHERE LOWER(divisions.name) = LOWER(users.division) 
+			   OR LOWER(divisions.code) = LOWER(users.division) 
+			LIMIT 1
+		) 
+		WHERE (division_id IS NULL OR division_id = 0) 
+		  AND division IS NOT NULL AND division != ''
+	`).Error
+
+	// 10. Backfill departments.division_id
+	_ = db.Exec(`
+		UPDATE departments 
+		SET division_id = (
+			SELECT id FROM divisions 
+			WHERE LOWER(divisions.name) = LOWER(departments.division) 
+			   OR LOWER(divisions.code) = LOWER(departments.division) 
+			LIMIT 1
+		) 
+		WHERE (division_id IS NULL OR division_id = 0) 
+		  AND division IS NOT NULL AND division != ''
 	`).Error
 
 	return nil
