@@ -46,7 +46,11 @@ func isSelf(c *gin.Context, targetID uint) bool {
 func (s *Server) ListUsers(c *gin.Context) {
 	var users []models.User
 	query := s.DB.Order(orderCreatedAtDesc)
-	if c.Query("include_inactive") != "true" {
+	if isActiveStr := c.Query("is_active"); isActiveStr != "" {
+		if isActive, err := strconv.ParseBool(isActiveStr); err == nil {
+			query = query.Where("is_active = ?", isActive)
+		}
+	} else if c.Query("include_inactive") == "false" {
 		query = query.Where("is_active = ?", true)
 	}
 	if err := query.Find(&users).Error; err != nil {
