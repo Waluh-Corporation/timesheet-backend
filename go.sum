@@ -4,6 +4,8 @@ github.com/KyleBanks/depth v1.2.1 h1:5h8fQADFrWtarTdtDudMmGsC7GPbOAu6RVB3ffsVFHc
 github.com/KyleBanks/depth v1.2.1/go.mod h1:jzSb9d0L43HxTQfT+oSA1EEp2q+ne2uh6XgeJcm8brE=
 github.com/SherClockHolmes/webpush-go v1.4.0 h1:ocnzNKWN23T9nvHi6IfyrQjkIc0oJWv1B1pULsf9i3s=
 github.com/SherClockHolmes/webpush-go v1.4.0/go.mod h1:XSq8pKX11vNV8MJEMwjrlTkxhAj1zKfxmyhdV7Pd6UA=
+github.com/ZeroHawkeye/wordZero v1.6.0 h1:W8vplhq8lzBk/7FDKbNOhW4pCS79llf8YfPhIZAObV4=
+github.com/ZeroHawkeye/wordZero v1.6.0/go.mod h1:kKgjyYeSShSVygQ1YEdXdbkgkkkR3EEvQS8gi2Bld7E=
 github.com/bytedance/gopkg v0.1.4 h1:oZnQwnX82KAIWb7033bEwtxvTqXcYMxDBaQxo5JJHWM=
 github.com/bytedance/gopkg v0.1.4/go.mod h1:v1zWfPm21Fb+OsyXN2VAHdL6TBb2L88anLQgdyje6R4=
 github.com/bytedance/sonic v1.15.4 h1:FgtV/4aBHpla9AxuMpuuzVUpa/Cf3izufkxNmnEzdI8=

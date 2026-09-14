@@ -62,6 +62,7 @@ type User struct {
 	ProfileRequests   []ProfileChangeRequest `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	Overtimes         []OvertimeEntry        `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	DailyActivities   []DailyActivity        `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
+	BeritaAcaras      []BeritaAcara          `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
 }
 
 // Company represents a vendor/organization (e.g. MII, SDD, Adidata).
@@ -322,4 +323,27 @@ type SystemSetting struct {
 	Key       string    `gorm:"primaryKey;size:64" json:"key"`
 	Value     string    `gorm:"type:text;not null" json:"value"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// BeritaAcara records attendance attestation and minutes for official attendance reporting.
+type BeritaAcara struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	UserID           uint      `gorm:"not null;index:idx_berita_acaras_user_id;index:idx_berita_acaras_user_date" json:"user_id"`
+	DailyActivityID  *uint     `gorm:"index:idx_berita_acaras_daily_activity_id;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"daily_activity_id,omitempty"`
+	Date             time.Time `gorm:"type:date;not null;index:idx_berita_acaras_date;index:idx_berita_acaras_user_date" json:"date"`
+	Day              string    `gorm:"size:32" json:"day"`
+	StartTime        string    `gorm:"size:8" json:"start_time"`
+	EndTime          string    `gorm:"size:8" json:"end_time"`
+	Keterangan       string    `gorm:"type:text;not null" json:"keterangan"`
+	TeamLeaderID     *uint     `gorm:"index:idx_berita_acaras_team_leader_id;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"team_leader_id,omitempty"`
+	DepartmentHeadID *uint     `gorm:"index:idx_berita_acaras_department_head_id;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_head_id,omitempty"`
+	IsActive         bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_berita_acaras_is_active" json:"is_active"`
+
+	User           *User          `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user,omitempty"`
+	DailyActivity  *DailyActivity `gorm:"foreignKey:DailyActivityID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"daily_activity,omitempty"`
+	TeamLeader     *Approver      `gorm:"foreignKey:TeamLeaderID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"team_leader,omitempty"`
+	DepartmentHead *Approver      `gorm:"foreignKey:DepartmentHeadID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_head,omitempty"`
 }

@@ -453,6 +453,36 @@ definitions:
         example: john_doe
         type: string
     type: object
+  request.BeritaAcaraRequest:
+    properties:
+      daily_activity_id:
+        example: 1
+        type: integer
+      date:
+        example: "2026-09-01"
+        type: string
+      day:
+        example: Selasa
+        type: string
+      department_head_id:
+        example: 3
+        type: integer
+      end_time:
+        example: "17:00"
+        type: string
+      keterangan:
+        example: Lupa absen datang / Work From Office
+        type: string
+      start_time:
+        example: "08:00"
+        type: string
+      team_leader_id:
+        example: 2
+        type: integer
+    required:
+    - date
+    - keterangan
+    type: object
   request.ChangePasswordRequest:
     properties:
       new_password:
@@ -559,6 +589,10 @@ definitions:
         maximum: 12
         minimum: 1
         type: integer
+      type:
+        description: '"timesheet", "berita_acara", or "both" (defaults to "timesheet")'
+        example: both
+        type: string
       year:
         example: 2026
         maximum: 9999
@@ -759,6 +793,39 @@ definitions:
         type: string
       username:
         type: string
+    type: object
+  response.BeritaAcaraDetailResponse:
+    properties:
+      created_at:
+        type: string
+      daily_activity:
+        $ref: '#/definitions/response.DailyActivityResponse'
+      daily_activity_id:
+        type: integer
+      date:
+        type: string
+      day:
+        type: string
+      department_head:
+        $ref: '#/definitions/models.Approver'
+      department_head_id:
+        type: integer
+      end_time:
+        type: string
+      id:
+        type: integer
+      keterangan:
+        type: string
+      start_time:
+        type: string
+      team_leader:
+        $ref: '#/definitions/models.Approver'
+      team_leader_id:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: integer
     type: object
   response.ChangePasswordResponse:
     properties:
@@ -2000,6 +2067,136 @@ paths:
       summary: Complete password reset
       tags:
       - Auth
+  /api/v1/berita-acara:
+    get:
+      description: Retrieves a paginated list of Berita Acara records for the authenticated
+        user.
+      parameters:
+      - description: Month filter (1-12)
+        in: query
+        name: month
+        type: integer
+      - description: Year filter
+        in: query
+        name: year
+        type: integer
+      - description: Start date filter (YYYY-MM-DD)
+        in: query
+        name: start_date
+        type: string
+      - description: End date filter (YYYY-MM-DD)
+        in: query
+        name: end_date
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 10)
+        in: query
+        name: limit
+        type: integer
+      - description: Fetch all records without pagination
+        in: query
+        name: all
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PaginatedResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List Berita Acara records
+      tags:
+      - Berita Acara
+    post:
+      consumes:
+      - application/json
+      description: Creates or updates a Berita Acara kehadiran entry for the authenticated
+        user on a given date.
+      parameters:
+      - description: Berita Acara payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.BeritaAcaraRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Invalid date format or payload
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upsert Berita Acara kehadiran
+      tags:
+      - Berita Acara
+  /api/v1/berita-acara/{id}:
+    get:
+      description: Retrieves details of a specific Berita Acara record by ID.
+      parameters:
+      - description: Berita Acara ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.BeritaAcaraDetailResponse'
+        "400":
+          description: Invalid ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: 'Forbidden: not authorized to access another user''s record'
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Record not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get Berita Acara detail
+      tags:
+      - Berita Acara
   /api/v1/companies:
     get:
       description: Returns all companies with their associated departments.
@@ -2648,8 +2845,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Renders monthly activities and overtimes into an Excel (.xlsx)
-        workbook, initiates download, and dispatches an email copy.
+      description: Renders monthly activities into an Excel (.xlsx) workbook, Word
+        (.docx) Berita Acara, or both in a ZIP archive, initiates download, and dispatches
+        an email copy.
       parameters:
       - description: Generation parameters
         in: body
@@ -2659,9 +2857,11 @@ paths:
           $ref: '#/definitions/request.GenerateRequest'
       produces:
       - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+      - application/zip
       responses:
         "200":
-          description: Generated Excel workbook (.xlsx)
+          description: Generated Document (.xlsx, .docx, or .zip)
           schema:
             type: file
         "400":
@@ -2682,7 +2882,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Generate timesheet spreadsheet
+      summary: Generate timesheet or berita acara documents
       tags:
       - Timesheet
   /api/v1/users/change-password:

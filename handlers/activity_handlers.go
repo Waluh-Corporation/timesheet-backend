@@ -278,14 +278,14 @@ func (s *Server) ListMonthlyActivities(c *gin.Context) {
 }
 
 // GenerateTimesheet godoc
-// @Summary Generate timesheet spreadsheet
-// @Description Renders monthly activities and overtimes into an Excel (.xlsx) workbook, initiates download, and dispatches an email copy.
+// @Summary Generate timesheet or berita acara documents
+// @Description Renders monthly activities into an Excel (.xlsx) workbook, Word (.docx) Berita Acara, or both in a ZIP archive, initiates download, and dispatches an email copy.
 // @Tags Timesheet
 // @Security BearerAuth
 // @Accept json
-// @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+// @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/zip
 // @Param request body request.GenerateRequest true "Generation parameters"
-// @Success 200 {file} binary "Generated Excel workbook (.xlsx)"
+// @Success 200 {file} binary "Generated Document (.xlsx, .docx, or .zip)"
 // @Failure 400 {object} response.ErrorResponse "Template or company mapping missing"
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 404 {object} response.ErrorResponse "User not found"
@@ -295,6 +295,15 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	var req request.GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	genType := strings.ToLower(strings.TrimSpace(req.Type))
+	if genType == "" {
+		genType = "timesheet"
+	}
+	if genType != "timesheet" && genType != "berita_acara" && genType != "both" {
+		RespondError(c, http.StatusBadRequest, "invalid type: must be 'timesheet', 'berita_acara', or 'both'")
 		return
 	}
 
@@ -325,60 +334,119 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 
 	start := time.Date(req.Year, time.Month(req.Month), 1, 0, 0, 0, 0, jakarta())
 	end := start.AddDate(0, 1, 0)
-	var activities []models.DailyActivity
-	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Scopes(models.ActiveOnly).
-		Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Find(&activities)
-
-	var overtimes []models.OvertimeEntry
-	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Scopes(models.ActiveOnly).
-		Preload("TeamLeader", models.ActiveOnly).Preload("DepartmentHead", models.ActiveOnly).
-		Order(orderDateAsc).Find(&overtimes)
-
-	// Fetch public holidays for the month so weekends/holidays are reflected in
-	// the generated sheet (best-effort; generation still proceeds on failure).
-	holidays := map[int]string{}
-	if hs, herr := services.FetchHolidays(req.Year, req.Month); herr == nil {
-		for _, h := range hs {
-			var y, m, d int
-			if _, e := fmt.Sscanf(h.Date, "%d-%d-%d", &y, &m, &d); e == nil {
-				holidays[d] = h.Description
-			}
-		}
-	}
+	period := mailer.FormatMonthYearIndonesian(req.Month, req.Year)
 
 	var approvers []models.Approver
 	s.DB.Where(queryIsActive, true).Order("id asc").Find(&approvers)
 
-	out, err := services.GenerateFromTemplate(services.GenerationInput{
-		CompanyCode: companyCode,
-		User:        &user,
-		Month:       req.Month,
-		Year:        req.Year,
-		Activities:  activities,
-		Overtimes:   overtimes,
-		Approvers:   approvers,
-		Holidays:    holidays,
-	})
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "generation failed: "+err.Error())
-		return
+	var xlsxBytes []byte
+	var xlsxFilename string
+	if genType == "timesheet" || genType == "both" {
+		var activities []models.DailyActivity
+		s.DB.Where(queryUserDateRange, user.ID, start, end).
+			Scopes(models.ActiveOnly).
+			Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Find(&activities)
+
+		var overtimes []models.OvertimeEntry
+		s.DB.Where(queryUserDateRange, user.ID, start, end).
+			Scopes(models.ActiveOnly).
+			Preload("TeamLeader", models.ActiveOnly).Preload("DepartmentHead", models.ActiveOnly).
+			Order(orderDateAsc).Find(&overtimes)
+
+		holidays := map[int]string{}
+		if hs, herr := services.FetchHolidays(req.Year, req.Month); herr == nil {
+			for _, h := range hs {
+				var y, m, d int
+				if _, e := fmt.Sscanf(h.Date, "%d-%d-%d", &y, &m, &d); e == nil {
+					holidays[d] = h.Description
+				}
+			}
+		}
+
+		var err error
+		xlsxBytes, err = services.GenerateFromTemplate(services.GenerationInput{
+			CompanyCode: companyCode,
+			User:        &user,
+			Month:       req.Month,
+			Year:        req.Year,
+			Activities:  activities,
+			Overtimes:   overtimes,
+			Approvers:   approvers,
+			Holidays:    holidays,
+		})
+		if err != nil {
+			RespondError(c, http.StatusInternalServerError, "timesheet generation failed: "+err.Error())
+			return
+		}
+		xlsxFilename = fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitize(user.Username), req.Month, req.Year)
 	}
 
-	filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitize(user.Username), req.Month, req.Year)
+	var docxBytes []byte
+	var docxFilename string
+	if genType == "berita_acara" || genType == "both" {
+		var beritaAcaras []models.BeritaAcara
+		s.DB.Where(queryUserDateRange, user.ID, start, end).
+			Scopes(models.ActiveOnly).
+			Preload("TeamLeader", models.ActiveOnly).Preload("DepartmentHead", models.ActiveOnly).
+			Order(orderDateAsc).Find(&beritaAcaras)
 
-	period := mailer.FormatMonthYearIndonesian(req.Month, req.Year)
-
-	// Email a copy asynchronously so the download isn't blocked on SMTP.
-	go func(to, uname, comp, per, fn string, data []byte) {
-		if s.Mailer != nil {
-			_ = s.Mailer.SendTimesheetEmailWithDetails(to, uname, comp, per, fn, data)
+		var err error
+		docxBytes, err = services.GenerateBeritaAcaraDocx(services.BeritaAcaraInput{
+			CompanyCode:  companyCode,
+			User:         &user,
+			Month:        req.Month,
+			Year:         req.Year,
+			BeritaAcaras: beritaAcaras,
+			Approvers:    approvers,
+		})
+		if err != nil {
+			RespondError(c, http.StatusInternalServerError, "berita acara generation failed: "+err.Error())
+			return
 		}
-	}(user.Email, user.Username, companyName, period, filename, out)
+		docxFilename = fmt.Sprintf("Berita_Acara_%s_%02d_%04d.docx", sanitize(user.Username), req.Month, req.Year)
+	}
 
-	c.Header("Content-Disposition", "attachment; filename="+filename)
-	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
+	switch genType {
+	case "timesheet":
+		go func(to, uname, comp, per, fn string, data []byte) {
+			if s.Mailer != nil {
+				_ = s.Mailer.SendTimesheetEmailWithDetails(to, uname, comp, per, fn, data)
+			}
+		}(user.Email, user.Username, companyName, period, xlsxFilename, xlsxBytes)
+
+		c.Header("Content-Disposition", "attachment; filename="+xlsxFilename)
+		c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xlsxBytes)
+
+	case "berita_acara":
+		go func(to, uname, comp, per, fn string, data []byte) {
+			if s.Mailer != nil {
+				_ = s.Mailer.SendBeritaAcaraEmailWithDetails(to, uname, comp, per, fn, data)
+			}
+		}(user.Email, user.Username, companyName, period, docxFilename, docxBytes)
+
+		c.Header("Content-Disposition", "attachment; filename="+docxFilename)
+		c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", docxBytes)
+
+	case "both":
+		zipFilename := fmt.Sprintf("Timesheet_and_Berita_Acara_%s_%02d_%04d.zip", sanitize(user.Username), req.Month, req.Year)
+		zipBytes, err := services.CreateZipArchive(
+			services.ArchiveFile{Name: xlsxFilename, Data: xlsxBytes},
+			services.ArchiveFile{Name: docxFilename, Data: docxBytes},
+		)
+		if err != nil {
+			RespondError(c, http.StatusInternalServerError, "zip packaging failed: "+err.Error())
+			return
+		}
+
+		go func(to, uname, comp, per, fn string, data []byte) {
+			if s.Mailer != nil {
+				_ = s.Mailer.SendBothDocumentsEmailWithDetails(to, uname, comp, per, fn, data)
+			}
+		}(user.Email, user.Username, companyName, period, zipFilename, zipBytes)
+
+		c.Header("Content-Disposition", "attachment; filename="+zipFilename)
+		c.Data(http.StatusOK, "application/zip", zipBytes)
+	}
 }
 
 func saveYearlyHolidays(db *gorm.DB, yearlyHolidays []models.HolidayDTO) int {

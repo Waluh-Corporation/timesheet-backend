@@ -154,6 +154,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.ProfileChangeRequest{},
 		&models.PasswordResetToken{},
 		&models.SystemSetting{},
+		&models.BeritaAcara{},
 	)
 }
 

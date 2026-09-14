@@ -30,17 +30,19 @@ type webAuthnSessionEntry struct {
 
 // Server carries the shared dependencies used by all HTTP handlers.
 type Server struct {
-	DB           *gorm.DB
-	Cfg          *config.Config
-	Auth         *auth.Service
-	Mailer       *mailer.Mailer
-	Push         *push.Service
-	WebAuthn     *webauthn.WebAuthn
-	Hasher       auth.PasswordHasher
-	UserRepo     repository.UserRepository
-	UserSvc      service.UserService
-	ActivityRepo repository.ActivityRepository
-	ActivitySvc  service.ActivityService
+	DB              *gorm.DB
+	Cfg             *config.Config
+	Auth            *auth.Service
+	Mailer          *mailer.Mailer
+	Push            *push.Service
+	WebAuthn        *webauthn.WebAuthn
+	Hasher          auth.PasswordHasher
+	UserRepo        repository.UserRepository
+	UserSvc         service.UserService
+	ActivityRepo    repository.ActivityRepository
+	ActivitySvc     service.ActivityService
+	BeritaAcaraRepo repository.BeritaAcaraRepository
+	BeritaAcaraSvc  service.BeritaAcaraService
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
@@ -63,12 +65,16 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	var userSvc service.UserService
 	var activityRepo repository.ActivityRepository
 	var activitySvc service.ActivityService
+	var beritaAcaraRepo repository.BeritaAcaraRepository
+	var beritaAcaraSvc service.BeritaAcaraService
 
 	if db != nil {
 		userRepo = repository.NewUserRepository(db)
 		userSvc = service.NewUserService(userRepo, auth.DefaultHasher, m)
 		activityRepo = repository.NewActivityRepository(db)
 		activitySvc = service.NewActivityService(activityRepo)
+		beritaAcaraRepo = repository.NewBeritaAcaraRepository(db)
+		beritaAcaraSvc = service.NewBeritaAcaraService(beritaAcaraRepo)
 	}
 
 	return &Server{
@@ -83,6 +89,8 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		UserSvc:          userSvc,
 		ActivityRepo:     activityRepo,
 		ActivitySvc:      activitySvc,
+		BeritaAcaraRepo:  beritaAcaraRepo,
+		BeritaAcaraSvc:   beritaAcaraSvc,
 		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
 	}, nil
 }

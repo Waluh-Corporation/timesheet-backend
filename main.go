@@ -242,6 +242,12 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/overtimes", s.ListMonthlyOvertimes)
 		authed.DELETE("/overtimes/:id", s.DeleteOvertime)
 		authed.POST("/timesheet/generate", s.GenerateTimesheet)
+
+		// Berita Acara kehadiran entry + list + detail.
+		authed.POST("/berita-acara", s.UpsertBeritaAcara)
+		authed.GET("/berita-acara", s.ListBeritaAcara)
+		authed.GET("/berita-acara/:id", s.GetBeritaAcara)
+
 		authed.GET("/holidays", s.GetHolidays)
 		authed.GET("/holidays/all", s.ListHolidays)
 		authed.POST("/holidays/sync", s.SyncHolidays)

@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
+	github.com/ZeroHawkeye/wordZero v1.6.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-webauthn/webauthn v0.18.1
 	github.com/golang-jwt/jwt/v5 v5.3.1

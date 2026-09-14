@@ -1452,6 +1452,206 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/berita-acara": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves a paginated list of Berita Acara records for the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Berita Acara"
+                ],
+                "summary": "List Berita Acara records",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Month filter (1-12)",
+                        "name": "month",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Year filter",
+                        "name": "year",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date filter (YYYY-MM-DD)",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date filter (YYYY-MM-DD)",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 10)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Fetch all records without pagination",
+                        "name": "all",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.PaginatedResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates or updates a Berita Acara kehadiran entry for the authenticated user on a given date.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Berita Acara"
+                ],
+                "summary": "Upsert Berita Acara kehadiran",
+                "parameters": [
+                    {
+                        "description": "Berita Acara payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.BeritaAcaraRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid date format or payload",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/berita-acara/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves details of a specific Berita Acara record by ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Berita Acara"
+                ],
+                "summary": "Get Berita Acara detail",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Berita Acara ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.BeritaAcaraDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden: not authorized to access another user's record",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Record not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/companies": {
             "get": {
                 "security": [
@@ -2456,17 +2656,19 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Renders monthly activities and overtimes into an Excel (.xlsx) workbook, initiates download, and dispatches an email copy.",
+                "description": "Renders monthly activities into an Excel (.xlsx) workbook, Word (.docx) Berita Acara, or both in a ZIP archive, initiates download, and dispatches an email copy.",
                 "consumes": [
                     "application/json"
                 ],
                 "produces": [
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/zip"
                 ],
                 "tags": [
                     "Timesheet"
                 ],
-                "summary": "Generate timesheet spreadsheet",
+                "summary": "Generate timesheet or berita acara documents",
                 "parameters": [
                     {
                         "description": "Generation parameters",
@@ -2480,7 +2682,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Generated Excel workbook (.xlsx)",
+                        "description": "Generated Document (.xlsx, .docx, or .zip)",
                         "schema": {
                             "type": "file"
                         }
@@ -3243,6 +3445,47 @@ const docTemplate = `{
                 }
             }
         },
+        "request.BeritaAcaraRequest": {
+            "type": "object",
+            "required": [
+                "date",
+                "keterangan"
+            ],
+            "properties": {
+                "daily_activity_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "date": {
+                    "type": "string",
+                    "example": "2026-09-01"
+                },
+                "day": {
+                    "type": "string",
+                    "example": "Selasa"
+                },
+                "department_head_id": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "end_time": {
+                    "type": "string",
+                    "example": "17:00"
+                },
+                "keterangan": {
+                    "type": "string",
+                    "example": "Lupa absen datang / Work From Office"
+                },
+                "start_time": {
+                    "type": "string",
+                    "example": "08:00"
+                },
+                "team_leader_id": {
+                    "type": "integer",
+                    "example": 2
+                }
+            }
+        },
         "request.ChangePasswordRequest": {
             "type": "object",
             "required": [
@@ -3393,6 +3636,11 @@ const docTemplate = `{
                     "maximum": 12,
                     "minimum": 1,
                     "example": 9
+                },
+                "type": {
+                    "description": "\"timesheet\", \"berita_acara\", or \"both\" (defaults to \"timesheet\")",
+                    "type": "string",
+                    "example": "both"
                 },
                 "year": {
                     "type": "integer",
@@ -3679,6 +3927,56 @@ const docTemplate = `{
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "response.BeritaAcaraDetailResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "daily_activity": {
+                    "$ref": "#/definitions/response.DailyActivityResponse"
+                },
+                "daily_activity_id": {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "string"
+                },
+                "day": {
+                    "type": "string"
+                },
+                "department_head": {
+                    "$ref": "#/definitions/models.Approver"
+                },
+                "department_head_id": {
+                    "type": "integer"
+                },
+                "end_time": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "keterangan": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "team_leader": {
+                    "$ref": "#/definitions/models.Approver"
+                },
+                "team_leader_id": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer"
                 }
             }
         },
