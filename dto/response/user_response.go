@@ -19,11 +19,13 @@ type UserResponse struct {
 	BniID        string      `json:"bni_id" example:"12345678"`
 	EmployeeID   string      `json:"employee_id" example:"EMP-001"`
 	Division     string      `json:"division" example:"Application Development Division"`
+	DivisionID   *uint       `json:"division_id,omitempty" example:"1"`
 	Department   string      `json:"department" example:"Core Banking"`
 	DepartmentID *uint       `json:"department_id,omitempty" example:"1"`
 	GroupName    string      `json:"group_name,omitempty" example:"SDD"`
 	Position     string      `json:"position,omitempty" example:"Software Engineer"`
 	Site         string      `json:"site" example:"Jakarta"`
+	SiteID       *uint       `json:"site_id,omitempty" example:"1"`
 	Company      string      `json:"company" example:"MII"`
 	CompanyID    *uint       `json:"company_id,omitempty" example:"1"`
 }
@@ -42,11 +44,13 @@ func ToUserResponse(u *models.User) UserResponse {
 		BniID:        u.BniID,
 		EmployeeID:   u.EmployeeID,
 		Division:     u.Division,
+		DivisionID:   u.DivisionID,
 		Department:   u.Department,
 		DepartmentID: u.DepartmentID,
 		GroupName:    u.GroupName,
 		Position:     u.Position,
 		Site:         u.Site,
+		SiteID:       u.SiteID,
 		Company:      u.Company,
 		CompanyID:    u.CompanyID,
 	}

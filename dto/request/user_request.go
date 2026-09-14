@@ -10,9 +10,11 @@ type CreateUserRequest struct {
 	Name         string      `json:"name" example:"John Doe"`
 	BniID        string      `json:"bni_id" example:"12345678"`
 	Division     string      `json:"division" example:"Application Development Division"`
+	DivisionID   *uint       `json:"division_id" example:"1"`
 	Department   string      `json:"department" example:"Core Banking"`
 	DepartmentID *uint       `json:"department_id" example:"1"`
 	Site         string      `json:"site" example:"Jakarta"`
+	SiteID       *uint       `json:"site_id" example:"1"`
 	Company      string      `json:"company" example:"MII"`
 	CompanyID    *uint       `json:"company_id" example:"1"`
 }
@@ -30,9 +32,11 @@ type UpdateUserRequest struct {
 	Name         *string      `json:"name" example:"John Doe"`
 	BniID        *string      `json:"bni_id" example:"12345678"`
 	Division     *string      `json:"division" example:"Application Development Division"`
+	DivisionID   *uint        `json:"division_id" example:"1"`
 	Department   *string      `json:"department" example:"Core Banking"`
 	DepartmentID *uint        `json:"department_id" example:"1"`
 	Site         *string      `json:"site" example:"Jakarta"`
+	SiteID       *uint        `json:"site_id" example:"1"`
 	Company      *string      `json:"company" example:"MII"`
 	CompanyID    *uint        `json:"company_id" example:"1"`
 }
@@ -43,8 +47,10 @@ type ProfileChangeRequestDTO struct {
 	BniID        string `json:"bni_id" example:"12345678"`
 	EmployeeID   string `json:"employee_id" example:"MII-12345"`
 	Division     string `json:"division" example:"Application Development Division"`
+	DivisionID   *uint  `json:"division_id" example:"1"`
 	Department   string `json:"department" example:"Core Banking"`
 	DepartmentID *uint  `json:"department_id" example:"1"`
 	Site         string `json:"site" example:"Jakarta"`
+	SiteID       *uint  `json:"site_id" example:"1"`
 	CompanyID    *uint  `json:"company_id" example:"1"`
 }

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Timesheet Backend Complete API Tests",
-    "description": "Complete test collection covering 100% of all 50 endpoints in Timesheet Backend API with Postman assertions.",
+    "description": "Complete test collection covering 100% of all 65 endpoints in Timesheet Backend API with Postman assertions.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -27,6 +27,18 @@
     },
     {
       "key": "createdCompanyId",
+      "value": "1"
+    },
+    {
+      "key": "createdSiteId",
+      "value": "1"
+    },
+    {
+      "key": "createdDivisionId",
+      "value": "1"
+    },
+    {
+      "key": "createdDepartmentId",
       "value": "1"
     },
     {
@@ -398,6 +410,68 @@
                   "    pm.expect(res.data[0].is_active).to.be.true;",
                   "    pm.expect(res.data[0]).to.not.have.property(\"company_id\");",
                   "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Sites",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/sites"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Sites have is_active true\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "  });",
+                  "  pm.collectionVariables.set(\"createdSiteId\", res.data[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Divisions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/divisions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));",
+                  "if (res.data && res.data.length > 0) {",
+                  "  pm.test(\"Divisions have is_active true\", () => {",
+                  "    pm.expect(res.data[0].is_active).to.be.true;",
+                  "  });",
+                  "  pm.collectionVariables.set(\"createdDivisionId\", res.data[0].id);",
                   "}"
                 ]
               }
@@ -1214,6 +1288,31 @@
       "name": "10. Admin - Master Companies",
       "item": [
         {
+          "name": "Admin List Companies",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/companies"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Admin Create Company",
           "request": {
             "method": "POST",
@@ -1315,6 +1414,31 @@
       "name": "11. Admin - Master Approvers",
       "item": [
         {
+          "name": "Admin List Approvers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/approvers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Admin Create Approver",
           "request": {
             "method": "POST",
@@ -1413,7 +1537,385 @@
       ]
     },
     {
-      "name": "12. Admin - Users & Passkeys",
+      "name": "12. Admin - Master Sites",
+      "item": [
+        {
+          "name": "Admin List Sites",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/sites"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Create Site",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"code\":\"site_pm_{{$timestamp}}\",\"name\":\"Test Site Postman\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/sites"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 201\", () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set(\"createdSiteId\", res.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Update Site",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Test Site Postman Updated\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/sites/{{createdSiteId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Delete Site",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/sites/{{createdSiteId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success and deleted is true\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "    pm.expect(res.deleted).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "13. Admin - Master Divisions",
+      "item": [
+        {
+          "name": "Admin List Divisions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/divisions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Create Division",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"code\":\"div_pm_{{$timestamp}}\",\"name\":\"Test Division Postman\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/divisions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 201\", () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set(\"createdDivisionId\", res.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Update Division",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Test Division Postman Updated\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/divisions/{{createdDivisionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Delete Division",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/divisions/{{createdDivisionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success and deleted is true\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "    pm.expect(res.deleted).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "14. Admin - Master Departments",
+      "item": [
+        {
+          "name": "Admin List Departments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/departments"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "const res = pm.response.json();",
+                  "pm.test(\"Data is array\", () => pm.expect(res.data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Create Department",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"code\":\"dept_pm_{{$timestamp}}\",\"name\":\"Test Department Postman\",\"division\":\"Wholesale Digital Delivery\",\"division_id\":1}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/departments"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 201\", () => pm.expect([200, 201]).to.include(pm.response.code));",
+                  "const res = pm.response.json();",
+                  "if (res.data && res.data.id) {",
+                  "  pm.collectionVariables.set(\"createdDepartmentId\", res.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Update Department",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Test Department Postman Updated\",\"division_id\":1}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/departments/{{createdDepartmentId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Delete Department",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/departments/{{createdDepartmentId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));",
+                  "if (pm.response.code === 200) {",
+                  "  const res = pm.response.json();",
+                  "  pm.test(\"Status is success and deleted is true\", () => {",
+                  "    pm.expect(res.status).to.eql(\"success\");",
+                  "    pm.expect(res.deleted).to.be.true;",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "15. Admin - Users & Passkeys",
       "item": [
         {
           "name": "Admin Create User",
@@ -1431,7 +1933,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"username\":\"mcptest_{{$timestamp}}\",\"email\":\"mcptest_{{$timestamp}}@example.com\",\"name\":\"MCP Test User\",\"role\":\"user\",\"company_id\":1,\"department_id\":1}"
+              "raw": "{\"username\":\"mcptest_{{$timestamp}}\",\"email\":\"mcptest_{{$timestamp}}@example.com\",\"name\":\"MCP Test User\",\"role\":\"user\",\"company_id\":1,\"department_id\":1,\"site_id\":1,\"division_id\":1}"
             },
             "url": "{{baseUrl}}/api/v1/admin/users"
           },
@@ -1446,6 +1948,13 @@
                   "  pm.test(\"Initial password is NOT exposed in response (delivered via email)\", () => {",
                   "    pm.expect(res.data).to.not.have.property(\"initial_password\");",
                   "  });",
+                  "  if (res.data.user) {",
+                  "    pm.test(\"User response has human-readable site, division, and department\", () => {",
+                  "      pm.expect(res.data.user).to.have.property(\"site\");",
+                  "      pm.expect(res.data.user).to.have.property(\"division\");",
+                  "      pm.expect(res.data.user).to.have.property(\"department\");",
+                  "    });",
+                  "  }",
                   "  if (res.data.user && res.data.user.id) {",
                   "    pm.collectionVariables.set(\"createdUserId\", res.data.user.id);",
                   "  } else if (res.data.id) {",
@@ -1521,6 +2030,9 @@
                   "    pm.expect(u).to.have.property(\"id\");",
                   "    pm.expect(u).to.have.property(\"username\");",
                   "    pm.expect(u).to.have.property(\"role\");",
+                  "    pm.expect(u).to.have.property(\"site\");",
+                  "    pm.expect(u).to.have.property(\"division\");",
+                  "    pm.expect(u).to.have.property(\"department\");",
                   "    pm.expect(u).to.not.have.property(\"password_hash\");",
                   "  });",
                   "}"
@@ -1545,7 +2057,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"name\":\"MCP User Updated\"}"
+              "raw": "{\"name\":\"MCP User Updated\",\"site_id\":1,\"division_id\":1}"
             },
             "url": "{{baseUrl}}/api/v1/admin/users/{{createdUserId}}"
           },
@@ -1639,7 +2151,7 @@
       ]
     },
     {
-      "name": "13. Admin - Profile Changes Review",
+      "name": "16. Admin - Profile Changes Review",
       "item": [
         {
           "name": "Admin List Profile Changes (Shortened Response)",
@@ -1695,7 +2207,7 @@
       ]
     },
     {
-      "name": "14. Setup Init Guard",
+      "name": "17. Setup Init Guard",
       "item": [
         {
           "name": "Init Setup Guard (System Already Initialized)",

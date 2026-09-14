@@ -246,10 +246,12 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/holidays/all", s.ListHolidays)
 		authed.POST("/holidays/sync", s.SyncHolidays)
 
-		// Master data (normalized projects, companies, departments, activity-statuses, approvers).
+		// Master data (normalized projects, companies, departments, activity-statuses, approvers, sites, divisions).
 		authed.GET("/projects", s.ListProjects)
 		authed.GET("/companies", s.ListCompanies)
 		authed.GET("/departments", s.ListDepartments)
+		authed.GET("/sites", s.ListSites)
+		authed.GET("/divisions", s.ListDivisions)
 		authed.GET("/activity-statuses", s.ListActivityStatuses)
 		authed.GET("/approvers", s.ListApprovers)
 
@@ -273,14 +275,31 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)
 
-		// Master data management (approvers & companies)
+		// Master data management (approvers, companies, sites, divisions, departments)
+		admin.GET("/approvers", s.AdminListApprovers)
 		admin.POST("/approvers", s.CreateApprover)
 		admin.PATCH("/approvers/:id", s.UpdateApprover)
 		admin.DELETE("/approvers/:id", s.DeleteApprover)
 
+		admin.GET("/companies", s.AdminListCompanies)
 		admin.POST("/companies", s.CreateCompany)
 		admin.PATCH("/companies/:id", s.UpdateCompany)
 		admin.DELETE("/companies/:id", s.DeleteCompany)
+
+		admin.GET("/sites", s.AdminListSites)
+		admin.POST("/sites", s.CreateSite)
+		admin.PATCH("/sites/:id", s.UpdateSite)
+		admin.DELETE("/sites/:id", s.DeleteSite)
+
+		admin.GET("/divisions", s.AdminListDivisions)
+		admin.POST("/divisions", s.CreateDivision)
+		admin.PATCH("/divisions/:id", s.UpdateDivision)
+		admin.DELETE("/divisions/:id", s.DeleteDivision)
+
+		admin.GET("/departments", s.AdminListDepartments)
+		admin.POST("/departments", s.CreateDepartment)
+		admin.PATCH("/departments/:id", s.UpdateDepartment)
+		admin.DELETE("/departments/:id", s.DeleteDepartment)
 	}
 }
 
