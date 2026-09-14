@@ -20,6 +20,8 @@ type IPRateLimiter struct {
 	limit       int           // max requests per window
 	window      time.Duration // window duration
 	cleanupRate time.Duration
+	stopChan    chan struct{}
+	stopOnce    sync.Once
 }
 
 // NewIPRateLimiter creates a new IPRateLimiter with background garbage collection.
@@ -29,23 +31,42 @@ func NewIPRateLimiter(limit int, window time.Duration) *IPRateLimiter {
 		limit:       limit,
 		window:      window,
 		cleanupRate: window * 2,
+		stopChan:    make(chan struct{}),
 	}
 
 	go limiter.cleanupLoop()
 	return limiter
 }
 
+// Stop gracefully stops the background cleanup loop.
+func (l *IPRateLimiter) Stop() {
+	if l == nil {
+		return
+	}
+	l.stopOnce.Do(func() {
+		if l.stopChan != nil {
+			close(l.stopChan)
+		}
+	})
+}
+
 func (l *IPRateLimiter) cleanupLoop() {
 	ticker := time.NewTicker(l.cleanupRate)
-	for range ticker.C {
-		l.mu.Lock()
-		cutoff := time.Now().Add(-l.window)
-		for ip, rec := range l.clients {
-			if rec.lastSeen.Before(cutoff) {
-				delete(l.clients, ip)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			l.mu.Lock()
+			cutoff := time.Now().Add(-l.window)
+			for ip, rec := range l.clients {
+				if rec.lastSeen.Before(cutoff) {
+					delete(l.clients, ip)
+				}
 			}
+			l.mu.Unlock()
+		case <-l.stopChan:
+			return
 		}
-		l.mu.Unlock()
 	}
 }
 

@@ -115,3 +115,10 @@ func TestStructuredRecovery(t *testing.T) {
 		t.Errorf("expected 500, got %d", w.Code)
 	}
 }
+
+func TestRateLimiterStop(t *testing.T) {
+	limiter := middleware.NewIPRateLimiter(5, 100*time.Millisecond)
+	// Stop should be safe to call once or multiple times
+	limiter.Stop()
+	limiter.Stop()
+}

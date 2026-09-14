@@ -3800,6 +3800,9 @@ const docTemplate = `{
                 "token": {
                     "type": "string",
                     "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                },
+                "user": {
+                    "$ref": "#/definitions/models.User"
                 }
             }
         },
