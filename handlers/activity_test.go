@@ -259,6 +259,17 @@ func TestActivityHandlers_GetAndListIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("GetDailyActivity not found", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "999999"}}
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.GetDailyActivity(c)
+		assertFatalCode(t, w, http.StatusNotFound)
+	})
+
 	t.Run("ListActivities with pagination", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -279,6 +290,89 @@ func TestActivityHandlers_GetAndListIntegration(t *testing.T) {
 			t.Fatalf("unmarshal error: %v", err)
 		}
 		assertListActivitiesPagination(t, len(resp.Data), resp.Pagination)
+	})
+
+	t.Run("ListActivities with date range and sort asc", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities?start_date=2026-09-01&end_date=2026-09-02&sort=asc", nil)
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.ListActivities(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+
+	t.Run("ListActivities with month and year filter", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities?year=2026&month=9&status=P", nil)
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.ListActivities(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+
+	t.Run("ListActivities with all=true", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities?all=true", nil)
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.ListActivities(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+
+	t.Run("ListActivities with year only", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities?year=2026&sort=desc", nil)
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.ListActivities(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+}
+
+func TestActivityHandlers_UninitializedService(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	srv := &Server{} // DB and ActivitySvc are nil
+
+	t.Run("UpsertDailyActivity uninitialized", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("POST", "/api/v1/activities", strings.NewReader(`{"date":"2026-09-01","activity":"testing"}`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		srv.UpsertDailyActivity(c)
+		assertResponseCode(t, w, http.StatusInternalServerError)
+		if !strings.Contains(w.Body.String(), errActivityServiceNotInitialized) {
+			t.Errorf("expected %q in body, got %s", errActivityServiceNotInitialized, w.Body.String())
+		}
+	})
+
+	t.Run("GetDailyActivity uninitialized", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "1"}}
+		srv.GetDailyActivity(c)
+		assertResponseCode(t, w, http.StatusInternalServerError)
+		if !strings.Contains(w.Body.String(), errActivityServiceNotInitialized) {
+			t.Errorf("expected %q in body, got %s", errActivityServiceNotInitialized, w.Body.String())
+		}
+	})
+
+	t.Run("ListActivities uninitialized", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities", nil)
+		srv.ListActivities(c)
+		assertResponseCode(t, w, http.StatusInternalServerError)
+		if !strings.Contains(w.Body.String(), errActivityServiceNotInitialized) {
+			t.Errorf("expected %q in body, got %s", errActivityServiceNotInitialized, w.Body.String())
+		}
 	})
 }
 
@@ -351,6 +445,30 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 	}
 
 	assertProjectSyncFields(t, saved, testProj)
+
+	t.Run("UpsertDailyActivity bad JSON", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("POST", "/api/v1/activities", strings.NewReader(`{invalid json`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.UpsertDailyActivity(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("UpsertDailyActivity invalid input date", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("POST", "/api/v1/activities", strings.NewReader(`{"date":"bad-date","activity":"coding"}`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.UpsertDailyActivity(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
 }
 
 func itoa(n uint) string {

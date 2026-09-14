@@ -70,7 +70,10 @@ func (s *Server) Login(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "could not issue token")
 		return
 	}
-	RespondSuccess(c, http.StatusOK, gin.H{"token": token})
+	RespondSuccess(c, http.StatusOK, response.LoginResponse{
+		Token: token,
+		User:  user,
+	})
 }
 
 // WebAuthnRelatedOrigins godoc
@@ -394,7 +397,10 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "could not issue token")
 		return
 	}
-	RespondSuccess(c, http.StatusOK, gin.H{"token": token})
+	RespondSuccess(c, http.StatusOK, response.LoginResponse{
+		Token: token,
+		User:  user,
+	})
 }
 
 // --- Passkey management (self-service for any authenticated user) ---

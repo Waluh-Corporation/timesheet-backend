@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,18 +15,22 @@ import (
 
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
+	"timesheet-backend/internal/domain"
+	"timesheet-backend/internal/repository"
+	"timesheet-backend/internal/service"
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/services"
 )
 
 const (
-	dateFormatYYYYMMDD = "2006-01-02"
-	queryDateRange     = "date >= ? AND date < ?"
-	queryUserDateRange = "user_id = ? AND date >= ? AND date < ?"
-	orderDateAsc       = "date asc"
-	orderNameAsc       = "name asc"
-	queryIsActive      = "is_active = ?"
+	dateFormatYYYYMMDD               = "2006-01-02"
+	queryDateRange                   = "date >= ? AND date < ?"
+	queryUserDateRange               = "user_id = ? AND date >= ? AND date < ?"
+	orderDateAsc                     = "date asc"
+	orderNameAsc                     = "name asc"
+	queryIsActive                    = "is_active = ?"
+	errActivityServiceNotInitialized = "activity service not initialized"
 )
 
 // jakarta returns the Asia/Jakarta location, falling back to a fixed +07:00.
@@ -35,11 +40,6 @@ func jakarta() *time.Location {
 		return time.FixedZone("WIB", 7*3600)
 	}
 	return loc
-}
-
-func (s *Server) validateActivityStatus(status string) bool {
-	var statusCount int64
-	return s.DB.Model(&models.ActivityStatus{}).Where("code = ?", status).Count(&statusCount).Error == nil && statusCount > 0
 }
 
 func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
@@ -67,28 +67,19 @@ func (s *Server) buildProjectQuery(projectID, projectName string) *gorm.DB {
 	return query
 }
 
-func (s *Server) resolveDailyActivityProject(req *request.DailyActivityRequest, activity *models.DailyActivity) error {
-	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
-		proj, err := s.findProjectByRefID(*req.ProjectRefID)
-		if err != nil {
-			return err
-		}
-		activity.ProjectRefID = &proj.ID
-		activity.ProjectID = proj.Code
-		activity.ProjectName = proj.Name
-		return nil
+func reqContext(c *gin.Context) context.Context {
+	if c != nil && c.Request != nil && c.Request.Context() != nil {
+		return c.Request.Context()
 	}
+	return context.Background()
+}
 
-	if req.ProjectID == "" && req.ProjectName == "" {
-		return nil
+func (s *Server) getActivityService() service.ActivityService {
+	if s.ActivitySvc != nil {
+		return s.ActivitySvc
 	}
-
-	var proj models.Project
-	query := s.buildProjectQuery(req.ProjectID, req.ProjectName)
-	if err := query.Limit(1).Find(&proj).Error; err == nil && proj.ID != 0 {
-		activity.ProjectRefID = &proj.ID
-		activity.ProjectID = proj.Code
-		activity.ProjectName = proj.Name
+	if s.DB != nil {
+		return service.NewActivityService(repository.NewActivityRepository(s.DB))
 	}
 	return nil
 }
@@ -112,64 +103,21 @@ func (s *Server) UpsertDailyActivity(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, jakarta())
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid date format, expected YYYY-MM-DD")
+
+	svc := s.getActivityService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
 		return
 	}
 
-	// Default status to 'P' if not provided
-	if req.Status == "" {
-		req.Status = "P"
-	}
-
-	// Validate status against activity_statuses to return 400 instead of foreign key constraint 500
-	if !s.validateActivityStatus(req.Status) {
-		RespondError(c, http.StatusBadRequest, "invalid status code: must be a valid activity status (e.g. P, BT, S, PM, V, X)")
-		return
-	}
-
-	activity := models.DailyActivity{
-		UserID:       currentUserID(c),
-		Date:         date,
-		StartTime:    req.StartTime,
-		EndTime:      req.EndTime,
-		Status:       req.Status,
-		Activity:     req.Activity,
-		ProjectName:  req.ProjectName,
-		ProjectID:    req.ProjectID,
-		ProjectRefID: req.ProjectRefID,
-	}
-
-	if err := s.resolveDailyActivityProject(&req, &activity); err != nil {
-		RespondError(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	uid := currentUserID(c)
-	var existing models.DailyActivity
-	findErr := s.DB.Where("user_id = ? AND date = ? AND is_active = true", uid, date).First(&existing).Error
-	if findErr == nil {
-		// Existing active record found -> UPDATE
-		existing.StartTime = req.StartTime
-		existing.EndTime = req.EndTime
-		existing.Status = req.Status
-		existing.Activity = req.Activity
-		existing.ProjectName = activity.ProjectName
-		existing.ProjectID = activity.ProjectID
-		existing.ProjectRefID = activity.ProjectRefID
-		existing.UpdatedAt = time.Now()
-		if err := s.DB.Save(&existing).Error; err != nil {
-			RespondError(c, http.StatusInternalServerError, err.Error())
+	if err := svc.UpsertDailyActivity(reqContext(c), currentUserID(c), &req); err != nil {
+		if errors.Is(err, domain.ErrInvalidInput) {
+			msg := strings.TrimPrefix(err.Error(), domain.ErrInvalidInput.Error()+": ")
+			RespondError(c, http.StatusBadRequest, msg)
 			return
 		}
-	} else {
-		// No active record for this date -> INSERT new record with is_active = true
-		activity.IsActive = true
-		if err := s.DB.Create(&activity).Error; err != nil {
-			RespondError(c, http.StatusInternalServerError, err.Error())
-			return
-		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
 	}
 
 	RespondMessage(c, http.StatusOK, "activity saved successfully")
@@ -197,85 +145,27 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 		return
 	}
 
-	var activity models.DailyActivity
-	if err := s.DB.Where("id = ? AND is_active = true", id).First(&activity).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "activity not found")
+	svc := s.getActivityService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
 		return
 	}
 
-	if activity.UserID != currentUserID(c) {
-		RespondError(c, http.StatusForbidden, "you are not authorized to access another user's activity")
+	resp, err := svc.GetDailyActivity(reqContext(c), currentUserID(c), uint(id))
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "activity not found")
+			return
+		}
+		if errors.Is(err, domain.ErrForbidden) {
+			RespondError(c, http.StatusForbidden, "you are not authorized to access another user's activity")
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	resp := response.DailyActivityResponse{
-		ID:          activity.ID,
-		Date:        activity.Date,
-		StartTime:   activity.StartTime,
-		EndTime:     activity.EndTime,
-		Activity:    activity.Activity,
-		ProjectName: activity.ProjectName,
-		ProjectID:   activity.ProjectID,
-		Status:      activity.Status,
-	}
-
-	RespondSuccess(c, http.StatusOK, resp)
-}
-
-// ListActivities godoc
-// @Summary List daily activities with pagination
-// @Description Retrieves daily activities for the authenticated user with pagination and optional filtering by year, month, date range, or status.
-// @Tags Activity
-// @Security BearerAuth
-// @Produce json
-// @Param page query int false "Page number (default: 1)"
-// @Param limit query int false "Items per page (default: 10, max: 100). Use -1 or all=true for all records"
-// @Param year query int false "Year filter (e.g. 2026)"
-// @Param month query int false "Month filter (1-12)"
-// @Param start_date query string false "Start date filter (YYYY-MM-DD)"
-// @Param end_date query string false "End date filter (YYYY-MM-DD)"
-// @Param sort query string false "Sort order: asc or desc (default: desc, or asc when filtering by month)"
-// @Success 200 {object} response.PaginatedResponse
-// @Failure 401 {object} response.ErrorResponse "Unauthorized"
-// @Failure 500 {object} response.ErrorResponse "Internal server error"
-func applyActivityDateFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
-	if startDateStr := c.Query("start_date"); startDateStr != "" {
-		if startDate, err := time.ParseInLocation(dateFormatYYYYMMDD, startDateStr, jakarta()); err == nil {
-			query = query.Where("date >= ?", startDate)
-		}
-	}
-	if endDateStr := c.Query("end_date"); endDateStr != "" {
-		if endDate, err := time.ParseInLocation(dateFormatYYYYMMDD, endDateStr, jakarta()); err == nil {
-			query = query.Where("date <= ?", endDate)
-		}
-	}
-
-	hasMonth := c.Query("month") != ""
-	hasYear := c.Query("year") != ""
-	if hasMonth || hasYear {
-		year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
-		if hasMonth {
-			month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
-			start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
-			end := start.AddDate(0, 1, 0)
-			query = query.Where(queryDateRange, start, end)
-		} else {
-			start := time.Date(year, 1, 1, 0, 0, 0, 0, jakarta())
-			end := start.AddDate(1, 0, 0)
-			query = query.Where(queryDateRange, start, end)
-		}
-	} else if c.Query("page") == "" && c.Query("limit") == "" && c.Query("start_date") == "" && c.Query("end_date") == "" {
-		year := time.Now().In(jakarta()).Year()
-		month := int(time.Now().In(jakarta()).Month())
-		start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
-		end := start.AddDate(0, 1, 0)
-		query = query.Where(queryDateRange, start, end)
-	}
-
-	if status := c.Query("status"); status != "" {
-		query = query.Where("status = ?", status)
-	}
-	return query
+	RespondSuccess(c, http.StatusOK, *resp)
 }
 
 func determineActivitySortOrder(c *gin.Context) string {
@@ -289,22 +179,61 @@ func determineActivitySortOrder(c *gin.Context) string {
 	return "desc"
 }
 
-func calculateActivityPagination(c *gin.Context, totalRows int64) (int, int, bool) {
+func parseDateQuery(c *gin.Context, param string) *time.Time {
+	val := c.Query(param)
+	if val == "" {
+		return nil
+	}
+	t, err := time.ParseInLocation(dateFormatYYYYMMDD, val, jakarta())
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func parsePeriodFilter(c *gin.Context, filter *repository.ActivityFilter) {
+	hasMonth := c.Query("month") != ""
+	hasYear := c.Query("year") != ""
+	if hasMonth || hasYear {
+		year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
+		filter.Year = &year
+		if hasMonth {
+			month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
+			filter.Month = &month
+		}
+		return
+	}
+	if c.Query("page") == "" && c.Query("limit") == "" && c.Query("start_date") == "" && c.Query("end_date") == "" {
+		filter.IsCurrentMonthDefault = true
+	}
+}
+
+func parsePaginationFilter(c *gin.Context, filter *repository.ActivityFilter) {
 	page := queryIntDefault(c, "page", 1)
 	if page < 1 {
 		page = 1
 	}
 
 	limit := queryIntDefault(c, "limit", 10)
-	isAll := c.Query("all") == "true" || limit == -1
+	filter.IsAll = c.Query("all") == "true" || limit == -1
+	filter.Page = page
+	filter.Limit = limit
 
 	if c.Query("page") == "" && c.Query("limit") == "" {
-		limit = int(totalRows)
-		if limit == 0 {
-			limit = 10
-		}
+		filter.Limit = -1
+		filter.IsAll = true
 	}
-	return page, limit, isAll
+}
+
+func parseActivityFilter(c *gin.Context) repository.ActivityFilter {
+	var filter repository.ActivityFilter
+	filter.StartDate = parseDateQuery(c, "start_date")
+	filter.EndDate = parseDateQuery(c, "end_date")
+	parsePeriodFilter(c, &filter)
+	filter.Status = c.Query("status")
+	filter.SortOrder = determineActivitySortOrder(c)
+	parsePaginationFilter(c, &filter)
+	return filter
 }
 
 // ListActivities godoc
@@ -326,55 +255,21 @@ func calculateActivityPagination(c *gin.Context, totalRows int64) (int, int, boo
 // @Router /api/v1/activities [get]
 func (s *Server) ListActivities(c *gin.Context) {
 	uid := currentUserID(c)
-	query := s.DB.Model(&models.DailyActivity{}).Where("user_id = ? AND is_active = true", uid)
-	query = applyActivityDateFilters(c, query)
+	svc := s.getActivityService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
+		return
+	}
 
-	sortOrder := determineActivitySortOrder(c)
+	filter := parseActivityFilter(c)
 
-	var totalRows int64
-	if err := query.Count(&totalRows).Error; err != nil {
+	respItems, meta, err := svc.ListActivities(reqContext(c), uid, filter)
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	page, limit, isAll := calculateActivityPagination(c, totalRows)
-
-	activities := make([]models.DailyActivity, 0)
-	dataQuery := query.Order("date " + sortOrder)
-
-	if !isAll && limit > 0 {
-		if limit > 100 {
-			limit = 100
-		}
-		offset := (page - 1) * limit
-		dataQuery = dataQuery.Limit(limit).Offset(offset)
-	} else {
-		limit = int(totalRows)
-		if limit == 0 {
-			limit = 1
-		}
-	}
-
-	if err := dataQuery.Find(&activities).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	respItems := make([]response.DailyActivityResponse, len(activities))
-	for i, a := range activities {
-		respItems[i] = response.DailyActivityResponse{
-			ID:          a.ID,
-			Date:        a.Date,
-			StartTime:   a.StartTime,
-			EndTime:     a.EndTime,
-			Activity:    a.Activity,
-			ProjectName: a.ProjectName,
-			ProjectID:   a.ProjectID,
-			Status:      a.Status,
-		}
-	}
-
-	RespondPaginated(c, http.StatusOK, respItems, page, limit, totalRows)
+	RespondPaginated(c, http.StatusOK, respItems, meta.Page, meta.Limit, meta.TotalRows)
 }
 
 // ListMonthlyActivities delegates to ListActivities for backwards-compatibility.

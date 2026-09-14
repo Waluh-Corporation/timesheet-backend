@@ -1,8 +1,11 @@
 package response
 
-// LoginResponse represents a successful authentication response containing JWT token.
+import "timesheet-backend/models"
+
+// LoginResponse represents a successful authentication response containing JWT token and user profile.
 type LoginResponse struct {
-	Token string `json:"token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+	Token string      `json:"token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+	User  models.User `json:"user"`
 }
 
 // OriginsResponse returns allowed WebAuthn related origins.

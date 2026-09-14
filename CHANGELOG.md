@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] - 2026-09-14
+
+### Added
+- **User Profile in Login Responses**: Included user profile entity in `LoginResponse` across standard password and WebAuthn/passkey login flows (`POST /api/v1/auth/login`, `POST /api/v1/passkey/login/finish`) to eliminate redundant initial profile requests.
+
+### Changed
+- **Activity Layer Architecture**: Refactored activity domain into decoupled repository and service layers (`ActivityRepository`, `ActivityService`) for streamlined business logic and improved maintainability.
+- **Mailer Reliability with Auto-Retry**: Added exponential backoff retry logic and automatic `Message-ID` & `Date` header injection to transactional email delivery.
+- **Graceful Rate Limiter Lifecycle**: Added graceful cleanup handling to IP rate limiting background workers during server shutdown.
+
+---
+
 ## [1.2.0] - 2026-09-13
 
 ### Added
@@ -77,7 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API Route Versioning: Migrated all routes to the `/api/v1` prefix and decommissioned legacy unversioned endpoints.
 - Decoupled Workbook Engine: Replaced database-stored template grids with dedicated programmatic spreadsheet builders.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.0.0

@@ -151,7 +151,7 @@ func loadDotEnv(filenames ...string) {
 
 // Load reads configuration from the environment.
 func Load() *Config {
-	loadDotEnv(".env", "../.env")
+	loadDotEnv(".env", "../.env", "../../.env")
 
 	defaultDBURL := "host=" + getEnv("DB_HOST", "localhost") + " user=" + getEnv("DB_USER", "timesheet") + " dbname=" + getEnv("DB_NAME", "timesheet") + " port=" + getEnv("DB_PORT", "5432") + " sslmode=disable TimeZone=Asia/Jakarta"
 

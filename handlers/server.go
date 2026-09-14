@@ -30,15 +30,17 @@ type webAuthnSessionEntry struct {
 
 // Server carries the shared dependencies used by all HTTP handlers.
 type Server struct {
-	DB       *gorm.DB
-	Cfg      *config.Config
-	Auth     *auth.Service
-	Mailer   *mailer.Mailer
-	Push     *push.Service
-	WebAuthn *webauthn.WebAuthn
-	Hasher   auth.PasswordHasher
-	UserRepo repository.UserRepository
-	UserSvc  service.UserService
+	DB           *gorm.DB
+	Cfg          *config.Config
+	Auth         *auth.Service
+	Mailer       *mailer.Mailer
+	Push         *push.Service
+	WebAuthn     *webauthn.WebAuthn
+	Hasher       auth.PasswordHasher
+	UserRepo     repository.UserRepository
+	UserSvc      service.UserService
+	ActivityRepo repository.ActivityRepository
+	ActivitySvc  service.ActivityService
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
@@ -56,8 +58,18 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	if err != nil {
 		return nil, err
 	}
-	userRepo := repository.NewUserRepository(db)
-	userSvc := service.NewUserService(userRepo, auth.DefaultHasher, m)
+
+	var userRepo repository.UserRepository
+	var userSvc service.UserService
+	var activityRepo repository.ActivityRepository
+	var activitySvc service.ActivityService
+
+	if db != nil {
+		userRepo = repository.NewUserRepository(db)
+		userSvc = service.NewUserService(userRepo, auth.DefaultHasher, m)
+		activityRepo = repository.NewActivityRepository(db)
+		activitySvc = service.NewActivityService(activityRepo)
+	}
 
 	return &Server{
 		DB:               db,
@@ -69,6 +81,8 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		Hasher:           auth.DefaultHasher,
 		UserRepo:         userRepo,
 		UserSvc:          userSvc,
+		ActivityRepo:     activityRepo,
+		ActivitySvc:      activitySvc,
 		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
 	}, nil
 }
