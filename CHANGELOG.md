@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Web Push Cron Schedule Endpoint**: Introduced `GET /api/v1/push/schedule` accessible to all authenticated users and administrators, exposing cron expression, active status, timezone, human-readable schedule description, and next planned execution timestamp.
+- **Admin Test Web Push to User Endpoint**: Added `POST /api/v1/admin/push/test` and `POST /api/v1/admin/users/:id/push/test` allowing administrators to trigger and test instant Web Push notifications targeted to specific users with customizable title, body, and destination URL, including active subscription counts.
+
+---
+
+## [1.5.0] - 2026-09-15
+
+### Added
+- **Configurable Background Scheduler via Environment**: Added environment variables (`SCHEDULER_REMINDER_CRON` and `SCHEDULER_CLEANUP_CRON`) allowing operators to customize execution schedules for daily Web Push timesheet reminders and database token housekeeping without code changes.
+- **Resilient Cron Fallback & Task Control**: Implemented automatic fallback to default cron expressions upon encountering invalid syntax, along with support for explicitly disabling background jobs (`disabled`, `off`, `false`, or `none`).
+
 ---
 
 ## [1.4.0] - 2026-09-15
@@ -107,7 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API Route Versioning: Migrated all routes to the `/api/v1` prefix and decommissioned legacy unversioned endpoints.
 - Decoupled Workbook Engine: Replaced database-stored template grids with dedicated programmatic spreadsheet builders.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.1.0...v1.2.0

@@ -1,6 +1,8 @@
 package request
 
-import "timesheet-backend/models"
+import (
+	"timesheet-backend/models"
+)
 
 // CreateUserRequest is the payload for administrator user provisioning.
 type CreateUserRequest struct {
@@ -9,6 +11,7 @@ type CreateUserRequest struct {
 	Role         models.Role `json:"role" binding:"required,oneof=admin user" example:"user"`
 	Name         string      `json:"name" example:"John Doe"`
 	BniID        string      `json:"bni_id" example:"12345678"`
+	EmployeeID   string      `json:"employee_id" example:"EMP-001"`
 	Division     string      `json:"division" example:"Application Development Division"`
 	DivisionID   *uint       `json:"division_id" example:"1"`
 	Department   string      `json:"department" example:"Core Banking"`
@@ -31,6 +34,7 @@ type UpdateUserRequest struct {
 	IsActive     *bool        `json:"is_active" example:"true"`
 	Name         *string      `json:"name" example:"John Doe"`
 	BniID        *string      `json:"bni_id" example:"12345678"`
+	EmployeeID   *string      `json:"employee_id" example:"EMP-001"`
 	Division     *string      `json:"division" example:"Application Development Division"`
 	DivisionID   *uint        `json:"division_id" example:"1"`
 	Department   *string      `json:"department" example:"Core Banking"`
@@ -45,7 +49,7 @@ type UpdateUserRequest struct {
 type ProfileChangeRequestDTO struct {
 	Name         string `json:"name" example:"John Doe"`
 	BniID        string `json:"bni_id" example:"12345678"`
-	EmployeeID   string `json:"employee_id" example:"MII-12345"`
+	EmployeeID   string `json:"employee_id" example:"EMP-001"`
 	Division     string `json:"division" example:"Application Development Division"`
 	DivisionID   *uint  `json:"division_id" example:"1"`
 	Department   string `json:"department" example:"Core Banking"`

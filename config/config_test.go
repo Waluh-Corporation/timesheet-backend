@@ -230,3 +230,39 @@ func TestLoad_RateLimitConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestLoad_SchedulerCronConfig(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		t.Setenv("SCHEDULER_REMINDER_CRON", "")
+		t.Setenv("SCHEDULER_CRON", "")
+		t.Setenv("SCHEDULER_CLEANUP_CRON", "")
+		cfg := Load()
+		if cfg.ReminderCron != "0 17 * * *" {
+			t.Errorf("expected ReminderCron default to be '0 17 * * *', got %q", cfg.ReminderCron)
+		}
+		if cfg.CleanupCron != "0 2 * * *" {
+			t.Errorf("expected CleanupCron default to be '0 2 * * *', got %q", cfg.CleanupCron)
+		}
+	})
+
+	t.Run("custom SCHEDULER_REMINDER_CRON and SCHEDULER_CLEANUP_CRON", func(t *testing.T) {
+		t.Setenv("SCHEDULER_REMINDER_CRON", "30 18 * * 1-5")
+		t.Setenv("SCHEDULER_CLEANUP_CRON", "0 3 * * *")
+		cfg := Load()
+		if cfg.ReminderCron != "30 18 * * 1-5" {
+			t.Errorf("expected ReminderCron to be '30 18 * * 1-5', got %q", cfg.ReminderCron)
+		}
+		if cfg.CleanupCron != "0 3 * * *" {
+			t.Errorf("expected CleanupCron to be '0 3 * * *', got %q", cfg.CleanupCron)
+		}
+	})
+
+	t.Run("fallback to SCHEDULER_CRON alias", func(t *testing.T) {
+		t.Setenv("SCHEDULER_REMINDER_CRON", "")
+		t.Setenv("SCHEDULER_CRON", "0 16 * * *")
+		cfg := Load()
+		if cfg.ReminderCron != "0 16 * * *" {
+			t.Errorf("expected ReminderCron to fallback to SCHEDULER_CRON '0 16 * * *', got %q", cfg.ReminderCron)
+		}
+	})
+}

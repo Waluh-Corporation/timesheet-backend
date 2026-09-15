@@ -34,7 +34,7 @@ Timesheet Backend automates monthly corporate timesheet generation across multi-
 - **Embedded SQL Migrations**: Versioned up/down SQL migrations executed automatically on startup via Go `embed` ([`database/migrations/`](database/migrations/)).
 
 ### Background Services & Integrations
-- **Web Push Reminders (VAPID)**: Daily cron task running at 17:00 WIB (`Asia/Jakarta`) to notify active users with unsubmitted daily entries.
+- **Web Push Reminders (VAPID)**: Daily cron task (default 17:00 WIB, configurable via `SCHEDULER_REMINDER_CRON` and `SCHEDULER_CLEANUP_CRON`) to notify active users with unsubmitted daily entries and purge stale tokens.
 - **Kemendesa Public Holiday API**: Automated synchronization with `api.kemendesa.link/libur-nasional` with civic, religious, and joint leave classifications and yearly bulk caching.
 - **Transactional SMTP Delivery**: Asynchronous delivery of generated timesheets, onboarding invitations, and password reset links via gomail.
 

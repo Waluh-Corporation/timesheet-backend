@@ -577,6 +577,37 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 		assertFatalCode(t, w, http.StatusCreated)
 	})
 
+	t.Run("CreateUser with employee_id saves in database", func(t *testing.T) {
+		reqBody := `{
+			"username": "user_with_employee_id",
+			"email": "user_with_employee_id@example.com",
+			"name": "User Employee ID",
+			"role": "user",
+			"bni_id": "000001",
+			"employee_id": "000001"
+		}`
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader([]byte(reqBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.CreateUser(c)
+		assertFatalCode(t, w, http.StatusCreated)
+
+		var saved models.User
+		if err := srv.DB.Where("username = ?", "user_with_employee_id").First(&saved).Error; err != nil {
+			t.Fatalf("failed to query created user: %v", err)
+		}
+		if saved.EmployeeID != "000001" {
+			t.Fatalf("expected EmployeeID '000001', got '%s'", saved.EmployeeID)
+		}
+		if saved.BniID != "000001" {
+			t.Fatalf("expected BniID '000001', got '%s'", saved.BniID)
+		}
+	})
+
 	t.Run("UpdateUser modifies user attributes", func(t *testing.T) {
 		newName := "Updated New User Name"
 		reqBody := fmt.Sprintf(`{"name": "%s", "company": "user_test_comp", "department": "Product Engineering"}`, newName)
