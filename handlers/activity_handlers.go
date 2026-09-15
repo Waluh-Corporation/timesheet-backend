@@ -29,6 +29,7 @@ const (
 	queryUserDateRange               = "user_id = ? AND date >= ? AND date < ?"
 	orderDateAsc                     = "date asc"
 	orderNameAsc                     = "name asc"
+	orderIDAsc                       = "id asc"
 	queryIsActive                    = "is_active = ?"
 	errActivityServiceNotInitialized = "activity service not initialized"
 )
@@ -337,7 +338,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	period := mailer.FormatMonthYearIndonesian(req.Month, req.Year)
 
 	var approvers []models.Approver
-	s.DB.Where(queryIsActive, true).Order("id asc").Find(&approvers)
+	s.DB.Where(queryIsActive, true).Order(orderIDAsc).Find(&approvers)
 
 	var xlsxBytes []byte
 	var xlsxFilename string
@@ -781,28 +782,98 @@ func (s *Server) ListProjects(c *gin.Context) {
 // @Router /api/v1/companies [get]
 func (s *Server) ListCompanies(c *gin.Context) {
 	var companies []models.Company
-	if err := s.DB.Scopes(models.ActiveOnly).Order("id asc").Find(&companies).Error; err != nil {
+	if err := s.DB.Scopes(models.ActiveOnly).Order(orderIDAsc).Find(&companies).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	RespondSuccess(c, http.StatusOK, companies)
 }
 
-// ListDepartments godoc
-// @Summary List active departments
-// @Description Returns active departments, optionally filtered by company_id.
+// ListSites godoc
+// @Summary List all sites
+// @Description Returns all registered office/placement sites.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param company_id query int false "Company ID filter"
+// @Param is_active query bool false "Filter by active status"
+// @Param include_inactive query bool false "Include inactive sites"
+// @Success 200 {array} models.Site
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/sites [get]
+func (s *Server) ListSites(c *gin.Context) {
+	var sites []models.Site
+	query := s.DB.Order(orderIDAsc)
+	if c.Query("include_inactive") != "true" && c.Query("is_active") != "false" {
+		query = query.Scopes(models.ActiveOnly)
+	} else if c.Query("is_active") == "false" {
+		query = query.Where(queryIsActive, false)
+	}
+	if err := query.Find(&sites).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, sites)
+}
+
+// ListDivisions godoc
+// @Summary List all divisions
+// @Description Returns all organizational divisions.
+// @Tags Master Data
+// @Security BearerAuth
+// @Produce json
+// @Param is_active query bool false "Filter by active status"
+// @Param include_inactive query bool false "Include inactive divisions"
+// @Success 200 {array} models.Division
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/divisions [get]
+func (s *Server) ListDivisions(c *gin.Context) {
+	var divisions []models.Division
+	query := s.DB.Order(orderIDAsc)
+	if c.Query("include_inactive") != "true" && c.Query("is_active") != "false" {
+		query = query.Scopes(models.ActiveOnly)
+	} else if c.Query("is_active") == "false" {
+		query = query.Where(queryIsActive, false)
+	}
+	if err := query.Find(&divisions).Error; err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, divisions)
+}
+
+// ListDepartments godoc
+// @Summary List active departments
+// @Description Returns departments, optionally filtered by division, division_id, or is_active.
+// @Tags Master Data
+// @Security BearerAuth
+// @Produce json
+// @Param division query string false "Division name filter"
+// @Param division_id query int false "Division ID filter"
+// @Param is_active query bool false "Filter by active status"
+// @Param include_inactive query bool false "Include inactive departments"
 // @Success 200 {array} models.Department
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/departments [get]
 func (s *Server) ListDepartments(c *gin.Context) {
 	var depts []models.Department
-	query := s.DB.Scopes(models.ActiveOnly)
-	if err := query.Order(orderNameAsc).Find(&depts).Error; err != nil {
+	query := s.DB.Order(orderNameAsc)
+	if c.Query("include_inactive") != "true" && c.Query("is_active") != "false" {
+		query = query.Scopes(models.ActiveOnly)
+	} else if c.Query("is_active") == "false" {
+		query = query.Where(queryIsActive, false)
+	}
+	if div := strings.TrimSpace(c.Query("division")); div != "" {
+		query = query.Where("LOWER(division) = LOWER(?)", div)
+	}
+	if divIDStr := c.Query("division_id"); divIDStr != "" {
+		if divID, err := strconv.ParseUint(divIDStr, 10, 64); err == nil {
+			query = query.Where("division_id = ?", divID)
+		}
+	}
+	if err := query.Find(&depts).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

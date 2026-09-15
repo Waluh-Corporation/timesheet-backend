@@ -53,6 +53,11 @@ type Config struct {
 	// RunMigrations controls whether versioned schema migrations and seeders run.
 	// Defaults to false so starting the server (e.g. go run .) does not run DDLs.
 	RunMigrations bool
+
+	// Rate limiting configuration for public auth routes.
+	RateLimitEnabled  bool
+	RateLimitRequests int
+	RateLimitWindow   time.Duration
 }
 
 func getEnv(key, fallback string) string {
@@ -190,6 +195,17 @@ func Load() *Config {
 		AdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", ""),
 
 		RunMigrations: getEnvBool("RUN_MIGRATIONS", false),
+
+		RateLimitEnabled:  getEnvBool("RATE_LIMIT_ENABLED", true),
+		RateLimitRequests: getEnvInt("RATE_LIMIT_REQUESTS", 10),
+		RateLimitWindow:   time.Duration(getEnvInt("RATE_LIMIT_WINDOW_SECONDS", 60)) * time.Second,
+	}
+
+	if cfg.RateLimitRequests <= 0 {
+		cfg.RateLimitRequests = 10
+	}
+	if cfg.RateLimitWindow <= 0 {
+		cfg.RateLimitWindow = 60 * time.Second
 	}
 
 	cfg.validateSecrets()

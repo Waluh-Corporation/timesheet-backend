@@ -38,6 +38,69 @@ definitions:
     - code
     - name
     type: object
+  handlers.CreateDepartmentRequest:
+    properties:
+      code:
+        example: wdl
+        maxLength: 64
+        minLength: 2
+        type: string
+      division:
+        example: Wholesale Digital Delivery
+        type: string
+      division_id:
+        example: 1
+        type: integer
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Wholesale Channel and Service Delivery
+        maxLength: 255
+        minLength: 2
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  handlers.CreateDivisionRequest:
+    properties:
+      code:
+        example: wdd
+        maxLength: 64
+        minLength: 2
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Wholesale Digital Delivery
+        maxLength: 255
+        minLength: 2
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  handlers.CreateSiteRequest:
+    properties:
+      code:
+        example: jkt
+        maxLength: 64
+        minLength: 2
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Jakarta
+        maxLength: 255
+        minLength: 2
+        type: string
+    required:
+    - code
+    - name
+    type: object
   handlers.InitSetupAdminRequest:
     properties:
       email:
@@ -199,6 +262,48 @@ definitions:
         example: PT Mitra Integrasi Informatika
         type: string
     type: object
+  handlers.UpdateDepartmentRequest:
+    properties:
+      code:
+        example: wdl
+        type: string
+      division:
+        example: Wholesale Digital Delivery
+        type: string
+      division_id:
+        example: 1
+        type: integer
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Wholesale Channel and Service Delivery
+        type: string
+    type: object
+  handlers.UpdateDivisionRequest:
+    properties:
+      code:
+        example: wdd
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Wholesale Digital Delivery
+        type: string
+    type: object
+  handlers.UpdateSiteRequest:
+    properties:
+      code:
+        example: jkt
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      name:
+        example: Jakarta
+        type: string
+    type: object
   models.ActivityStatus:
     properties:
       code:
@@ -265,12 +370,31 @@ definitions:
       division:
         description: e.g. "Wholesale Digital Delivery"
         type: string
+      division_id:
+        type: integer
+      division_rel:
+        $ref: '#/definitions/models.Division'
       id:
         type: integer
       is_active:
         type: boolean
       name:
         description: e.g. "Wholesale Channel and Service Delivery"
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.Division:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
         type: string
       updated_at:
         type: string
@@ -328,6 +452,10 @@ definitions:
         $ref: '#/definitions/models.Department'
       division:
         type: string
+      division_id:
+        type: integer
+      division_rel:
+        $ref: '#/definitions/models.Division'
       employee_id:
         type: string
       group_name:
@@ -346,6 +474,10 @@ definitions:
         $ref: '#/definitions/models.User'
       site:
         type: string
+      site_id:
+        type: integer
+      site_rel:
+        $ref: '#/definitions/models.Site'
       status:
         $ref: '#/definitions/models.ProfileStatus'
       updated_at:
@@ -389,6 +521,21 @@ definitions:
     x-enum-varnames:
     - RoleAdmin
     - RoleUser
+  models.Site:
+    properties:
+      code:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
   models.User:
     properties:
       bni_id:
@@ -410,6 +557,10 @@ definitions:
         $ref: '#/definitions/models.Department'
       division:
         type: string
+      division_id:
+        type: integer
+      division_rel:
+        $ref: '#/definitions/models.Division'
       email:
         type: string
       employee_id:
@@ -431,6 +582,10 @@ definitions:
         $ref: '#/definitions/models.Role'
       site:
         type: string
+      site_id:
+        type: integer
+      site_rel:
+        $ref: '#/definitions/models.Site'
       updated_at:
         type: string
       username:
@@ -516,6 +671,9 @@ definitions:
       division:
         example: Application Development Division
         type: string
+      division_id:
+        example: 1
+        type: integer
       email:
         example: john.doe@example.com
         type: string
@@ -532,6 +690,9 @@ definitions:
       site:
         example: Jakarta
         type: string
+      site_id:
+        example: 1
+        type: integer
       username:
         example: john_doe
         maxLength: 64
@@ -631,6 +792,9 @@ definitions:
       division:
         example: Application Development Division
         type: string
+      division_id:
+        example: 1
+        type: integer
       employee_id:
         example: MII-12345
         type: string
@@ -640,6 +804,9 @@ definitions:
       site:
         example: Jakarta
         type: string
+      site_id:
+        example: 1
+        type: integer
     type: object
   request.PushKeyPayload:
     properties:
@@ -703,6 +870,9 @@ definitions:
       division:
         example: Application Development Division
         type: string
+      division_id:
+        example: 1
+        type: integer
       is_active:
         example: true
         type: boolean
@@ -716,6 +886,9 @@ definitions:
       site:
         example: Jakarta
         type: string
+      site_id:
+        example: 1
+        type: integer
     type: object
   response.AdminPasskeyResponse:
     properties:
@@ -740,6 +913,8 @@ definitions:
         type: integer
       division:
         type: string
+      division_id:
+        type: integer
       employee_id:
         type: string
       id:
@@ -754,6 +929,8 @@ definitions:
         type: string
       site:
         type: string
+      site_id:
+        type: integer
       status:
         $ref: '#/definitions/models.ProfileStatus'
       user_email:
@@ -777,6 +954,8 @@ definitions:
         type: integer
       division:
         type: string
+      division_id:
+        type: integer
       email:
         type: string
       employee_id:
@@ -791,6 +970,8 @@ definitions:
         $ref: '#/definitions/models.Role'
       site:
         type: string
+      site_id:
+        type: integer
       username:
         type: string
     type: object
@@ -1079,6 +1260,9 @@ definitions:
       division:
         example: Application Development Division
         type: string
+      division_id:
+        example: 1
+        type: integer
       email:
         example: john.doe@example.com
         type: string
@@ -1107,6 +1291,9 @@ definitions:
       site:
         example: Jakarta
         type: string
+      site_id:
+        example: 1
+        type: integer
       updated_at:
         type: string
       username:
@@ -1304,6 +1491,43 @@ paths:
       tags:
       - Master Data
   /api/v1/admin/approvers:
+    get:
+      description: Returns all registered approvers with optional inactive filter.
+      parameters:
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      - description: Include inactive approvers
+        in: query
+        name: include_inactive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Approver'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all approvers (admin only)
+      tags:
+      - Master Data
     post:
       consumes:
       - application/json
@@ -1429,6 +1653,43 @@ paths:
       tags:
       - Master Data
   /api/v1/admin/companies:
+    get:
+      description: Returns all companies.
+      parameters:
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      - description: Include inactive companies
+        in: query
+        name: include_inactive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Company'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all companies (admin only)
+      tags:
+      - Master Data
     post:
       consumes:
       - application/json
@@ -1553,6 +1814,338 @@ paths:
       summary: Update a company (admin only)
       tags:
       - Master Data
+  /api/v1/admin/departments:
+    get:
+      description: Returns all departments with optional division and inactive filters.
+      parameters:
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      - description: Include inactive departments
+        in: query
+        name: include_inactive
+        type: boolean
+      - description: Filter by division name
+        in: query
+        name: division
+        type: string
+      - description: Filter by division ID
+        in: query
+        name: division_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Department'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all departments (admin only)
+      tags:
+      - Master Data
+    post:
+      consumes:
+      - application/json
+      description: Adds a new organizational department.
+      parameters:
+      - description: Department data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateDepartmentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a department (admin only)
+      tags:
+      - Master Data
+  /api/v1/admin/departments/{id}:
+    delete:
+      description: Soft-deactivates a department from master data.
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DeleteResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Department not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a department (admin only)
+      tags:
+      - Master Data
+    patch:
+      consumes:
+      - application/json
+      description: Updates code, name, division, or active status of a department.
+      parameters:
+      - description: Department ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Department update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateDepartmentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Department not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a department (admin only)
+      tags:
+      - Master Data
+  /api/v1/admin/divisions:
+    get:
+      description: Returns all organizational divisions with optional inactive filter.
+      parameters:
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      - description: Include inactive divisions
+        in: query
+        name: include_inactive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Division'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all divisions (admin only)
+      tags:
+      - Master Data
+    post:
+      consumes:
+      - application/json
+      description: Adds a new organizational division.
+      parameters:
+      - description: Division data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateDivisionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a division (admin only)
+      tags:
+      - Master Data
+  /api/v1/admin/divisions/{id}:
+    delete:
+      description: Soft-deactivates a division from master data.
+      parameters:
+      - description: Division ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DeleteResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Division not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a division (admin only)
+      tags:
+      - Master Data
+    patch:
+      consumes:
+      - application/json
+      description: Updates code, name, or active status of an existing division.
+      parameters:
+      - description: Division ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Division update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateDivisionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Division not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a division (admin only)
+      tags:
+      - Master Data
   /api/v1/admin/profile-changes:
     get:
       description: Retrieves submitted profile change requests with optional status
@@ -1637,6 +2230,169 @@ paths:
       summary: Review profile change request (Admin)
       tags:
       - Admin
+  /api/v1/admin/sites:
+    get:
+      description: Returns all registered office/placement sites with optional inactive
+        filter.
+      parameters:
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      - description: Include inactive sites
+        in: query
+        name: include_inactive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Site'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all sites (admin only)
+      tags:
+      - Master Data
+    post:
+      consumes:
+      - application/json
+      description: Adds a new office or placement site.
+      parameters:
+      - description: Site data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateSiteRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a site (admin only)
+      tags:
+      - Master Data
+  /api/v1/admin/sites/{id}:
+    delete:
+      description: Soft-deactivates a site from master data.
+      parameters:
+      - description: Site ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DeleteResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Site not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a site (admin only)
+      tags:
+      - Master Data
+    patch:
+      consumes:
+      - application/json
+      description: Updates code, name, or active status of an existing site.
+      parameters:
+      - description: Site ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Site update data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateSiteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Site not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a site (admin only)
+      tags:
+      - Master Data
   /api/v1/admin/users:
     get:
       description: Retrieves all registered user accounts (admin only).
@@ -2224,12 +2980,25 @@ paths:
       - Master Data
   /api/v1/departments:
     get:
-      description: Returns active departments, optionally filtered by company_id.
+      description: Returns departments, optionally filtered by division, division_id,
+        or is_active.
       parameters:
-      - description: Company ID filter
+      - description: Division name filter
         in: query
-        name: company_id
+        name: division
+        type: string
+      - description: Division ID filter
+        in: query
+        name: division_id
         type: integer
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      - description: Include inactive departments
+        in: query
+        name: include_inactive
+        type: boolean
       produces:
       - application/json
       responses:
@@ -2250,6 +3019,40 @@ paths:
       security:
       - BearerAuth: []
       summary: List active departments
+      tags:
+      - Master Data
+  /api/v1/divisions:
+    get:
+      description: Returns all organizational divisions.
+      parameters:
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      - description: Include inactive divisions
+        in: query
+        name: include_inactive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Division'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all divisions
       tags:
       - Master Data
   /api/v1/holidays:
@@ -2841,6 +3644,40 @@ paths:
       summary: Check system onboarding initialization status
       tags:
       - Setup
+  /api/v1/sites:
+    get:
+      description: Returns all registered office/placement sites.
+      parameters:
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      - description: Include inactive sites
+        in: query
+        name: include_inactive
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Site'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List all sites
+      tags:
+      - Master Data
   /api/v1/timesheet/generate:
     post:
       consumes:

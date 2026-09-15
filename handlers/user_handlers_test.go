@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/auth"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 )
@@ -204,6 +206,100 @@ func TestUserHandlers_UserCRUDIntegration(t *testing.T) {
 
 		srv.DeleteUser(c)
 		assertFatalCode(t, w, http.StatusNotFound)
+	})
+
+	t.Run("ListUsers includes inactive users by default and respects filters", func(t *testing.T) {
+		// 1. Default ListUsers should include the deactivated user
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
+		srv.ListUsers(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		var respAll response.APIResponse
+		if err := json.Unmarshal(w.Body.Bytes(), &respAll); err != nil {
+			t.Fatalf("failed to unmarshal response: %v", err)
+		}
+		usersAllRaw, _ := json.Marshal(respAll.Data)
+		var usersAll []response.AdminUserResponse
+		_ = json.Unmarshal(usersAllRaw, &usersAll)
+
+		foundDeactivated := false
+		for _, u := range usersAll {
+			if u.ID == targetUser.ID {
+				foundDeactivated = true
+				if u.IsActive {
+					t.Errorf("expected deactivated user to have is_active = false, got true")
+				}
+			}
+		}
+		if !foundDeactivated {
+			t.Errorf("expected deactivated user %d to be included in default ListUsers, but was missing", targetUser.ID)
+		}
+
+		// 2. ListUsers with ?is_active=true should NOT include deactivated user
+		wActive := httptest.NewRecorder()
+		cActive, _ := gin.CreateTestContext(wActive)
+		cActive.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users?is_active=true", nil)
+		srv.ListUsers(cActive)
+		assertFatalCode(t, wActive, http.StatusOK)
+
+		var respActive response.APIResponse
+		_ = json.Unmarshal(wActive.Body.Bytes(), &respActive)
+		usersActiveRaw, _ := json.Marshal(respActive.Data)
+		var usersActive []response.AdminUserResponse
+		_ = json.Unmarshal(usersActiveRaw, &usersActive)
+
+		for _, u := range usersActive {
+			if u.ID == targetUser.ID {
+				t.Errorf("expected user %d NOT to appear when is_active=true filter is applied", targetUser.ID)
+			}
+		}
+
+		// 3. ListUsers with ?is_active=false should include deactivated user
+		wInactive := httptest.NewRecorder()
+		cInactive, _ := gin.CreateTestContext(wInactive)
+		cInactive.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users?is_active=false", nil)
+		srv.ListUsers(cInactive)
+		assertFatalCode(t, wInactive, http.StatusOK)
+
+		var respInactive response.APIResponse
+		_ = json.Unmarshal(wInactive.Body.Bytes(), &respInactive)
+		usersInactiveRaw, _ := json.Marshal(respInactive.Data)
+		var usersInactive []response.AdminUserResponse
+		_ = json.Unmarshal(usersInactiveRaw, &usersInactive)
+
+		foundInInactive := false
+		for _, u := range usersInactive {
+			if u.ID == targetUser.ID {
+				foundInInactive = true
+			}
+			if u.IsActive {
+				t.Errorf("user %d should not have is_active=true when is_active=false filter is applied", u.ID)
+			}
+		}
+		if !foundInInactive {
+			t.Errorf("expected deactivated user %d to appear when is_active=false filter is applied", targetUser.ID)
+		}
+
+		// 4. ListUsers with ?include_inactive=false should exclude deactivated user
+		wIncFalse := httptest.NewRecorder()
+		cIncFalse, _ := gin.CreateTestContext(wIncFalse)
+		cIncFalse.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users?include_inactive=false", nil)
+		srv.ListUsers(cIncFalse)
+		assertFatalCode(t, wIncFalse, http.StatusOK)
+
+		var respIncFalse response.APIResponse
+		_ = json.Unmarshal(wIncFalse.Body.Bytes(), &respIncFalse)
+		usersIncFalseRaw, _ := json.Marshal(respIncFalse.Data)
+		var usersIncFalse []response.AdminUserResponse
+		_ = json.Unmarshal(usersIncFalseRaw, &usersIncFalse)
+
+		for _, u := range usersIncFalse {
+			if u.ID == targetUser.ID {
+				t.Errorf("expected user %d NOT to appear when include_inactive=false", targetUser.ID)
+			}
+		}
 	})
 
 	t.Run("CreateUser with admin role ignores company and enforces no company relation", func(t *testing.T) {
@@ -505,6 +601,132 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 
 		srv.ListUsers(c)
 		assertFatalCode(t, w, http.StatusOK)
+	})
+
+	t.Run("CreateUser and UpdateUser with site_id and division_id returns human-readable names and IDs", func(t *testing.T) {
+		site1 := models.Site{Code: "sby_test", Name: "Surabaya Hub", IsActive: true}
+		_ = tx.Create(&site1)
+		site2 := models.Site{Code: "bdg_test", Name: "Bandung Hub", IsActive: true}
+		_ = tx.Create(&site2)
+
+		div1 := models.Division{Code: "it_ops", Name: "IT Operations", IsActive: true}
+		_ = tx.Create(&div1)
+		div2 := models.Division{Code: "fin_tech", Name: "Financial Technology", IsActive: true}
+		_ = tx.Create(&div2)
+
+		reqBody := fmt.Sprintf(`{
+			"username": "user_site_div_test",
+			"email": "user_site_div@example.com",
+			"name": "User Site Div",
+			"role": "user",
+			"company": "user_test_comp",
+			"department": "Product Engineering",
+			"site_id": %d,
+			"division_id": %d,
+			"initial_password": "StrongPassword123!"
+		}`, site1.ID, div1.ID)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewReader([]byte(reqBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.CreateUser(c)
+		assertFatalCode(t, w, http.StatusCreated)
+
+		var resp struct {
+			Data struct {
+				Message string                `json:"message"`
+				User    response.UserResponse `json:"user"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if resp.Data.User.Site != "Surabaya Hub" {
+			t.Errorf("expected site 'Surabaya Hub', got %q", resp.Data.User.Site)
+		}
+		if resp.Data.User.SiteID == nil || *resp.Data.User.SiteID != site1.ID {
+			t.Errorf("expected site_id %d, got %v", site1.ID, resp.Data.User.SiteID)
+		}
+		if resp.Data.User.Division != "IT Operations" {
+			t.Errorf("expected division 'IT Operations', got %q", resp.Data.User.Division)
+		}
+		if resp.Data.User.DivisionID == nil || *resp.Data.User.DivisionID != div1.ID {
+			t.Errorf("expected division_id %d, got %v", div1.ID, resp.Data.User.DivisionID)
+		}
+
+		// Update to site2 and div2
+		updateBody := fmt.Sprintf(`{"site_id": %d, "division_id": %d}`, site2.ID, div2.ID)
+		w = httptest.NewRecorder()
+		c, _ = gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", resp.Data.User.ID)}}
+		c.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/admin/users/%d", resp.Data.User.ID), bytes.NewReader([]byte(updateBody)))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set(ctxUserID, adminUser.ID)
+		c.Set(ctxRole, models.RoleAdmin)
+
+		srv.UpdateUser(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		var updatedUser models.User
+		if err := srv.DB.Where("id = ?", resp.Data.User.ID).First(&updatedUser).Error; err != nil {
+			t.Fatalf("failed to query updated user: %v", err)
+		}
+		if updatedUser.Site != "Bandung Hub" {
+			t.Errorf("expected updated site 'Bandung Hub', got %q", updatedUser.Site)
+		}
+		if updatedUser.SiteID == nil || *updatedUser.SiteID != site2.ID {
+			t.Errorf("expected updated site_id %d, got %v", site2.ID, updatedUser.SiteID)
+		}
+		if updatedUser.Division != "Financial Technology" {
+			t.Errorf("expected updated division 'Financial Technology', got %q", updatedUser.Division)
+		}
+		if updatedUser.DivisionID == nil || *updatedUser.DivisionID != div2.ID {
+			t.Errorf("expected updated division_id %d, got %v", div2.ID, updatedUser.DivisionID)
+		}
+
+		// Verify ListUsers returns human-readable fields and IDs
+		wList := httptest.NewRecorder()
+		cList, _ := gin.CreateTestContext(wList)
+		cList.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
+		cList.Set(ctxUserID, adminUser.ID)
+		cList.Set(ctxRole, models.RoleAdmin)
+
+		srv.ListUsers(cList)
+		assertFatalCode(t, wList, http.StatusOK)
+
+		var listResp struct {
+			Data []response.AdminUserResponse `json:"data"`
+		}
+		if err := json.Unmarshal(wList.Body.Bytes(), &listResp); err != nil {
+			t.Fatalf("failed to decode list response: %v", err)
+		}
+		var foundUser *response.AdminUserResponse
+		for i := range listResp.Data {
+			if listResp.Data[i].ID == resp.Data.User.ID {
+				foundUser = &listResp.Data[i]
+				break
+			}
+		}
+		if foundUser == nil {
+			t.Fatal("user not found in ListUsers")
+		}
+		if foundUser.Site != "Bandung Hub" {
+			t.Errorf("expected site 'Bandung Hub', got %q", foundUser.Site)
+		}
+		if foundUser.SiteID == nil || *foundUser.SiteID != site2.ID {
+			t.Errorf("expected site_id %d, got %v", site2.ID, foundUser.SiteID)
+		}
+		if foundUser.Division != "Financial Technology" {
+			t.Errorf("expected division 'Financial Technology', got %q", foundUser.Division)
+		}
+		if foundUser.DivisionID == nil || *foundUser.DivisionID != div2.ID {
+			t.Errorf("expected division_id %d, got %v", div2.ID, foundUser.DivisionID)
+		}
 	})
 
 	t.Run("DeleteUser deactivates user", func(t *testing.T) {
