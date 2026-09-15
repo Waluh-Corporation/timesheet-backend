@@ -69,6 +69,35 @@ func TestSetup_SeedFunctions(t *testing.T) {
 		}
 	})
 
+	t.Run("seedDefaultDepartments", func(t *testing.T) {
+		err := seedDefaultDepartments(tx)
+		if err != nil {
+			t.Fatalf("seedDefaultDepartments failed: %v", err)
+		}
+		if err := seedDefaultDepartments(tx); err != nil {
+			t.Fatalf("seedDefaultDepartments idempotent run failed: %v", err)
+		}
+	})
+
+	t.Run("seedDefaultSitesAndDivisions", func(t *testing.T) {
+		err := seedDefaultSitesAndDivisions(tx)
+		if err != nil {
+			t.Fatalf("seedDefaultSitesAndDivisions failed: %v", err)
+		}
+		if err := seedDefaultSitesAndDivisions(tx); err != nil {
+			t.Fatalf("seedDefaultSitesAndDivisions idempotent run failed: %v", err)
+		}
+		var siteCount, divCount int64
+		_ = tx.Model(&models.Site{}).Count(&siteCount)
+		_ = tx.Model(&models.Division{}).Count(&divCount)
+		if siteCount < 3 {
+			t.Errorf("expected at least 3 sites, got %d", siteCount)
+		}
+		if divCount < 1 {
+			t.Errorf("expected at least 1 division, got %d", divCount)
+		}
+	})
+
 	t.Run("seedAdmin skipped when empty password", func(t *testing.T) {
 		emptyCfg := &config.Config{}
 		err := seedAdmin(tx, emptyCfg)

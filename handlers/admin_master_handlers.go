@@ -418,6 +418,20 @@ func (s *Server) CreateSite(c *gin.Context) {
 // @Failure 404 {object} response.ErrorResponse "Site not found"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/sites/{id} [patch]
+func (s *Server) findActiveSiteByID(c *gin.Context) (*models.Site, bool) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid site ID, expected positive integer")
+		return nil, false
+	}
+	var site models.Site
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&site).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "site not found")
+		return nil, false
+	}
+	return &site, true
+}
+
 func (s *Server) UpdateSite(c *gin.Context) {
 	var req UpdateSiteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -425,15 +439,8 @@ func (s *Server) UpdateSite(c *gin.Context) {
 		return
 	}
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid site ID, expected positive integer")
-		return
-	}
-
-	var site models.Site
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&site).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "site not found")
+	site, ok := s.findActiveSiteByID(c)
+	if !ok {
 		return
 	}
 
@@ -447,7 +454,7 @@ func (s *Server) UpdateSite(c *gin.Context) {
 		site.IsActive = *req.IsActive
 	}
 
-	if err := s.DB.WithContext(c.Request.Context()).Save(&site).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Save(site).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to update site: "+err.Error())
 		return
 	}
@@ -468,19 +475,12 @@ func (s *Server) UpdateSite(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/sites/{id} [delete]
 func (s *Server) DeleteSite(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid site ID, expected positive integer")
+	site, ok := s.findActiveSiteByID(c)
+	if !ok {
 		return
 	}
 
-	var site models.Site
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&site).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "site not found")
-		return
-	}
-
-	if err := s.DB.Model(&site).Updates(map[string]interface{}{
+	if err := s.DB.Model(site).Updates(map[string]interface{}{
 		"is_active":  false,
 		"updated_at": time.Now(),
 	}).Error; err != nil {
@@ -545,6 +545,20 @@ func (s *Server) CreateDivision(c *gin.Context) {
 // @Failure 404 {object} response.ErrorResponse "Division not found"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/divisions/{id} [patch]
+func (s *Server) findActiveDivisionByID(c *gin.Context) (*models.Division, bool) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid division ID, expected positive integer")
+		return nil, false
+	}
+	var div models.Division
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&div).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "division not found")
+		return nil, false
+	}
+	return &div, true
+}
+
 func (s *Server) UpdateDivision(c *gin.Context) {
 	var req UpdateDivisionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -552,15 +566,8 @@ func (s *Server) UpdateDivision(c *gin.Context) {
 		return
 	}
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid division ID, expected positive integer")
-		return
-	}
-
-	var div models.Division
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&div).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "division not found")
+	div, ok := s.findActiveDivisionByID(c)
+	if !ok {
 		return
 	}
 
@@ -574,7 +581,7 @@ func (s *Server) UpdateDivision(c *gin.Context) {
 		div.IsActive = *req.IsActive
 	}
 
-	if err := s.DB.WithContext(c.Request.Context()).Save(&div).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Save(div).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to update division: "+err.Error())
 		return
 	}
@@ -595,19 +602,12 @@ func (s *Server) UpdateDivision(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/divisions/{id} [delete]
 func (s *Server) DeleteDivision(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid division ID, expected positive integer")
+	div, ok := s.findActiveDivisionByID(c)
+	if !ok {
 		return
 	}
 
-	var div models.Division
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&div).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "division not found")
-		return
-	}
-
-	if err := s.DB.Model(&div).Updates(map[string]interface{}{
+	if err := s.DB.Model(div).Updates(map[string]interface{}{
 		"is_active":  false,
 		"updated_at": time.Now(),
 	}).Error; err != nil {
@@ -717,6 +717,20 @@ func (s *Server) resolveDepartmentDivisionUpdate(dept *models.Department, req *U
 // @Failure 404 {object} response.ErrorResponse "Department not found"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/departments/{id} [patch]
+func (s *Server) findActiveDepartmentByID(c *gin.Context) (*models.Department, bool) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid department ID, expected positive integer")
+		return nil, false
+	}
+	var dept models.Department
+	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&dept).Error; err != nil {
+		RespondError(c, http.StatusNotFound, "department not found")
+		return nil, false
+	}
+	return &dept, true
+}
+
 func (s *Server) UpdateDepartment(c *gin.Context) {
 	var req UpdateDepartmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -724,15 +738,8 @@ func (s *Server) UpdateDepartment(c *gin.Context) {
 		return
 	}
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid department ID, expected positive integer")
-		return
-	}
-
-	var dept models.Department
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&dept).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "department not found")
+	dept, ok := s.findActiveDepartmentByID(c)
+	if !ok {
 		return
 	}
 
@@ -745,9 +752,9 @@ func (s *Server) UpdateDepartment(c *gin.Context) {
 	if req.IsActive != nil {
 		dept.IsActive = *req.IsActive
 	}
-	s.resolveDepartmentDivisionUpdate(&dept, &req)
+	s.resolveDepartmentDivisionUpdate(dept, &req)
 
-	if err := s.DB.WithContext(c.Request.Context()).Save(&dept).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Save(dept).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to update department: "+err.Error())
 		return
 	}
@@ -768,19 +775,12 @@ func (s *Server) UpdateDepartment(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/departments/{id} [delete]
 func (s *Server) DeleteDepartment(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid department ID, expected positive integer")
+	dept, ok := s.findActiveDepartmentByID(c)
+	if !ok {
 		return
 	}
 
-	var dept models.Department
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&dept).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "department not found")
-		return
-	}
-
-	if err := s.DB.Model(&dept).Updates(map[string]interface{}{
+	if err := s.DB.Model(dept).Updates(map[string]interface{}{
 		"is_active":  false,
 		"updated_at": time.Now(),
 	}).Error; err != nil {

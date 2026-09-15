@@ -395,6 +395,16 @@ func TestAdminMasterHandlers_DivisionAndDepartmentCRUD(t *testing.T) {
 	srv.ListDepartments(c)
 	assertFatalCode(t, w, http.StatusOK)
 
+	// 4b. Update Division
+	updateDivBody := `{"name": "Test Division WDD Updated", "code": "tdiv2"}`
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: divIdStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/divisions/"+divIdStr, bytes.NewReader([]byte(updateDivBody)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateDivision(c)
+	assertFatalCode(t, w, http.StatusOK)
+
 	// 5. Update Department
 	updateDeptBody := `{"name": "Test Department Core Renamed"}`
 	deptIdStr := fmt.Sprintf("%d", createdDept.ID)
@@ -404,6 +414,46 @@ func TestAdminMasterHandlers_DivisionAndDepartmentCRUD(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/departments/"+deptIdStr, bytes.NewReader([]byte(updateDeptBody)))
 	c.Request.Header.Set("Content-Type", "application/json")
 
+	srv.UpdateDepartment(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 5b. Update Department with Division name matching existing
+	updateDeptDivNameBody := `{"division": "Test Division WDD Updated"}`
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: deptIdStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/departments/"+deptIdStr, bytes.NewReader([]byte(updateDeptDivNameBody)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateDepartment(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 5c. Update Department with non-existent Division name
+	updateDeptNonDivBody := `{"division": "Non Existent Division Name"}`
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: deptIdStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/departments/"+deptIdStr, bytes.NewReader([]byte(updateDeptNonDivBody)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateDepartment(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 5d. Update Department clearing Division with division_id = 0
+	clearDivBody := `{"division_id": 0}`
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: deptIdStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/departments/"+deptIdStr, bytes.NewReader([]byte(clearDivBody)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateDepartment(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 5e. Update Department clearing Division with division = ""
+	clearDivStrBody := `{"division": ""}`
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: deptIdStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/departments/"+deptIdStr, bytes.NewReader([]byte(clearDivStrBody)))
+	c.Request.Header.Set("Content-Type", "application/json")
 	srv.UpdateDepartment(c)
 	assertFatalCode(t, w, http.StatusOK)
 
@@ -424,4 +474,193 @@ func TestAdminMasterHandlers_DivisionAndDepartmentCRUD(t *testing.T) {
 
 	srv.DeleteDivision(c)
 	assertFatalCode(t, w, http.StatusOK)
+}
+
+func TestAdminMasterHandlers_Validation_SitesDivisionsDepartments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	srv := &Server{DB: tx, Cfg: cfg}
+
+	// Invalid JSON payload tests
+	t.Run("Create handlers reject empty or invalid JSON", func(t *testing.T) {
+		handlers := []func(*gin.Context){
+			srv.CreateSite,
+			srv.CreateDivision,
+			srv.CreateDepartment,
+		}
+		for _, h := range handlers {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte("{invalid")))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h(c)
+			assertResponseCode(t, w, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("Update handlers reject invalid JSON", func(t *testing.T) {
+		handlers := []func(*gin.Context){
+			srv.UpdateSite,
+			srv.UpdateDivision,
+			srv.UpdateDepartment,
+		}
+		for _, h := range handlers {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Params = gin.Params{{Key: "id", Value: "1"}}
+			c.Request = httptest.NewRequest(http.MethodPatch, "/1", bytes.NewReader([]byte("{invalid")))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h(c)
+			assertResponseCode(t, w, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("Update and Delete reject invalid IDs", func(t *testing.T) {
+		for _, invalidID := range []string{"abc", "0", "-1"} {
+			updateHandlers := []func(*gin.Context){
+				srv.UpdateSite,
+				srv.UpdateDivision,
+				srv.UpdateDepartment,
+			}
+			for _, h := range updateHandlers {
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Params = gin.Params{{Key: "id", Value: invalidID}}
+				c.Request = httptest.NewRequest(http.MethodPatch, "/"+invalidID, bytes.NewReader([]byte("{}")))
+				c.Request.Header.Set("Content-Type", "application/json")
+				h(c)
+				assertResponseCode(t, w, http.StatusBadRequest)
+			}
+
+			deleteHandlers := []func(*gin.Context){
+				srv.DeleteSite,
+				srv.DeleteDivision,
+				srv.DeleteDepartment,
+			}
+			for _, h := range deleteHandlers {
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Params = gin.Params{{Key: "id", Value: invalidID}}
+				c.Request = httptest.NewRequest(http.MethodDelete, "/"+invalidID, nil)
+				h(c)
+				assertResponseCode(t, w, http.StatusBadRequest)
+			}
+		}
+	})
+
+	t.Run("Update and Delete return 404 for non-existent IDs", func(t *testing.T) {
+		updateHandlers := []func(*gin.Context){
+			srv.UpdateSite,
+			srv.UpdateDivision,
+			srv.UpdateDepartment,
+		}
+		for _, h := range updateHandlers {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Params = gin.Params{{Key: "id", Value: "99999999"}}
+			c.Request = httptest.NewRequest(http.MethodPatch, "/99999999", bytes.NewReader([]byte("{}")))
+			c.Request.Header.Set("Content-Type", "application/json")
+			h(c)
+			assertResponseCode(t, w, http.StatusNotFound)
+		}
+
+		deleteHandlers := []func(*gin.Context){
+			srv.DeleteSite,
+			srv.DeleteDivision,
+			srv.DeleteDepartment,
+		}
+		for _, h := range deleteHandlers {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Params = gin.Params{{Key: "id", Value: "99999999"}}
+			c.Request = httptest.NewRequest(http.MethodDelete, "/99999999", nil)
+			h(c)
+			assertResponseCode(t, w, http.StatusNotFound)
+		}
+	})
+}
+
+func TestAdminMasterHandlers_AdminListEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	srv := &Server{DB: tx, Cfg: cfg}
+
+	// Seed one of each
+	comp := models.Company{Code: "list_comp", Name: "List Comp", IsActive: true}
+	_ = tx.Create(&comp)
+	appr := models.Approver{Name: "List Appr", RoleType: models.ApproverRoleTeamLeader, IsActive: true}
+	_ = tx.Create(&appr)
+	site := models.Site{Code: "list_site", Name: "List Site", IsActive: true}
+	_ = tx.Create(&site)
+	div := models.Division{Code: "list_div", Name: "List Div", IsActive: true}
+	_ = tx.Create(&div)
+	dept := models.Department{Code: "list_dept", Name: "List Dept", DivisionID: &div.ID, Division: div.Name, IsActive: true}
+	_ = tx.Create(&dept)
+
+	endpoints := []struct {
+		name    string
+		handler func(*gin.Context)
+		url     string
+	}{
+		{"AdminListApprovers", srv.AdminListApprovers, "/api/v1/admin/approvers"},
+		{"AdminListCompanies", srv.AdminListCompanies, "/api/v1/admin/companies"},
+		{"AdminListSites", srv.AdminListSites, "/api/v1/admin/sites"},
+		{"AdminListDivisions", srv.AdminListDivisions, "/api/v1/admin/divisions"},
+		{"AdminListDepartments", srv.AdminListDepartments, "/api/v1/admin/departments"},
+	}
+
+	for _, ep := range endpoints {
+		t.Run(ep.name+" default", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.url, nil)
+			ep.handler(c)
+			assertFatalCode(t, w, http.StatusOK)
+		})
+
+		t.Run(ep.name+" ?is_active=true", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.url+"?is_active=true", nil)
+			ep.handler(c)
+			assertFatalCode(t, w, http.StatusOK)
+		})
+
+		t.Run(ep.name+" ?is_active=false", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.url+"?is_active=false", nil)
+			ep.handler(c)
+			assertFatalCode(t, w, http.StatusOK)
+		})
+
+		t.Run(ep.name+" ?include_inactive=false", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.url+"?include_inactive=false", nil)
+			ep.handler(c)
+			assertFatalCode(t, w, http.StatusOK)
+		})
+	}
+
+	// Test AdminListDepartments with division query filter
+	t.Run("AdminListDepartments with division filters", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/admin/departments?division_id=%d", div.ID), nil)
+		srv.AdminListDepartments(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		w = httptest.NewRecorder()
+		c, _ = gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/departments?division=List+Div", nil)
+		srv.AdminListDepartments(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
 }
