@@ -36,9 +36,10 @@ func formatHumanSchedule(expr, tz string) string {
 		min, errM := strconv.Atoi(parts[0])
 		if errH == nil && errM == nil {
 			timeStr := fmt.Sprintf("%02d:%02d", hour, min)
-			if parts[4] == "*" {
+			switch parts[4] {
+			case "*":
 				return fmt.Sprintf("Setiap hari pukul %s (%s)", timeStr, tz)
-			} else if parts[4] == "1-5" {
+			case "1-5":
 				return fmt.Sprintf("Setiap hari kerja (Senin-Jumat) pukul %s (%s)", timeStr, tz)
 			}
 		}
