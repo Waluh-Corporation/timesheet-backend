@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -11,39 +12,84 @@ import (
 	"timesheet-backend/push"
 )
 
-// Scheduler owns the cron runner that dispatches the daily timesheet reminder.
+const (
+	DefaultReminderCron = "0 17 * * *"
+	DefaultCleanupCron  = "0 2 * * *"
+)
+
+// Scheduler owns the cron runner that dispatches the daily timesheet reminder and housekeeping tasks.
 type Scheduler struct {
-	db   *gorm.DB
-	push *push.Service
-	cron *cron.Cron
-	loc  *time.Location
+	db           *gorm.DB
+	push         *push.Service
+	cron         *cron.Cron
+	loc          *time.Location
+	reminderCron string
+	cleanupCron  string
+}
+
+// isJobDisabled checks if a cron expression explicitly disables the scheduled task.
+func isJobDisabled(expr string) bool {
+	val := strings.ToLower(strings.TrimSpace(expr))
+	return val == "disabled" || val == "off" || val == "false" || val == "none"
 }
 
 // New builds a Scheduler pinned to the given IANA timezone (Asia/Jakarta for
-// WIB). If the zone can't be loaded it falls back to UTC and logs loudly.
-func New(db *gorm.DB, pushSvc *push.Service, tz string) *Scheduler {
+// WIB) and optional cron expressions for reminders and token housekeeping.
+// If crons are omitted or empty, DefaultReminderCron ("0 17 * * *") and
+// DefaultCleanupCron ("0 2 * * *") are used.
+func New(db *gorm.DB, pushSvc *push.Service, tz string, crons ...string) *Scheduler {
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
 		log.Printf("[scheduler] could not load timezone %q, falling back to UTC: %v", tz, err)
 		loc = time.UTC
 	}
 	c := cron.New(cron.WithLocation(loc))
-	return &Scheduler{db: db, push: pushSvc, cron: c, loc: loc}
+
+	reminderCron := DefaultReminderCron
+	cleanupCron := DefaultCleanupCron
+	if len(crons) > 0 && strings.TrimSpace(crons[0]) != "" {
+		reminderCron = strings.TrimSpace(crons[0])
+	}
+	if len(crons) > 1 && strings.TrimSpace(crons[1]) != "" {
+		cleanupCron = strings.TrimSpace(crons[1])
+	}
+
+	return &Scheduler{
+		db:           db,
+		push:         pushSvc,
+		cron:         c,
+		loc:          loc,
+		reminderCron: reminderCron,
+		cleanupCron:  cleanupCron,
+	}
 }
 
-// Start registers the 17:00 WIB daily reminder job and launches the runner.
+// Start registers the configured daily reminder and token housekeeping cron jobs
+// and launches the runner.
 func (s *Scheduler) Start() {
-	// "0 17 * * *" => every day at 17:00 in the scheduler's location (WIB).
-	if _, err := s.cron.AddFunc("0 17 * * *", s.sendDailyReminders); err != nil {
-		log.Printf("[scheduler] failed to register daily reminder: %v", err)
-		return
+	if s.reminderCron != "" && !isJobDisabled(s.reminderCron) {
+		if _, err := s.cron.AddFunc(s.reminderCron, s.sendDailyReminders); err != nil {
+			log.Printf("[scheduler] failed to register daily reminder (%s): %v, falling back to default %s", s.reminderCron, err, DefaultReminderCron)
+			if _, fallbackErr := s.cron.AddFunc(DefaultReminderCron, s.sendDailyReminders); fallbackErr != nil {
+				log.Printf("[scheduler] failed to register fallback daily reminder: %v", fallbackErr)
+			}
+		}
+	} else {
+		log.Printf("[scheduler] daily reminder is disabled")
 	}
-	// "0 2 * * *" => every day at 02:00 in the scheduler's location (WIB) for token housekeeping.
-	if _, err := s.cron.AddFunc("0 2 * * *", s.cleanupExpiredTokens); err != nil {
-		log.Printf("[scheduler] failed to register token housekeeping: %v", err)
+
+	if s.cleanupCron != "" && !isJobDisabled(s.cleanupCron) {
+		if _, err := s.cron.AddFunc(s.cleanupCron, s.cleanupExpiredTokens); err != nil {
+			log.Printf("[scheduler] failed to register token housekeeping (%s): %v, falling back to default %s", s.cleanupCron, err, DefaultCleanupCron)
+			if _, fallbackErr := s.cron.AddFunc(DefaultCleanupCron, s.cleanupExpiredTokens); fallbackErr != nil {
+				log.Printf("[scheduler] failed to register fallback token housekeeping: %v", fallbackErr)
+			}
+		}
+	} else {
+		log.Printf("[scheduler] token housekeeping is disabled")
 	}
 	s.cron.Start()
-	log.Printf("[scheduler] daily timesheet reminder armed for 17:00 %s", s.loc.String())
+	log.Printf("[scheduler] daily timesheet reminder armed with cron %q in %s", s.reminderCron, s.loc.String())
 }
 
 // Stop gracefully halts the cron runner.

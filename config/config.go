@@ -42,8 +42,10 @@ type Config struct {
 	// FrontendURL is used to build links inside emails (setup / reset).
 	FrontendURL string
 
-	// Timezone used for the daily reminder scheduler.
-	Timezone string
+	// Timezone used for the daily reminder scheduler and configurable cron expressions.
+	Timezone     string
+	ReminderCron string
+	CleanupCron  string
 
 	// Bootstrap admin credentials, applied on first boot when no admin exists.
 	AdminEmail    string
@@ -187,8 +189,10 @@ func Load() *Config {
 		VAPIDPrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
 		VAPIDSubject:    getEnv("VAPID_SUBJECT", "mailto:admin@timesheet.local"),
 
-		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:3000"),
-		Timezone:    getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
+		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:3000"),
+		Timezone:     getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
+		ReminderCron: getEnv("SCHEDULER_REMINDER_CRON", getEnv("SCHEDULER_CRON", "0 17 * * *")),
+		CleanupCron:  getEnv("SCHEDULER_CLEANUP_CRON", "0 2 * * *"),
 
 		AdminEmail:    getEnv("ADMIN_EMAIL", getEnv("BOOTSTRAP_ADMIN_EMAIL", "admin@timesheet.local")),
 		AdminUsername: getEnv("BOOTSTRAP_ADMIN_USERNAME", "admin"),
