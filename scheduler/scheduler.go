@@ -64,30 +64,28 @@ func New(db *gorm.DB, pushSvc *push.Service, tz string, crons ...string) *Schedu
 	}
 }
 
+// registerJob attempts to register a task with the given cron expression,
+// falling back to a default expression if registration fails.
+func (s *Scheduler) registerJob(name, cronExpr, defaultCron string, task func()) {
+	if cronExpr == "" || isJobDisabled(cronExpr) {
+		log.Printf("[scheduler] %s is disabled", name)
+		return
+	}
+
+	if _, err := s.cron.AddFunc(cronExpr, task); err != nil {
+		log.Printf("[scheduler] failed to register %s (%s): %v, falling back to default %s", name, cronExpr, err, defaultCron)
+		if _, fallbackErr := s.cron.AddFunc(defaultCron, task); fallbackErr != nil {
+			log.Printf("[scheduler] failed to register fallback %s: %v", name, fallbackErr)
+		}
+	}
+}
+
 // Start registers the configured daily reminder and token housekeeping cron jobs
 // and launches the runner.
 func (s *Scheduler) Start() {
-	if s.reminderCron != "" && !isJobDisabled(s.reminderCron) {
-		if _, err := s.cron.AddFunc(s.reminderCron, s.sendDailyReminders); err != nil {
-			log.Printf("[scheduler] failed to register daily reminder (%s): %v, falling back to default %s", s.reminderCron, err, DefaultReminderCron)
-			if _, fallbackErr := s.cron.AddFunc(DefaultReminderCron, s.sendDailyReminders); fallbackErr != nil {
-				log.Printf("[scheduler] failed to register fallback daily reminder: %v", fallbackErr)
-			}
-		}
-	} else {
-		log.Printf("[scheduler] daily reminder is disabled")
-	}
+	s.registerJob("daily reminder", s.reminderCron, DefaultReminderCron, s.sendDailyReminders)
+	s.registerJob("token housekeeping", s.cleanupCron, DefaultCleanupCron, s.cleanupExpiredTokens)
 
-	if s.cleanupCron != "" && !isJobDisabled(s.cleanupCron) {
-		if _, err := s.cron.AddFunc(s.cleanupCron, s.cleanupExpiredTokens); err != nil {
-			log.Printf("[scheduler] failed to register token housekeeping (%s): %v, falling back to default %s", s.cleanupCron, err, DefaultCleanupCron)
-			if _, fallbackErr := s.cron.AddFunc(DefaultCleanupCron, s.cleanupExpiredTokens); fallbackErr != nil {
-				log.Printf("[scheduler] failed to register fallback token housekeeping: %v", fallbackErr)
-			}
-		}
-	} else {
-		log.Printf("[scheduler] token housekeeping is disabled")
-	}
 	s.cron.Start()
 	log.Printf("[scheduler] daily timesheet reminder armed with cron %q in %s", s.reminderCron, s.loc.String())
 }
