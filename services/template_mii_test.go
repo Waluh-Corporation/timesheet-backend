@@ -19,12 +19,16 @@ func TestGenerateMII(t *testing.T) {
 	user := &models.User{Name: "Budi Santoso", Division: "Digital", BniID: "MII-123", Site: "Jakarta"}
 	// Day 4 of May 2026 is a Monday (a working day).
 	act := models.DailyActivity{
-		Date:        time.Date(2026, 5, 4, 0, 0, 0, 0, time.UTC),
-		StartTime:   "08:00",
-		EndTime:     "17:00",
-		Status:      "P",
-		Activity:    "Sprint work",
-		AppImpacted: "cash", // lower-case, should normalize to "Cash"
+		Date:      time.Date(2026, 5, 4, 0, 0, 0, 0, time.UTC),
+		StartTime: "08:00",
+		EndTime:   "17:00",
+		Status:    "P",
+		Activity:  "Sprint work",
+		ProjectRef: &models.Project{
+			Code:        "P24015",
+			Name:        "BNI Direct Cash",
+			AppImpacted: "cash", // lower-case, should normalize to "Cash"
+		},
 	}
 
 	in := GenerationInput{

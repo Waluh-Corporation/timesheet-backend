@@ -1,14 +1,20 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -17,7 +23,11 @@ import (
 	"timesheet-backend/config"
 	"timesheet-backend/database"
 	_ "timesheet-backend/docs"
+	_ "timesheet-backend/dto/request"
+	_ "timesheet-backend/dto/response"
 	"timesheet-backend/handlers"
+	"timesheet-backend/internal/middleware"
+	"timesheet-backend/internal/observability"
 	"timesheet-backend/mailer"
 	"timesheet-backend/push"
 	"timesheet-backend/scheduler"
@@ -36,29 +46,112 @@ import (
 // @name Authorization
 // @description Enter JWT token with format "Bearer {token}".
 
-func main() {
-	migrateFlag := flag.Bool("migrate", false, "run database migrations before starting the server")
-	migrateOnlyFlag := flag.Bool("migrate-only", false, "run database migrations and exit")
-	flag.Parse()
-
-	cfg := config.Load()
-	if *migrateFlag || *migrateOnlyFlag {
+func setupDatabase(cfg *config.Config, logger *slog.Logger, migrateFlag, migrateOnlyFlag bool) (*gorm.DB, bool) {
+	if migrateFlag || migrateOnlyFlag {
 		cfg.RunMigrations = true
 	}
 
 	db, err := database.Connect(cfg)
 	if err != nil {
-		log.Fatalf("database connection failed: %v", err)
+		logger.Error("database connection failed", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	if cfg.RunMigrations {
 		if err := database.Setup(db, cfg); err != nil {
-			log.Fatalf("database setup failed: %v", err)
+			logger.Error("database setup failed", slog.Any("error", err))
+			os.Exit(1)
 		}
 	}
 
-	if *migrateOnlyFlag {
-		log.Println("database migrations completed successfully")
+	if migrateOnlyFlag {
+		logger.Info("database migrations completed successfully")
+		return nil, true
+	}
+
+	return db, false
+}
+
+func registerHealthRoutes(r *gin.Engine, db *gorm.DB) {
+	r.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+	r.GET("/readyz", func(c *gin.Context) {
+		sqlDB, err := db.DB()
+		if err != nil || sqlDB.PingContext(c.Request.Context()) != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unready", "database": "disconnected"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "connected"})
+	})
+}
+
+func registerStaticRoutes(r *gin.Engine, logger *slog.Logger) {
+	staticPath := filepath.Clean(os.Getenv("STATIC_FILES_PATH"))
+	if staticPath == "" || staticPath == "." {
+		staticPath = "./static"
+	}
+	//nolint:gosec // G703: staticPath is loaded from server environment variable configuration
+	if _, err := os.Stat(staticPath); err == nil {
+		r.NoRoute(spaHandler(staticPath))
+		logger.Info("serving static frontend", slog.String("path", staticPath))
+	}
+}
+
+func setupRouter(db *gorm.DB, srv *handlers.Server, logger *slog.Logger) *gin.Engine {
+	r := gin.New()
+	r.Use(middleware.RequestID())
+	r.Use(middleware.StructuredRecovery())
+	r.Use(middleware.SecurityHeaders())
+	r.Use(srv.CORSMiddleware())
+	r.MaxMultipartMemory = 16 << 20 // 16 MiB template uploads
+
+	registerHealthRoutes(r, db)
+	registerRoutes(r, srv)
+	registerStaticRoutes(r, logger)
+	return r
+}
+
+func runHTTPServer(httpServer *http.Server, db *gorm.DB, logger *slog.Logger, port string) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		logger.Info("server starting", slog.String("port", port))
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server listen failed", slog.Any("error", err))
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	stop()
+	logger.Info("shutting down gracefully, press Ctrl+C again to force")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		logger.Error("server forced to shutdown", slog.Any("error", err))
+	}
+
+	if sqlDB, err := db.DB(); err == nil {
+		_ = sqlDB.Close()
+	}
+
+	logger.Info("server exited cleanly")
+}
+
+func main() {
+	logger := observability.Logger()
+
+	migrateFlag := flag.Bool("migrate", false, "run database migrations before starting the server")
+	migrateOnlyFlag := flag.Bool("migrate-only", false, "run database migrations and exit")
+	flag.Parse()
+
+	cfg := config.Load()
+	db, exitEarly := setupDatabase(cfg, logger, *migrateFlag, *migrateOnlyFlag)
+	if exitEarly {
 		return
 	}
 
@@ -68,35 +161,25 @@ func main() {
 
 	srv, err := handlers.NewServer(db, cfg, authSvc, mailSvc, pushSvc)
 	if err != nil {
-		log.Fatalf("failed to init server: %v", err)
+		logger.Error("failed to init server", slog.Any("error", err))
+		os.Exit(1)
 	}
 
-	// Daily 17:00 WIB reminder scheduler.
 	sched := scheduler.New(db, pushSvc, cfg.Timezone)
 	sched.Start()
 	defer sched.Stop()
 
-	r := gin.Default()
-	r.Use(handlers.CORSMiddleware())
-	r.MaxMultipartMemory = 16 << 20 // 16 MiB template uploads
+	r := setupRouter(db, srv, logger)
 
-	registerRoutes(r, srv)
-
-	// Serve the exported Next.js frontend from this same binary so the whole
-	// portal ships as a single image (frontend + API on one origin).
-	staticPath := os.Getenv("STATIC_FILES_PATH")
-	if staticPath == "" {
-		staticPath = "./static"
-	}
-	if _, err := os.Stat(staticPath); err == nil {
-		r.NoRoute(spaHandler(staticPath))
-		log.Printf("serving static frontend from %s", staticPath)
+	httpServer := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("server starting on port %s", cfg.Port)
-	if err := r.Run(":" + cfg.Port); err != nil {
-		log.Fatalf("failed to run server: %v", err)
-	}
+	runHTTPServer(httpServer, db, logger, cfg.Port)
 }
 
 // registerRoutes wires the full Phase 2 API surface.
@@ -116,8 +199,10 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		setupGroup.POST("/init", s.InitSetup)
 	}
 
-	// --- Public auth routes (NO public sign-up) ---
+	// --- Public auth routes with rate limiting ---
+	authLimiter := middleware.NewIPRateLimiter(10, 1*time.Minute)
 	authGroup := api.Group("/auth")
+	authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
 	{
 		authGroup.POST("/login", s.Login)
 		authGroup.POST("/forgot-password", s.ForgotPassword)
@@ -139,6 +224,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	authed.Use(s.AuthMiddleware())
 	{
 		authed.GET("/me", s.Me)
+		authed.POST("/users/change-password", s.ChangePassword)
 		authed.POST("/profile/change", s.SubmitProfileChange)
 		authed.GET("/profile/changes", s.MyProfileChanges)
 
@@ -160,10 +246,12 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/holidays/all", s.ListHolidays)
 		authed.POST("/holidays/sync", s.SyncHolidays)
 
-		// Master data (normalized projects, companies, departments, activity-statuses, approvers).
+		// Master data (normalized projects, companies, departments, activity-statuses, approvers, sites, divisions).
 		authed.GET("/projects", s.ListProjects)
 		authed.GET("/companies", s.ListCompanies)
 		authed.GET("/departments", s.ListDepartments)
+		authed.GET("/sites", s.ListSites)
+		authed.GET("/divisions", s.ListDivisions)
 		authed.GET("/activity-statuses", s.ListActivityStatuses)
 		authed.GET("/approvers", s.ListApprovers)
 
@@ -187,15 +275,49 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)
 
-		// Master data management (approvers & companies)
+		// Master data management (approvers, companies, sites, divisions, departments)
+		admin.GET("/approvers", s.AdminListApprovers)
 		admin.POST("/approvers", s.CreateApprover)
 		admin.PATCH("/approvers/:id", s.UpdateApprover)
 		admin.DELETE("/approvers/:id", s.DeleteApprover)
 
+		admin.GET("/companies", s.AdminListCompanies)
 		admin.POST("/companies", s.CreateCompany)
 		admin.PATCH("/companies/:id", s.UpdateCompany)
 		admin.DELETE("/companies/:id", s.DeleteCompany)
+
+		admin.GET("/sites", s.AdminListSites)
+		admin.POST("/sites", s.CreateSite)
+		admin.PATCH("/sites/:id", s.UpdateSite)
+		admin.DELETE("/sites/:id", s.DeleteSite)
+
+		admin.GET("/divisions", s.AdminListDivisions)
+		admin.POST("/divisions", s.CreateDivision)
+		admin.PATCH("/divisions/:id", s.UpdateDivision)
+		admin.DELETE("/divisions/:id", s.DeleteDivision)
+
+		admin.GET("/departments", s.AdminListDepartments)
+		admin.POST("/departments", s.CreateDepartment)
+		admin.PATCH("/departments/:id", s.UpdateDepartment)
+		admin.DELETE("/departments/:id", s.DeleteDepartment)
 	}
+}
+
+const errNotFoundMsg = "not found"
+
+// tryFiles returns the first existing, non-directory candidate.
+func tryFiles(candidates ...string) (string, bool) {
+	for _, c := range candidates {
+		if info, err := os.Stat(c); err == nil && !info.IsDir() {
+			return c, true
+		}
+	}
+	return "", false
+}
+
+// isPathWithinRoot checks whether target is contained within the root directory.
+func isPathWithinRoot(root, target string) bool {
+	return target == root || strings.HasPrefix(target, root+string(os.PathSeparator))
 }
 
 // spaHandler serves the statically-exported Next.js site (Next `output: export`)
@@ -207,29 +329,19 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 func spaHandler(staticRoot string) gin.HandlerFunc {
 	root := filepath.Clean(staticRoot)
 
-	// tryFiles returns the first existing, non-directory candidate.
-	tryFiles := func(candidates ...string) (string, bool) {
-		for _, c := range candidates {
-			if info, err := os.Stat(c); err == nil && !info.IsDir() {
-				return c, true
-			}
-		}
-		return "", false
-	}
-
 	return func(c *gin.Context) {
 		// Never serve HTML for an unmatched API or Swagger route.
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.HasPrefix(c.Request.URL.Path, "/swagger/") {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
 			return
 		}
 
 		// filepath.Clean on a "/"-prefixed path strips any "../" traversal; the
-		// subsequent prefix check is defence-in-depth against escaping the root.
+		// subsequent prefix check is defense-in-depth against escaping the root.
 		rel := filepath.Clean("/" + c.Request.URL.Path)
 		target := filepath.Join(root, filepath.FromSlash(rel))
-		if target != root && !strings.HasPrefix(target, root+string(os.PathSeparator)) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		if !isPathWithinRoot(root, target) {
+			c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
 			return
 		}
 
@@ -244,6 +356,6 @@ func spaHandler(staticRoot string) gin.HandlerFunc {
 			c.File(index)
 			return
 		}
-		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
 	}
 }

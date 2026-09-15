@@ -1,0 +1,4 @@
+# Gitleaks ignore file
+# Mock JWT tokens from commit 02b032e (cleared in subsequent commits)
+02b032e5d18466ed778cb6f79f2ace43c69e300a:postman_collection.json:jwt:14
+02b032e5d18466ed778cb6f79f2ace43c69e300a:postman_collection.json:jwt:18

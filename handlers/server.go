@@ -2,9 +2,13 @@ package handlers
 
 import (
 	"math"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -12,23 +16,35 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
+	"timesheet-backend/internal/repository"
+	"timesheet-backend/internal/service"
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/push"
 )
 
+type webAuthnSessionEntry struct {
+	data      *webauthn.SessionData
+	createdAt time.Time
+}
+
 // Server carries the shared dependencies used by all HTTP handlers.
 type Server struct {
-	DB       *gorm.DB
-	Cfg      *config.Config
-	Auth     *auth.Service
-	Mailer   *mailer.Mailer
-	Push     *push.Service
-	WebAuthn *webauthn.WebAuthn
+	DB           *gorm.DB
+	Cfg          *config.Config
+	Auth         *auth.Service
+	Mailer       *mailer.Mailer
+	Push         *push.Service
+	WebAuthn     *webauthn.WebAuthn
+	Hasher       auth.PasswordHasher
+	UserRepo     repository.UserRepository
+	UserSvc      service.UserService
+	ActivityRepo repository.ActivityRepository
+	ActivitySvc  service.ActivityService
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
-	webAuthnSessions map[string]*webauthn.SessionData
+	webAuthnSessions map[string]*webAuthnSessionEntry
 	sessionsMu       sync.Mutex
 }
 
@@ -42,6 +58,19 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	if err != nil {
 		return nil, err
 	}
+
+	var userRepo repository.UserRepository
+	var userSvc service.UserService
+	var activityRepo repository.ActivityRepository
+	var activitySvc service.ActivityService
+
+	if db != nil {
+		userRepo = repository.NewUserRepository(db)
+		userSvc = service.NewUserService(userRepo, auth.DefaultHasher, m)
+		activityRepo = repository.NewActivityRepository(db)
+		activitySvc = service.NewActivityService(activityRepo)
+	}
+
 	return &Server{
 		DB:               db,
 		Cfg:              cfg,
@@ -49,24 +78,45 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		Mailer:           m,
 		Push:             p,
 		WebAuthn:         wa,
-		webAuthnSessions: make(map[string]*webauthn.SessionData),
+		Hasher:           auth.DefaultHasher,
+		UserRepo:         userRepo,
+		UserSvc:          userSvc,
+		ActivityRepo:     activityRepo,
+		ActivitySvc:      activitySvc,
+		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
 	}, nil
 }
 
 func (s *Server) putSession(id string, data *webauthn.SessionData) {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
-	s.webAuthnSessions[id] = data
+
+	// Proactively clean up expired sessions (> 5 minutes old)
+	cutoff := time.Now().Add(-5 * time.Minute)
+	for k, v := range s.webAuthnSessions {
+		if v.createdAt.Before(cutoff) {
+			delete(s.webAuthnSessions, k)
+		}
+	}
+
+	s.webAuthnSessions[id] = &webAuthnSessionEntry{
+		data:      data,
+		createdAt: time.Now(),
+	}
 }
 
 func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
-	data, ok := s.webAuthnSessions[id]
+	entry, ok := s.webAuthnSessions[id]
 	if ok {
 		delete(s.webAuthnSessions, id)
+		if time.Since(entry.createdAt) > 5*time.Minute {
+			return nil, false
+		}
+		return entry.data, true
 	}
-	return data, ok
+	return nil, false
 }
 
 const (
@@ -116,16 +166,69 @@ func currentUserID(c *gin.Context) uint {
 // publicBaseURL returns the scheme://host base to build user-facing links
 // (setup / password-reset emails) so they open on the PUBLIC URL rather than a
 // hardcoded localhost default.
+func matchHostOrURL(target, host, hostOnly string) bool {
+	if target == "" {
+		return false
+	}
+	if u, err := url.Parse(target); err == nil && u.Host != "" {
+		targetHost := u.Host
+		if th, _, err := net.SplitHostPort(u.Host); err == nil {
+			targetHost = th
+		}
+		return strings.EqualFold(host, u.Host) || strings.EqualFold(hostOnly, targetHost)
+	}
+	return strings.EqualFold(host, target) || strings.EqualFold(hostOnly, target)
+}
+
+func isLoopbackHost(hostOnly string) bool {
+	if strings.EqualFold(os.Getenv("GIN_MODE"), "release") {
+		return false
+	}
+	return hostOnly == "localhost" || hostOnly == "127.0.0.1" || hostOnly == "::1"
+}
+
+// isTrustedHost verifies that a requested host originates from an approved domain
+// (FrontendURL, RPOrigins, RPID, or loopback in development) to prevent Host Header Poisoning.
+func (s *Server) isTrustedHost(host string) bool {
+	if host == "" {
+		return false
+	}
+	hostOnly := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		hostOnly = h
+	}
+
+	if isLoopbackHost(hostOnly) {
+		return true
+	}
+
+	if s == nil || s.Cfg == nil {
+		return false
+	}
+
+	if matchHostOrURL(s.Cfg.RPID, host, hostOnly) || matchHostOrURL(s.Cfg.FrontendURL, host, hostOnly) {
+		return true
+	}
+
+	for _, origin := range s.Cfg.RPOrigins {
+		if matchHostOrURL(origin, host, hostOnly) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// publicBaseURL returns the scheme://host base to build user-facing links
+// (setup / password-reset emails) so they open on the PUBLIC URL rather than a
+// hardcoded localhost default.
 //
 // When the portal runs behind a reverse proxy the proxy advertises the real
-// public origin via X-Forwarded-Proto / X-Forwarded-Host — those win, so links
-// always match the domain the user actually reached the portal on. Only when no
-// forwarded host is present (e.g. the local split dev stack where the API and
-// the Next.js frontend live on different ports) do we fall back to the
-// configured FrontendURL.
+// public origin via X-Forwarded-Proto / X-Forwarded-Host — those win only if
+// the host is in our trusted allowlist, preventing password-reset link poisoning.
 func (s *Server) publicBaseURL(c *gin.Context) string {
 	host := firstHeaderValue(c.GetHeader("X-Forwarded-Host"))
-	if host != "" {
+	if host != "" && s.isTrustedHost(host) {
 		scheme := firstHeaderValue(c.GetHeader("X-Forwarded-Proto"))
 		if scheme == "" {
 			if c.Request.TLS != nil {
@@ -136,7 +239,10 @@ func (s *Server) publicBaseURL(c *gin.Context) string {
 		}
 		return strings.TrimRight(scheme+"://"+host, "/")
 	}
-	return strings.TrimRight(s.Cfg.FrontendURL, "/")
+	if s != nil && s.Cfg != nil && s.Cfg.FrontendURL != "" {
+		return strings.TrimRight(s.Cfg.FrontendURL, "/")
+	}
+	return "http://localhost:3000"
 }
 
 // firstHeaderValue returns the first, trimmed entry of a possibly
@@ -148,20 +254,64 @@ func firstHeaderValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
-// CORSMiddleware sets up cross-origin resource sharing headers.
-func CORSMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+// isOriginAllowed checks whether an origin header is in the allowed CORS list.
+func (s *Server) isOriginAllowed(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	clean := strings.TrimRight(strings.ToLower(origin), "/")
 
-		if c.Request.Method == "OPTIONS" {
+	if s != nil && s.Cfg != nil {
+		if s.Cfg.FrontendURL != "" && strings.TrimRight(strings.ToLower(s.Cfg.FrontendURL), "/") == clean {
+			return true
+		}
+		for _, o := range s.Cfg.RPOrigins {
+			if strings.TrimRight(strings.ToLower(o), "/") == clean {
+				return true
+			}
+		}
+	}
+
+	// Local development allowlist outside release mode
+	if !strings.EqualFold(os.Getenv("GIN_MODE"), "release") {
+		switch clean {
+		case "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8080":
+			return true
+		}
+	}
+
+	return false
+}
+
+// CORSMiddleware sets up cross-origin resource sharing headers.
+// Origins in the allowlist receive reflected Origin and credentials allowance.
+func (s *Server) CORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		origin := c.GetHeader("Origin")
+		if origin != "" {
+			if s.isOriginAllowed(origin) {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+		} else {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Request-ID")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		c.Writer.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
+
+		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 		c.Next()
 	}
+}
+
+// CORSMiddleware is a package-level fallback that delegates to a Server instance.
+func CORSMiddleware() gin.HandlerFunc {
+	s := &Server{}
+	return s.CORSMiddleware()
 }
 
 // RespondSuccess sends a 2xx JSON response wrapped in the unified envelope.

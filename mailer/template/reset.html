@@ -1,0 +1,186 @@
+<p
+  style="
+    margin: 16px 0 0;
+    color: #4b5563;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  "
+>
+  Halo{{if .Username}} <strong>{{.Username}}</strong>{{end}}, kami menerima permintaan untuk mengatur ulang kata sandi akun <strong>{{.AppName}}</strong> yang terhubung dengan alamat email ini.
+</p>
+
+<!-- DETAILS BOX -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  style="
+    width: 100%;
+    margin: 24px 0 0;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  "
+>
+  <tr>
+    <td style="padding: 16px 20px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        {{if .Username}}
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Akun</td>
+          <td width="65%" style="padding: 5px 0; font-size: 14px; font-weight: bold; color: #111827;">{{.Username}}</td>
+        </tr>
+        {{end}}
+        {{if .RequestedAt}}
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Waktu Permintaan</td>
+          <td width="65%" style="padding: 5px 0; font-size: 13px; font-weight: 500; color: #111827;">{{.RequestedAt}}</td>
+        </tr>
+        {{end}}
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Berlaku Hingga</td>
+          <td width="65%" style="padding: 5px 0; font-size: 13px; font-weight: bold; color: #dc2626;">{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}{{.ExpireMinutes}} menit{{end}}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- ACTION BUTTON -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 26px 0 0;">
+  <tr>
+    <td
+      align="center"
+      bgcolor="#4f46e5"
+      style="
+        background-color: #4f46e5;
+        border-radius: 8px;
+      "
+    >
+      <!--[if mso]>
+      <v:roundrect
+        xmlns:v="urn:schemas-microsoft-com:vml"
+        xmlns:w="urn:schemas-microsoft-com:office:word"
+        href="{{.ResetURL}}"
+        style="height: 48px; v-text-anchor: middle; width: 220px"
+        arcsize="17%"
+        strokecolor="#4f46e5"
+        fillcolor="#4f46e5"
+      >
+        <w:anchorlock />
+        <center style="color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: bold">
+          Reset Kata Sandi Saya
+        </center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-->
+      <a
+        href="{{.ResetURL}}"
+        target="_blank"
+        class="confirm-button"
+        style="
+          display: inline-block;
+          padding: 14px 26px;
+          color: #ffffff;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 15px;
+          font-weight: bold;
+          line-height: 18px;
+          text-align: center;
+          text-decoration: none;
+          white-space: nowrap;
+          border-radius: 8px;
+          background-color: #4f46e5;
+        "
+      >Reset Kata Sandi Saya</a>
+      <!--<![endif]-->
+    </td>
+  </tr>
+</table>
+
+<!-- FALLBACK URL BOX -->
+<div style="margin-top: 26px;">
+  <p
+    style="
+      margin: 0;
+      color: #6b7280;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      line-height: 1.6;
+    "
+  >
+    Jika tombol di atas tidak dapat diklik, salin dan tempel URL berikut ke browser Anda:
+  </p>
+  <p
+    style="
+      margin: 8px 0 0;
+      padding: 12px 14px;
+      background-color: #f3f4f6;
+      border-left: 3px solid #4f46e5;
+      color: #3730a3;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      line-height: 1.55;
+      word-break: break-all;
+    "
+  >
+    <a href="{{.ResetURL}}" target="_blank" style="color: #3730a3; text-decoration: none;">{{.ResetURL}}</a>
+  </p>
+</div>
+
+<!-- SECURITY ALERT NOTICE -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  style="
+    width: 100%;
+    margin-top: 22px;
+    background-color: #fffbeb;
+    border-left: 3px solid #f59e0b;
+    border-radius: 0 6px 6px 0;
+  "
+>
+  <tr>
+    <td style="padding: 12px 14px;">
+      <p style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #92400e;">
+        Peringatan Keamanan
+      </p>
+      <p style="margin: 0; font-size: 12px; color: #78350f; line-height: 1.5;">
+        Tautan ini bersifat rahasia dan hanya berlaku hingga <strong>{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}{{.ExpireMinutes}} menit{{end}}</strong>. Jangan bagikan tautan ini kepada siapapun.
+      </p>
+    </td>
+  </tr>
+</table>
+
+<!-- DISCLAIMER -->
+<table
+  role="presentation"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  width="100%"
+  style="width: 100%; border-top: 1px solid #e5e7eb; margin-top: 28px;"
+>
+  <tr>
+    <td style="padding-top: 20px">
+      <p
+        style="
+          margin: 0;
+          color: #6b7280;
+          font-family: Arial, Helvetica, sans-serif;
+          font-size: 13px;
+          line-height: 1.6;
+        "
+      >
+        <strong style="color: #374151">Tidak meminta reset kata sandi?</strong><br />
+        Anda dapat mengabaikan email ini dengan aman. Kata sandi Anda tetap aman dan tidak akan berubah.
+      </p>
+    </td>
+  </tr>
+</table>

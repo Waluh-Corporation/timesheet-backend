@@ -56,6 +56,10 @@ func (s *Scheduler) Stop() {
 // sendDailyReminders notifies every active user who has not yet recorded an
 // activity for "today" (in WIB).
 func (s *Scheduler) sendDailyReminders() {
+	if s.db == nil || s.push == nil {
+		return
+	}
+
 	now := time.Now().In(s.loc)
 	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.loc)
 	endOfDay := startOfDay.Add(24 * time.Hour)
@@ -86,6 +90,10 @@ func (s *Scheduler) sendDailyReminders() {
 
 // cleanupExpiredTokens performs DBA housekeeping on password_reset_tokens to prevent table bloat.
 func (s *Scheduler) cleanupExpiredTokens() {
+	if s.db == nil {
+		return
+	}
+
 	now := time.Now()
 	// Delete tokens that expired more than 7 days ago, or were used more than 30 days ago.
 	res := s.db.Where("expires_at < ?", now.AddDate(0, 0, -7)).

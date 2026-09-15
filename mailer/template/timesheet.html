@@ -1,0 +1,82 @@
+<p
+  style="
+    margin: 16px 0 0;
+    color: #4b5563;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  "
+>
+  Halo{{if .Username}} <strong>{{.Username}}</strong>{{end}}, dokumen timesheet bulanan Anda telah berhasil dibuat dan <strong>terlampir</strong> pada email ini dalam format Microsoft Excel (.xlsx).
+</p>
+
+<!-- DETAILS BOX -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  style="
+    width: 100%;
+    margin: 24px 0 0;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  "
+>
+  <tr>
+    <td style="padding: 16px 20px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        {{if .Company}}
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Perusahaan / Klien</td>
+          <td width="65%" style="padding: 5px 0; font-size: 14px; font-weight: bold; color: #111827;">{{.Company}}</td>
+        </tr>
+        {{end}}
+        {{if .Period}}
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Periode Timesheet</td>
+          <td width="65%" style="padding: 5px 0; font-size: 14px; font-weight: bold; color: #4f46e5;">{{.Period}}</td>
+        </tr>
+        {{end}}
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Nama Lampiran</td>
+          <td width="65%" style="padding: 5px 0; font-size: 12px; font-family: 'Courier New', Courier, monospace; font-weight: bold; color: #111827;">{{.Filename}}</td>
+        </tr>
+        <tr>
+          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Format Berkas</td>
+          <td width="65%" style="padding: 5px 0; font-size: 13px; font-weight: 500; color: #059669;">Microsoft Excel (.xlsx)</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<!-- NEXT STEPS / APPROVAL NOTICE -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  style="
+    width: 100%;
+    margin-top: 22px;
+    background-color: #ecfdf5;
+    border-left: 3px solid #10b981;
+    border-radius: 0 6px 6px 0;
+  "
+>
+  <tr>
+    <td style="padding: 12px 14px;">
+      <p style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #065f46;">
+        Langkah Selanjutnya
+      </p>
+      <p style="margin: 0; font-size: 12px; color: #047857; line-height: 1.5;">
+        Silakan periksa kembali rincian hari kerja, jam lembur, dan uraian tugas pada file lampiran sebelum menyerahkan dokumen kepada Team Leader atau Department Head untuk persetujuan resmi.
+      </p>
+    </td>
+  </tr>
+</table>
+

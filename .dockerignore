@@ -17,3 +17,9 @@ main
 .DS_Store
 *.log
 
+# Agent configurations, scratch scripts, and temporary generated artifacts
+.agents
+.system_generated
+scratch
+*.xlsx
+

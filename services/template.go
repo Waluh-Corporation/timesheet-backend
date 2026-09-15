@@ -14,6 +14,7 @@ type GenerationInput struct {
 	Year        int
 	Activities  []models.DailyActivity
 	Overtimes   []models.OvertimeEntry
+	Approvers   []models.Approver
 	// Holidays maps day-of-month to a public-holiday name for the month.
 	Holidays map[int]string
 }

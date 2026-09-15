@@ -6,6 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm/clause"
 
+	"timesheet-backend/dto/request"
+	_ "timesheet-backend/dto/response"
 	"timesheet-backend/models"
 	"timesheet-backend/push"
 )
@@ -15,7 +17,7 @@ import (
 // @Description Returns the application server public key for browser Web Push subscription.
 // @Tags Push Notification
 // @Produce json
-// @Success 200 {object} models.VAPIDKeyResponse
+// @Success 200 {object} response.VAPIDKeyResponse
 // @Router /api/v1/push/vapid-public-key [get]
 func (s *Server) GetVAPIDKey(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, gin.H{"public_key": s.Push.PublicKey()})
@@ -28,14 +30,14 @@ func (s *Server) GetVAPIDKey(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param request body models.SubscribeRequest true "Push subscription payload"
-// @Success 201 {object} models.MessageResponse
-// @Failure 400 {object} models.ErrorResponse "Invalid payload"
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Param request body request.SubscribeRequest true "Push subscription payload"
+// @Success 201 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid payload"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/push/subscribe [post]
 func (s *Server) Subscribe(c *gin.Context) {
-	var req models.SubscribeRequest
+	var req request.SubscribeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
@@ -65,13 +67,13 @@ func (s *Server) Subscribe(c *gin.Context) {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param request body models.UnsubscribeRequest false "Optional endpoint filter"
-// @Success 200 {object} models.MessageResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
-// @Failure 500 {object} models.ErrorResponse "Internal server error"
+// @Param request body request.UnsubscribeRequest false "Optional endpoint filter"
+// @Success 200 {object} response.MessageResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/push/unsubscribe [post]
 func (s *Server) Unsubscribe(c *gin.Context) {
-	var req models.UnsubscribeRequest
+	var req request.UnsubscribeRequest
 	_ = c.ShouldBindJSON(&req)
 	q := s.DB.Where("user_id = ?", currentUserID(c))
 	if req.Endpoint != "" {
@@ -90,8 +92,8 @@ func (s *Server) Unsubscribe(c *gin.Context) {
 // @Tags Push Notification
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} models.MessageResponse
-// @Failure 401 {object} models.ErrorResponse "Unauthorized"
+// @Success 200 {object} response.MessageResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Router /api/v1/push/test [post]
 func (s *Server) SendTestPush(c *gin.Context) {
 	s.Push.SendToUser(currentUserID(c), push.Payload{

@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict BH3x013drdUpJrEB9UKsnc3WqrKzcPQ2efwSfbM7G250gjtotdIhVDO1GuOBtmH
+\restrict tiktdLAaNkJhASjCwUDCLFCWMn97A9dVwap9cFve3VQyGrwIguIj7goIGY09ReJ
 
 -- Dumped from database version 16.15
--- Dumped by pg_dump version 16.15
+-- Dumped by pg_dump version 16.15 (Debian 16.15-1.pgdg13+2)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -46,7 +46,8 @@ CREATE TABLE public.approvers (
     name character varying(255) NOT NULL,
     role_type character varying(32) NOT NULL,
     title character varying(128),
-    is_active boolean DEFAULT true NOT NULL
+    is_active boolean DEFAULT true NOT NULL,
+    CONSTRAINT chk_approvers_role_type CHECK (((role_type)::text = ANY ((ARRAY['team_leader'::character varying, 'department_head'::character varying])::text[])))
 );
 
 
@@ -117,8 +118,8 @@ CREATE TABLE public.daily_activities (
     activity text,
     project_name character varying(255),
     project_id character varying(64),
-    app_impacted character varying(255),
-    project_ref_id bigint
+    project_ref_id bigint,
+    CONSTRAINT chk_daily_activities_time_format CHECK ((((start_time IS NULL) OR ((start_time)::text = ''::text) OR ((start_time)::text ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'::text)) AND ((end_time IS NULL) OR ((end_time)::text = ''::text) OR ((end_time)::text ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'::text))))
 );
 
 
@@ -226,7 +227,8 @@ CREATE TABLE public.overtime_entries (
     end_time character varying(8),
     task_description text NOT NULL,
     team_leader_id bigint,
-    department_head_id bigint
+    department_head_id bigint,
+    CONSTRAINT chk_overtime_entries_time_format CHECK ((((start_time IS NULL) OR ((start_time)::text = ''::text) OR ((start_time)::text ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'::text)) AND ((end_time IS NULL) OR ((end_time)::text = ''::text) OR ((end_time)::text ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'::text))))
 );
 
 
@@ -306,8 +308,16 @@ CREATE TABLE public.profile_change_requests (
     reviewed_by bigint,
     reviewed_at timestamp with time zone,
     company_id bigint,
-    department_id bigint
+    department_id bigint,
+    CONSTRAINT chk_profile_change_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying])::text[])))
 );
+
+
+--
+-- Name: COLUMN profile_change_requests.bni_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profile_change_requests.bni_id IS 'NPP BNI';
 
 
 --
@@ -442,8 +452,16 @@ CREATE TABLE public.users (
     site character varying(128),
     company character varying(64),
     company_id bigint,
-    department_id bigint
+    department_id bigint,
+    CONSTRAINT chk_users_role CHECK (((role)::text = ANY ((ARRAY['admin'::character varying, 'user'::character varying])::text[])))
 );
+
+
+--
+-- Name: COLUMN users.bni_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.users.bni_id IS 'NPP BNI';
 
 
 --
@@ -726,6 +744,22 @@ ALTER TABLE ONLY public.system_settings
 
 
 --
+-- Name: departments uq_departments_company_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.departments
+    ADD CONSTRAINT uq_departments_company_name UNIQUE (company_id, name);
+
+
+--
+-- Name: projects uq_projects_code_name; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT uq_projects_code_name UNIQUE (code, name);
+
+
+--
 -- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -754,6 +788,13 @@ ALTER TABLE ONLY public.web_authn_credentials
 --
 
 CREATE INDEX idx_approvers_role_type_active ON public.approvers USING btree (role_type) WHERE (is_active = true);
+
+
+--
+-- Name: idx_daily_activities_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_daily_activities_date ON public.daily_activities USING btree (date);
 
 
 --
@@ -798,18 +839,18 @@ CREATE INDEX idx_departments_company_active ON public.departments USING btree (c
 CREATE INDEX idx_departments_company_id ON public.departments USING btree (company_id);
 
 
-
---
--- Name: idx_holidays_date; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_holidays_date ON public.holidays USING btree (date);
-
 --
 -- Name: idx_holidays_joint_leave; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_holidays_joint_leave ON public.holidays USING btree (is_joint_leave);
+
+
+--
+-- Name: idx_overtime_entries_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_overtime_entries_date ON public.overtime_entries USING btree (date);
 
 
 --
@@ -883,6 +924,13 @@ CREATE INDEX idx_profile_change_requests_department_id ON public.profile_change_
 
 
 --
+-- Name: idx_profile_change_requests_reviewed_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_profile_change_requests_reviewed_by ON public.profile_change_requests USING btree (reviewed_by);
+
+
+--
 -- Name: idx_profile_change_requests_user_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -894,20 +942,6 @@ CREATE INDEX idx_profile_change_requests_user_id ON public.profile_change_reques
 --
 
 CREATE INDEX idx_projects_code ON public.projects USING btree (code);
-
-
---
--- Name: idx_projects_company_active; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_projects_company_active ON public.projects USING btree (company_id, is_active);
-
-
---
--- Name: idx_projects_company_id; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_projects_company_id ON public.projects USING btree (company_id);
 
 
 --
@@ -950,6 +984,13 @@ CREATE INDEX idx_users_department_id ON public.users USING btree (department_id)
 --
 
 CREATE UNIQUE INDEX idx_users_email ON public.users USING btree (email) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: idx_users_role_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_users_role_active ON public.users USING btree (role, is_active) WHERE (deleted_at IS NULL);
 
 
 --
@@ -1030,7 +1071,6 @@ ALTER TABLE ONLY public.profile_change_requests
     ADD CONSTRAINT fk_profile_change_requests_reviewer FOREIGN KEY (reviewed_by) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE SET NULL;
 
 
-
 --
 -- Name: overtime_entries overtime_entries_daily_activity_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
@@ -1072,14 +1112,6 @@ ALTER TABLE ONLY public.profile_change_requests
 
 
 --
--- Name: projects projects_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.projects
-    ADD CONSTRAINT projects_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON UPDATE CASCADE ON DELETE SET NULL;
-
-
---
 -- Name: push_subscriptions push_subscriptions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1115,5 +1147,5 @@ ALTER TABLE ONLY public.web_authn_credentials
 -- PostgreSQL database dump complete
 --
 
-\unrestrict BH3x013drdUpJrEB9UKsnc3WqrKzcPQ2efwSfbM7G250gjtotdIhVDO1GuOBtmH
+\unrestrict tiktdLAaNkJhASjCwUDCLFCWMn97A9dVwap9cFve3VQyGrwIguIj7goIGY09ReJ
 

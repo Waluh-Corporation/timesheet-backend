@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/binary"
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -34,24 +35,27 @@ type User struct {
 
 	Username string `gorm:"uniqueIndex;size:64;not null" json:"username"`
 	Email    string `gorm:"uniqueIndex;size:255;not null" json:"email"`
-	// PasswordHash is an Argon2id PHC-encoded hash (legacy bcrypt hashes are
-	// still verified and upgraded on next login). It may be empty for
-	// passwordless (passkey-only) accounts that have not yet set a password.
+	// PasswordHash is an Argon2id PHC-encoded hash adhering to OWASP recommendations.
+	// It may be empty for passwordless (passkey-only) accounts that have not yet set a password.
 	PasswordHash string `gorm:"size:255" json:"-"`
-	Role         Role   `gorm:"size:16;not null;default:user" json:"role"`
-	IsActive     bool   `gorm:"not null;default:true" json:"is_active"`
+	Role         Role   `gorm:"size:16;not null;default:user;index:idx_users_role_active,priority:1;check:role IN ('admin', 'user')" json:"role"`
+	IsActive     bool   `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_users_role_active,priority:2" json:"is_active"`
 
 	// Profile fields (the "approved" / live values).
 	Name          string      `gorm:"size:255" json:"name"`
 	BniID         string      `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
 	EmployeeID    string      `gorm:"size:64" json:"employee_id"`            // NPP or Vendor ID
 	Division      string      `gorm:"size:255" json:"division"`
+	DivisionID    *uint       `gorm:"index" json:"division_id,omitempty"`
+	DivisionRel   *Division   `gorm:"foreignKey:DivisionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"division_rel,omitempty"`
 	Department    string      `gorm:"size:255" json:"department"`
 	DepartmentID  *uint       `gorm:"index" json:"department_id"`
 	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
 	GroupName     string      `gorm:"size:255" json:"group_name"` // Kelompok (SDD)
 	Position      string      `gorm:"size:128" json:"position"`
 	Site          string      `gorm:"size:128" json:"site"`
+	SiteID        *uint       `gorm:"index" json:"site_id,omitempty"`
+	SiteRel       *Site       `gorm:"foreignKey:SiteID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"site_rel,omitempty"`
 	Company       string      `gorm:"size:64" json:"company"`
 	CompanyID     *uint       `gorm:"index" json:"company_id"`
 	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
@@ -64,27 +68,47 @@ type User struct {
 	DailyActivities   []DailyActivity        `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
 }
 
-// Company represents a vendor/organization (e.g. MII, SDD, Adidata).
-type Company struct {
-	ID          uint         `gorm:"primaryKey" json:"id"`
-	CreatedAt   time.Time    `json:"created_at"`
-	UpdatedAt   time.Time    `json:"updated_at"`
-	Code        string       `gorm:"unique;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
-	Name        string       `gorm:"size:255;not null" json:"name"`
-	Departments []Department `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"departments,omitempty"`
-}
-
-// Department represents an organizational department or unit within a company.
-type Department struct {
+// Site represents a company branch, office, or client placement location (e.g. Jakarta, BNI - RDTX).
+type Site struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-	CompanyID *uint     `gorm:"index" json:"company_id"`
-	Company   *Company  `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company,omitempty"`
-	Code      string    `gorm:"size:64;index" json:"code"`     // e.g. "WCSD", "DEV-01"
-	Name      string    `gorm:"size:255;not null" json:"name"` // e.g. "Wholesale Channel and Service Delivery"
-	Division  string    `gorm:"size:255" json:"division"`      // e.g. "Wholesale Digital Delivery"
-	IsActive  bool      `gorm:"not null;default:true" json:"is_active"`
+	Code      string    `gorm:"uniqueIndex:uq_sites_code;size:64;not null" json:"code"`
+	Name      string    `gorm:"size:255;not null" json:"name"`
+	IsActive  bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_sites_active" json:"is_active"`
+}
+
+// Division represents an organizational business or technology division (e.g. Wholesale Digital Delivery).
+type Division struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Code      string    `gorm:"uniqueIndex:uq_divisions_code;size:64;not null" json:"code"`
+	Name      string    `gorm:"size:255;not null" json:"name"`
+	IsActive  bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_divisions_active" json:"is_active"`
+}
+
+// Company represents a vendor/organization (e.g. MII, SDD, Adidata).
+type Company struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Code      string    `gorm:"unique;size:32;not null" json:"code"` // "mii", "sdd", "adidata", "ntt"
+	Name      string    `gorm:"size:255;not null" json:"name"`
+	IsActive  bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_companies_active" json:"is_active"`
+}
+
+// Department represents an organizational department or unit within the company portal.
+type Department struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Code        string    `gorm:"size:64;index" json:"code"`                                     // e.g. "WCSD", "DEV-01"
+	Name        string    `gorm:"size:255;not null;uniqueIndex:uq_departments_name" json:"name"` // e.g. "Wholesale Channel and Service Delivery"
+	Division    string    `gorm:"size:255" json:"division"`                                      // e.g. "Wholesale Digital Delivery"
+	DivisionID  *uint     `gorm:"index" json:"division_id,omitempty"`
+	DivisionRel *Division `gorm:"foreignKey:DivisionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"division_rel,omitempty"`
+	IsActive    bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_departments_active" json:"is_active"`
 }
 
 // ActivityStatus represents a normalized status option for daily timesheet activity.
@@ -113,10 +137,10 @@ type Project struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-	Code        string    `gorm:"size:64;not null;index" json:"code"` // e.g. "P24015"
-	Name        string    `gorm:"size:255;not null" json:"name"`      // e.g. "BNI Direct"
-	AppImpacted string    `gorm:"size:255" json:"app_impacted"`       // e.g. "BNI Direct Cash"
-	IsActive    bool      `gorm:"not null;default:true" json:"is_active"`
+	Code        string    `gorm:"size:64;not null;index;uniqueIndex:uq_projects_code_name,priority:1" json:"code"` // e.g. "P24015"
+	Name        string    `gorm:"size:255;not null;uniqueIndex:uq_projects_code_name,priority:2" json:"name"`      // e.g. "BNI Direct"
+	AppImpacted string    `gorm:"size:255" json:"app_impacted"`                                                    // e.g. "BNI Direct Cash"
+	IsActive    bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_projects_active" json:"is_active"`
 }
 
 // ApproverRoleType enumerates the functional role of an approver.
@@ -133,9 +157,9 @@ type Approver struct {
 	CreatedAt time.Time        `json:"created_at"`
 	UpdatedAt time.Time        `json:"updated_at"`
 	Name      string           `gorm:"size:255;not null" json:"name"`
-	RoleType  ApproverRoleType `gorm:"size:32;not null;index" json:"role_type"`
+	RoleType  ApproverRoleType `gorm:"size:32;not null;index;check:role_type IN ('team_leader', 'department_head')" json:"role_type"`
 	Title     string           `gorm:"size:128" json:"title"`
-	IsActive  bool             `gorm:"not null;default:true" json:"is_active"`
+	IsActive  bool             `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_approvers_active" json:"is_active"`
 }
 
 // OvertimeEntry records overtime activities for SPL sheet generation.
@@ -145,12 +169,13 @@ type OvertimeEntry struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 	UserID           uint      `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
 	DailyActivityID  *uint     `gorm:"index;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"daily_activity_id"`
-	Date             time.Time `gorm:"type:date;not null" json:"date"`
+	Date             time.Time `gorm:"type:date;not null;index:idx_overtime_entries_date" json:"date"`
 	StartTime        string    `gorm:"size:8" json:"start_time"` // "17:00"
 	EndTime          string    `gorm:"size:8" json:"end_time"`   // "21:00"
 	TaskDescription  string    `gorm:"type:text;not null" json:"task_description"`
 	TeamLeaderID     *uint     `gorm:"index" json:"team_leader_id"`
 	DepartmentHeadID *uint     `gorm:"index" json:"department_head_id"`
+	IsActive         bool      `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_overtime_entries_active" json:"is_active"`
 
 	User           User           `gorm:"foreignKey:UserID" json:"user,omitempty"`
 	DailyActivity  *DailyActivity `gorm:"foreignKey:DailyActivityID" json:"daily_activity,omitempty"`
@@ -162,10 +187,7 @@ type OvertimeEntry struct {
 func (u User) WebAuthnID() []byte {
 	// Encode the primary key as a stable little-endian byte slice.
 	b := make([]byte, 8)
-	id := u.ID
-	for i := 0; i < 8; i++ {
-		b[i] = byte(id >> (8 * i))
-	}
+	binary.LittleEndian.PutUint64(b, uint64(u.ID))
 	return b
 }
 
@@ -203,7 +225,7 @@ type WebAuthnCredential struct {
 	CredentialID    []byte `gorm:"uniqueIndex;not null" json:"-"`
 	PublicKey       []byte `gorm:"not null" json:"-"`
 	AttestationType string `gorm:"size:64" json:"-"`
-	AAGUID          []byte `json:"-"`
+	AAGUID          []byte `gorm:"column:aaguid" json:"-"`
 	SignCount       uint32 `json:"-"`
 	CloneWarning    bool   `json:"-"`
 	// BackupEligible (BE) records whether the authenticator can back up / sync
@@ -223,9 +245,9 @@ type DailyActivity struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	UserID uint `gorm:"uniqueIndex:idx_user_date;not null" json:"user_id"`
+	UserID uint `gorm:"not null;index:idx_daily_activities_user_date" json:"user_id"`
 	// Date is normalised to midnight in Asia/Jakarta.
-	Date time.Time `gorm:"uniqueIndex:idx_user_date;not null;type:date" json:"date"`
+	Date time.Time `gorm:"index:idx_daily_activities_user_date;index:idx_daily_activities_date;not null;type:date" json:"date"`
 
 	StartTime   string `gorm:"size:8" json:"start_time"`
 	EndTime     string `gorm:"size:8" json:"end_time"`
@@ -233,7 +255,7 @@ type DailyActivity struct {
 	Activity    string `gorm:"type:text" json:"activity"`
 	ProjectName string `gorm:"size:255" json:"project_name"`
 	ProjectID   string `gorm:"size:64" json:"project_id"`
-	AppImpacted string `gorm:"size:255" json:"app_impacted"`
+	IsActive    bool   `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_daily_activities_active" json:"is_active"`
 
 	ProjectRefID *uint           `gorm:"index" json:"project_ref_id"`
 	ProjectRef   *Project        `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
@@ -260,12 +282,12 @@ func (d DailyActivity) GetProjectName() string {
 }
 
 // GetAppImpacted returns the canonical app impacted from the referenced Project,
-// falling back to the denormalized AppImpacted if ProjectRef is not preloaded.
+// or empty string if ProjectRef is not preloaded or empty.
 func (d DailyActivity) GetAppImpacted() string {
-	if d.ProjectRef != nil && d.ProjectRef.AppImpacted != "" {
+	if d.ProjectRef != nil {
 		return d.ProjectRef.AppImpacted
 	}
-	return d.AppImpacted
+	return ""
 }
 
 // PushSubscription persists a browser Web Push subscription for a user.
@@ -286,26 +308,30 @@ type ProfileChangeRequest struct {
 	CreatedAt time.Time     `json:"created_at"`
 	UpdatedAt time.Time     `json:"updated_at"`
 	UserID    uint          `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
-	Status    ProfileStatus `gorm:"size:16;not null;default:pending" json:"status"`
+	Status    ProfileStatus `gorm:"size:16;not null;default:pending;check:status IN ('pending', 'approved', 'rejected')" json:"status"`
 
 	Name          string      `gorm:"size:255" json:"name"`
 	BniID         string      `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
 	EmployeeID    string      `gorm:"size:64" json:"employee_id"`
 	Division      string      `gorm:"size:255" json:"division"`
+	DivisionID    *uint       `gorm:"index" json:"division_id,omitempty"`
+	DivisionRel   *Division   `gorm:"foreignKey:DivisionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"division_rel,omitempty"`
 	Department    string      `gorm:"size:255" json:"department"`
 	DepartmentID  *uint       `gorm:"index" json:"department_id"`
 	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
 	GroupName     string      `gorm:"size:255" json:"group_name"`
 	Position      string      `gorm:"size:128" json:"position"`
 	Site          string      `gorm:"size:128" json:"site"`
+	SiteID        *uint       `gorm:"index" json:"site_id,omitempty"`
+	SiteRel       *Site       `gorm:"foreignKey:SiteID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"site_rel,omitempty"`
 	CompanyID     *uint       `gorm:"index" json:"company_id"`
 	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
 
-	ReviewedBy *uint      `gorm:"index" json:"reviewed_by"`
+	ReviewedBy *uint      `gorm:"index:idx_profile_change_requests_reviewed_by" json:"reviewed_by"`
 	ReviewedAt *time.Time `json:"reviewed_at"`
 	Reviewer   *User      `gorm:"foreignKey:ReviewedBy;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"reviewer,omitempty"`
 
-	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	User User `gorm:"foreignKey:UserID" json:"-"`
 }
 
 // PasswordResetToken backs the forgot/reset-password and account setup email flows.
