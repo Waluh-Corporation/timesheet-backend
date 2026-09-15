@@ -94,6 +94,10 @@ func (l *IPRateLimiter) Allow(ip string) bool {
 // RateLimitMiddleware returns a Gin middleware restricting requests per client IP.
 func RateLimitMiddleware(limiter *IPRateLimiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if limiter == nil {
+			c.Next()
+			return
+		}
 		ip := c.ClientIP()
 		if !limiter.Allow(ip) {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{

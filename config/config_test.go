@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestParseOrigins(t *testing.T) {
@@ -181,4 +182,51 @@ func TestLoad_AppConfigEnv(t *testing.T) {
 	if cfg.AdminEmail != "superadmin@custom.org" {
 		t.Errorf("expected AdminEmail to be 'superadmin@custom.org', got %q", cfg.AdminEmail)
 	}
+}
+
+func TestLoad_RateLimitConfig(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		t.Setenv("RATE_LIMIT_ENABLED", "")
+		t.Setenv("RATE_LIMIT_REQUESTS", "")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "")
+		cfg := Load()
+		if !cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled default to be true, got %v", cfg.RateLimitEnabled)
+		}
+		if cfg.RateLimitRequests != 10 {
+			t.Errorf("expected RateLimitRequests default to be 10, got %d", cfg.RateLimitRequests)
+		}
+		if cfg.RateLimitWindow != 60*time.Second {
+			t.Errorf("expected RateLimitWindow default to be 60s, got %v", cfg.RateLimitWindow)
+		}
+	})
+
+	t.Run("custom values", func(t *testing.T) {
+		t.Setenv("RATE_LIMIT_ENABLED", "false")
+		t.Setenv("RATE_LIMIT_REQUESTS", "50")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "120")
+		cfg := Load()
+		if cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled to be false, got %v", cfg.RateLimitEnabled)
+		}
+		if cfg.RateLimitRequests != 50 {
+			t.Errorf("expected RateLimitRequests to be 50, got %d", cfg.RateLimitRequests)
+		}
+		if cfg.RateLimitWindow != 120*time.Second {
+			t.Errorf("expected RateLimitWindow to be 120s, got %v", cfg.RateLimitWindow)
+		}
+	})
+
+	t.Run("invalid or zero values fallback to defaults", func(t *testing.T) {
+		t.Setenv("RATE_LIMIT_ENABLED", "true")
+		t.Setenv("RATE_LIMIT_REQUESTS", "0")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "-5")
+		cfg := Load()
+		if cfg.RateLimitRequests != 10 {
+			t.Errorf("expected RateLimitRequests fallback to 10, got %d", cfg.RateLimitRequests)
+		}
+		if cfg.RateLimitWindow != 60*time.Second {
+			t.Errorf("expected RateLimitWindow fallback to 60s, got %v", cfg.RateLimitWindow)
+		}
+	})
 }
