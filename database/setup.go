@@ -12,7 +12,10 @@ import (
 	"timesheet-backend/models"
 )
 
-const queryCode = "code = ?"
+const (
+	queryCode          = "code = ?"
+	defaultDivisionWDD = "Wholesale Digital Delivery"
+)
 
 // Setup runs database migrations and initial seeding.
 func Setup(db *gorm.DB, cfg *config.Config) error {
@@ -71,7 +74,7 @@ func seedDefaultCompanies(db *gorm.DB) error {
 // seedDefaultDepartments seeds the default department on first boot.
 func seedDefaultDepartments(db *gorm.DB) error {
 	departments := []models.Department{
-		{Code: "WDL", Name: "Wholesale Channel and Service Delivery", Division: "Wholesale Digital Delivery", IsActive: true},
+		{Code: "WDL", Name: "Wholesale Channel and Service Delivery", Division: defaultDivisionWDD, IsActive: true},
 	}
 	for _, d := range departments {
 		var cnt int64
@@ -107,7 +110,7 @@ func seedDefaultSitesAndDivisions(db *gorm.DB) error {
 	}
 
 	divisions := []models.Division{
-		{Code: "wdd", Name: "Wholesale Digital Delivery", IsActive: true},
+		{Code: "wdd", Name: defaultDivisionWDD, IsActive: true},
 	}
 	for _, d := range divisions {
 		var cnt int64
@@ -281,7 +284,7 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 
 	// 6. Seed default departments
 	defaultDepartments := []models.Department{
-		{Code: "WDL", Name: "Wholesale Channel and Service Delivery", Division: "Wholesale Digital Delivery", IsActive: true},
+		{Code: "WDL", Name: "Wholesale Channel and Service Delivery", Division: defaultDivisionWDD, IsActive: true},
 	}
 	for _, d := range defaultDepartments {
 		var cnt int64

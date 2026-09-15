@@ -660,7 +660,7 @@ func (s *Server) CreateDepartment(c *gin.Context) {
 		}
 	} else if dept.Division != "" {
 		var div models.Division
-		if err := s.DB.Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", dept.Division, "%"+dept.Division+"%").First(&div).Error; err == nil {
+		if err := s.DB.Where(queryCodeOrNameLikeIsActive, dept.Division, "%"+dept.Division+"%").First(&div).Error; err == nil {
 			dept.Division = div.Name
 			dept.DivisionID = &div.ID
 		}
@@ -671,6 +671,34 @@ func (s *Server) CreateDepartment(c *gin.Context) {
 		return
 	}
 	RespondMessage(c, http.StatusCreated, "department created successfully")
+}
+
+func (s *Server) resolveDepartmentDivisionUpdate(dept *models.Department, req *UpdateDepartmentRequest) {
+	if req.DivisionID != nil {
+		if *req.DivisionID != 0 {
+			var div models.Division
+			if err := s.DB.Where(queryIDAndIsActive, *req.DivisionID).First(&div).Error; err == nil {
+				dept.DivisionID = &div.ID
+				dept.Division = div.Name
+			}
+		} else {
+			dept.DivisionID = nil
+			dept.Division = ""
+		}
+		return
+	}
+	if req.Division != nil {
+		dept.Division = strings.TrimSpace(*req.Division)
+		if dept.Division != "" {
+			var div models.Division
+			if err := s.DB.Where(queryCodeOrNameLikeIsActive, dept.Division, "%"+dept.Division+"%").First(&div).Error; err == nil {
+				dept.DivisionID = &div.ID
+				dept.Division = div.Name
+				return
+			}
+		}
+		dept.DivisionID = nil
+	}
 }
 
 // UpdateDepartment godoc
@@ -717,31 +745,7 @@ func (s *Server) UpdateDepartment(c *gin.Context) {
 	if req.IsActive != nil {
 		dept.IsActive = *req.IsActive
 	}
-	if req.DivisionID != nil {
-		if *req.DivisionID != 0 {
-			var div models.Division
-			if err := s.DB.Where(queryIDAndIsActive, *req.DivisionID).First(&div).Error; err == nil {
-				dept.DivisionID = &div.ID
-				dept.Division = div.Name
-			}
-		} else {
-			dept.DivisionID = nil
-			dept.Division = ""
-		}
-	} else if req.Division != nil {
-		dept.Division = strings.TrimSpace(*req.Division)
-		if dept.Division != "" {
-			var div models.Division
-			if err := s.DB.Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", dept.Division, "%"+dept.Division+"%").First(&div).Error; err == nil {
-				dept.DivisionID = &div.ID
-				dept.Division = div.Name
-			} else {
-				dept.DivisionID = nil
-			}
-		} else {
-			dept.DivisionID = nil
-		}
-	}
+	s.resolveDepartmentDivisionUpdate(&dept, &req)
 
 	if err := s.DB.WithContext(c.Request.Context()).Save(&dept).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to update department: "+err.Error())
