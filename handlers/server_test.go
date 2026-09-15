@@ -284,3 +284,78 @@ func TestServer_Middlewares(t *testing.T) {
 		t.Errorf("expected 200 for admin accessing admin route, got %d", wAdmin.Code)
 	}
 }
+
+func TestServer_CORSMiddleware_CORSAllowedOrigins(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	t.Setenv("GIN_MODE", "release")
+
+	srv := &Server{
+		Cfg: &config.Config{
+			FrontendURL: "https://timesheet-frontend-dev.fafr.my.id",
+			CORSAllowedOrigins: []string{
+				"http://localhost:3000",
+				"http://127.0.0.1:5173",
+			},
+		},
+	}
+
+	r := gin.New()
+	r.Use(srv.CORSMiddleware())
+	r.OPTIONS("/cors", func(c *gin.Context) {})
+
+	// In release mode, origin listed in CORSAllowedOrigins must be allowed
+	reqLocalhost := httptest.NewRequest(http.MethodOptions, "/cors", nil)
+	reqLocalhost.Header.Set("Origin", "http://localhost:3000")
+	wLocalhost := httptest.NewRecorder()
+	r.ServeHTTP(wLocalhost, reqLocalhost)
+	if wLocalhost.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" {
+		t.Errorf("expected Access-Control-Allow-Origin to be reflected for CORSAllowedOrigins in release mode")
+	}
+	if wLocalhost.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Errorf("expected Access-Control-Allow-Credentials: true for CORSAllowedOrigins")
+	}
+
+	// FrontendURL must also be allowed
+	reqFrontend := httptest.NewRequest(http.MethodOptions, "/cors", nil)
+	reqFrontend.Header.Set("Origin", "https://timesheet-frontend-dev.fafr.my.id")
+	wFrontend := httptest.NewRecorder()
+	r.ServeHTTP(wFrontend, reqFrontend)
+	if wFrontend.Header().Get("Access-Control-Allow-Origin") != "https://timesheet-frontend-dev.fafr.my.id" {
+		t.Errorf("expected Access-Control-Allow-Origin for FrontendURL")
+	}
+
+	// Origin not in CORSAllowedOrigins or FrontendURL must be denied in release mode
+	reqEvil := httptest.NewRequest(http.MethodOptions, "/cors", nil)
+	reqEvil.Header.Set("Origin", "http://attacker.com")
+	wEvil := httptest.NewRecorder()
+	r.ServeHTTP(wEvil, reqEvil)
+	if wEvil.Header().Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("untrusted origin must not receive Access-Control-Allow-Origin in release mode")
+	}
+
+	// Test wildcard in CORSAllowedOrigins
+	srvWildcard := &Server{
+		Cfg: &config.Config{
+			CORSAllowedOrigins: []string{"*"},
+		},
+	}
+	rWildcard := gin.New()
+	rWildcard.Use(srvWildcard.CORSMiddleware())
+	rWildcard.OPTIONS("/cors", func(c *gin.Context) {})
+
+	reqAny := httptest.NewRequest(http.MethodOptions, "/cors", nil)
+	reqAny.Header.Set("Origin", "https://any-domain.example.com")
+	wAny := httptest.NewRecorder()
+	rWildcard.ServeHTTP(wAny, reqAny)
+	if wAny.Header().Get("Access-Control-Allow-Origin") != "https://any-domain.example.com" {
+		t.Errorf("expected wildcard CORS to allow any origin")
+	}
+
+	// isTrustedHost test with CORSAllowedOrigins
+	if !srv.isTrustedHost("localhost:3000") {
+		t.Errorf("expected localhost:3000 to be trusted host via CORSAllowedOrigins")
+	}
+	if !srv.isTrustedHost("127.0.0.1:5173") {
+		t.Errorf("expected 127.0.0.1:5173 to be trusted host via CORSAllowedOrigins")
+	}
+}

@@ -60,6 +60,10 @@ type Config struct {
 	RateLimitEnabled  bool
 	RateLimitRequests int
 	RateLimitWindow   time.Duration
+
+	// CORSAllowedOrigins specifies origins allowed to make cross-origin requests.
+	// When empty, it falls back to FrontendURL, RPOrigins, and local dev origins.
+	CORSAllowedOrigins []string
 }
 
 func getEnv(key, fallback string) string {
@@ -203,6 +207,8 @@ func Load() *Config {
 		RateLimitEnabled:  getEnvBool("RATE_LIMIT_ENABLED", true),
 		RateLimitRequests: getEnvInt("RATE_LIMIT_REQUESTS", 10),
 		RateLimitWindow:   time.Duration(getEnvInt("RATE_LIMIT_WINDOW_SECONDS", 60)) * time.Second,
+
+		CORSAllowedOrigins: parseOrigins(getEnv("CORS_ALLOWED_ORIGINS", "")),
 	}
 
 	if cfg.RateLimitRequests <= 0 {
