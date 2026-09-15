@@ -182,6 +182,14 @@ func main() {
 	runHTTPServer(httpServer, db, logger, cfg.Port)
 }
 
+const (
+	routeApprovers   = "/approvers"
+	routeCompanies   = "/companies"
+	routeDepartments = "/departments"
+	routeDivisions   = "/divisions"
+	routeSites       = "/sites"
+)
+
 // registerRoutes wires the full Phase 2 API surface.
 func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	// Swagger documentation UI
@@ -264,12 +272,12 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 
 		// Master data (normalized projects, companies, departments, activity-statuses, approvers, sites, divisions).
 		authed.GET("/projects", s.ListProjects)
-		authed.GET("/companies", s.ListCompanies)
-		authed.GET("/departments", s.ListDepartments)
-		authed.GET("/sites", s.ListSites)
-		authed.GET("/divisions", s.ListDivisions)
+		authed.GET(routeCompanies, s.ListCompanies)
+		authed.GET(routeDepartments, s.ListDepartments)
+		authed.GET(routeSites, s.ListSites)
+		authed.GET(routeDivisions, s.ListDivisions)
 		authed.GET("/activity-statuses", s.ListActivityStatuses)
-		authed.GET("/approvers", s.ListApprovers)
+		authed.GET(routeApprovers, s.ListApprovers)
 
 		// Web push subscription.
 		authed.POST("/push/subscribe", s.Subscribe)
@@ -292,28 +300,28 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)
 
 		// Master data management (approvers, companies, sites, divisions, departments)
-		admin.GET("/approvers", s.AdminListApprovers)
-		admin.POST("/approvers", s.CreateApprover)
+		admin.GET(routeApprovers, s.AdminListApprovers)
+		admin.POST(routeApprovers, s.CreateApprover)
 		admin.PATCH("/approvers/:id", s.UpdateApprover)
 		admin.DELETE("/approvers/:id", s.DeleteApprover)
 
-		admin.GET("/companies", s.AdminListCompanies)
-		admin.POST("/companies", s.CreateCompany)
+		admin.GET(routeCompanies, s.AdminListCompanies)
+		admin.POST(routeCompanies, s.CreateCompany)
 		admin.PATCH("/companies/:id", s.UpdateCompany)
 		admin.DELETE("/companies/:id", s.DeleteCompany)
 
-		admin.GET("/sites", s.AdminListSites)
-		admin.POST("/sites", s.CreateSite)
+		admin.GET(routeSites, s.AdminListSites)
+		admin.POST(routeSites, s.CreateSite)
 		admin.PATCH("/sites/:id", s.UpdateSite)
 		admin.DELETE("/sites/:id", s.DeleteSite)
 
-		admin.GET("/divisions", s.AdminListDivisions)
-		admin.POST("/divisions", s.CreateDivision)
+		admin.GET(routeDivisions, s.AdminListDivisions)
+		admin.POST(routeDivisions, s.CreateDivision)
 		admin.PATCH("/divisions/:id", s.UpdateDivision)
 		admin.DELETE("/divisions/:id", s.DeleteDivision)
 
-		admin.GET("/departments", s.AdminListDepartments)
-		admin.POST("/departments", s.CreateDepartment)
+		admin.GET(routeDepartments, s.AdminListDepartments)
+		admin.POST(routeDepartments, s.CreateDepartment)
 		admin.PATCH("/departments/:id", s.UpdateDepartment)
 		admin.DELETE("/departments/:id", s.DeleteDepartment)
 	}

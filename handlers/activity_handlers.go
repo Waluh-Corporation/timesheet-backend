@@ -29,6 +29,7 @@ const (
 	queryUserDateRange               = "user_id = ? AND date >= ? AND date < ?"
 	orderDateAsc                     = "date asc"
 	orderNameAsc                     = "name asc"
+	orderIDAsc                       = "id asc"
 	queryIsActive                    = "is_active = ?"
 	errActivityServiceNotInitialized = "activity service not initialized"
 )
@@ -349,7 +350,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	}
 
 	var approvers []models.Approver
-	s.DB.Where(queryIsActive, true).Order("id asc").Find(&approvers)
+	s.DB.Where(queryIsActive, true).Order(orderIDAsc).Find(&approvers)
 
 	out, err := services.GenerateFromTemplate(services.GenerationInput{
 		CompanyCode: companyCode,
@@ -713,7 +714,7 @@ func (s *Server) ListProjects(c *gin.Context) {
 // @Router /api/v1/companies [get]
 func (s *Server) ListCompanies(c *gin.Context) {
 	var companies []models.Company
-	if err := s.DB.Scopes(models.ActiveOnly).Order("id asc").Find(&companies).Error; err != nil {
+	if err := s.DB.Scopes(models.ActiveOnly).Order(orderIDAsc).Find(&companies).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -734,11 +735,11 @@ func (s *Server) ListCompanies(c *gin.Context) {
 // @Router /api/v1/sites [get]
 func (s *Server) ListSites(c *gin.Context) {
 	var sites []models.Site
-	query := s.DB.Order("id asc")
+	query := s.DB.Order(orderIDAsc)
 	if c.Query("include_inactive") != "true" && c.Query("is_active") != "false" {
 		query = query.Scopes(models.ActiveOnly)
 	} else if c.Query("is_active") == "false" {
-		query = query.Where("is_active = ?", false)
+		query = query.Where(queryIsActive, false)
 	}
 	if err := query.Find(&sites).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
@@ -761,11 +762,11 @@ func (s *Server) ListSites(c *gin.Context) {
 // @Router /api/v1/divisions [get]
 func (s *Server) ListDivisions(c *gin.Context) {
 	var divisions []models.Division
-	query := s.DB.Order("id asc")
+	query := s.DB.Order(orderIDAsc)
 	if c.Query("include_inactive") != "true" && c.Query("is_active") != "false" {
 		query = query.Scopes(models.ActiveOnly)
 	} else if c.Query("is_active") == "false" {
-		query = query.Where("is_active = ?", false)
+		query = query.Where(queryIsActive, false)
 	}
 	if err := query.Find(&divisions).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
@@ -794,7 +795,7 @@ func (s *Server) ListDepartments(c *gin.Context) {
 	if c.Query("include_inactive") != "true" && c.Query("is_active") != "false" {
 		query = query.Scopes(models.ActiveOnly)
 	} else if c.Query("is_active") == "false" {
-		query = query.Where("is_active = ?", false)
+		query = query.Where(queryIsActive, false)
 	}
 	if div := strings.TrimSpace(c.Query("division")); div != "" {
 		query = query.Where("LOWER(division) = LOWER(?)", div)
