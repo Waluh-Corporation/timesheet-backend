@@ -662,6 +662,9 @@ definitions:
       email:
         example: john.doe@example.com
         type: string
+      employee_id:
+        example: EMP-001
+        type: string
       name:
         example: John Doe
         type: string
@@ -777,7 +780,7 @@ definitions:
         example: 1
         type: integer
       employee_id:
-        example: MII-12345
+        example: EMP-001
         type: string
       name:
         example: John Doe
@@ -854,6 +857,9 @@ definitions:
       division_id:
         example: 1
         type: integer
+      employee_id:
+        example: EMP-001
+        type: string
       is_active:
         example: true
         type: boolean

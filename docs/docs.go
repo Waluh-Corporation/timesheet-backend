@@ -4653,6 +4653,10 @@ const docTemplate = `{
                     "type": "string",
                     "example": "john.doe@example.com"
                 },
+                "employee_id": {
+                    "type": "string",
+                    "example": "EMP-001"
+                },
                 "name": {
                     "type": "string",
                     "example": "John Doe"
@@ -4808,7 +4812,7 @@ const docTemplate = `{
                 },
                 "employee_id": {
                     "type": "string",
-                    "example": "MII-12345"
+                    "example": "EMP-001"
                 },
                 "name": {
                     "type": "string",
@@ -4914,6 +4918,10 @@ const docTemplate = `{
                 "division_id": {
                     "type": "integer",
                     "example": 1
+                },
+                "employee_id": {
+                    "type": "string",
+                    "example": "EMP-001"
                 },
                 "is_active": {
                     "type": "boolean",

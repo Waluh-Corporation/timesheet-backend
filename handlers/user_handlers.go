@@ -285,6 +285,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 		Role:         req.Role,
 		Name:         req.Name,
 		BniID:        req.BniID,
+		EmployeeID:   req.EmployeeID,
 		Division:     req.Division,
 		DivisionID:   req.DivisionID,
 		Department:   req.Department,
@@ -417,6 +418,9 @@ func applyUserUpdates(db *gorm.DB, user *models.User, req *request.UpdateUserReq
 	}
 	if req.BniID != nil {
 		user.BniID = *req.BniID
+	}
+	if req.EmployeeID != nil {
+		user.EmployeeID = *req.EmployeeID
 	}
 	if req.Division != nil {
 		user.Division = *req.Division
