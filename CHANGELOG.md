@@ -10,8 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Configurable CORS Allowed Origins via Environment**: Added `CORS_ALLOWED_ORIGINS` environment variable supporting comma-separated origin allowlists (and wildcard `*`) so frontend developers and operators can flexibly enable cross-origin API access across development, staging, and multi-domain deployments without coupling to WebAuthn configuration.
 - **Web Push Cron Schedule Endpoint**: Introduced `GET /api/v1/push/schedule` accessible to all authenticated users and administrators, exposing cron expression, active status, timezone, human-readable schedule description, and next planned execution timestamp.
 - **Admin Test Web Push to User Endpoint**: Added `POST /api/v1/admin/push/test` and `POST /api/v1/admin/users/:id/push/test` allowing administrators to trigger and test instant Web Push notifications targeted to specific users with customizable title, body, and destination URL, including active subscription counts.
+
+### Improved
+- **Modular CORS Origin Validation**: Refactored origin matching and development allowlist evaluation in `handlers/server.go` into focused helper functions to reduce cognitive complexity and streamline cross-origin security rules.
 
 ---
 

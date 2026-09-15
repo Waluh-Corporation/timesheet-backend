@@ -266,3 +266,39 @@ func TestLoad_SchedulerCronConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestLoad_CORSAllowedOriginsConfig(t *testing.T) {
+	t.Run("empty by default", func(t *testing.T) {
+		t.Setenv("CORS_ALLOWED_ORIGINS", "")
+		cfg := Load()
+		if len(cfg.CORSAllowedOrigins) != 0 {
+			t.Errorf("expected empty CORSAllowedOrigins, got %v", cfg.CORSAllowedOrigins)
+		}
+	})
+
+	t.Run("single and multiple comma-separated origins with whitespace", func(t *testing.T) {
+		t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000, https://timesheet-frontend-dev.fafr.my.id, http://127.0.0.1:5173/")
+		cfg := Load()
+		expected := []string{
+			"http://localhost:3000",
+			"https://timesheet-frontend-dev.fafr.my.id",
+			"http://127.0.0.1:5173",
+		}
+		if len(cfg.CORSAllowedOrigins) != len(expected) {
+			t.Fatalf("expected %d origins, got %d: %v", len(expected), len(cfg.CORSAllowedOrigins), cfg.CORSAllowedOrigins)
+		}
+		for i, exp := range expected {
+			if cfg.CORSAllowedOrigins[i] != exp {
+				t.Errorf("origin[%d]: expected %q, got %q", i, exp, cfg.CORSAllowedOrigins[i])
+			}
+		}
+	})
+
+	t.Run("wildcard origin", func(t *testing.T) {
+		t.Setenv("CORS_ALLOWED_ORIGINS", "*")
+		cfg := Load()
+		if len(cfg.CORSAllowedOrigins) != 1 || cfg.CORSAllowedOrigins[0] != "*" {
+			t.Errorf("expected ['*'], got %v", cfg.CORSAllowedOrigins)
+		}
+	})
+}

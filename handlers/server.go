@@ -216,6 +216,12 @@ func (s *Server) isTrustedHost(host string) bool {
 		}
 	}
 
+	for _, origin := range s.Cfg.CORSAllowedOrigins {
+		if origin != "*" && matchHostOrURL(origin, host, hostOnly) {
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -254,33 +260,54 @@ func firstHeaderValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
+func matchCleanOrigin(target, candidate string) bool {
+	if target == "" {
+		return false
+	}
+	return target == "*" || strings.TrimRight(strings.ToLower(target), "/") == candidate
+}
+
+func containsCleanOrigin(origins []string, candidate string) bool {
+	for _, o := range origins {
+		if matchCleanOrigin(o, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) isConfigOriginAllowed(clean string) bool {
+	if s == nil || s.Cfg == nil {
+		return false
+	}
+	if containsCleanOrigin(s.Cfg.CORSAllowedOrigins, clean) {
+		return true
+	}
+	if matchCleanOrigin(s.Cfg.FrontendURL, clean) {
+		return true
+	}
+	return containsCleanOrigin(s.Cfg.RPOrigins, clean)
+}
+
+func isDevOriginAllowed(clean string) bool {
+	if strings.EqualFold(os.Getenv("GIN_MODE"), "release") {
+		return false
+	}
+	switch clean {
+	case "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8080":
+		return true
+	default:
+		return false
+	}
+}
+
 // isOriginAllowed checks whether an origin header is in the allowed CORS list.
 func (s *Server) isOriginAllowed(origin string) bool {
 	if origin == "" {
 		return false
 	}
 	clean := strings.TrimRight(strings.ToLower(origin), "/")
-
-	if s != nil && s.Cfg != nil {
-		if s.Cfg.FrontendURL != "" && strings.TrimRight(strings.ToLower(s.Cfg.FrontendURL), "/") == clean {
-			return true
-		}
-		for _, o := range s.Cfg.RPOrigins {
-			if strings.TrimRight(strings.ToLower(o), "/") == clean {
-				return true
-			}
-		}
-	}
-
-	// Local development allowlist outside release mode
-	if !strings.EqualFold(os.Getenv("GIN_MODE"), "release") {
-		switch clean {
-		case "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8080":
-			return true
-		}
-	}
-
-	return false
+	return s.isConfigOriginAllowed(clean) || isDevOriginAllowed(clean)
 }
 
 // CORSMiddleware sets up cross-origin resource sharing headers.
