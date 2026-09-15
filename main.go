@@ -227,6 +227,24 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authLimiter := middleware.NewIPRateLimiter(rateLimitRequests, rateLimitWindow)
 		authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
 	}
+	rateLimitEnabled := true
+	rateLimitRequests := 10
+	rateLimitWindow := 1 * time.Minute
+
+	if s != nil && s.Cfg != nil {
+		rateLimitEnabled = s.Cfg.RateLimitEnabled
+		if s.Cfg.RateLimitRequests > 0 {
+			rateLimitRequests = s.Cfg.RateLimitRequests
+		}
+		if s.Cfg.RateLimitWindow > 0 {
+			rateLimitWindow = s.Cfg.RateLimitWindow
+		}
+	}
+
+	if rateLimitEnabled {
+		authLimiter := middleware.NewIPRateLimiter(rateLimitRequests, rateLimitWindow)
+		authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
+	}
 	{
 		authGroup.POST("/login", s.Login)
 		authGroup.POST("/forgot-password", s.ForgotPassword)
@@ -271,12 +289,18 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.POST("/holidays/sync", s.SyncHolidays)
 
 		// Master data (normalized projects, companies, departments, activity-statuses, approvers, sites, divisions).
+		// Master data (normalized projects, companies, departments, activity-statuses, approvers, sites, divisions).
 		authed.GET("/projects", s.ListProjects)
 		authed.GET(routeCompanies, s.ListCompanies)
 		authed.GET(routeDepartments, s.ListDepartments)
 		authed.GET(routeSites, s.ListSites)
 		authed.GET(routeDivisions, s.ListDivisions)
+		authed.GET(routeCompanies, s.ListCompanies)
+		authed.GET(routeDepartments, s.ListDepartments)
+		authed.GET(routeSites, s.ListSites)
+		authed.GET(routeDivisions, s.ListDivisions)
 		authed.GET("/activity-statuses", s.ListActivityStatuses)
+		authed.GET(routeApprovers, s.ListApprovers)
 		authed.GET(routeApprovers, s.ListApprovers)
 
 		// Web push subscription and schedule.
@@ -303,9 +327,14 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		// Master data management (approvers, companies, sites, divisions, departments)
 		admin.GET(routeApprovers, s.AdminListApprovers)
 		admin.POST(routeApprovers, s.CreateApprover)
+		// Master data management (approvers, companies, sites, divisions, departments)
+		admin.GET(routeApprovers, s.AdminListApprovers)
+		admin.POST(routeApprovers, s.CreateApprover)
 		admin.PATCH("/approvers/:id", s.UpdateApprover)
 		admin.DELETE("/approvers/:id", s.DeleteApprover)
 
+		admin.GET(routeCompanies, s.AdminListCompanies)
+		admin.POST(routeCompanies, s.CreateCompany)
 		admin.GET(routeCompanies, s.AdminListCompanies)
 		admin.POST(routeCompanies, s.CreateCompany)
 		admin.PATCH("/companies/:id", s.UpdateCompany)

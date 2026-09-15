@@ -45,6 +45,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2026-09-15
+
+### Added
+- **Site & Division Master Data APIs**: New directory endpoints (`GET /api/v1/sites`, `GET /api/v1/divisions`) and full administrative CRUD endpoints (`/api/v1/admin/sites`, `/api/v1/admin/divisions`, `/api/v1/admin/departments`) to manage company work locations and organizational divisions.
+- **Relational Schema Integrity**: Migration 000024 introducing `sites` and `divisions` tables with foreign keys on `users`, `departments`, and `profile_change_requests`, complete with automated relational data backfill.
+- **Cascading Department Division Filter**: Support for `?division=...` and `?division_id=...` query filters on `GET /api/v1/departments`.
+- **Admin Master Data List Endpoints**: Administrative list endpoints for companies (`GET /api/v1/admin/companies`) and approvers (`GET /api/v1/admin/approvers`).
+- **Configurable Rate Limiter via Environment**: Added environment-driven configuration for authentication route rate limiting (`RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS`, and `RATE_LIMIT_WINDOW_SECONDS`), allowing operators to adjust request limits and window thresholds dynamically without redeploying code.
+
+### Changed
+- **Human-Readable User Responses**: User and profile DTO responses now return descriptive string names (`site`, `division`, `department`, `company`) alongside relational foreign key IDs, preserving seamless frontend display and spreadsheet generator compatibility.
+- **Expanded API Documentation & Postman Collection**: Full 100% test coverage across all 65 Swagger endpoints with 71 automated Postman test cases.
+
+### Fixed
+- **Inactive Users Visibility in Admin Directory**: Returned both active and inactive users by default in `GET /api/v1/admin/users` to prevent deactivated accounts from disappearing from admin management screens, with optional `is_active` and `include_inactive` filtering.
+
+---
+
 ## [1.3.0] - 2026-09-14
 
 ### Added
