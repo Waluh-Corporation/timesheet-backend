@@ -182,6 +182,14 @@ func main() {
 	runHTTPServer(httpServer, db, logger, cfg.Port)
 }
 
+const (
+	routeApprovers   = "/approvers"
+	routeCompanies   = "/companies"
+	routeDepartments = "/departments"
+	routeDivisions   = "/divisions"
+	routeSites       = "/sites"
+)
+
 // registerRoutes wires the full Phase 2 API surface.
 func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	// Swagger documentation UI
@@ -200,9 +208,25 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	}
 
 	// --- Public auth routes with rate limiting ---
-	authLimiter := middleware.NewIPRateLimiter(10, 1*time.Minute)
 	authGroup := api.Group("/auth")
-	authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
+	rateLimitEnabled := true
+	rateLimitRequests := 10
+	rateLimitWindow := 1 * time.Minute
+
+	if s != nil && s.Cfg != nil {
+		rateLimitEnabled = s.Cfg.RateLimitEnabled
+		if s.Cfg.RateLimitRequests > 0 {
+			rateLimitRequests = s.Cfg.RateLimitRequests
+		}
+		if s.Cfg.RateLimitWindow > 0 {
+			rateLimitWindow = s.Cfg.RateLimitWindow
+		}
+	}
+
+	if rateLimitEnabled {
+		authLimiter := middleware.NewIPRateLimiter(rateLimitRequests, rateLimitWindow)
+		authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
+	}
 	{
 		authGroup.POST("/login", s.Login)
 		authGroup.POST("/forgot-password", s.ForgotPassword)
@@ -246,12 +270,14 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/holidays/all", s.ListHolidays)
 		authed.POST("/holidays/sync", s.SyncHolidays)
 
-		// Master data (normalized projects, companies, departments, activity-statuses, approvers).
+		// Master data (normalized projects, companies, departments, activity-statuses, approvers, sites, divisions).
 		authed.GET("/projects", s.ListProjects)
-		authed.GET("/companies", s.ListCompanies)
-		authed.GET("/departments", s.ListDepartments)
+		authed.GET(routeCompanies, s.ListCompanies)
+		authed.GET(routeDepartments, s.ListDepartments)
+		authed.GET(routeSites, s.ListSites)
+		authed.GET(routeDivisions, s.ListDivisions)
 		authed.GET("/activity-statuses", s.ListActivityStatuses)
-		authed.GET("/approvers", s.ListApprovers)
+		authed.GET(routeApprovers, s.ListApprovers)
 
 		// Web push subscription.
 		authed.POST("/push/subscribe", s.Subscribe)
@@ -273,14 +299,31 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)
 
-		// Master data management (approvers & companies)
-		admin.POST("/approvers", s.CreateApprover)
+		// Master data management (approvers, companies, sites, divisions, departments)
+		admin.GET(routeApprovers, s.AdminListApprovers)
+		admin.POST(routeApprovers, s.CreateApprover)
 		admin.PATCH("/approvers/:id", s.UpdateApprover)
 		admin.DELETE("/approvers/:id", s.DeleteApprover)
 
-		admin.POST("/companies", s.CreateCompany)
+		admin.GET(routeCompanies, s.AdminListCompanies)
+		admin.POST(routeCompanies, s.CreateCompany)
 		admin.PATCH("/companies/:id", s.UpdateCompany)
 		admin.DELETE("/companies/:id", s.DeleteCompany)
+
+		admin.GET(routeSites, s.AdminListSites)
+		admin.POST(routeSites, s.CreateSite)
+		admin.PATCH("/sites/:id", s.UpdateSite)
+		admin.DELETE("/sites/:id", s.DeleteSite)
+
+		admin.GET(routeDivisions, s.AdminListDivisions)
+		admin.POST(routeDivisions, s.CreateDivision)
+		admin.PATCH("/divisions/:id", s.UpdateDivision)
+		admin.DELETE("/divisions/:id", s.DeleteDivision)
+
+		admin.GET(routeDepartments, s.AdminListDepartments)
+		admin.POST(routeDepartments, s.CreateDepartment)
+		admin.PATCH("/departments/:id", s.UpdateDepartment)
+		admin.DELETE("/departments/:id", s.DeleteDepartment)
 	}
 }
 

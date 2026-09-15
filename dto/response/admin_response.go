@@ -16,9 +16,11 @@ type AdminUserResponse struct {
 	BniID        string      `json:"bni_id"`
 	EmployeeID   string      `json:"employee_id"`
 	Division     string      `json:"division"`
+	DivisionID   *uint       `json:"division_id,omitempty"`
 	Department   string      `json:"department"`
 	DepartmentID *uint       `json:"department_id,omitempty"`
 	Site         string      `json:"site"`
+	SiteID       *uint       `json:"site_id,omitempty"`
 	Company      string      `json:"company"`
 	CompanyID    *uint       `json:"company_id,omitempty"`
 	IsActive     bool        `json:"is_active"`
@@ -35,9 +37,11 @@ type AdminProfileChangeResponse struct {
 	BniID        string               `json:"bni_id"`
 	EmployeeID   string               `json:"employee_id"`
 	Division     string               `json:"division"`
+	DivisionID   *uint                `json:"division_id,omitempty"`
 	Department   string               `json:"department"`
 	DepartmentID *uint                `json:"department_id,omitempty"`
 	Site         string               `json:"site"`
+	SiteID       *uint                `json:"site_id,omitempty"`
 	CompanyID    *uint                `json:"company_id,omitempty"`
 	ReviewedBy   *uint                `json:"reviewed_by,omitempty"`
 	ReviewerName string               `json:"reviewer_name,omitempty"`
