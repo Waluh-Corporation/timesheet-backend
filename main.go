@@ -200,9 +200,25 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	}
 
 	// --- Public auth routes with rate limiting ---
-	authLimiter := middleware.NewIPRateLimiter(10, 1*time.Minute)
 	authGroup := api.Group("/auth")
-	authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
+	rateLimitEnabled := true
+	rateLimitRequests := 10
+	rateLimitWindow := 1 * time.Minute
+
+	if s != nil && s.Cfg != nil {
+		rateLimitEnabled = s.Cfg.RateLimitEnabled
+		if s.Cfg.RateLimitRequests > 0 {
+			rateLimitRequests = s.Cfg.RateLimitRequests
+		}
+		if s.Cfg.RateLimitWindow > 0 {
+			rateLimitWindow = s.Cfg.RateLimitWindow
+		}
+	}
+
+	if rateLimitEnabled {
+		authLimiter := middleware.NewIPRateLimiter(rateLimitRequests, rateLimitWindow)
+		authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
+	}
 	{
 		authGroup.POST("/login", s.Login)
 		authGroup.POST("/forgot-password", s.ForgotPassword)

@@ -122,3 +122,18 @@ func TestRateLimiterStop(t *testing.T) {
 	limiter.Stop()
 	limiter.Stop()
 }
+
+func TestRateLimiter_NilLimiter(t *testing.T) {
+	r := gin.New()
+	r.Use(middleware.RateLimitMiddleware(nil))
+	r.GET("/test-nil", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test-nil", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 with nil limiter, got %d", w.Code)
+	}
+}
