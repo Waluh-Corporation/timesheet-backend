@@ -279,7 +279,8 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/activity-statuses", s.ListActivityStatuses)
 		authed.GET(routeApprovers, s.ListApprovers)
 
-		// Web push subscription.
+		// Web push subscription and schedule.
+		authed.GET("/push/schedule", s.GetPushSchedule)
 		authed.POST("/push/subscribe", s.Subscribe)
 		authed.POST("/push/unsubscribe", s.Unsubscribe)
 		authed.POST("/push/test", s.SendTestPush)
@@ -324,6 +325,10 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.POST(routeDepartments, s.CreateDepartment)
 		admin.PATCH("/departments/:id", s.UpdateDepartment)
 		admin.DELETE("/departments/:id", s.DeleteDepartment)
+
+		// Web Push testing (admin only)
+		admin.POST("/push/test", s.AdminSendTestPush)
+		admin.POST("/users/:id/push/test", s.AdminSendTestPush)
 	}
 }
 

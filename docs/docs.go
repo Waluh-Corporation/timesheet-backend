@@ -1434,6 +1434,75 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/admin/push/test": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Dispatches an immediate test push notification to a designated user to verify browser notifications.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Push Notification",
+                    "Admin"
+                ],
+                "summary": "Send test push notification to a user (Admin only)",
+                "parameters": [
+                    {
+                        "description": "Push notification test parameters including target user_id",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.AdminTestPushRequest"
+                        }
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Target User ID (when using /admin/users/:id/push/test)",
+                        "name": "id",
+                        "in": "path"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.AdminTestPushResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request (missing user_id)",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (admin only)",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/sites": {
             "get": {
                 "security": [
@@ -1738,7 +1807,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a new user account with role, departmental assignment, and initial password.",
+                "description": "Creates a new user account with a randomly generated secure password and sends a welcome notification.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1748,7 +1817,7 @@ const docTemplate = `{
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Create user (Admin)",
+                "summary": "Provision a new user (Admin)",
                 "parameters": [
                     {
                         "description": "User provisioning payload",
@@ -3171,6 +3240,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/push/schedule": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the configured cron schedule, timezone, status, and next execution time for daily timesheet reminders. Accessible by authenticated users and admins.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Push Notification"
+                ],
+                "summary": "Get Web Push reminder schedule",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.PushScheduleResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/push/subscribe": {
             "post": {
                 "security": [
@@ -4465,6 +4565,27 @@ const docTemplate = `{
                 }
             }
         },
+        "request.AdminTestPushRequest": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string",
+                    "example": "Waktunya isi timesheet hari ini!"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Timesheet Reminder"
+                },
+                "url": {
+                    "type": "string",
+                    "example": "/activity"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
         "request.BeginPasskeyLoginRequest": {
             "type": "object",
             "properties": {
@@ -4896,6 +5017,27 @@ const docTemplate = `{
                 }
             }
         },
+        "response.AdminTestPushResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "test notification dispatched"
+                },
+                "subscriptions_count": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "username": {
+                    "type": "string",
+                    "example": "johndoe"
+                }
+            }
+        },
         "response.AdminUserResponse": {
             "type": "object",
             "properties": {
@@ -5243,6 +5385,31 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "response.PushScheduleResponse": {
+            "type": "object",
+            "properties": {
+                "cron_expression": {
+                    "type": "string",
+                    "example": "0 17 * * *"
+                },
+                "human_readable": {
+                    "type": "string",
+                    "example": "Setiap hari pukul 17:00 (Asia/Jakarta)"
+                },
+                "is_enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "next_run": {
+                    "type": "string",
+                    "example": "2026-09-15T17:00:00+07:00"
+                },
+                "timezone": {
+                    "type": "string",
+                    "example": "Asia/Jakarta"
                 }
             }
         },

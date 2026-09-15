@@ -1,7 +1,9 @@
 package scheduler
 
 import (
+	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +19,77 @@ const (
 	DefaultCleanupCron  = "0 2 * * *"
 )
 
+// ScheduleInfo carries details about a cron schedule for frontend presentation.
+type ScheduleInfo struct {
+	CronExpression string     `json:"cron_expression"`
+	Timezone       string     `json:"timezone"`
+	IsEnabled      bool       `json:"is_enabled"`
+	NextRun        *time.Time `json:"next_run"`
+	HumanReadable  string     `json:"human_readable"`
+}
+
+// formatHumanSchedule generates a friendly description of standard 5-part cron schedules.
+func formatHumanSchedule(expr, tz string) string {
+	parts := strings.Fields(expr)
+	if len(parts) == 5 && parts[2] == "*" && parts[3] == "*" {
+		hour, errH := strconv.Atoi(parts[1])
+		min, errM := strconv.Atoi(parts[0])
+		if errH == nil && errM == nil {
+			timeStr := fmt.Sprintf("%02d:%02d", hour, min)
+			if parts[4] == "*" {
+				return fmt.Sprintf("Setiap hari pukul %s (%s)", timeStr, tz)
+			} else if parts[4] == "1-5" {
+				return fmt.Sprintf("Setiap hari kerja (Senin-Jumat) pukul %s (%s)", timeStr, tz)
+			}
+		}
+	}
+	return fmt.Sprintf("Jadwal cron: %s (%s)", expr, tz)
+}
+
+// GetScheduleInfo computes the status, human-readable description, and next run time for a cron expression.
+func GetScheduleInfo(tz, cronExpr string) ScheduleInfo {
+	if strings.TrimSpace(cronExpr) == "" {
+		cronExpr = DefaultReminderCron
+	}
+	if strings.TrimSpace(tz) == "" {
+		tz = "Asia/Jakarta"
+	}
+
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		loc = time.UTC
+		tz = "UTC"
+	}
+
+	disabled := IsJobDisabled(cronExpr)
+	info := ScheduleInfo{
+		CronExpression: cronExpr,
+		Timezone:       tz,
+		IsEnabled:      !disabled,
+	}
+
+	if disabled {
+		info.HumanReadable = "Dinonaktifkan / Disabled"
+		return info
+	}
+
+	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	sched, err := parser.Parse(cronExpr)
+	if err != nil {
+		sched, _ = parser.Parse(DefaultReminderCron)
+		info.HumanReadable = formatHumanSchedule(DefaultReminderCron, tz) + " (fallback dari ekspresi tidak valid)"
+	} else {
+		info.HumanReadable = formatHumanSchedule(cronExpr, tz)
+	}
+
+	if sched != nil {
+		next := sched.Next(time.Now().In(loc))
+		info.NextRun = &next
+	}
+
+	return info
+}
+
 // Scheduler owns the cron runner that dispatches the daily timesheet reminder and housekeeping tasks.
 type Scheduler struct {
 	db           *gorm.DB
@@ -27,8 +100,8 @@ type Scheduler struct {
 	cleanupCron  string
 }
 
-// isJobDisabled checks if a cron expression explicitly disables the scheduled task.
-func isJobDisabled(expr string) bool {
+// IsJobDisabled checks if a cron expression explicitly disables the scheduled task.
+func IsJobDisabled(expr string) bool {
 	val := strings.ToLower(strings.TrimSpace(expr))
 	return val == "disabled" || val == "off" || val == "false" || val == "none"
 }
@@ -67,7 +140,7 @@ func New(db *gorm.DB, pushSvc *push.Service, tz string, crons ...string) *Schedu
 // registerJob attempts to register a task with the given cron expression,
 // falling back to a default expression if registration fails.
 func (s *Scheduler) registerJob(name, cronExpr, defaultCron string, task func()) {
-	if cronExpr == "" || isJobDisabled(cronExpr) {
+	if cronExpr == "" || IsJobDisabled(cronExpr) {
 		log.Printf("[scheduler] %s is disabled", name)
 		return
 	}

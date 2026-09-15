@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Web Push Cron Schedule Endpoint**: Introduced `GET /api/v1/push/schedule` accessible to all authenticated users and administrators, exposing cron expression, active status, timezone, human-readable schedule description, and next planned execution timestamp.
+- **Admin Test Web Push to User Endpoint**: Added `POST /api/v1/admin/push/test` and `POST /api/v1/admin/users/:id/push/test` allowing administrators to trigger and test instant Web Push notifications targeted to specific users with customizable title, body, and destination URL, including active subscription counts.
+
 ---
 
 ## [1.5.0] - 2026-09-15
