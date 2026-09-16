@@ -322,6 +322,95 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
 }
 
+// GetTimesheetSummary godoc
+// @Summary Get monthly and yearly historical timesheet summary
+// @Description Returns aggregated timesheet metrics including working days, days filled, working hours, overtime hours, and attendance breakdown per month.
+// @Tags Timesheet
+// @Security BearerAuth
+// @Produce json
+// @Param year query int false "Year filter (e.g. 2026, default current year)"
+// @Param month query int false "Optional month filter (1-12)"
+// @Success 200 {object} response.TimesheetSummaryResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid year or month"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/timesheet/summary [get]
+func (s *Server) GetTimesheetSummary(c *gin.Context) {
+	year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
+	var monthPtr *int
+	if c.Query("month") != "" {
+		m := queryIntDefault(c, "month", 0)
+		monthPtr = &m
+	}
+
+	tsSvc := s.getTimesheetService()
+	if tsSvc == nil {
+		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")
+		return
+	}
+
+	resp, err := tsSvc.GetHistoricalSummary(reqContext(c), currentUserID(c), year, monthPtr)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "user not found")
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondSuccess(c, http.StatusOK, resp)
+}
+
+// ExportTimesheetSummary godoc
+// @Summary Export monthly and yearly historical timesheet summary to Excel
+// @Description Renders aggregated timesheet metrics into an Excel (.xlsx) workbook, initiates download, and dispatches an email copy.
+// @Tags Timesheet
+// @Security BearerAuth
+// @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+// @Param year query int false "Year filter (e.g. 2026, default current year)"
+// @Param month query int false "Optional month filter (1-12)"
+// @Success 200 {file} binary "Generated Excel summary workbook (.xlsx)"
+// @Failure 400 {object} response.ErrorResponse "Invalid parameters"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Generation failed"
+// @Router /api/v1/timesheet/summary/export [get]
+func (s *Server) ExportTimesheetSummary(c *gin.Context) {
+	year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
+	var monthPtr *int
+	if c.Query("month") != "" {
+		m := queryIntDefault(c, "month", 0)
+		monthPtr = &m
+	}
+
+	tsSvc := s.getTimesheetService()
+	if tsSvc == nil {
+		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")
+		return
+	}
+
+	out, filename, err := tsSvc.GenerateSummaryWorkbook(reqContext(c), currentUserID(c), year, monthPtr)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "user not found")
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "export failed: "+err.Error())
+		return
+	}
+
+	c.Header("Content-Disposition", "attachment; filename="+filename)
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
+}
+
 func saveYearlyHolidays(db *gorm.DB, yearlyHolidays []models.HolidayDTO) int {
 	syncedCount := 0
 	for _, h := range yearlyHolidays {

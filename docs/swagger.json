@@ -3619,6 +3619,120 @@
                 }
             }
         },
+        "/api/v1/timesheet/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns aggregated timesheet metrics including working days, days filled, working hours, overtime hours, and attendance breakdown per month.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Timesheet"
+                ],
+                "summary": "Get monthly and yearly historical timesheet summary",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Year filter (e.g. 2026, default current year)",
+                        "name": "year",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Optional month filter (1-12)",
+                        "name": "month",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TimesheetSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid year or month",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/timesheet/summary/export": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Renders aggregated timesheet metrics into an Excel (.xlsx) workbook, initiates download, and dispatches an email copy.",
+                "produces": [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                ],
+                "tags": [
+                    "Timesheet"
+                ],
+                "summary": "Export monthly and yearly historical timesheet summary to Excel",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Year filter (e.g. 2026, default current year)",
+                        "name": "year",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Optional month filter (1-12)",
+                        "name": "month",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Generated Excel summary workbook (.xlsx)",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Generation failed",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/change-password": {
             "post": {
                 "security": [
@@ -5234,6 +5348,38 @@
                 }
             }
         },
+        "response.MonthlySummaryDTO": {
+            "type": "object",
+            "properties": {
+                "attendance_breakdown": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "days_filled": {
+                    "type": "integer"
+                },
+                "is_complete": {
+                    "type": "boolean"
+                },
+                "month": {
+                    "type": "integer"
+                },
+                "month_name": {
+                    "type": "string"
+                },
+                "overtime_hours": {
+                    "type": "number"
+                },
+                "working_days": {
+                    "type": "integer"
+                },
+                "working_hours": {
+                    "type": "number"
+                }
+            }
+        },
         "response.OriginsResponse": {
             "type": "object",
             "properties": {
@@ -5432,6 +5578,41 @@
                 "status": {
                     "type": "string",
                     "example": "success"
+                }
+            }
+        },
+        "response.TimesheetSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "month": {
+                    "type": "integer"
+                },
+                "months": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.MonthlySummaryDTO"
+                    }
+                },
+                "total_days_filled": {
+                    "type": "integer"
+                },
+                "total_overtime_hours": {
+                    "type": "number"
+                },
+                "total_working_days": {
+                    "type": "integer"
+                },
+                "total_working_hours": {
+                    "type": "number"
+                },
+                "year": {
+                    "type": "integer"
+                },
+                "yearly_attendance_breakdown": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
                 }
             }
         },

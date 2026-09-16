@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -116,12 +117,92 @@ func TestTimesheetService_OvertimeAndWorkbook(t *testing.T) {
 		t.Fatalf("expected ErrInvalidInput for year 1999, got %v", err)
 	}
 
-	// Valid workbook generation for SDD company
+	// Empty activities check: must fail
+	if _, _, err := svc.GenerateWorkbook(ctx, user.ID, 6, 2026); err == nil || !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput when activities are empty, got %v", err)
+	}
+
+	// Seed activity for June 2026
+	actDate := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	act := &models.DailyActivity{
+		UserID:    user.ID,
+		Date:      actDate,
+		StartTime: "08:00",
+		EndTime:   "17:00",
+		Status:    "P",
+		Activity:  "Feature development",
+		IsActive:  true,
+	}
+	if err := tx.Create(act).Error; err != nil {
+		t.Fatalf("failed to create activity: %v", err)
+	}
+
+	// Valid workbook generation for SDD company with seeded activity
 	wb, filename, err := svc.GenerateWorkbook(ctx, user.ID, 6, 2026)
 	if err != nil {
 		t.Fatalf("GenerateWorkbook failed: %v", err)
 	}
 	if len(wb) == 0 || filename == "" {
 		t.Fatalf("expected non-empty workbook and filename, got len %d, filename %s", len(wb), filename)
+	}
+
+	// 7. Overtime time range validation (check-out < check-in)
+	otInvalidTime := &request.OvertimeRequest{
+		Date:            "2026-06-16",
+		StartTime:       "20:00",
+		EndTime:         "18:00",
+		TaskDescription: "Invalid overtime hours",
+	}
+	if err := svc.UpsertOvertime(ctx, user.ID, otInvalidTime); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for start > end, got %v", err)
+	}
+
+	// 8. GetHistoricalSummary
+	// Invalid parameters
+	if _, err := svc.GetHistoricalSummary(ctx, user.ID, 1990, nil); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for year 1990, got %v", err)
+	}
+	invalidMonth := 15
+	if _, err := svc.GetHistoricalSummary(ctx, user.ID, 2026, &invalidMonth); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for month 15, got %v", err)
+	}
+	if _, err := svc.GetHistoricalSummary(ctx, 999999, 2026, nil); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for non-existent user, got %v", err)
+	}
+
+	// Successful yearly summary
+	yearlySummary, err := svc.GetHistoricalSummary(ctx, user.ID, 2026, nil)
+	if err != nil {
+		t.Fatalf("GetHistoricalSummary yearly failed: %v", err)
+	}
+	if yearlySummary.Year != 2026 || len(yearlySummary.Months) != 12 {
+		t.Fatalf("unexpected yearly summary: %+v", yearlySummary)
+	}
+
+	// Successful specific month summary
+	targetMonth := 6
+	monthlySummary, err := svc.GetHistoricalSummary(ctx, user.ID, 2026, &targetMonth)
+	if err != nil {
+		t.Fatalf("GetHistoricalSummary monthly failed: %v", err)
+	}
+	if len(monthlySummary.Months) != 1 || monthlySummary.Months[0].Month != 6 {
+		t.Fatalf("unexpected monthly summary: %+v", monthlySummary)
+	}
+
+	// 9. GenerateSummaryWorkbook
+	sumWb, sumFilename, err := svc.GenerateSummaryWorkbook(ctx, user.ID, 2026, nil)
+	if err != nil {
+		t.Fatalf("GenerateSummaryWorkbook failed: %v", err)
+	}
+	if len(sumWb) == 0 || sumFilename == "" {
+		t.Fatalf("expected non-empty summary workbook, got len %d, filename %s", len(sumWb), sumFilename)
+	}
+
+	sumWbMonth, sumFilenameMonth, err := svc.GenerateSummaryWorkbook(ctx, user.ID, 2026, &targetMonth)
+	if err != nil {
+		t.Fatalf("GenerateSummaryWorkbook monthly failed: %v", err)
+	}
+	if len(sumWbMonth) == 0 || sumFilenameMonth == "" {
+		t.Fatalf("expected non-empty monthly summary workbook, got len %d, filename %s", len(sumWbMonth), sumFilenameMonth)
 	}
 }

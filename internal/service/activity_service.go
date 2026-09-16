@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"timesheet-backend/dto/request"
@@ -58,7 +59,31 @@ func (s *activityService) resolveProject(ctx context.Context, req *request.Daily
 	return nil
 }
 
+func validateWorkingHours(startTime, endTime string) error {
+	s := strings.TrimSpace(startTime)
+	e := strings.TrimSpace(endTime)
+	if s == "" || e == "" {
+		return nil
+	}
+	start, err := time.Parse("15:04", s)
+	if err != nil {
+		return fmt.Errorf("%w: format jam check-in tidak valid ('%s'). Mohon gunakan format JJ:MM (contoh: 08:00)", domain.ErrInvalidInput, s)
+	}
+	end, err := time.Parse("15:04", e)
+	if err != nil {
+		return fmt.Errorf("%w: format jam check-out tidak valid ('%s'). Mohon gunakan format JJ:MM (contoh: 17:00)", domain.ErrInvalidInput, e)
+	}
+	if !start.Before(end) {
+		return fmt.Errorf("%w: jam check-out (%s) tidak boleh lebih awal dari atau sama dengan jam check-in (%s). Mohon periksa kembali jam kerja yang Anda masukkan", domain.ErrInvalidInput, e, s)
+	}
+	return nil
+}
+
 func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, req *request.DailyActivityRequest) error {
+	if err := validateWorkingHours(req.StartTime, req.EndTime); err != nil {
+		return err
+	}
+
 	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, jakartaLocation())
 	if err != nil {
 		return fmt.Errorf("%w: invalid date format, expected YYYY-MM-DD", domain.ErrInvalidInput)

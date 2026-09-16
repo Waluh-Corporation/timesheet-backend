@@ -1074,6 +1074,27 @@ definitions:
         example: success
         type: string
     type: object
+  response.MonthlySummaryDTO:
+    properties:
+      attendance_breakdown:
+        additionalProperties:
+          type: integer
+        type: object
+      days_filled:
+        type: integer
+      is_complete:
+        type: boolean
+      month:
+        type: integer
+      month_name:
+        type: string
+      overtime_hours:
+        type: number
+      working_days:
+        type: integer
+      working_hours:
+        type: number
+    type: object
   response.OriginsResponse:
     properties:
       origins:
@@ -1210,6 +1231,29 @@ definitions:
       status:
         example: success
         type: string
+    type: object
+  response.TimesheetSummaryResponse:
+    properties:
+      month:
+        type: integer
+      months:
+        items:
+          $ref: '#/definitions/response.MonthlySummaryDTO'
+        type: array
+      total_days_filled:
+        type: integer
+      total_overtime_hours:
+        type: number
+      total_working_days:
+        type: integer
+      total_working_hours:
+        type: number
+      year:
+        type: integer
+      yearly_attendance_breakdown:
+        additionalProperties:
+          type: integer
+        type: object
     type: object
   response.UpdateUserResponse:
     properties:
@@ -3640,6 +3684,80 @@ paths:
       security:
       - BearerAuth: []
       summary: Generate timesheet spreadsheet
+      tags:
+      - Timesheet
+  /api/v1/timesheet/summary:
+    get:
+      description: Returns aggregated timesheet metrics including working days, days
+        filled, working hours, overtime hours, and attendance breakdown per month.
+      parameters:
+      - description: Year filter (e.g. 2026, default current year)
+        in: query
+        name: year
+        type: integer
+      - description: Optional month filter (1-12)
+        in: query
+        name: month
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TimesheetSummaryResponse'
+        "400":
+          description: Invalid year or month
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get monthly and yearly historical timesheet summary
+      tags:
+      - Timesheet
+  /api/v1/timesheet/summary/export:
+    get:
+      description: Renders aggregated timesheet metrics into an Excel (.xlsx) workbook,
+        initiates download, and dispatches an email copy.
+      parameters:
+      - description: Year filter (e.g. 2026, default current year)
+        in: query
+        name: year
+        type: integer
+      - description: Optional month filter (1-12)
+        in: query
+        name: month
+        type: integer
+      produces:
+      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      responses:
+        "200":
+          description: Generated Excel summary workbook (.xlsx)
+          schema:
+            type: file
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Generation failed
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Export monthly and yearly historical timesheet summary to Excel
       tags:
       - Timesheet
   /api/v1/users/change-password:
