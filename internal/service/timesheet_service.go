@@ -60,6 +60,9 @@ func sanitizeFilename(s string) string {
 }
 
 func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	if month < 1 || month > 12 || year < 2000 || year > 2100 {
+		return nil, "", fmt.Errorf("%w: invalid month or year", domain.ErrInvalidInput)
+	}
 	loc := jakartaLocation()
 	var user models.User
 	if err := s.db.WithContext(ctx).Scopes(models.ActiveOnly).
@@ -151,6 +154,9 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 }
 
 func (s *timesheetService) UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error {
+	if req == nil {
+		return fmt.Errorf("%w: request is required", domain.ErrInvalidInput)
+	}
 	loc := jakartaLocation()
 	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, loc)
 	if err != nil {

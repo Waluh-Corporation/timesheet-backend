@@ -285,6 +285,17 @@ func TestMasterDataService_Approvers(t *testing.T) {
 		t.Errorf("expected updated name, got %s", updated.Name)
 	}
 
+	// Update empty name error
+	emptyName := "   "
+	if _, err := svc.UpdateApprover(ctx, a.ID, &emptyName, nil, nil, nil); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for empty name, got %v", err)
+	}
+
+	// Update not found
+	if _, err := svc.UpdateApprover(ctx, 999, &newName, nil, nil, nil); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+
 	// List
 	active := true
 	list, err := svc.ListApprovers(ctx, "", &active)
@@ -296,42 +307,246 @@ func TestMasterDataService_Approvers(t *testing.T) {
 	if err := svc.DeleteApprover(ctx, a.ID); err != nil {
 		t.Fatalf("DeleteApprover failed: %v", err)
 	}
+	if err := svc.DeleteApprover(ctx, 999); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on Delete, got %v", err)
+	}
 }
 
-func TestMasterDataService_CompanyAndDept(t *testing.T) {
+func TestMasterDataService_Company(t *testing.T) {
 	repo := newMockMasterRepo()
 	svc := service.NewMasterDataService(repo)
 	ctx := context.Background()
 
-	// Company
+	// Validation
+	if _, err := svc.CreateCompany(ctx, "", "Company"); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+
+	// Create
 	comp, err := svc.CreateCompany(ctx, "mii", "PT MII")
 	if err != nil {
 		t.Fatalf("CreateCompany failed: %v", err)
 	}
 
-	// Division
+	// List
+	comps, err := svc.ListCompanies(ctx, nil)
+	if err != nil || len(comps) != 1 {
+		t.Fatalf("ListCompanies failed: %v", err)
+	}
+
+	// Update
+	newCode := "mii2"
+	newName := "PT MII New"
+	isActive := true
+	updated, err := svc.UpdateCompany(ctx, comp.ID, &newCode, &newName, &isActive)
+	if err != nil {
+		t.Fatalf("UpdateCompany failed: %v", err)
+	}
+	if updated.Code != "mii2" || updated.Name != "PT MII New" {
+		t.Errorf("unexpected updated company: %+v", updated)
+	}
+
+	// Update not found
+	if _, err := svc.UpdateCompany(ctx, 999, &newCode, nil, nil); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+
+	// Delete
+	if err := svc.DeleteCompany(ctx, comp.ID); err != nil {
+		t.Fatalf("DeleteCompany failed: %v", err)
+	}
+	if err := svc.DeleteCompany(ctx, 999); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on delete, got %v", err)
+	}
+}
+
+func TestMasterDataService_Site(t *testing.T) {
+	repo := newMockMasterRepo()
+	svc := service.NewMasterDataService(repo)
+	ctx := context.Background()
+
+	// Validation
+	if _, err := svc.CreateSite(ctx, "", "Site", nil); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+
+	// Create
+	site, err := svc.CreateSite(ctx, "RDTX", "RDTX Tower", nil)
+	if err != nil {
+		t.Fatalf("CreateSite failed: %v", err)
+	}
+
+	// List
+	sites, err := svc.ListSites(ctx, nil)
+	if err != nil || len(sites) != 1 {
+		t.Fatalf("ListSites failed: %v", err)
+	}
+
+	// Update
+	newCode := "rdtx2"
+	newName := "RDTX Tower 2"
+	isActive := true
+	updated, err := svc.UpdateSite(ctx, site.ID, &newCode, &newName, &isActive)
+	if err != nil {
+		t.Fatalf("UpdateSite failed: %v", err)
+	}
+	if updated.Code != "rdtx2" {
+		t.Errorf("expected rdtx2, got %s", updated.Code)
+	}
+
+	// Update not found
+	if _, err := svc.UpdateSite(ctx, 999, &newCode, nil, nil); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+
+	// Delete
+	if err := svc.DeleteSite(ctx, site.ID); err != nil {
+		t.Fatalf("DeleteSite failed: %v", err)
+	}
+	if err := svc.DeleteSite(ctx, 999); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on delete, got %v", err)
+	}
+}
+
+func TestMasterDataService_Division(t *testing.T) {
+	repo := newMockMasterRepo()
+	svc := service.NewMasterDataService(repo)
+	ctx := context.Background()
+
+	// Validation
+	if _, err := svc.CreateDivision(ctx, "", "Division", nil); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+
+	// Create
 	div, err := svc.CreateDivision(ctx, "WDD", "Wholesale Digital Delivery", nil)
 	if err != nil {
 		t.Fatalf("CreateDivision failed: %v", err)
 	}
 
-	// Department with division
+	// List
+	divs, err := svc.ListDivisions(ctx, nil)
+	if err != nil || len(divs) != 1 {
+		t.Fatalf("ListDivisions failed: %v", err)
+	}
+
+	// Update
+	newCode := "wdd2"
+	newName := "Wholesale Digital Delivery 2"
+	isActive := true
+	updated, err := svc.UpdateDivision(ctx, div.ID, &newCode, &newName, &isActive)
+	if err != nil {
+		t.Fatalf("UpdateDivision failed: %v", err)
+	}
+	if updated.Code != "wdd2" {
+		t.Errorf("expected wdd2, got %s", updated.Code)
+	}
+
+	// Update not found
+	if _, err := svc.UpdateDivision(ctx, 999, &newCode, nil, nil); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+
+	// Delete
+	if err := svc.DeleteDivision(ctx, div.ID); err != nil {
+		t.Fatalf("DeleteDivision failed: %v", err)
+	}
+	if err := svc.DeleteDivision(ctx, 999); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on delete, got %v", err)
+	}
+}
+
+func TestMasterDataService_Department(t *testing.T) {
+	repo := newMockMasterRepo()
+	svc := service.NewMasterDataService(repo)
+	ctx := context.Background()
+
+	// Create division first
+	div, _ := svc.CreateDivision(ctx, "WDD", "Wholesale Digital Delivery", nil)
+
+	// Validation
+	if _, err := svc.CreateDepartment(ctx, "DEV", "", "", nil, nil); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+
+	// Create with division ID
 	dept, err := svc.CreateDepartment(ctx, "DEV", "Development Team", "", &div.ID, nil)
 	if err != nil {
 		t.Fatalf("CreateDepartment failed: %v", err)
 	}
 	if dept.Division != "Wholesale Digital Delivery" {
-		t.Errorf("expected division name set, got: %s", dept.Division)
+		t.Errorf("expected division name set, got %s", dept.Division)
 	}
 
-	// Site
-	site, err := svc.CreateSite(ctx, "RDTX", "RDTX Tower", nil)
+	// Create with division name string
+	dept2, err := svc.CreateDepartment(ctx, "QA", "QA Team", "Wholesale Digital Delivery", nil, nil)
 	if err != nil {
-		t.Fatalf("CreateSite failed: %v", err)
+		t.Fatalf("CreateDepartment with division name failed: %v", err)
 	}
-	if site.ID != 1 {
-		t.Errorf("expected site ID 1, got %d", site.ID)
+	if dept2.DivisionID == nil || *dept2.DivisionID != div.ID {
+		t.Errorf("expected division ID resolved, got %v", dept2.DivisionID)
 	}
 
-	_ = comp
+	// List
+	depts, err := svc.ListDepartments(ctx, &div.ID, "", nil)
+	if err != nil || len(depts) != 2 {
+		t.Fatalf("ListDepartments failed: %v", err)
+	}
+
+	// Update
+	newName := "Dev Team Renamed"
+	newCode := "DEVR"
+	newDivName := "Wholesale Digital Delivery"
+	updated, err := svc.UpdateDepartment(ctx, dept.ID, &newCode, &newName, &newDivName, nil, nil)
+	if err != nil {
+		t.Fatalf("UpdateDepartment failed: %v", err)
+	}
+	if updated.Code != "DEVR" || updated.Name != newName {
+		t.Errorf("unexpected updated department: %+v", updated)
+	}
+
+	// Update clearing division with divisionID = 0
+	zero := uint(0)
+	cleared, err := svc.UpdateDepartment(ctx, dept.ID, nil, nil, nil, &zero, nil)
+	if err != nil || cleared.DivisionID != nil || cleared.Division != "" {
+		t.Errorf("expected division cleared, got: %+v", cleared)
+	}
+
+	// Update clearing division with empty string
+	emptyDiv := ""
+	cleared2, err := svc.UpdateDepartment(ctx, dept.ID, nil, nil, &emptyDiv, nil, nil)
+	if err != nil || cleared2.DivisionID != nil || cleared2.Division != "" {
+		t.Errorf("expected division cleared, got: %+v", cleared2)
+	}
+
+	// Update not found
+	if _, err := svc.UpdateDepartment(ctx, 999, &newCode, nil, nil, nil, nil); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+
+	// Delete
+	if err := svc.DeleteDepartment(ctx, dept.ID); err != nil {
+		t.Fatalf("DeleteDepartment failed: %v", err)
+	}
+	if err := svc.DeleteDepartment(ctx, 999); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound on delete, got %v", err)
+	}
+}
+
+func TestMasterDataService_ProjectsAndStatuses(t *testing.T) {
+	repo := newMockMasterRepo()
+	repo.projects = []models.Project{{ID: 1, Name: "Proj1", IsActive: true}}
+	repo.statuses = []models.ActivityStatus{{Code: "P", Name: "Present"}}
+	svc := service.NewMasterDataService(repo)
+	ctx := context.Background()
+
+	projs, err := svc.ListProjects(ctx, true)
+	if err != nil || len(projs) != 1 {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+
+	statuses, err := svc.ListActivityStatuses(ctx)
+	if err != nil || len(statuses) != 1 {
+		t.Fatalf("ListActivityStatuses failed: %v", err)
+	}
 }
