@@ -292,7 +292,7 @@ func (s *masterDataService) CreateDepartment(ctx context.Context, code string, n
 	}
 
 	divName := strings.TrimSpace(division)
-	var resolvedDivID *uint = divisionID
+	resolvedDivID := divisionID
 	if divisionID != nil && *divisionID != 0 {
 		div, err := s.repo.FindDivisionByID(ctx, *divisionID)
 		if err == nil && div != nil {
