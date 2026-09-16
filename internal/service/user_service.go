@@ -17,23 +17,30 @@ import (
 type UserService interface {
 	CreateUserByAdmin(ctx context.Context, user *models.User, loginURL string) (initialPassword string, err error)
 	ChangePassword(ctx context.Context, userID uint, oldPassword, newPassword string) error
+	ApplyApprovedProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error
 }
 
 type userService struct {
 	repo   repository.UserRepository
 	hasher auth.PasswordHasher
 	mailer *mailer.Mailer
+	master repository.MasterRepository
 }
 
 // NewUserService constructs an instance of UserService.
-func NewUserService(repo repository.UserRepository, hasher auth.PasswordHasher, m *mailer.Mailer) UserService {
+func NewUserService(repo repository.UserRepository, hasher auth.PasswordHasher, m *mailer.Mailer, master ...repository.MasterRepository) UserService {
 	if hasher == nil {
 		hasher = auth.DefaultHasher
+	}
+	var mr repository.MasterRepository
+	if len(master) > 0 {
+		mr = master[0]
 	}
 	return &userService{
 		repo:   repo,
 		hasher: hasher,
 		mailer: m,
+		master: mr,
 	}
 }
 
@@ -121,4 +128,59 @@ func (s *userService) ChangePassword(ctx context.Context, userID uint, oldPasswo
 	}
 
 	return nil
+}
+
+// ApplyApprovedProfileChange updates a user entity based on the approved profile change request.
+func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error {
+	if change == nil {
+		return domain.ErrInvalidInput
+	}
+	user, err := s.repo.FindByID(ctx, change.UserID)
+	if err != nil || user == nil {
+		return domain.ErrNotFound
+	}
+
+	user.Name = change.Name
+	user.BniID = change.BniID
+	if change.EmployeeID != "" {
+		user.EmployeeID = change.EmployeeID
+	}
+	user.Division = change.Division
+	if change.DivisionID != nil && *change.DivisionID != 0 {
+		user.DivisionID = change.DivisionID
+	}
+	user.Site = change.Site
+	if change.SiteID != nil && *change.SiteID != 0 {
+		user.SiteID = change.SiteID
+	}
+
+	if change.DepartmentID != nil && *change.DepartmentID != 0 {
+		if s.master != nil {
+			dept, err := s.master.FindDepartmentByID(ctx, *change.DepartmentID)
+			if err == nil && dept != nil && dept.IsActive {
+				user.DepartmentID = &dept.ID
+				user.Department = dept.Name
+				if user.Division == "" {
+					user.Division = dept.Division
+				}
+			}
+		}
+	} else if change.Department != "" {
+		user.Department = change.Department
+	}
+
+	if user.Role == models.RoleAdmin {
+		user.CompanyID = nil
+		user.Company = ""
+	} else if change.CompanyID != nil && *change.CompanyID != 0 {
+		if s.master != nil {
+			comp, err := s.master.FindCompanyByID(ctx, *change.CompanyID)
+			if err == nil && comp != nil && comp.IsActive {
+				user.CompanyID = &comp.ID
+				user.Company = comp.Name
+			}
+		}
+	}
+
+	return s.repo.Update(ctx, user)
 }

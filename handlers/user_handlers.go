@@ -795,7 +795,9 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	now := time.Now()
 
 	if action == "approve" {
-		s.applyApprovedProfileChange(&change)
+		if userSvc := s.getUserService(); userSvc != nil {
+			_ = userSvc.ApplyApprovedProfileChange(c.Request.Context(), &change)
+		}
 		change.Status = models.ProfileApproved
 	} else {
 		change.Status = "rejected"
@@ -805,65 +807,6 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	s.DB.Save(&change)
 
 	RespondMessage(c, http.StatusOK, "profile change request "+action+"d")
-}
-
-func applyProfileChangeBasicInfo(user *models.User, change *models.ProfileChangeRequest) {
-	user.Name = change.Name
-	user.BniID = change.BniID
-	if change.EmployeeID != "" {
-		user.EmployeeID = change.EmployeeID
-	}
-	user.Division = change.Division
-	if change.DivisionID != nil && *change.DivisionID != 0 {
-		user.DivisionID = change.DivisionID
-	}
-	user.Site = change.Site
-	if change.SiteID != nil && *change.SiteID != 0 {
-		user.SiteID = change.SiteID
-	}
-}
-
-func (s *Server) applyProfileChangeDepartment(user *models.User, change *models.ProfileChangeRequest) {
-	if change.DepartmentID != nil && *change.DepartmentID != 0 {
-		var dept models.Department
-		if err := s.DB.Where(queryIDAndIsActive, *change.DepartmentID).First(&dept).Error; err == nil {
-			user.DepartmentID = &dept.ID
-			user.Department = dept.Name
-			if user.Division == "" {
-				user.Division = dept.Division
-			}
-		}
-		return
-	}
-	if change.Department != "" {
-		user.Department = change.Department
-	}
-}
-
-func (s *Server) applyProfileChangeCompany(user *models.User, change *models.ProfileChangeRequest) {
-	if user.Role == models.RoleAdmin {
-		user.CompanyID = nil
-		user.Company = ""
-		return
-	}
-	if change.CompanyID != nil && *change.CompanyID != 0 {
-		var comp models.Company
-		if err := s.DB.Where(queryIDAndIsActive, *change.CompanyID).First(&comp).Error; err == nil {
-			user.CompanyID = &comp.ID
-			user.Company = comp.Name
-		}
-	}
-}
-
-func (s *Server) applyApprovedProfileChange(change *models.ProfileChangeRequest) {
-	var targetUser models.User
-	if err := s.DB.Where(queryID, change.UserID).First(&targetUser).Error; err != nil {
-		return
-	}
-	applyProfileChangeBasicInfo(&targetUser, change)
-	s.applyProfileChangeDepartment(&targetUser, change)
-	s.applyProfileChangeCompany(&targetUser, change)
-	_ = s.DB.Save(&targetUser).Error
 }
 
 // ChangePassword godoc

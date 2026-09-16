@@ -249,13 +249,11 @@ type DailyActivity struct {
 	// Date is normalised to midnight in Asia/Jakarta.
 	Date time.Time `gorm:"index:idx_daily_activities_user_date;index:idx_daily_activities_date;not null;type:date" json:"date"`
 
-	StartTime   string `gorm:"size:8" json:"start_time"`
-	EndTime     string `gorm:"size:8" json:"end_time"`
-	Status      string `gorm:"size:8" json:"status"`
-	Activity    string `gorm:"type:text" json:"activity"`
-	ProjectName string `gorm:"size:255" json:"project_name"`
-	ProjectID   string `gorm:"size:64" json:"project_id"`
-	IsActive    bool   `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_daily_activities_active" json:"is_active"`
+	StartTime string `gorm:"size:8" json:"start_time"`
+	EndTime   string `gorm:"size:8" json:"end_time"`
+	Status    string `gorm:"size:8" json:"status"`
+	Activity  string `gorm:"type:text" json:"activity"`
+	IsActive  bool   `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_daily_activities_active" json:"is_active"`
 
 	ProjectRefID *uint           `gorm:"index" json:"project_ref_id"`
 	ProjectRef   *Project        `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
@@ -264,21 +262,21 @@ type DailyActivity struct {
 }
 
 // GetProjectCode returns the canonical project code from the referenced Project,
-// falling back to the denormalized ProjectID if ProjectRef is not preloaded.
+// or empty string if ProjectRef is not assigned or preloaded.
 func (d DailyActivity) GetProjectCode() string {
-	if d.ProjectRef != nil && d.ProjectRef.Code != "" {
+	if d.ProjectRef != nil {
 		return d.ProjectRef.Code
 	}
-	return d.ProjectID
+	return ""
 }
 
 // GetProjectName returns the canonical project name from the referenced Project,
-// falling back to the denormalized ProjectName if ProjectRef is not preloaded.
+// or empty string if ProjectRef is not assigned or preloaded.
 func (d DailyActivity) GetProjectName() string {
-	if d.ProjectRef != nil && d.ProjectRef.Name != "" {
+	if d.ProjectRef != nil {
 		return d.ProjectRef.Name
 	}
-	return d.ProjectName
+	return ""
 }
 
 // GetAppImpacted returns the canonical app impacted from the referenced Project,

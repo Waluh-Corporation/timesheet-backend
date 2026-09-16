@@ -381,12 +381,6 @@ func assertProjectSyncFields(t *testing.T, act models.DailyActivity, proj models
 	if act.ProjectRefID == nil || *act.ProjectRefID != proj.ID {
 		t.Errorf("expected ProjectRefID %d, got %v", proj.ID, act.ProjectRefID)
 	}
-	if act.ProjectID != proj.Code {
-		t.Errorf("expected ProjectID %q, got %q", proj.Code, act.ProjectID)
-	}
-	if act.ProjectName != proj.Name {
-		t.Errorf("expected ProjectName %q, got %q", proj.Name, act.ProjectName)
-	}
 	if act.GetProjectCode() != proj.Code {
 		t.Errorf("expected GetProjectCode() %q, got %q", proj.Code, act.GetProjectCode())
 	}

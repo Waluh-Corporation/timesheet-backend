@@ -49,21 +49,12 @@ func (s *activityService) resolveProject(ctx context.Context, req *request.Daily
 			return errors.New("invalid project_ref_id: project does not exist or is inactive")
 		}
 		activity.ProjectRefID = &proj.ID
-		activity.ProjectID = proj.Code
-		activity.ProjectName = proj.Name
+		activity.ProjectRef = proj
 		return nil
 	}
 
-	if req.ProjectID == "" && req.ProjectName == "" {
-		return nil
-	}
-
-	proj, err := s.repo.FindActiveProjectByCodeOrName(ctx, req.ProjectID, req.ProjectName)
-	if err == nil && proj != nil && proj.ID != 0 {
-		activity.ProjectRefID = &proj.ID
-		activity.ProjectID = proj.Code
-		activity.ProjectName = proj.Name
-	}
+	activity.ProjectRefID = nil
+	activity.ProjectRef = nil
 	return nil
 }
 
@@ -91,8 +82,6 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 		EndTime:      req.EndTime,
 		Status:       req.Status,
 		Activity:     req.Activity,
-		ProjectName:  req.ProjectName,
-		ProjectID:    req.ProjectID,
 		ProjectRefID: req.ProjectRefID,
 	}
 
@@ -107,8 +96,6 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 		existing.EndTime = req.EndTime
 		existing.Status = req.Status
 		existing.Activity = req.Activity
-		existing.ProjectName = activity.ProjectName
-		existing.ProjectID = activity.ProjectID
 		existing.ProjectRefID = activity.ProjectRefID
 		existing.UpdatedAt = time.Now()
 		return s.repo.Update(ctx, existing)
@@ -135,8 +122,8 @@ func (s *activityService) GetDailyActivity(ctx context.Context, userID uint, id 
 		StartTime:   activity.StartTime,
 		EndTime:     activity.EndTime,
 		Activity:    activity.Activity,
-		ProjectName: activity.ProjectName,
-		ProjectID:   activity.ProjectID,
+		ProjectName: activity.GetProjectName(),
+		ProjectID:   activity.GetProjectCode(),
 		Status:      activity.Status,
 	}, nil
 }
@@ -155,8 +142,8 @@ func (s *activityService) ListActivities(ctx context.Context, userID uint, filte
 			StartTime:   a.StartTime,
 			EndTime:     a.EndTime,
 			Activity:    a.Activity,
-			ProjectName: a.ProjectName,
-			ProjectID:   a.ProjectID,
+			ProjectName: a.GetProjectName(),
+			ProjectID:   a.GetProjectCode(),
 			Status:      a.Status,
 		}
 	}

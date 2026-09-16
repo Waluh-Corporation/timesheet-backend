@@ -171,8 +171,8 @@ func TestActivityService_UpsertDailyActivity(t *testing.T) {
 	if act.Status != "P" {
 		t.Errorf("expected default status P, got %s", act.Status)
 	}
-	if act.ProjectID != "PRJ-01" || act.ProjectName != "Project Alpha" {
-		t.Errorf("project fields mismatch: code=%s, name=%s", act.ProjectID, act.ProjectName)
+	if act.GetProjectCode() != "PRJ-01" || act.GetProjectName() != "Project Alpha" {
+		t.Errorf("project fields mismatch: code=%s, name=%s", act.GetProjectCode(), act.GetProjectName())
 	}
 
 	// 5. Success Update (same date, same user -> update existing)
@@ -324,14 +324,14 @@ func TestActivityService_UpsertProjectResolution(t *testing.T) {
 	}
 	repo.projects[proj.ID] = proj
 
-	// Resolve by code/name
+	// Resolve by ProjectRefID
+	projID := uint(55)
 	req := &request.DailyActivityRequest{
-		Date:        "2026-09-21",
-		StartTime:   "08:00",
-		EndTime:     "17:00",
-		ProjectID:   "PRJ-55",
-		ProjectName: "Project Beta",
-		Activity:    "Beta development",
+		Date:         "2026-09-21",
+		StartTime:    "08:00",
+		EndTime:      "17:00",
+		ProjectRefID: &projID,
+		Activity:     "Beta development",
 	}
 	if err := svc.UpsertDailyActivity(ctx, 10, req); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -340,8 +340,11 @@ func TestActivityService_UpsertProjectResolution(t *testing.T) {
 	if saved.ProjectRefID == nil || *saved.ProjectRefID != 55 {
 		t.Errorf("expected ProjectRefID 55, got: %v", saved.ProjectRefID)
 	}
+	if saved.GetProjectCode() != "PRJ-55" || saved.GetProjectName() != "Project Beta" {
+		t.Errorf("expected project code/name from ref, got %s / %s", saved.GetProjectCode(), saved.GetProjectName())
+	}
 
-	// Empty project code and name
+	// Empty project
 	reqEmptyProj := &request.DailyActivityRequest{
 		Date:      "2026-09-22",
 		StartTime: "08:00",
@@ -354,5 +357,8 @@ func TestActivityService_UpsertProjectResolution(t *testing.T) {
 	savedEmpty := repo.activities[2]
 	if savedEmpty.ProjectRefID != nil {
 		t.Errorf("expected nil ProjectRefID, got: %v", savedEmpty.ProjectRefID)
+	}
+	if savedEmpty.GetProjectCode() != "" || savedEmpty.GetProjectName() != "" {
+		t.Errorf("expected empty project code/name, got %s / %s", savedEmpty.GetProjectCode(), savedEmpty.GetProjectName())
 	}
 }

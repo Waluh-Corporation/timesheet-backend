@@ -48,7 +48,7 @@ func NewActivityRepository(db *gorm.DB) ActivityRepository {
 
 func (r *activityRepository) FindActiveByID(ctx context.Context, id uint) (*models.DailyActivity, error) {
 	var activity models.DailyActivity
-	if err := r.db.WithContext(ctx).Where("id = ? AND is_active = true", id).First(&activity).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Where("id = ? AND is_active = true", id).First(&activity).Error; err != nil {
 		return nil, err
 	}
 	return &activity, nil
@@ -56,7 +56,7 @@ func (r *activityRepository) FindActiveByID(ctx context.Context, id uint) (*mode
 
 func (r *activityRepository) FindActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error) {
 	var activity models.DailyActivity
-	if err := r.db.WithContext(ctx).Where("user_id = ? AND date = ? AND is_active = true", userID, date).First(&activity).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Where("user_id = ? AND date = ? AND is_active = true", userID, date).First(&activity).Error; err != nil {
 		return nil, err
 	}
 	return &activity, nil
@@ -141,7 +141,7 @@ func (r *activityRepository) ListActiveByUser(ctx context.Context, userID uint, 
 	}
 
 	activities := make([]models.DailyActivity, 0)
-	if err := dataQuery.Find(&activities).Error; err != nil {
+	if err := dataQuery.Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Find(&activities).Error; err != nil {
 		return nil, 0, err
 	}
 
