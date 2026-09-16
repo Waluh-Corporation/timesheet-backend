@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -726,80 +727,110 @@ func (s *Server) DeleteDepartment(c *gin.Context) {
 
 // AdminListApprovers godoc
 // @Summary List all approvers (admin only)
-// @Description Returns all registered approvers with optional inactive filter.
+// @Description Returns all registered approvers (both active and inactive).
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive approvers"
 // @Success 200 {array} models.Approver
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/approvers [get]
 func (s *Server) AdminListApprovers(c *gin.Context) {
-	s.ListApprovers(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	approvers, err := svc.ListApprovers(reqContext(c), c.Query("role_type"), nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, approvers)
 }
 
 // AdminListCompanies godoc
 // @Summary List all companies (admin only)
-// @Description Returns all companies.
+// @Description Returns all companies (both active and inactive).
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive companies"
 // @Success 200 {array} models.Company
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/companies [get]
 func (s *Server) AdminListCompanies(c *gin.Context) {
-	s.ListCompanies(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	companies, err := svc.ListCompanies(reqContext(c), nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, companies)
 }
 
 // AdminListSites godoc
 // @Summary List all sites (admin only)
-// @Description Returns all registered office/placement sites with optional inactive filter.
+// @Description Returns all registered office/placement sites (both active and inactive).
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive sites"
 // @Success 200 {array} models.Site
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/sites [get]
 func (s *Server) AdminListSites(c *gin.Context) {
-	s.ListSites(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	sites, err := svc.ListSites(reqContext(c), nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, sites)
 }
 
 // AdminListDivisions godoc
 // @Summary List all divisions (admin only)
-// @Description Returns all organizational divisions with optional inactive filter.
+// @Description Returns all organizational divisions (both active and inactive).
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive divisions"
 // @Success 200 {array} models.Division
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/divisions [get]
 func (s *Server) AdminListDivisions(c *gin.Context) {
-	s.ListDivisions(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	divisions, err := svc.ListDivisions(reqContext(c), nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, divisions)
 }
 
 // AdminListDepartments godoc
 // @Summary List all departments (admin only)
-// @Description Returns all departments with optional division and inactive filters.
+// @Description Returns all departments (both active and inactive) with optional division filter.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive departments"
 // @Param division query string false "Filter by division name"
 // @Param division_id query int false "Filter by division ID"
 // @Success 200 {array} models.Department
@@ -808,5 +839,23 @@ func (s *Server) AdminListDivisions(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/departments [get]
 func (s *Server) AdminListDepartments(c *gin.Context) {
-	s.ListDepartments(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	var divID *uint
+	if divIDStr := c.Query("division_id"); divIDStr != "" {
+		if id, err := strconv.ParseUint(divIDStr, 10, 64); err == nil {
+			uID := uint(id)
+			divID = &uID
+		}
+	}
+	divName := strings.TrimSpace(c.Query("division"))
+	depts, err := svc.ListDepartments(reqContext(c), divID, divName, nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, depts)
 }

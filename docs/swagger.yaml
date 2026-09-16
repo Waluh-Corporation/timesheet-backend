@@ -1523,16 +1523,7 @@ paths:
       - Master Data
   /api/v1/admin/approvers:
     get:
-      description: Returns all registered approvers with optional inactive filter.
-      parameters:
-      - description: Filter by active status
-        in: query
-        name: is_active
-        type: boolean
-      - description: Include inactive approvers
-        in: query
-        name: include_inactive
-        type: boolean
+      description: Returns all registered approvers (both active and inactive).
       produces:
       - application/json
       responses:
@@ -1685,16 +1676,7 @@ paths:
       - Master Data
   /api/v1/admin/companies:
     get:
-      description: Returns all companies.
-      parameters:
-      - description: Filter by active status
-        in: query
-        name: is_active
-        type: boolean
-      - description: Include inactive companies
-        in: query
-        name: include_inactive
-        type: boolean
+      description: Returns all companies (both active and inactive).
       produces:
       - application/json
       responses:
@@ -1847,16 +1829,9 @@ paths:
       - Master Data
   /api/v1/admin/departments:
     get:
-      description: Returns all departments with optional division and inactive filters.
+      description: Returns all departments (both active and inactive) with optional
+        division filter.
       parameters:
-      - description: Filter by active status
-        in: query
-        name: is_active
-        type: boolean
-      - description: Include inactive departments
-        in: query
-        name: include_inactive
-        type: boolean
       - description: Filter by division name
         in: query
         name: division
@@ -2017,16 +1992,7 @@ paths:
       - Master Data
   /api/v1/admin/divisions:
     get:
-      description: Returns all organizational divisions with optional inactive filter.
-      parameters:
-      - description: Filter by active status
-        in: query
-        name: is_active
-        type: boolean
-      - description: Include inactive divisions
-        in: query
-        name: include_inactive
-        type: boolean
+      description: Returns all organizational divisions (both active and inactive).
       produces:
       - application/json
       responses:
@@ -2308,17 +2274,8 @@ paths:
       - Admin
   /api/v1/admin/sites:
     get:
-      description: Returns all registered office/placement sites with optional inactive
-        filter.
-      parameters:
-      - description: Filter by active status
-        in: query
-        name: is_active
-        type: boolean
-      - description: Include inactive sites
-        in: query
-        name: include_inactive
-        type: boolean
+      description: Returns all registered office/placement sites (both active and
+        inactive).
       produces:
       - application/json
       responses:
@@ -2937,14 +2894,6 @@ paths:
         in: query
         name: division_id
         type: integer
-      - description: Filter by active status
-        in: query
-        name: is_active
-        type: boolean
-      - description: Include inactive departments
-        in: query
-        name: include_inactive
-        type: boolean
       produces:
       - application/json
       responses:
@@ -2970,15 +2919,6 @@ paths:
   /api/v1/divisions:
     get:
       description: Returns all organizational divisions.
-      parameters:
-      - description: Filter by active status
-        in: query
-        name: is_active
-        type: boolean
-      - description: Include inactive divisions
-        in: query
-        name: include_inactive
-        type: boolean
       produces:
       - application/json
       responses:
@@ -3614,15 +3554,6 @@ paths:
   /api/v1/sites:
     get:
       description: Returns all registered office/placement sites.
-      parameters:
-      - description: Filter by active status
-        in: query
-        name: is_active
-        type: boolean
-      - description: Include inactive sites
-        in: query
-        name: include_inactive
-        type: boolean
       produces:
       - application/json
       responses:

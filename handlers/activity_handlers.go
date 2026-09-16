@@ -609,14 +609,7 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 	RespondDelete(c, http.StatusOK)
 }
 
-func parseActiveFilter(c *gin.Context) *bool {
-	if c.Query("include_inactive") == "true" {
-		return nil
-	}
-	if c.Query("is_active") == "false" {
-		f := false
-		return &f
-	}
+func parseActiveFilter(_ *gin.Context) *bool {
 	t := true
 	return &t
 }
@@ -675,8 +668,6 @@ func (s *Server) ListCompanies(c *gin.Context) {
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive sites"
 // @Success 200 {array} models.Site
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
@@ -701,8 +692,6 @@ func (s *Server) ListSites(c *gin.Context) {
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive divisions"
 // @Success 200 {array} models.Division
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
@@ -729,8 +718,6 @@ func (s *Server) ListDivisions(c *gin.Context) {
 // @Produce json
 // @Param division query string false "Division name filter"
 // @Param division_id query int false "Division ID filter"
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive departments"
 // @Success 200 {array} models.Department
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"

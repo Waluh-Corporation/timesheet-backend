@@ -288,7 +288,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns all registered approvers with optional inactive filter.",
+                "description": "Returns all registered approvers (both active and inactive).",
                 "produces": [
                     "application/json"
                 ],
@@ -296,20 +296,6 @@ const docTemplate = `{
                     "Master Data"
                 ],
                 "summary": "List all approvers (admin only)",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive approvers",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -541,7 +527,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns all companies.",
+                "description": "Returns all companies (both active and inactive).",
                 "produces": [
                     "application/json"
                 ],
@@ -549,20 +535,6 @@ const docTemplate = `{
                     "Master Data"
                 ],
                 "summary": "List all companies (admin only)",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive companies",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -794,7 +766,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns all departments with optional division and inactive filters.",
+                "description": "Returns all departments (both active and inactive) with optional division filter.",
                 "produces": [
                     "application/json"
                 ],
@@ -803,18 +775,6 @@ const docTemplate = `{
                 ],
                 "summary": "List all departments (admin only)",
                 "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive departments",
-                        "name": "include_inactive",
-                        "in": "query"
-                    },
                     {
                         "type": "string",
                         "description": "Filter by division name",
@@ -1059,7 +1019,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns all organizational divisions with optional inactive filter.",
+                "description": "Returns all organizational divisions (both active and inactive).",
                 "produces": [
                     "application/json"
                 ],
@@ -1067,20 +1027,6 @@ const docTemplate = `{
                     "Master Data"
                 ],
                 "summary": "List all divisions (admin only)",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive divisions",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1510,7 +1456,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns all registered office/placement sites with optional inactive filter.",
+                "description": "Returns all registered office/placement sites (both active and inactive).",
                 "produces": [
                     "application/json"
                 ],
@@ -1518,20 +1464,6 @@ const docTemplate = `{
                     "Master Data"
                 ],
                 "summary": "List all sites (admin only)",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive sites",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -2475,18 +2407,6 @@ const docTemplate = `{
                         "description": "Division ID filter",
                         "name": "division_id",
                         "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive departments",
-                        "name": "include_inactive",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2529,20 +2449,6 @@ const docTemplate = `{
                     "Master Data"
                 ],
                 "summary": "List all divisions",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive divisions",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -3523,20 +3429,6 @@ const docTemplate = `{
                     "Master Data"
                 ],
                 "summary": "List all sites",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive sites",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",
