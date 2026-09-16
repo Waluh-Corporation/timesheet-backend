@@ -825,3 +825,83 @@ func TestAdminMasterHandlers_AdminList_ErrorsAndEdgeCases(t *testing.T) {
 		assertFatalCode(t, w, http.StatusOK)
 	})
 }
+
+func TestAdminMasterHandlers_ReactivateInactiveRecords(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	srv := &Server{DB: tx, Cfg: cfg}
+
+	// 1. Inactive Approver -> reactivate
+	appr := models.Approver{Name: "Inactive Lead", RoleType: models.ApproverRoleTeamLeader}
+	_ = tx.Create(&appr)
+	_ = tx.Model(&appr).Update("is_active", false)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	idStr := fmt.Sprintf("%d", appr.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/approvers/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateApprover(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 2. Inactive Company -> reactivate
+	comp := models.Company{Code: "reactcomp", Name: "React Company"}
+	_ = tx.Create(&comp)
+	_ = tx.Model(&comp).Update("is_active", false)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	idStr = fmt.Sprintf("%d", comp.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/companies/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateCompany(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 3. Inactive Site -> reactivate
+	site := models.Site{Code: "reactsite", Name: "React Site"}
+	_ = tx.Create(&site)
+	_ = tx.Model(&site).Update("is_active", false)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	idStr = fmt.Sprintf("%d", site.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/sites/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateSite(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 4. Inactive Division -> reactivate
+	div := models.Division{Code: "reactdiv", Name: "React Division"}
+	_ = tx.Create(&div)
+	_ = tx.Model(&div).Update("is_active", false)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	idStr = fmt.Sprintf("%d", div.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/divisions/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateDivision(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 5. Inactive Department -> reactivate
+	dept := models.Department{Code: "reactdept", Name: "React Department"}
+	_ = tx.Create(&dept)
+	_ = tx.Model(&dept).Update("is_active", false)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	idStr = fmt.Sprintf("%d", dept.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/departments/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateDepartment(c)
+	assertFatalCode(t, w, http.StatusOK)
+}
+

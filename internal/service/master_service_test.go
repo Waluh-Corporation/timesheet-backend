@@ -47,7 +47,7 @@ func (m *mockMasterRepo) ListApprovers(ctx context.Context, roleType string, act
 }
 func (m *mockMasterRepo) FindApproverByID(ctx context.Context, id uint) (*models.Approver, error) {
 	a, ok := m.approvers[id]
-	if !ok || !a.IsActive {
+	if !ok {
 		return nil, errors.New("not found")
 	}
 	return a, nil
@@ -80,7 +80,7 @@ func (m *mockMasterRepo) ListCompanies(ctx context.Context, activeStatus *bool) 
 }
 func (m *mockMasterRepo) FindCompanyByID(ctx context.Context, id uint) (*models.Company, error) {
 	c, ok := m.companies[id]
-	if !ok || !c.IsActive {
+	if !ok {
 		return nil, errors.New("not found")
 	}
 	return c, nil
@@ -121,7 +121,7 @@ func (m *mockMasterRepo) ListSites(ctx context.Context, activeStatus *bool) ([]m
 }
 func (m *mockMasterRepo) FindSiteByID(ctx context.Context, id uint) (*models.Site, error) {
 	s, ok := m.sites[id]
-	if !ok || !s.IsActive {
+	if !ok {
 		return nil, errors.New("not found")
 	}
 	return s, nil
@@ -162,7 +162,7 @@ func (m *mockMasterRepo) ListDivisions(ctx context.Context, activeStatus *bool) 
 }
 func (m *mockMasterRepo) FindDivisionByID(ctx context.Context, id uint) (*models.Division, error) {
 	d, ok := m.divisions[id]
-	if !ok || !d.IsActive {
+	if !ok {
 		return nil, errors.New("not found")
 	}
 	return d, nil
@@ -217,7 +217,7 @@ func (m *mockMasterRepo) ListDepartments(ctx context.Context, divisionID *uint, 
 }
 func (m *mockMasterRepo) FindDepartmentByID(ctx context.Context, id uint) (*models.Department, error) {
 	d, ok := m.departments[id]
-	if !ok || !d.IsActive {
+	if !ok {
 		return nil, errors.New("not found")
 	}
 	return d, nil
@@ -548,5 +548,52 @@ func TestMasterDataService_ProjectsAndStatuses(t *testing.T) {
 	statuses, err := svc.ListActivityStatuses(ctx)
 	if err != nil || len(statuses) != 1 {
 		t.Fatalf("ListActivityStatuses failed: %v", err)
+	}
+}
+
+func TestMasterDataService_Reactivation(t *testing.T) {
+	repo := newMockMasterRepo()
+	svc := service.NewMasterDataService(repo)
+	ctx := context.Background()
+
+	// 1. Approver
+	appr, _ := svc.CreateApprover(ctx, "Test Approver", models.ApproverRoleTeamLeader, "Lead", nil)
+	_ = svc.DeleteApprover(ctx, appr.ID)
+	activeTrue := true
+	reactivatedAppr, err := svc.UpdateApprover(ctx, appr.ID, nil, nil, nil, &activeTrue)
+	if err != nil || !reactivatedAppr.IsActive {
+		t.Fatalf("failed to reactivate approver: %v", err)
+	}
+
+	// 2. Company
+	comp, _ := svc.CreateCompany(ctx, "COMP", "Company Corp")
+	_ = svc.DeleteCompany(ctx, comp.ID)
+	reactivatedComp, err := svc.UpdateCompany(ctx, comp.ID, nil, nil, &activeTrue)
+	if err != nil || !reactivatedComp.IsActive {
+		t.Fatalf("failed to reactivate company: %v", err)
+	}
+
+	// 3. Site
+	site, _ := svc.CreateSite(ctx, "SITE", "Site Location", nil)
+	_ = svc.DeleteSite(ctx, site.ID)
+	reactivatedSite, err := svc.UpdateSite(ctx, site.ID, nil, nil, &activeTrue)
+	if err != nil || !reactivatedSite.IsActive {
+		t.Fatalf("failed to reactivate site: %v", err)
+	}
+
+	// 4. Division
+	div, _ := svc.CreateDivision(ctx, "DIV", "Division Name", nil)
+	_ = svc.DeleteDivision(ctx, div.ID)
+	reactivatedDiv, err := svc.UpdateDivision(ctx, div.ID, nil, nil, &activeTrue)
+	if err != nil || !reactivatedDiv.IsActive {
+		t.Fatalf("failed to reactivate division: %v", err)
+	}
+
+	// 5. Department
+	dept, _ := svc.CreateDepartment(ctx, "DEPT", "Dept Name", "", nil, nil)
+	_ = svc.DeleteDepartment(ctx, dept.ID)
+	reactivatedDept, err := svc.UpdateDepartment(ctx, dept.ID, nil, nil, nil, nil, &activeTrue)
+	if err != nil || !reactivatedDept.IsActive {
+		t.Fatalf("failed to reactivate department: %v", err)
 	}
 }
