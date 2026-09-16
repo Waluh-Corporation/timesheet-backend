@@ -384,3 +384,15 @@ func SetWorkbookProperties(f *excelize.File, title, lastModifiedBy string) {
 		Category:       "Timesheet",
 	})
 }
+
+// MonthNameIndonesian returns the full Indonesian month name for month 1-12.
+func MonthNameIndonesian(month int) string {
+	names := []string{
+		"Januari", "Februari", "Maret", "April", "Mei", "Juni",
+		"Juli", "Agustus", "September", "Oktober", "November", "Desember",
+	}
+	if month >= 1 && month <= 12 {
+		return names[month-1]
+	}
+	return fmt.Sprintf("Bulan %d", month)
+}

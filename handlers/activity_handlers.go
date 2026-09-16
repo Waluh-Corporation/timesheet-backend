@@ -366,51 +366,6 @@ func (s *Server) GetTimesheetSummary(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, resp)
 }
 
-// ExportTimesheetSummary godoc
-// @Summary Export monthly and yearly historical timesheet summary to Excel
-// @Description Renders aggregated timesheet metrics into an Excel (.xlsx) workbook, initiates download, and dispatches an email copy.
-// @Tags Timesheet
-// @Security BearerAuth
-// @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-// @Param year query int false "Year filter (e.g. 2026, default current year)"
-// @Param month query int false "Optional month filter (1-12)"
-// @Success 200 {file} binary "Generated Excel summary workbook (.xlsx)"
-// @Failure 400 {object} response.ErrorResponse "Invalid parameters"
-// @Failure 401 {object} response.ErrorResponse "Unauthorized"
-// @Failure 500 {object} response.ErrorResponse "Generation failed"
-// @Router /api/v1/timesheet/summary/export [get]
-func (s *Server) ExportTimesheetSummary(c *gin.Context) {
-	year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
-	var monthPtr *int
-	if c.Query("month") != "" {
-		m := queryIntDefault(c, "month", 0)
-		monthPtr = &m
-	}
-
-	tsSvc := s.getTimesheetService()
-	if tsSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")
-		return
-	}
-
-	out, filename, err := tsSvc.GenerateSummaryWorkbook(reqContext(c), currentUserID(c), year, monthPtr)
-	if err != nil {
-		if errors.Is(err, domain.ErrNotFound) {
-			RespondError(c, http.StatusNotFound, "user not found")
-			return
-		}
-		if errors.Is(err, domain.ErrInvalidInput) {
-			RespondError(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		RespondError(c, http.StatusInternalServerError, "export failed: "+err.Error())
-		return
-	}
-
-	c.Header("Content-Disposition", "attachment; filename="+filename)
-	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
-}
-
 func saveYearlyHolidays(db *gorm.DB, yearlyHolidays []models.HolidayDTO) int {
 	syncedCount := 0
 	for _, h := range yearlyHolidays {

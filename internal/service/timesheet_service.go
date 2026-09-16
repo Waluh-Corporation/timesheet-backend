@@ -21,7 +21,6 @@ import (
 type TimesheetService interface {
 	GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error)
 	GetHistoricalSummary(ctx context.Context, userID uint, year int, month *int) (*response.TimesheetSummaryResponse, error)
-	GenerateSummaryWorkbook(ctx context.Context, userID uint, year int, month *int) ([]byte, string, error)
 	UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error
 	ListMonthlyOvertimes(ctx context.Context, userID uint, month int, year int) ([]response.OvertimeResponse, error)
 	DeleteOvertime(ctx context.Context, id uint, userID uint) error
@@ -401,52 +400,4 @@ func (s *timesheetService) GetHistoricalSummary(ctx context.Context, userID uint
 		YearlyAttendanceBreakdown: yearlyAttendance,
 		Months:                    monthlySummaries,
 	}, nil
-}
-
-func (s *timesheetService) GenerateSummaryWorkbook(ctx context.Context, userID uint, year int, month *int) ([]byte, string, error) {
-	summary, err := s.GetHistoricalSummary(ctx, userID, year, month)
-	if err != nil {
-		return nil, "", err
-	}
-
-	var user models.User
-	if err := s.db.WithContext(ctx).Scopes(models.ActiveOnly).
-		Preload("CompanyRel").
-		Preload("SiteRel").
-		Preload("DepartmentRel").
-		Preload("DivisionRel").
-		Where("id = ?", userID).First(&user).Error; err != nil {
-		return nil, "", fmt.Errorf("%w: user not found", domain.ErrNotFound)
-	}
-
-	out, err := services.BuildSummaryWorkbook(services.SummaryReportInput{
-		User:    &user,
-		Summary: summary,
-	})
-	if err != nil {
-		return nil, "", err
-	}
-
-	var filename string
-	var periodStr string
-	if month != nil {
-		filename = fmt.Sprintf("Rekap_Timesheet_%s_%02d_%04d.xlsx", sanitizeFilename(user.Username), *month, year)
-		periodStr = fmt.Sprintf("%s %d", services.MonthNameIndonesian(*month), year)
-	} else {
-		filename = fmt.Sprintf("Rekap_Timesheet_%s_%04d.xlsx", sanitizeFilename(user.Username), year)
-		periodStr = fmt.Sprintf("Tahun %d", year)
-	}
-
-	companyName := user.Company
-	if user.CompanyRel != nil && user.CompanyRel.Name != "" {
-		companyName = user.CompanyRel.Name
-	}
-
-	if s.mailer != nil && user.Email != "" {
-		go func(to, uname, comp, per, fn string, data []byte) {
-			_ = s.mailer.SendSummaryEmailWithDetails(to, uname, comp, per, fn, data)
-		}(user.Email, user.Username, companyName, periodStr, filename, out)
-	}
-
-	return out, filename, nil
 }

@@ -188,21 +188,4 @@ func TestTimesheetService_OvertimeAndWorkbook(t *testing.T) {
 	if len(monthlySummary.Months) != 1 || monthlySummary.Months[0].Month != 6 {
 		t.Fatalf("unexpected monthly summary: %+v", monthlySummary)
 	}
-
-	// 9. GenerateSummaryWorkbook
-	sumWb, sumFilename, err := svc.GenerateSummaryWorkbook(ctx, user.ID, 2026, nil)
-	if err != nil {
-		t.Fatalf("GenerateSummaryWorkbook failed: %v", err)
-	}
-	if len(sumWb) == 0 || sumFilename == "" {
-		t.Fatalf("expected non-empty summary workbook, got len %d, filename %s", len(sumWb), sumFilename)
-	}
-
-	sumWbMonth, sumFilenameMonth, err := svc.GenerateSummaryWorkbook(ctx, user.ID, 2026, &targetMonth)
-	if err != nil {
-		t.Fatalf("GenerateSummaryWorkbook monthly failed: %v", err)
-	}
-	if len(sumWbMonth) == 0 || sumFilenameMonth == "" {
-		t.Fatalf("expected non-empty monthly summary workbook, got len %d, filename %s", len(sumWbMonth), sumFilenameMonth)
-	}
 }

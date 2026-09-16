@@ -3676,63 +3676,6 @@
                 }
             }
         },
-        "/api/v1/timesheet/summary/export": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Renders aggregated timesheet metrics into an Excel (.xlsx) workbook, initiates download, and dispatches an email copy.",
-                "produces": [
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                ],
-                "tags": [
-                    "Timesheet"
-                ],
-                "summary": "Export monthly and yearly historical timesheet summary to Excel",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Year filter (e.g. 2026, default current year)",
-                        "name": "year",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Optional month filter (1-12)",
-                        "name": "month",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Generated Excel summary workbook (.xlsx)",
-                        "schema": {
-                            "type": "file"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid parameters",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Generation failed",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/users/change-password": {
             "post": {
                 "security": [

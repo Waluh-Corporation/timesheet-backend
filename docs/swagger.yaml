@@ -3723,43 +3723,6 @@ paths:
       summary: Get monthly and yearly historical timesheet summary
       tags:
       - Timesheet
-  /api/v1/timesheet/summary/export:
-    get:
-      description: Renders aggregated timesheet metrics into an Excel (.xlsx) workbook,
-        initiates download, and dispatches an email copy.
-      parameters:
-      - description: Year filter (e.g. 2026, default current year)
-        in: query
-        name: year
-        type: integer
-      - description: Optional month filter (1-12)
-        in: query
-        name: month
-        type: integer
-      produces:
-      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-      responses:
-        "200":
-          description: Generated Excel summary workbook (.xlsx)
-          schema:
-            type: file
-        "400":
-          description: Invalid parameters
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "500":
-          description: Generation failed
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Export monthly and yearly historical timesheet summary to Excel
-      tags:
-      - Timesheet
   /api/v1/users/change-password:
     post:
       consumes:

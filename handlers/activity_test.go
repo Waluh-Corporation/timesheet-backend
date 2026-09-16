@@ -801,7 +801,7 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		assertFatalCode(t, wCompID, http.StatusOK)
 	})
 
-	t.Run("GetTimesheetSummary and ExportTimesheetSummary", func(t *testing.T) {
+	t.Run("GetTimesheetSummary", func(t *testing.T) {
 		// 1. Missing or invalid year
 		wBadYear := httptest.NewRecorder()
 		cBadYear, _ := gin.CreateTestContext(wBadYear)
@@ -841,36 +841,6 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		cYear.Set(ctxUserID, user.ID)
 		srv.GetTimesheetSummary(cYear)
 		assertFatalCode(t, wYear, http.StatusOK)
-
-		// Export with invalid year -> 400
-		wExpBad := httptest.NewRecorder()
-		cExpBad, _ := gin.CreateTestContext(wExpBad)
-		cExpBad.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/summary/export?year=1999", nil)
-		cExpBad.Set(ctxUserID, user.ID)
-		srv.ExportTimesheetSummary(cExpBad)
-		assertFatalCode(t, wExpBad, http.StatusBadRequest)
-
-		// Export monthly summary -> 200 and .xlsx attachment
-		wExpMonth := httptest.NewRecorder()
-		cExpMonth, _ := gin.CreateTestContext(wExpMonth)
-		cExpMonth.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/summary/export?year=2026&month=9", nil)
-		cExpMonth.Set(ctxUserID, user.ID)
-		srv.ExportTimesheetSummary(cExpMonth)
-		assertFatalCode(t, wExpMonth, http.StatusOK)
-		if wExpMonth.Body.Len() == 0 {
-			t.Error("expected non-empty xlsx summary export payload")
-		}
-
-		// Export yearly summary -> 200 and .xlsx attachment
-		wExpYear := httptest.NewRecorder()
-		cExpYear, _ := gin.CreateTestContext(wExpYear)
-		cExpYear.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/summary/export?year=2026", nil)
-		cExpYear.Set(ctxUserID, user.ID)
-		srv.ExportTimesheetSummary(cExpYear)
-		assertFatalCode(t, wExpYear, http.StatusOK)
-		if wExpYear.Body.Len() == 0 {
-			t.Error("expected non-empty xlsx yearly summary export payload")
-		}
 	})
 
 	t.Run("sanitize helper", func(t *testing.T) {

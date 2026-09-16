@@ -262,46 +262,6 @@ func (m *Mailer) SendTimesheetEmailWithDetails(to, username, company, period, fi
 	return nil
 }
 
-// SendSummaryEmailWithDetails delivers summary report email with explicit details.
-func (m *Mailer) SendSummaryEmailWithDetails(to, username, company, period, filename string, data []byte) error {
-	comp := strings.TrimSpace(company)
-	subject := "Laporan Rekapitulasi Timesheet Anda Telah Siap"
-	if comp != "" {
-		subject = fmt.Sprintf("Laporan Rekapitulasi Timesheet %s Anda Telah Siap", comp)
-	}
-
-	htmlBody, textBody, err := RenderTimesheetEmail(TimesheetEmailData{
-		AppName:      m.appName(),
-		Username:     username,
-		Email:        to,
-		Company:      comp,
-		Period:       period,
-		Filename:     filename,
-		PortalURL:    m.frontendURL(),
-		SupportEmail: m.supportEmail(),
-	})
-	if err != nil {
-		log.Printf("[mailer] failed to render summary email template: %v", err)
-		return err
-	}
-
-	msg := gomail.NewMessage()
-	msg.SetHeader("From", m.cfg.MailFrom)
-	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", subject)
-	m.setMessageContent(msg, htmlBody, textBody)
-	msg.Attach(filename, gomail.SetCopyFunc(func(w io.Writer) error {
-		_, err := w.Write(data)
-		return err
-	}))
-
-	if err := m.send(msg); err != nil {
-		return err
-	}
-	log.Printf("[mailer] summary email successfully sent to %s (file: %s)", to, filename)
-	return nil
-}
-
 // SendReminderEmail delivers a daily reminder to fill today's timesheet.
 func (m *Mailer) SendReminderEmail(to, username, dateStr, activityURL string) error {
 	if activityURL == "" && m.frontendURL() != "" {

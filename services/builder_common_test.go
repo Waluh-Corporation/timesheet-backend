@@ -349,3 +349,15 @@ func TestBuilderCommon_NewHelpers(t *testing.T) {
 		t.Errorf("expected 'Public Holiday', got %q", vK11)
 	}
 }
+
+func TestMonthNameIndonesian(t *testing.T) {
+	if MonthNameIndonesian(1) != "Januari" {
+		t.Errorf("expected Januari, got %s", MonthNameIndonesian(1))
+	}
+	if MonthNameIndonesian(12) != "Desember" {
+		t.Errorf("expected Desember, got %s", MonthNameIndonesian(12))
+	}
+	if MonthNameIndonesian(13) != "Bulan 13" {
+		t.Errorf("expected Bulan 13, got %s", MonthNameIndonesian(13))
+	}
+}
