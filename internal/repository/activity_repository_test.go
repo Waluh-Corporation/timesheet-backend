@@ -50,8 +50,6 @@ func TestActivityRepository(t *testing.T) {
 		EndTime:      "17:30",
 		Status:       "P",
 		Activity:     "Repository test activity",
-		ProjectName:  proj.Name,
-		ProjectID:    proj.Code,
 		ProjectRefID: &proj.ID,
 		IsActive:     true,
 	}

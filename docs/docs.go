@@ -340,64 +340,6 @@ const docTemplate = `{
                     }
                 }
             },
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns all registered approvers with optional inactive filter.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "List all approvers (admin only)",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive approvers",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Approver"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Admin only",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            },
             "post": {
                 "security": [
                     {
@@ -651,64 +593,6 @@ const docTemplate = `{
                     }
                 }
             },
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns all companies.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "List all companies (admin only)",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive companies",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Company"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Admin only",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            },
             "post": {
                 "security": [
                     {
@@ -890,524 +774,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Company not found",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/admin/departments": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns all departments with optional division and inactive filters.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "List all departments (admin only)",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive departments",
-                        "name": "include_inactive",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by division name",
-                        "name": "division",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Filter by division ID",
-                        "name": "division_id",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Department"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Admin only",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Adds a new organizational department.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "Create a department (admin only)",
-                "parameters": [
-                    {
-                        "description": "Department data",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.CreateDepartmentRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/response.MessageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/admin/departments/{id}": {
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Soft-deactivates a department from master data.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "Delete a department (admin only)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Department ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.DeleteResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Department not found",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Updates code, name, division, or active status of a department.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "Update a department (admin only)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Department ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Department update data",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.UpdateDepartmentRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.MessageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Department not found",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/admin/divisions": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns all organizational divisions with optional inactive filter.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "List all divisions (admin only)",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive divisions",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Division"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Admin only",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Adds a new organizational division.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "Create a division (admin only)",
-                "parameters": [
-                    {
-                        "description": "Division data",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.CreateDivisionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/response.MessageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/admin/divisions/{id}": {
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Soft-deactivates a division from master data.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "Delete a division (admin only)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Division ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.DeleteResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Division not found",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Updates code, name, or active status of an existing division.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "Update a division (admin only)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Division ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Division update data",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.UpdateDivisionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.MessageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Division not found",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -3090,7 +2456,6 @@ const docTemplate = `{
                     }
                 ],
                 "description": "Returns departments, optionally filtered by division, division_id, or is_active.",
-                "description": "Returns departments, optionally filtered by division, division_id, or is_active.",
                 "produces": [
                     "application/json"
                 ],
@@ -3106,27 +2471,7 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
-                        "type": "string",
-                        "description": "Division name filter",
-                        "name": "division",
-                        "in": "query"
-                    },
-                    {
                         "type": "integer",
-                        "description": "Division ID filter",
-                        "name": "division_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive departments",
-                        "name": "include_inactive",
                         "description": "Division ID filter",
                         "name": "division_id",
                         "in": "query"
@@ -3151,60 +2496,6 @@ const docTemplate = `{
                             "type": "array",
                             "items": {
                                 "$ref": "#/definitions/models.Department"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/divisions": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns all organizational divisions.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "List all divisions",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive divisions",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Division"
                             }
                         }
                     },
@@ -4271,60 +3562,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/sites": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns all registered office/placement sites.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Master Data"
-                ],
-                "summary": "List all sites",
-                "parameters": [
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Include inactive sites",
-                        "name": "include_inactive",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Site"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/timesheet/generate": {
             "post": {
                 "security": [
@@ -4510,89 +3747,6 @@ const docTemplate = `{
                     "maxLength": 255,
                     "minLength": 2,
                     "example": "PT Mitra Integrasi Informatika"
-                }
-            }
-        },
-        "handlers.CreateDepartmentRequest": {
-            "type": "object",
-            "required": [
-                "code",
-                "name"
-            ],
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 2,
-                    "example": "wdl"
-                },
-                "division": {
-                    "type": "string",
-                    "example": "Wholesale Digital Delivery"
-                },
-                "division_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "is_active": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "minLength": 2,
-                    "example": "Wholesale Channel and Service Delivery"
-                }
-            }
-        },
-        "handlers.CreateDivisionRequest": {
-            "type": "object",
-            "required": [
-                "code",
-                "name"
-            ],
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 2,
-                    "example": "wdd"
-                },
-                "is_active": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "minLength": 2,
-                    "example": "Wholesale Digital Delivery"
-                }
-            }
-        },
-        "handlers.CreateSiteRequest": {
-            "type": "object",
-            "required": [
-                "code",
-                "name"
-            ],
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 2,
-                    "example": "jkt"
-                },
-                "is_active": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "name": {
-                    "type": "string",
-                    "maxLength": 255,
-                    "minLength": 2,
-                    "example": "Jakarta"
                 }
             }
         },
@@ -4968,65 +4122,6 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.UpdateDepartmentRequest": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "example": "wdl"
-                },
-                "division": {
-                    "type": "string",
-                    "example": "Wholesale Digital Delivery"
-                },
-                "division_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "is_active": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "name": {
-                    "type": "string",
-                    "example": "Wholesale Channel and Service Delivery"
-                }
-            }
-        },
-        "handlers.UpdateDivisionRequest": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "example": "wdd"
-                },
-                "is_active": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "name": {
-                    "type": "string",
-                    "example": "Wholesale Digital Delivery"
-                }
-            }
-        },
-        "handlers.UpdateSiteRequest": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "example": "jkt"
-                },
-                "is_active": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "name": {
-                    "type": "string",
-                    "example": "Jakarta"
-                }
-            }
-        },
         "models.ActivityStatus": {
             "type": "object",
             "properties": {
@@ -5130,12 +4225,6 @@ const docTemplate = `{
                 "division_rel": {
                     "$ref": "#/definitions/models.Division"
                 },
-                "division_id": {
-                    "type": "integer"
-                },
-                "division_rel": {
-                    "$ref": "#/definitions/models.Division"
-                },
                 "id": {
                     "type": "integer"
                 },
@@ -5144,29 +4233,6 @@ const docTemplate = `{
                 },
                 "name": {
                     "description": "e.g. \"Wholesale Channel and Service Delivery\"",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.Division": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "name": {
                     "type": "string"
                 },
                 "updated_at": {
@@ -5283,12 +4349,6 @@ const docTemplate = `{
                 "division_rel": {
                     "$ref": "#/definitions/models.Division"
                 },
-                "division_id": {
-                    "type": "integer"
-                },
-                "division_rel": {
-                    "$ref": "#/definitions/models.Division"
-                },
                 "employee_id": {
                     "type": "string"
                 },
@@ -5315,12 +4375,6 @@ const docTemplate = `{
                 },
                 "site": {
                     "type": "string"
-                },
-                "site_id": {
-                    "type": "integer"
-                },
-                "site_rel": {
-                    "$ref": "#/definitions/models.Site"
                 },
                 "site_id": {
                     "type": "integer"
@@ -5413,29 +4467,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.Site": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
         "models.User": {
             "type": "object",
             "properties": {
@@ -5473,12 +4504,6 @@ const docTemplate = `{
                 "division_rel": {
                     "$ref": "#/definitions/models.Division"
                 },
-                "division_id": {
-                    "type": "integer"
-                },
-                "division_rel": {
-                    "$ref": "#/definitions/models.Division"
-                },
                 "email": {
                     "type": "string"
                 },
@@ -5508,12 +4533,6 @@ const docTemplate = `{
                 },
                 "site": {
                     "type": "string"
-                },
-                "site_id": {
-                    "type": "integer"
-                },
-                "site_rel": {
-                    "$ref": "#/definitions/models.Site"
                 },
                 "site_id": {
                     "type": "integer"
@@ -5630,10 +4649,6 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 1
                 },
-                "division_id": {
-                    "type": "integer",
-                    "example": 1
-                },
                 "email": {
                     "type": "string",
                     "example": "john.doe@example.com"
@@ -5661,10 +4676,6 @@ const docTemplate = `{
                 "site": {
                     "type": "string",
                     "example": "Jakarta"
-                },
-                "site_id": {
-                    "type": "integer",
-                    "example": 1
                 },
                 "site_id": {
                     "type": "integer",
@@ -5799,10 +4810,6 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 1
                 },
-                "division_id": {
-                    "type": "integer",
-                    "example": 1
-                },
                 "employee_id": {
                     "type": "string",
                     "example": "EMP-001"
@@ -5814,10 +4821,6 @@ const docTemplate = `{
                 "site": {
                     "type": "string",
                     "example": "Jakarta"
-                },
-                "site_id": {
-                    "type": "integer",
-                    "example": 1
                 },
                 "site_id": {
                     "type": "integer",
@@ -5943,10 +4946,6 @@ const docTemplate = `{
                 "site_id": {
                     "type": "integer",
                     "example": 1
-                },
-                "site_id": {
-                    "type": "integer",
-                    "example": 1
                 }
             }
         },
@@ -5988,9 +4987,6 @@ const docTemplate = `{
                 "division_id": {
                     "type": "integer"
                 },
-                "division_id": {
-                    "type": "integer"
-                },
                 "employee_id": {
                     "type": "string"
                 },
@@ -6011,9 +5007,6 @@ const docTemplate = `{
                 },
                 "site": {
                     "type": "string"
-                },
-                "site_id": {
-                    "type": "integer"
                 },
                 "site_id": {
                     "type": "integer"
@@ -6077,9 +5070,6 @@ const docTemplate = `{
                 "division_id": {
                     "type": "integer"
                 },
-                "division_id": {
-                    "type": "integer"
-                },
                 "email": {
                     "type": "string"
                 },
@@ -6100,9 +5090,6 @@ const docTemplate = `{
                 },
                 "site": {
                     "type": "string"
-                },
-                "site_id": {
-                    "type": "integer"
                 },
                 "site_id": {
                     "type": "integer"
@@ -6508,10 +5495,6 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 1
                 },
-                "division_id": {
-                    "type": "integer",
-                    "example": 1
-                },
                 "email": {
                     "type": "string",
                     "example": "john.doe@example.com"
@@ -6551,10 +5534,6 @@ const docTemplate = `{
                 "site": {
                     "type": "string",
                     "example": "Jakarta"
-                },
-                "site_id": {
-                    "type": "integer",
-                    "example": 1
                 },
                 "site_id": {
                     "type": "integer",

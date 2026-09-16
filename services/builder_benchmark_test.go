@@ -12,14 +12,12 @@ func sampleBenchmarkInput(company string) services.GenerationInput {
 	var activities []models.DailyActivity
 	for i := 1; i <= 22; i++ {
 		activities = append(activities, models.DailyActivity{
-			Date:        time.Date(2026, 7, i, 0, 0, 0, 0, time.UTC),
-			StartTime:   "08:00",
-			EndTime:     "17:00",
-			Status:      "P",
-			Activity:    "Developed backend API and unit tests",
-			ProjectName: "BNI Direct Cash",
-			ProjectID:   "P24015",
-			ProjectRef:  &models.Project{Code: "P24015", Name: "BNI Direct Cash", AppImpacted: "BNI Direct"},
+			Date:       time.Date(2026, 7, i, 0, 0, 0, 0, time.UTC),
+			StartTime:  "08:00",
+			EndTime:    "17:00",
+			Status:     "P",
+			Activity:   "Developed backend API and unit tests",
+			ProjectRef: &models.Project{Code: "P24015", Name: "BNI Direct Cash", AppImpacted: "BNI Direct"},
 		})
 	}
 
