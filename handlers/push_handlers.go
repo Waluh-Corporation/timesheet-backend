@@ -171,13 +171,13 @@ func (s *Server) AdminSendTestPush(c *gin.Context) {
 	}
 
 	var targetUser models.User
-	if err := s.DB.First(&targetUser, targetID).Error; err != nil {
+	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, targetID).First(&targetUser).Error; err != nil {
 		RespondError(c, http.StatusNotFound, "user not found")
 		return
 	}
 
 	var subCount int64
-	s.DB.Model(&models.PushSubscription{}).Where("user_id = ?", targetID).Count(&subCount)
+	s.DB.WithContext(c.Request.Context()).Model(&models.PushSubscription{}).Where("user_id = ?", targetID).Count(&subCount)
 
 	title := strings.TrimSpace(req.Title)
 	if title == "" {
