@@ -662,6 +662,18 @@ func TestAdminMasterHandlers_AdminListEndpoints(t *testing.T) {
 				t.Errorf("expected user response NOT to include inactive item %q, body: %s", ep.inactKeyword, w.Body.String())
 			}
 		})
+
+		t.Run("UserList "+ep.name+" called by Admin returns ALL records including inactive", func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Set(ctxRole, models.RoleAdmin)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.userURL, nil)
+			ep.userHandler(c)
+			assertFatalCode(t, w, http.StatusOK)
+			if !strings.Contains(w.Body.String(), ep.inactKeyword) {
+				t.Errorf("expected admin caller on %s to include inactive item %q, body: %s", ep.userURL, ep.inactKeyword, w.Body.String())
+			}
+		})
 	}
 
 	// Test AdminListDepartments with division query filter
