@@ -266,6 +266,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/overtimes", s.ListMonthlyOvertimes)
 		authed.DELETE("/overtimes/:id", s.DeleteOvertime)
 		authed.POST("/timesheet/generate", s.GenerateTimesheet)
+		authed.GET("/timesheet/summary", s.GetTimesheetSummary)
 		authed.GET("/holidays", s.GetHolidays)
 		authed.GET("/holidays/all", s.ListHolidays)
 		authed.POST("/holidays/sync", s.SyncHolidays)

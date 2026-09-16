@@ -362,3 +362,86 @@ func TestActivityService_UpsertProjectResolution(t *testing.T) {
 		t.Errorf("expected empty project code/name, got %s / %s", savedEmpty.GetProjectCode(), savedEmpty.GetProjectName())
 	}
 }
+
+func TestActivityService_WorkingHoursValidation(t *testing.T) {
+	repo := newMockActivityRepo()
+	svc := NewActivityService(repo)
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		startTime   string
+		endTime     string
+		expectError bool
+		errContains string
+	}{
+		{
+			name:        "valid normal hours",
+			startTime:   "08:00",
+			endTime:     "17:00",
+			expectError: false,
+		},
+		{
+			name:        "empty hours allowed",
+			startTime:   "",
+			endTime:     "",
+			expectError: false,
+		},
+		{
+			name:        "check-out earlier than check-in (06:00 < 07:00)",
+			startTime:   "07:00",
+			endTime:     "06:00",
+			expectError: true,
+			errContains: "jam check-out (06:00) tidak boleh lebih awal dari atau sama dengan jam check-in (07:00)",
+		},
+		{
+			name:        "check-in equals check-out (08:00 == 08:00)",
+			startTime:   "08:00",
+			endTime:     "08:00",
+			expectError: true,
+			errContains: "jam check-out (08:00) tidak boleh lebih awal dari atau sama dengan jam check-in (08:00)",
+		},
+		{
+			name:        "invalid check-in format",
+			startTime:   "25:00",
+			endTime:     "17:00",
+			expectError: true,
+			errContains: "format jam check-in tidak valid",
+		},
+		{
+			name:        "invalid check-out format",
+			startTime:   "08:00",
+			endTime:     "99:99",
+			expectError: true,
+			errContains: "format jam check-out tidak valid",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &request.DailyActivityRequest{
+				Date:      "2026-09-20",
+				StartTime: tc.startTime,
+				EndTime:   tc.endTime,
+				Status:    "P",
+				Activity:  "Test task",
+			}
+			err := svc.UpsertDailyActivity(ctx, 1, req)
+			if tc.expectError {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !errors.Is(err, domain.ErrInvalidInput) {
+					t.Errorf("expected ErrInvalidInput, got %v", err)
+				}
+				if !strings.Contains(err.Error(), tc.errContains) {
+					t.Errorf("expected error message to contain %q, got: %s", tc.errContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
