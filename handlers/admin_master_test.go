@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -673,6 +675,152 @@ func TestAdminMasterHandlers_AdminListEndpoints(t *testing.T) {
 		w = httptest.NewRecorder()
 		c, _ = gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/departments?division=List+Div", nil)
+		srv.AdminListDepartments(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+}
+
+type mockFailingMasterService struct{}
+
+func (m *mockFailingMasterService) ListApprovers(ctx context.Context, roleType string, activeStatus *bool) ([]models.Approver, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateApprover(ctx context.Context, name string, roleType models.ApproverRoleType, title string, isActive *bool) (*models.Approver, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateApprover(ctx context.Context, id uint, name *string, roleType *models.ApproverRoleType, title *string, isActive *bool) (*models.Approver, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteApprover(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListCompanies(ctx context.Context, activeStatus *bool) ([]models.Company, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateCompany(ctx context.Context, code string, name string) (*models.Company, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateCompany(ctx context.Context, id uint, code *string, name *string, isActive *bool) (*models.Company, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteCompany(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListSites(ctx context.Context, activeStatus *bool) ([]models.Site, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateSite(ctx context.Context, code string, name string, isActive *bool) (*models.Site, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateSite(ctx context.Context, id uint, code *string, name *string, isActive *bool) (*models.Site, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteSite(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListDivisions(ctx context.Context, activeStatus *bool) ([]models.Division, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateDivision(ctx context.Context, code string, name string, isActive *bool) (*models.Division, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateDivision(ctx context.Context, id uint, code *string, name *string, isActive *bool) (*models.Division, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteDivision(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListDepartments(ctx context.Context, divisionID *uint, divisionName string, activeStatus *bool) ([]models.Department, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateDepartment(ctx context.Context, code string, name string, division string, divisionID *uint, isActive *bool) (*models.Department, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateDepartment(ctx context.Context, id uint, code *string, name *string, division *string, divisionID *uint, isActive *bool) (*models.Department, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteDepartment(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListProjects(ctx context.Context, activeOnly bool) ([]models.Project, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) ListActivityStatuses(ctx context.Context) ([]models.ActivityStatus, error) {
+	return nil, errors.New("db error")
+}
+
+func TestAdminMasterHandlers_AdminList_ErrorsAndEdgeCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("Uninitialized MasterService returns 500", func(t *testing.T) {
+		srvNil := &Server{} // DB == nil, MasterSvc == nil
+
+		handlers := []struct {
+			name    string
+			handler func(*gin.Context)
+			url     string
+		}{
+			{"AdminListApprovers", srvNil.AdminListApprovers, "/api/v1/admin/approvers"},
+			{"AdminListCompanies", srvNil.AdminListCompanies, "/api/v1/admin/companies"},
+			{"AdminListSites", srvNil.AdminListSites, "/api/v1/admin/sites"},
+			{"AdminListDivisions", srvNil.AdminListDivisions, "/api/v1/admin/divisions"},
+			{"AdminListDepartments", srvNil.AdminListDepartments, "/api/v1/admin/departments"},
+		}
+
+		for _, h := range handlers {
+			t.Run(h.name, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodGet, h.url, nil)
+				h.handler(c)
+				assertFatalCode(t, w, http.StatusInternalServerError)
+				if !strings.Contains(w.Body.String(), "master service not initialized") {
+					t.Errorf("expected error message 'master service not initialized', got %s", w.Body.String())
+				}
+			})
+		}
+	})
+
+	t.Run("Service failure returns 500", func(t *testing.T) {
+		srvFail := &Server{
+			MasterSvc: &mockFailingMasterService{},
+		}
+
+		handlers := []struct {
+			name    string
+			handler func(*gin.Context)
+			url     string
+		}{
+			{"AdminListApprovers", srvFail.AdminListApprovers, "/api/v1/admin/approvers"},
+			{"AdminListCompanies", srvFail.AdminListCompanies, "/api/v1/admin/companies"},
+			{"AdminListSites", srvFail.AdminListSites, "/api/v1/admin/sites"},
+			{"AdminListDivisions", srvFail.AdminListDivisions, "/api/v1/admin/divisions"},
+			{"AdminListDepartments", srvFail.AdminListDepartments, "/api/v1/admin/departments"},
+		}
+
+		for _, h := range handlers {
+			t.Run(h.name, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodGet, h.url, nil)
+				h.handler(c)
+				assertFatalCode(t, w, http.StatusInternalServerError)
+				if !strings.Contains(w.Body.String(), "db error") {
+					t.Errorf("expected error message 'db error', got %s", w.Body.String())
+				}
+			})
+		}
+	})
+
+	t.Run("AdminListDepartments with invalid division_id ignores parse error gracefully", func(t *testing.T) {
+		db, cfg := setupTestDB(t)
+		tx := db.Begin()
+		defer tx.Rollback()
+		srv := &Server{DB: tx, Cfg: cfg}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/departments?division_id=not-a-number", nil)
 		srv.AdminListDepartments(c)
 		assertFatalCode(t, w, http.StatusOK)
 	})
