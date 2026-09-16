@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -591,61 +592,73 @@ func TestAdminMasterHandlers_AdminListEndpoints(t *testing.T) {
 
 	srv := &Server{DB: tx, Cfg: cfg}
 
-	// Seed one of each
+	// Seed active and inactive entries
 	comp := models.Company{Code: "list_comp", Name: "List Comp", IsActive: true}
 	_ = tx.Create(&comp)
+	compInact := models.Company{Code: "inact_comp", Name: "Inactive Comp"}
+	_ = tx.Create(&compInact)
+	_ = tx.Model(&compInact).Update("is_active", false)
+
 	appr := models.Approver{Name: "List Appr", RoleType: models.ApproverRoleTeamLeader, IsActive: true}
 	_ = tx.Create(&appr)
+	apprInact := models.Approver{Name: "Inactive Appr", RoleType: models.ApproverRoleTeamLeader}
+	_ = tx.Create(&apprInact)
+	_ = tx.Model(&apprInact).Update("is_active", false)
+
 	site := models.Site{Code: "list_site", Name: "List Site", IsActive: true}
 	_ = tx.Create(&site)
+	siteInact := models.Site{Code: "inact_site", Name: "Inactive Site"}
+	_ = tx.Create(&siteInact)
+	_ = tx.Model(&siteInact).Update("is_active", false)
+
 	div := models.Division{Code: "list_div", Name: "List Div", IsActive: true}
 	_ = tx.Create(&div)
+	divInact := models.Division{Code: "inact_div", Name: "Inactive Div"}
+	_ = tx.Create(&divInact)
+	_ = tx.Model(&divInact).Update("is_active", false)
+
 	dept := models.Department{Code: "list_dept", Name: "List Dept", DivisionID: &div.ID, Division: div.Name, IsActive: true}
 	_ = tx.Create(&dept)
+	deptInact := models.Department{Code: "inact_dept", Name: "Inactive Dept", DivisionID: &div.ID, Division: div.Name}
+	_ = tx.Create(&deptInact)
+	_ = tx.Model(&deptInact).Update("is_active", false)
 
 	endpoints := []struct {
-		name    string
-		handler func(*gin.Context)
-		url     string
+		name         string
+		adminHandler func(*gin.Context)
+		adminURL     string
+		userHandler  func(*gin.Context)
+		userURL      string
+		inactKeyword string
 	}{
-		{"AdminListApprovers", srv.AdminListApprovers, "/api/v1/admin/approvers"},
-		{"AdminListCompanies", srv.AdminListCompanies, "/api/v1/admin/companies"},
-		{"AdminListSites", srv.AdminListSites, "/api/v1/admin/sites"},
-		{"AdminListDivisions", srv.AdminListDivisions, "/api/v1/admin/divisions"},
-		{"AdminListDepartments", srv.AdminListDepartments, "/api/v1/admin/departments"},
+		{"Approvers", srv.AdminListApprovers, "/api/v1/admin/approvers", srv.ListApprovers, "/api/v1/approvers", "Inactive Appr"},
+		{"Companies", srv.AdminListCompanies, "/api/v1/admin/companies", srv.ListCompanies, "/api/v1/companies", "inact_comp"},
+		{"Sites", srv.AdminListSites, "/api/v1/admin/sites", srv.ListSites, "/api/v1/sites", "inact_site"},
+		{"Divisions", srv.AdminListDivisions, "/api/v1/admin/divisions", srv.ListDivisions, "/api/v1/divisions", "inact_div"},
+		{"Departments", srv.AdminListDepartments, "/api/v1/admin/departments", srv.ListDepartments, "/api/v1/departments", "inact_dept"},
 	}
 
 	for _, ep := range endpoints {
-		t.Run(ep.name+" default", func(t *testing.T) {
+		t.Run("AdminList "+ep.name+" returns both active and inactive records", func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, ep.url, nil)
-			ep.handler(c)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.adminURL, nil)
+			ep.adminHandler(c)
 			assertFatalCode(t, w, http.StatusOK)
+			if !strings.Contains(w.Body.String(), ep.inactKeyword) {
+				t.Errorf("expected admin response to include inactive item %q, body: %s", ep.inactKeyword, w.Body.String())
+			}
 		})
 
-		t.Run(ep.name+" ?is_active=true", func(t *testing.T) {
+		t.Run("UserList "+ep.name+" returns ONLY active records", func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, ep.url+"?is_active=true", nil)
-			ep.handler(c)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.userURL, nil)
+			ep.userHandler(c)
 			assertFatalCode(t, w, http.StatusOK)
-		})
-
-		t.Run(ep.name+" ?is_active=false", func(t *testing.T) {
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, ep.url+"?is_active=false", nil)
-			ep.handler(c)
-			assertFatalCode(t, w, http.StatusOK)
-		})
-
-		t.Run(ep.name+" ?include_inactive=false", func(t *testing.T) {
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, ep.url+"?include_inactive=false", nil)
-			ep.handler(c)
-			assertFatalCode(t, w, http.StatusOK)
+			if strings.Contains(w.Body.String(), ep.inactKeyword) {
+				t.Errorf("expected user response NOT to include inactive item %q, body: %s", ep.inactKeyword, w.Body.String())
+			}
 		})
 	}
 
