@@ -609,7 +609,10 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 	RespondDelete(c, http.StatusOK)
 }
 
-func parseActiveFilter(_ *gin.Context) *bool {
+func parseActiveFilter(c *gin.Context) *bool {
+	if role, _ := c.Get(ctxRole); role == models.RoleAdmin {
+		return nil
+	}
 	t := true
 	return &t
 }
