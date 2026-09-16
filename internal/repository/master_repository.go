@@ -81,7 +81,7 @@ func (r *masterRepository) ListApprovers(ctx context.Context, roleType string, a
 
 func (r *masterRepository) FindApproverByID(ctx context.Context, id uint) (*models.Approver, error) {
 	var a models.Approver
-	err := r.db.WithContext(ctx).Scopes(models.ActiveOnly).Where("id = ?", id).First(&a).Error
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&a).Error
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (r *masterRepository) ListCompanies(ctx context.Context, activeStatus *bool
 
 func (r *masterRepository) FindCompanyByID(ctx context.Context, id uint) (*models.Company, error) {
 	var c models.Company
-	err := r.db.WithContext(ctx).Scopes(models.ActiveOnly).Where("id = ?", id).First(&c).Error
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&c).Error
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (r *masterRepository) ListSites(ctx context.Context, activeStatus *bool) ([
 
 func (r *masterRepository) FindSiteByID(ctx context.Context, id uint) (*models.Site, error) {
 	var s models.Site
-	err := r.db.WithContext(ctx).Scopes(models.ActiveOnly).Where("id = ?", id).First(&s).Error
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&s).Error
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func (r *masterRepository) ListDivisions(ctx context.Context, activeStatus *bool
 
 func (r *masterRepository) FindDivisionByID(ctx context.Context, id uint) (*models.Division, error) {
 	var d models.Division
-	err := r.db.WithContext(ctx).Scopes(models.ActiveOnly).Where("id = ?", id).First(&d).Error
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&d).Error
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func (r *masterRepository) ListDepartments(ctx context.Context, divisionID *uint
 
 func (r *masterRepository) FindDepartmentByID(ctx context.Context, id uint) (*models.Department, error) {
 	var d models.Department
-	err := r.db.WithContext(ctx).Preload("DivisionRel").Scopes(models.ActiveOnly).Where("id = ?", id).First(&d).Error
+	err := r.db.WithContext(ctx).Preload("DivisionRel").Where("id = ?", id).First(&d).Error
 	if err != nil {
 		return nil, err
 	}

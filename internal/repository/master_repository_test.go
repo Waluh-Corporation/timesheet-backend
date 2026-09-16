@@ -50,8 +50,17 @@ func TestMasterRepository_All(t *testing.T) {
 		if err := repo.SoftDeleteApprover(ctx, appr.ID); err != nil {
 			t.Fatalf("SoftDeleteApprover failed: %v", err)
 		}
-		if _, err := repo.FindApproverByID(ctx, appr.ID); err == nil {
-			t.Fatal("expected error finding soft-deleted approver")
+		found, err = repo.FindApproverByID(ctx, appr.ID)
+		if err != nil || found.IsActive {
+			t.Fatalf("expected inactive approver, got err=%v, active=%v", err, found.IsActive)
+		}
+		found.IsActive = true
+		if err := repo.UpdateApprover(ctx, found); err != nil {
+			t.Fatalf("reactivating Approver failed: %v", err)
+		}
+		reactivated, err := repo.FindApproverByID(ctx, appr.ID)
+		if err != nil || !reactivated.IsActive {
+			t.Fatalf("expected reactivated approver, got err=%v, active=%v", err, reactivated.IsActive)
 		}
 	})
 
@@ -90,8 +99,17 @@ func TestMasterRepository_All(t *testing.T) {
 		if err := repo.SoftDeleteCompany(ctx, comp.ID); err != nil {
 			t.Fatalf("SoftDeleteCompany failed: %v", err)
 		}
-		if _, err := repo.FindCompanyByID(ctx, comp.ID); err == nil {
-			t.Fatal("expected error finding soft-deleted company")
+		found, err = repo.FindCompanyByID(ctx, comp.ID)
+		if err != nil || found.IsActive {
+			t.Fatalf("expected inactive company, got err=%v, active=%v", err, found.IsActive)
+		}
+		found.IsActive = true
+		if err := repo.UpdateCompany(ctx, found); err != nil {
+			t.Fatalf("reactivating Company failed: %v", err)
+		}
+		reactivated, err := repo.FindCompanyByID(ctx, comp.ID)
+		if err != nil || !reactivated.IsActive {
+			t.Fatalf("expected reactivated company, got err=%v, active=%v", err, reactivated.IsActive)
 		}
 	})
 
@@ -130,8 +148,17 @@ func TestMasterRepository_All(t *testing.T) {
 		if err := repo.SoftDeleteSite(ctx, site.ID); err != nil {
 			t.Fatalf("SoftDeleteSite failed: %v", err)
 		}
-		if _, err := repo.FindSiteByID(ctx, site.ID); err == nil {
-			t.Fatal("expected error finding soft-deleted site")
+		found, err = repo.FindSiteByID(ctx, site.ID)
+		if err != nil || found.IsActive {
+			t.Fatalf("expected inactive site, got err=%v, active=%v", err, found.IsActive)
+		}
+		found.IsActive = true
+		if err := repo.UpdateSite(ctx, found); err != nil {
+			t.Fatalf("reactivating Site failed: %v", err)
+		}
+		reactivated, err := repo.FindSiteByID(ctx, site.ID)
+		if err != nil || !reactivated.IsActive {
+			t.Fatalf("expected reactivated site, got err=%v, active=%v", err, reactivated.IsActive)
 		}
 	})
 
@@ -175,8 +202,17 @@ func TestMasterRepository_All(t *testing.T) {
 		if err := repo.SoftDeleteDivision(ctx, div.ID); err != nil {
 			t.Fatalf("SoftDeleteDivision failed: %v", err)
 		}
-		if _, err := repo.FindDivisionByID(ctx, div.ID); err == nil {
-			t.Fatal("expected error finding soft-deleted division")
+		found, err = repo.FindDivisionByID(ctx, div.ID)
+		if err != nil || found.IsActive {
+			t.Fatalf("expected inactive division, got err=%v, active=%v", err, found.IsActive)
+		}
+		found.IsActive = true
+		if err := repo.UpdateDivision(ctx, found); err != nil {
+			t.Fatalf("reactivating Division failed: %v", err)
+		}
+		reactivated, err := repo.FindDivisionByID(ctx, div.ID)
+		if err != nil || !reactivated.IsActive {
+			t.Fatalf("expected reactivated division, got err=%v, active=%v", err, reactivated.IsActive)
 		}
 	})
 
@@ -224,8 +260,17 @@ func TestMasterRepository_All(t *testing.T) {
 		if err := repo.SoftDeleteDepartment(ctx, dept.ID); err != nil {
 			t.Fatalf("SoftDeleteDepartment failed: %v", err)
 		}
-		if _, err := repo.FindDepartmentByID(ctx, dept.ID); err == nil {
-			t.Fatal("expected error finding soft-deleted department")
+		found, err = repo.FindDepartmentByID(ctx, dept.ID)
+		if err != nil || found.IsActive {
+			t.Fatalf("expected inactive department, got err=%v, active=%v", err, found.IsActive)
+		}
+		found.IsActive = true
+		if err := repo.UpdateDepartment(ctx, found); err != nil {
+			t.Fatalf("reactivating Department failed: %v", err)
+		}
+		reactivated, err := repo.FindDepartmentByID(ctx, dept.ID)
+		if err != nil || !reactivated.IsActive {
+			t.Fatalf("expected reactivated department, got err=%v, active=%v", err, reactivated.IsActive)
 		}
 	})
 
