@@ -904,4 +904,3 @@ func TestAdminMasterHandlers_ReactivateInactiveRecords(t *testing.T) {
 	srv.UpdateDepartment(c)
 	assertFatalCode(t, w, http.StatusOK)
 }
-
