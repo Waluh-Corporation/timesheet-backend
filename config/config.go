@@ -42,8 +42,10 @@ type Config struct {
 	// FrontendURL is used to build links inside emails (setup / reset).
 	FrontendURL string
 
-	// Timezone used for the daily reminder scheduler.
-	Timezone string
+	// Timezone used for the daily reminder scheduler and configurable cron expressions.
+	Timezone     string
+	ReminderCron string
+	CleanupCron  string
 
 	// Bootstrap admin credentials, applied on first boot when no admin exists.
 	AdminEmail    string
@@ -58,6 +60,10 @@ type Config struct {
 	RateLimitEnabled  bool
 	RateLimitRequests int
 	RateLimitWindow   time.Duration
+
+	// CORSAllowedOrigins specifies origins allowed to make cross-origin requests.
+	// When empty, it falls back to FrontendURL, RPOrigins, and local dev origins.
+	CORSAllowedOrigins []string
 }
 
 func getEnv(key, fallback string) string {
@@ -69,7 +75,7 @@ func getEnv(key, fallback string) string {
 
 func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
 			return n
 		}
 	}
@@ -78,7 +84,7 @@ func getEnvInt(key string, fallback int) int {
 
 func getEnvBool(key string, fallback bool) bool {
 	if v := os.Getenv(key); v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
+		if b, err := strconv.ParseBool(strings.TrimSpace(v)); err == nil {
 			return b
 		}
 	}
@@ -145,6 +151,13 @@ func loadDotEnv(filenames ...string) {
 			if len(parts) == 2 {
 				k := strings.TrimSpace(parts[0])
 				v := strings.TrimSpace(parts[1])
+				if !strings.HasPrefix(v, `"`) && !strings.HasPrefix(v, `'`) {
+					if idx := strings.Index(v, " #"); idx != -1 {
+						v = strings.TrimSpace(v[:idx])
+					} else if idx := strings.Index(v, "\t#"); idx != -1 {
+						v = strings.TrimSpace(v[:idx])
+					}
+				}
 				v = strings.Trim(v, `"'`)
 				if _, exists := os.LookupEnv(k); !exists {
 					_ = os.Setenv(k, v)
@@ -161,6 +174,16 @@ func Load() *Config {
 	defaultDBURL := "host=" + getEnv("DB_HOST", "localhost") + " user=" + getEnv("DB_USER", "timesheet") + " dbname=" + getEnv("DB_NAME", "timesheet") + " port=" + getEnv("DB_PORT", "5432") + " sslmode=disable TimeZone=Asia/Jakarta"
 
 	appName := getEnv("APP_NAME", "Timesheet Portal")
+
+	rateLimitDefault := isRelease() // Enabled by default in production (release mode), disabled in debug/dev
+	rateLimitEnabled := getEnvBool("RATE_LIMIT_ENABLED", rateLimitDefault)
+	rateLimitRequests := getEnvInt("RATE_LIMIT_REQUESTS", 10)
+	rateLimitWindowSec := getEnvInt("RATE_LIMIT_WINDOW_SECONDS", 60)
+
+	// Setting requests <= 0 or window <= 0 explicitly disables the rate limiter
+	if rateLimitRequests <= 0 || rateLimitWindowSec <= 0 {
+		rateLimitEnabled = false
+	}
 
 	cfg := &Config{
 		AppName:     appName,
@@ -187,8 +210,10 @@ func Load() *Config {
 		VAPIDPrivateKey: getEnv("VAPID_PRIVATE_KEY", ""),
 		VAPIDSubject:    getEnv("VAPID_SUBJECT", "mailto:admin@timesheet.local"),
 
-		FrontendURL: getEnv("FRONTEND_URL", "http://localhost:3000"),
-		Timezone:    getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
+		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:3000"),
+		Timezone:     getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
+		ReminderCron: getEnv("SCHEDULER_REMINDER_CRON", getEnv("SCHEDULER_CRON", "0 17 * * *")),
+		CleanupCron:  getEnv("SCHEDULER_CLEANUP_CRON", "0 2 * * *"),
 
 		AdminEmail:    getEnv("ADMIN_EMAIL", getEnv("BOOTSTRAP_ADMIN_EMAIL", "admin@timesheet.local")),
 		AdminUsername: getEnv("BOOTSTRAP_ADMIN_USERNAME", "admin"),
@@ -196,16 +221,20 @@ func Load() *Config {
 
 		RunMigrations: getEnvBool("RUN_MIGRATIONS", false),
 
-		RateLimitEnabled:  getEnvBool("RATE_LIMIT_ENABLED", true),
-		RateLimitRequests: getEnvInt("RATE_LIMIT_REQUESTS", 10),
-		RateLimitWindow:   time.Duration(getEnvInt("RATE_LIMIT_WINDOW_SECONDS", 60)) * time.Second,
+		RateLimitEnabled:  rateLimitEnabled,
+		RateLimitRequests: rateLimitRequests,
+		RateLimitWindow:   time.Duration(rateLimitWindowSec) * time.Second,
+
+		CORSAllowedOrigins: parseOrigins(getEnv("CORS_ALLOWED_ORIGINS", "")),
 	}
 
-	if cfg.RateLimitRequests <= 0 {
-		cfg.RateLimitRequests = 10
-	}
-	if cfg.RateLimitWindow <= 0 {
-		cfg.RateLimitWindow = 60 * time.Second
+	if cfg.RateLimitEnabled {
+		if cfg.RateLimitRequests <= 0 {
+			cfg.RateLimitRequests = 10
+		}
+		if cfg.RateLimitWindow <= 0 {
+			cfg.RateLimitWindow = 60 * time.Second
+		}
 	}
 
 	cfg.validateSecrets()

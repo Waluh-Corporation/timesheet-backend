@@ -102,13 +102,15 @@ func TestBuildSDDWorkbook(t *testing.T) {
 	}
 
 	act := models.DailyActivity{
-		Date:        time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
-		StartTime:   "08:30",
-		EndTime:     "17:30",
-		Status:      "H",
-		Activity:    "API Development",
-		ProjectName: "BNI Direct",
-		ProjectID:   "P24015",
+		Date:      time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC),
+		StartTime: "08:30",
+		EndTime:   "17:30",
+		Status:    "H",
+		Activity:  "API Development",
+		ProjectRef: &models.Project{
+			Code: "P24015",
+			Name: "BNI Direct",
+		},
 	}
 
 	in := GenerationInput{
@@ -178,12 +180,14 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 	}
 
 	act := models.DailyActivity{
-		Date:        time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC),
-		StartTime:   "08:00",
-		EndTime:     "17:00",
-		Status:      "P",
-		Activity:    "WIT BNIdirect bisnis",
-		ProjectName: "BNI Direct",
+		Date:      time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC),
+		StartTime: "08:00",
+		EndTime:   "17:00",
+		Status:    "P",
+		Activity:  "WIT BNIdirect bisnis",
+		ProjectRef: &models.Project{
+			Name: "BNI Direct",
+		},
 	}
 
 	tl := models.Approver{Name: "Team Leader Example"}
@@ -273,13 +277,11 @@ func TestBuildNTTWorkbook(t *testing.T) {
 	}
 
 	act := models.DailyActivity{
-		Date:        time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
-		StartTime:   "08:00",
-		EndTime:     "17:00",
-		Status:      "P",
-		Activity:    "Sprint Planning",
-		ProjectName: "BNI Direct",
-		ProjectID:   "P24015",
+		Date:      time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+		StartTime: "08:00",
+		EndTime:   "17:00",
+		Status:    "P",
+		Activity:  "Sprint Planning",
 		ProjectRef: &models.Project{
 			Code:        "P24015",
 			Name:        "BNI Direct",

@@ -184,25 +184,20 @@ func TestUser_WebAuthnMethods(t *testing.T) {
 }
 
 func TestDailyActivity_ProjectGetters(t *testing.T) {
-	// Fallback to denormalized fields
-	actFallback := DailyActivity{
-		ProjectID:   "PRJ-01",
-		ProjectName: "Project Alpha",
+	// Without ProjectRef, canonical getters return empty strings
+	actEmpty := DailyActivity{}
+	if actEmpty.GetProjectCode() != "" {
+		t.Errorf("expected empty string, got %s", actEmpty.GetProjectCode())
 	}
-	if actFallback.GetProjectCode() != "PRJ-01" {
-		t.Errorf("expected PRJ-01, got %s", actFallback.GetProjectCode())
+	if actEmpty.GetProjectName() != "" {
+		t.Errorf("expected empty string, got %s", actEmpty.GetProjectName())
 	}
-	if actFallback.GetProjectName() != "Project Alpha" {
-		t.Errorf("expected Project Alpha, got %s", actFallback.GetProjectName())
-	}
-	if actFallback.GetAppImpacted() != "" {
-		t.Errorf("expected empty string without ProjectRef, got %s", actFallback.GetAppImpacted())
+	if actEmpty.GetAppImpacted() != "" {
+		t.Errorf("expected empty string without ProjectRef, got %s", actEmpty.GetAppImpacted())
 	}
 
-	// Referenced Project takes precedence and provides canonical AppImpacted
+	// Referenced Project provides canonical attributes
 	actRef := DailyActivity{
-		ProjectID:   "PRJ-OLD",
-		ProjectName: "Name Old",
 		ProjectRef: &Project{
 			Code:        "PRJ-NEW",
 			Name:        "Name New",

@@ -1,18 +1,17 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
 	_ "timesheet-backend/dto/response"
+	"timesheet-backend/internal/domain"
 	"timesheet-backend/models"
 )
-
-const queryID = "id = ?"
 
 // CreateApproverRequest carries fields to add a new approver.
 type CreateApproverRequest struct {
@@ -109,19 +108,18 @@ func (s *Server) CreateApprover(c *gin.Context) {
 		return
 	}
 
-	isActive := true
-	if req.IsActive != nil {
-		isActive = *req.IsActive
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
 	}
 
-	appr := models.Approver{
-		Name:     strings.TrimSpace(req.Name),
-		RoleType: req.RoleType,
-		Title:    strings.TrimSpace(req.Title),
-		IsActive: isActive,
-	}
-
-	if err := s.DB.Create(&appr).Error; err != nil {
+	_, err := svc.CreateApprover(reqContext(c), req.Name, req.RoleType, req.Title, req.IsActive)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to create approver: "+err.Error())
 		return
 	}
@@ -158,40 +156,24 @@ func (s *Server) UpdateApprover(c *gin.Context) {
 		return
 	}
 
-	if s.DB == nil {
+	svc := s.getMasterService()
+	if svc == nil {
 		RespondError(c, http.StatusInternalServerError, "database not available")
 		return
 	}
 
-	var appr models.Approver
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&appr).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "approver not found")
-		return
-	}
-
-	hasUpdates := false
-	if req.Name != nil {
-		appr.Name = strings.TrimSpace(*req.Name)
-		hasUpdates = true
-	}
-	if req.RoleType != nil {
-		appr.RoleType = *req.RoleType
-		hasUpdates = true
-	}
-	if req.Title != nil {
-		appr.Title = strings.TrimSpace(*req.Title)
-		hasUpdates = true
-	}
-	if req.IsActive != nil {
-		appr.IsActive = *req.IsActive
-		hasUpdates = true
-	}
-
-	if hasUpdates {
-		if err := s.DB.WithContext(c.Request.Context()).Save(&appr).Error; err != nil {
-			RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
+	_, err = svc.UpdateApprover(reqContext(c), uint(id), req.Name, req.RoleType, req.Title, req.IsActive)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "approver not found")
 			return
 		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "failed to update approver: "+err.Error())
+		return
 	}
 
 	RespondMessage(c, http.StatusOK, "approver updated successfully")
@@ -217,16 +199,17 @@ func (s *Server) DeleteApprover(c *gin.Context) {
 		return
 	}
 
-	var appr models.Approver
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&appr).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "approver not found")
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
 		return
 	}
 
-	if err := s.DB.Model(&appr).Updates(map[string]interface{}{
-		"is_active":  false,
-		"updated_at": time.Now(),
-	}).Error; err != nil {
+	if err := svc.DeleteApprover(reqContext(c), uint(id)); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "approver not found")
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to delete approver: "+err.Error())
 		return
 	}
@@ -254,13 +237,18 @@ func (s *Server) CreateCompany(c *gin.Context) {
 		return
 	}
 
-	comp := models.Company{
-		Code:     strings.ToLower(strings.TrimSpace(req.Code)),
-		Name:     strings.TrimSpace(req.Name),
-		IsActive: true,
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
 	}
 
-	if err := s.DB.Create(&comp).Error; err != nil {
+	_, err := svc.CreateCompany(reqContext(c), req.Code, req.Name)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to create company: "+err.Error())
 		return
 	}
@@ -296,32 +284,24 @@ func (s *Server) UpdateCompany(c *gin.Context) {
 		return
 	}
 
-	if s.DB == nil {
+	svc := s.getMasterService()
+	if svc == nil {
 		RespondError(c, http.StatusInternalServerError, "database not available")
 		return
 	}
 
-	var comp models.Company
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&comp).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "company not found")
-		return
-	}
-
-	hasUpdates := false
-	if req.Code != nil {
-		comp.Code = strings.ToLower(strings.TrimSpace(*req.Code))
-		hasUpdates = true
-	}
-	if req.Name != nil {
-		comp.Name = strings.TrimSpace(*req.Name)
-		hasUpdates = true
-	}
-
-	if hasUpdates {
-		if err := s.DB.WithContext(c.Request.Context()).Save(&comp).Error; err != nil {
-			RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
+	_, err = svc.UpdateCompany(reqContext(c), uint(id), req.Code, req.Name, nil)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "company not found")
 			return
 		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, "failed to update company: "+err.Error())
+		return
 	}
 
 	RespondMessage(c, http.StatusOK, "company updated successfully")
@@ -347,16 +327,17 @@ func (s *Server) DeleteCompany(c *gin.Context) {
 		return
 	}
 
-	var comp models.Company
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&comp).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "company not found")
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
 		return
 	}
 
-	if err := s.DB.Model(&comp).Updates(map[string]interface{}{
-		"is_active":  false,
-		"updated_at": time.Now(),
-	}).Error; err != nil {
+	if err := svc.DeleteCompany(reqContext(c), uint(id)); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "company not found")
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to delete company: "+err.Error())
 		return
 	}
@@ -384,18 +365,18 @@ func (s *Server) CreateSite(c *gin.Context) {
 		return
 	}
 
-	isActive := true
-	if req.IsActive != nil {
-		isActive = *req.IsActive
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
 	}
 
-	site := models.Site{
-		Code:     strings.ToLower(strings.TrimSpace(req.Code)),
-		Name:     strings.TrimSpace(req.Name),
-		IsActive: isActive,
-	}
-
-	if err := s.DB.Create(&site).Error; err != nil {
+	_, err := svc.CreateSite(reqContext(c), req.Code, req.Name, req.IsActive)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to create site: "+err.Error())
 		return
 	}
@@ -418,20 +399,6 @@ func (s *Server) CreateSite(c *gin.Context) {
 // @Failure 404 {object} response.ErrorResponse "Site not found"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/sites/{id} [patch]
-func (s *Server) findActiveSiteByID(c *gin.Context) (*models.Site, bool) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid site ID, expected positive integer")
-		return nil, false
-	}
-	var site models.Site
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&site).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "site not found")
-		return nil, false
-	}
-	return &site, true
-}
-
 func (s *Server) UpdateSite(c *gin.Context) {
 	var req UpdateSiteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -439,22 +406,28 @@ func (s *Server) UpdateSite(c *gin.Context) {
 		return
 	}
 
-	site, ok := s.findActiveSiteByID(c)
-	if !ok {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid site ID, expected positive integer")
 		return
 	}
 
-	if req.Code != nil {
-		site.Code = strings.ToLower(strings.TrimSpace(*req.Code))
-	}
-	if req.Name != nil {
-		site.Name = strings.TrimSpace(*req.Name)
-	}
-	if req.IsActive != nil {
-		site.IsActive = *req.IsActive
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
 	}
 
-	if err := s.DB.WithContext(c.Request.Context()).Save(site).Error; err != nil {
+	_, err = svc.UpdateSite(reqContext(c), uint(id), req.Code, req.Name, req.IsActive)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "site not found")
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to update site: "+err.Error())
 		return
 	}
@@ -475,15 +448,23 @@ func (s *Server) UpdateSite(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/sites/{id} [delete]
 func (s *Server) DeleteSite(c *gin.Context) {
-	site, ok := s.findActiveSiteByID(c)
-	if !ok {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid site ID, expected positive integer")
 		return
 	}
 
-	if err := s.DB.Model(site).Updates(map[string]interface{}{
-		"is_active":  false,
-		"updated_at": time.Now(),
-	}).Error; err != nil {
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+
+	if err := svc.DeleteSite(reqContext(c), uint(id)); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "site not found")
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to delete site: "+err.Error())
 		return
 	}
@@ -511,18 +492,18 @@ func (s *Server) CreateDivision(c *gin.Context) {
 		return
 	}
 
-	isActive := true
-	if req.IsActive != nil {
-		isActive = *req.IsActive
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
 	}
 
-	div := models.Division{
-		Code:     strings.ToLower(strings.TrimSpace(req.Code)),
-		Name:     strings.TrimSpace(req.Name),
-		IsActive: isActive,
-	}
-
-	if err := s.DB.Create(&div).Error; err != nil {
+	_, err := svc.CreateDivision(reqContext(c), req.Code, req.Name, req.IsActive)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to create division: "+err.Error())
 		return
 	}
@@ -545,20 +526,6 @@ func (s *Server) CreateDivision(c *gin.Context) {
 // @Failure 404 {object} response.ErrorResponse "Division not found"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/divisions/{id} [patch]
-func (s *Server) findActiveDivisionByID(c *gin.Context) (*models.Division, bool) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid division ID, expected positive integer")
-		return nil, false
-	}
-	var div models.Division
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&div).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "division not found")
-		return nil, false
-	}
-	return &div, true
-}
-
 func (s *Server) UpdateDivision(c *gin.Context) {
 	var req UpdateDivisionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -566,22 +533,28 @@ func (s *Server) UpdateDivision(c *gin.Context) {
 		return
 	}
 
-	div, ok := s.findActiveDivisionByID(c)
-	if !ok {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid division ID, expected positive integer")
 		return
 	}
 
-	if req.Code != nil {
-		div.Code = strings.ToLower(strings.TrimSpace(*req.Code))
-	}
-	if req.Name != nil {
-		div.Name = strings.TrimSpace(*req.Name)
-	}
-	if req.IsActive != nil {
-		div.IsActive = *req.IsActive
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
 	}
 
-	if err := s.DB.WithContext(c.Request.Context()).Save(div).Error; err != nil {
+	_, err = svc.UpdateDivision(reqContext(c), uint(id), req.Code, req.Name, req.IsActive)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "division not found")
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to update division: "+err.Error())
 		return
 	}
@@ -602,15 +575,23 @@ func (s *Server) UpdateDivision(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/divisions/{id} [delete]
 func (s *Server) DeleteDivision(c *gin.Context) {
-	div, ok := s.findActiveDivisionByID(c)
-	if !ok {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid division ID, expected positive integer")
 		return
 	}
 
-	if err := s.DB.Model(div).Updates(map[string]interface{}{
-		"is_active":  false,
-		"updated_at": time.Now(),
-	}).Error; err != nil {
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+
+	if err := svc.DeleteDivision(reqContext(c), uint(id)); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "division not found")
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to delete division: "+err.Error())
 		return
 	}
@@ -638,67 +619,22 @@ func (s *Server) CreateDepartment(c *gin.Context) {
 		return
 	}
 
-	isActive := true
-	if req.IsActive != nil {
-		isActive = *req.IsActive
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
 	}
 
-	dept := models.Department{
-		Code:       strings.ToUpper(strings.TrimSpace(req.Code)),
-		Name:       strings.TrimSpace(req.Name),
-		Division:   strings.TrimSpace(req.Division),
-		DivisionID: req.DivisionID,
-		IsActive:   isActive,
-	}
-
-	// Resolve Division if DivisionID is provided
-	if req.DivisionID != nil && *req.DivisionID != 0 {
-		var div models.Division
-		if err := s.DB.Where(queryIDAndIsActive, *req.DivisionID).First(&div).Error; err == nil {
-			dept.Division = div.Name
-			dept.DivisionID = &div.ID
+	_, err := svc.CreateDepartment(reqContext(c), req.Code, req.Name, req.Division, req.DivisionID, req.IsActive)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
 		}
-	} else if dept.Division != "" {
-		var div models.Division
-		if err := s.DB.Where(queryCodeOrNameLikeIsActive, dept.Division, "%"+dept.Division+"%").First(&div).Error; err == nil {
-			dept.Division = div.Name
-			dept.DivisionID = &div.ID
-		}
-	}
-
-	if err := s.DB.Create(&dept).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to create department: "+err.Error())
 		return
 	}
 	RespondMessage(c, http.StatusCreated, "department created successfully")
-}
-
-func (s *Server) resolveDepartmentDivisionUpdate(dept *models.Department, req *UpdateDepartmentRequest) {
-	if req.DivisionID != nil {
-		if *req.DivisionID != 0 {
-			var div models.Division
-			if err := s.DB.Where(queryIDAndIsActive, *req.DivisionID).First(&div).Error; err == nil {
-				dept.DivisionID = &div.ID
-				dept.Division = div.Name
-			}
-		} else {
-			dept.DivisionID = nil
-			dept.Division = ""
-		}
-		return
-	}
-	if req.Division != nil {
-		dept.Division = strings.TrimSpace(*req.Division)
-		if dept.Division != "" {
-			var div models.Division
-			if err := s.DB.Where(queryCodeOrNameLikeIsActive, dept.Division, "%"+dept.Division+"%").First(&div).Error; err == nil {
-				dept.DivisionID = &div.ID
-				dept.Division = div.Name
-				return
-			}
-		}
-		dept.DivisionID = nil
-	}
 }
 
 // UpdateDepartment godoc
@@ -717,20 +653,6 @@ func (s *Server) resolveDepartmentDivisionUpdate(dept *models.Department, req *U
 // @Failure 404 {object} response.ErrorResponse "Department not found"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/departments/{id} [patch]
-func (s *Server) findActiveDepartmentByID(c *gin.Context) (*models.Department, bool) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid department ID, expected positive integer")
-		return nil, false
-	}
-	var dept models.Department
-	if err := s.DB.WithContext(c.Request.Context()).Scopes(models.ActiveOnly).Where(queryID, id).First(&dept).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "department not found")
-		return nil, false
-	}
-	return &dept, true
-}
-
 func (s *Server) UpdateDepartment(c *gin.Context) {
 	var req UpdateDepartmentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -738,23 +660,28 @@ func (s *Server) UpdateDepartment(c *gin.Context) {
 		return
 	}
 
-	dept, ok := s.findActiveDepartmentByID(c)
-	if !ok {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid department ID, expected positive integer")
 		return
 	}
 
-	if req.Code != nil {
-		dept.Code = strings.ToUpper(strings.TrimSpace(*req.Code))
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "database not available")
+		return
 	}
-	if req.Name != nil {
-		dept.Name = strings.TrimSpace(*req.Name)
-	}
-	if req.IsActive != nil {
-		dept.IsActive = *req.IsActive
-	}
-	s.resolveDepartmentDivisionUpdate(dept, &req)
 
-	if err := s.DB.WithContext(c.Request.Context()).Save(dept).Error; err != nil {
+	_, err = svc.UpdateDepartment(reqContext(c), uint(id), req.Code, req.Name, req.Division, req.DivisionID, req.IsActive)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "department not found")
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to update department: "+err.Error())
 		return
 	}
@@ -775,15 +702,23 @@ func (s *Server) UpdateDepartment(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/departments/{id} [delete]
 func (s *Server) DeleteDepartment(c *gin.Context) {
-	dept, ok := s.findActiveDepartmentByID(c)
-	if !ok {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid department ID, expected positive integer")
 		return
 	}
 
-	if err := s.DB.Model(dept).Updates(map[string]interface{}{
-		"is_active":  false,
-		"updated_at": time.Now(),
-	}).Error; err != nil {
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+
+	if err := svc.DeleteDepartment(reqContext(c), uint(id)); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "department not found")
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to delete department: "+err.Error())
 		return
 	}
@@ -792,80 +727,110 @@ func (s *Server) DeleteDepartment(c *gin.Context) {
 
 // AdminListApprovers godoc
 // @Summary List all approvers (admin only)
-// @Description Returns all registered approvers with optional inactive filter.
+// @Description Returns all registered approvers (both active and inactive).
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive approvers"
 // @Success 200 {array} models.Approver
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/approvers [get]
 func (s *Server) AdminListApprovers(c *gin.Context) {
-	s.ListApprovers(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	approvers, err := svc.ListApprovers(reqContext(c), c.Query("role_type"), nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, approvers)
 }
 
 // AdminListCompanies godoc
 // @Summary List all companies (admin only)
-// @Description Returns all companies.
+// @Description Returns all companies (both active and inactive).
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive companies"
 // @Success 200 {array} models.Company
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/companies [get]
 func (s *Server) AdminListCompanies(c *gin.Context) {
-	s.ListCompanies(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	companies, err := svc.ListCompanies(reqContext(c), nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, companies)
 }
 
 // AdminListSites godoc
 // @Summary List all sites (admin only)
-// @Description Returns all registered office/placement sites with optional inactive filter.
+// @Description Returns all registered office/placement sites (both active and inactive).
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive sites"
 // @Success 200 {array} models.Site
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/sites [get]
 func (s *Server) AdminListSites(c *gin.Context) {
-	s.ListSites(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	sites, err := svc.ListSites(reqContext(c), nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, sites)
 }
 
 // AdminListDivisions godoc
 // @Summary List all divisions (admin only)
-// @Description Returns all organizational divisions with optional inactive filter.
+// @Description Returns all organizational divisions (both active and inactive).
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive divisions"
 // @Success 200 {array} models.Division
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/divisions [get]
 func (s *Server) AdminListDivisions(c *gin.Context) {
-	s.ListDivisions(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	divisions, err := svc.ListDivisions(reqContext(c), nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, divisions)
 }
 
 // AdminListDepartments godoc
 // @Summary List all departments (admin only)
-// @Description Returns all departments with optional division and inactive filters.
+// @Description Returns all departments (both active and inactive) with optional division filter.
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive departments"
 // @Param division query string false "Filter by division name"
 // @Param division_id query int false "Filter by division ID"
 // @Success 200 {array} models.Department
@@ -874,5 +839,23 @@ func (s *Server) AdminListDivisions(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/departments [get]
 func (s *Server) AdminListDepartments(c *gin.Context) {
-	s.ListDepartments(c)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	var divID *uint
+	if divIDStr := c.Query("division_id"); divIDStr != "" {
+		if id, err := strconv.ParseUint(divIDStr, 10, 64); err == nil {
+			uID := uint(id)
+			divID = &uID
+		}
+	}
+	divName := strings.TrimSpace(c.Query("division"))
+	depts, err := svc.ListDepartments(reqContext(c), divID, divName, nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	RespondSuccess(c, http.StatusOK, depts)
 }

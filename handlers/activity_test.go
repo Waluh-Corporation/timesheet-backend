@@ -381,12 +381,6 @@ func assertProjectSyncFields(t *testing.T, act models.DailyActivity, proj models
 	if act.ProjectRefID == nil || *act.ProjectRefID != proj.ID {
 		t.Errorf("expected ProjectRefID %d, got %v", proj.ID, act.ProjectRefID)
 	}
-	if act.ProjectID != proj.Code {
-		t.Errorf("expected ProjectID %q, got %q", proj.Code, act.ProjectID)
-	}
-	if act.ProjectName != proj.Name {
-		t.Errorf("expected ProjectName %q, got %q", proj.Name, act.ProjectName)
-	}
 	if act.GetProjectCode() != proj.Code {
 		t.Errorf("expected GetProjectCode() %q, got %q", proj.Code, act.GetProjectCode())
 	}
@@ -751,8 +745,35 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		srv.GenerateTimesheet(cNoComp)
 		assertFatalCode(t, wNoComp, http.StatusBadRequest)
 
-		// 4. User with assigned company string "mii"
+		// 4. User with assigned company string "mii" but empty activities -> 400 Bad Request
 		_ = tx.Model(&user).Update("company", "mii")
+		wEmpty := httptest.NewRecorder()
+		cEmpty, _ := gin.CreateTestContext(wEmpty)
+		cEmpty.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cEmpty.Request.Header.Set("Content-Type", "application/json")
+		cEmpty.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cEmpty)
+		assertFatalCode(t, wEmpty, http.StatusBadRequest)
+		if !strings.Contains(wEmpty.Body.String(), "belum ada aktivitas yang tercatat") {
+			t.Errorf("expected polite empty timesheet error, got: %s", wEmpty.Body.String())
+		}
+
+		// Seed an activity for user in September 2026
+		actDate := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+		seedAct := models.DailyActivity{
+			UserID:    user.ID,
+			Date:      actDate,
+			StartTime: "09:00",
+			EndTime:   "18:00",
+			Status:    "P",
+			Activity:  "Working on tasks",
+			IsActive:  true,
+		}
+		if err := tx.Create(&seedAct).Error; err != nil {
+			t.Fatalf("failed to seed activity: %v", err)
+		}
+
+		// 5. Generate timesheet with activities present -> 200 OK
 		wOk := httptest.NewRecorder()
 		cOk, _ := gin.CreateTestContext(wOk)
 		cOk.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
@@ -764,7 +785,7 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 			t.Error("expected non-empty xlsx payload in response")
 		}
 
-		// 5. User with assigned CompanyID
+		// 6. User with assigned CompanyID
 		var testComp models.Company
 		if err := tx.Where("code = ?", "MII").First(&testComp).Error; err != nil {
 			testComp = models.Company{Code: "MII", Name: "Mitra Integrasi Informatika", IsActive: true}

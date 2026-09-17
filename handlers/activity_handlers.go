@@ -14,11 +14,10 @@ import (
 	"gorm.io/gorm/clause"
 
 	"timesheet-backend/dto/request"
-	"timesheet-backend/dto/response"
+	_ "timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
-	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/services"
 )
@@ -299,84 +298,25 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		return
 	}
 
-	var user models.User
-	if err := s.DB.Where(queryID, currentUserID(c)).First(&user).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "user not found")
+	tsSvc := s.getTimesheetService()
+	if tsSvc == nil {
+		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")
 		return
 	}
 
-	// Resolve the company: relational first (CompanyID), then string fallback.
-	var companyCode string
-	var companyName string
-	if user.CompanyID != nil && *user.CompanyID != 0 {
-		var comp models.Company
-		if err := s.DB.Where(queryID, *user.CompanyID).First(&comp).Error; err == nil {
-			companyCode = strings.ToLower(comp.Code)
-			companyName = comp.Name
-		}
-	}
-	if companyCode == "" && user.Company != "" {
-		companyCode = strings.ToLower(user.Company)
-		companyName = user.Company
-	}
-	if companyCode == "" {
-		RespondError(c, http.StatusBadRequest, "user has no company assigned. Ask an admin to assign a company (MII, SDD, NTT, or Adidata) to your account.")
-		return
-	}
-
-	start := time.Date(req.Year, time.Month(req.Month), 1, 0, 0, 0, 0, jakarta())
-	end := start.AddDate(0, 1, 0)
-	var activities []models.DailyActivity
-	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Scopes(models.ActiveOnly).
-		Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Find(&activities)
-
-	var overtimes []models.OvertimeEntry
-	s.DB.Where(queryUserDateRange, user.ID, start, end).
-		Scopes(models.ActiveOnly).
-		Preload("TeamLeader", models.ActiveOnly).Preload("DepartmentHead", models.ActiveOnly).
-		Order(orderDateAsc).Find(&overtimes)
-
-	// Fetch public holidays for the month so weekends/holidays are reflected in
-	// the generated sheet (best-effort; generation still proceeds on failure).
-	holidays := map[int]string{}
-	if hs, herr := services.FetchHolidays(req.Year, req.Month); herr == nil {
-		for _, h := range hs {
-			var y, m, d int
-			if _, e := fmt.Sscanf(h.Date, "%d-%d-%d", &y, &m, &d); e == nil {
-				holidays[d] = h.Description
-			}
-		}
-	}
-
-	var approvers []models.Approver
-	s.DB.Where(queryIsActive, true).Order(orderIDAsc).Find(&approvers)
-
-	out, err := services.GenerateFromTemplate(services.GenerationInput{
-		CompanyCode: companyCode,
-		User:        &user,
-		Month:       req.Month,
-		Year:        req.Year,
-		Activities:  activities,
-		Overtimes:   overtimes,
-		Approvers:   approvers,
-		Holidays:    holidays,
-	})
+	out, filename, err := tsSvc.GenerateWorkbook(reqContext(c), currentUserID(c), req.Month, req.Year)
 	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "user not found")
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "generation failed: "+err.Error())
 		return
 	}
-
-	filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitize(user.Username), req.Month, req.Year)
-
-	period := mailer.FormatMonthYearIndonesian(req.Month, req.Year)
-
-	// Email a copy asynchronously so the download isn't blocked on SMTP.
-	go func(to, uname, comp, per, fn string, data []byte) {
-		if s.Mailer != nil {
-			_ = s.Mailer.SendTimesheetEmailWithDetails(to, uname, comp, per, fn, data)
-		}
-	}(user.Email, user.Username, companyName, period, filename, out)
 
 	c.Header("Content-Disposition", "attachment; filename="+filename)
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
@@ -520,15 +460,7 @@ func sanitize(s string) string {
 }
 
 // OvertimeRequest carries data to create/update an overtime entry.
-type OvertimeRequest struct {
-	ID               uint   `json:"id" example:"1"`
-	Date             string `json:"date" binding:"required" example:"2026-09-01"` // YYYY-MM-DD
-	StartTime        string `json:"start_time" binding:"required" example:"17:00"`
-	EndTime          string `json:"end_time" binding:"required" example:"21:00"`
-	TaskDescription  string `json:"task_description" binding:"required" example:"Production bug fixing and system deployment"`
-	TeamLeaderID     *uint  `json:"team_leader_id" example:"2"`
-	DepartmentHeadID *uint  `json:"department_head_id" example:"3"`
-}
+type OvertimeRequest = request.OvertimeRequest
 
 // UpsertOvertime godoc
 // @Summary Create or update overtime record
@@ -544,59 +476,25 @@ type OvertimeRequest struct {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/overtimes [post]
 func (s *Server) UpsertOvertime(c *gin.Context) {
-	var req OvertimeRequest
+	var req request.OvertimeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, jakarta())
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid date format, expected YYYY-MM-DD")
+
+	tsSvc := s.getTimesheetService()
+	if tsSvc == nil {
+		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")
 		return
 	}
 
-	uid := currentUserID(c)
-	var entry models.OvertimeEntry
-	found := false
-
-	if req.ID != 0 {
-		if err := s.DB.Where("id = ? AND user_id = ? AND is_active = true", req.ID, uid).First(&entry).Error; err == nil {
-			found = true
-		}
-	}
-	if !found {
-		if err := s.DB.Where("user_id = ? AND date = ? AND is_active = true", uid, date).First(&entry).Error; err == nil {
-			found = true
-		}
-	}
-
-	if found {
-		entry.Date = date
-		entry.StartTime = req.StartTime
-		entry.EndTime = req.EndTime
-		entry.TaskDescription = req.TaskDescription
-		entry.TeamLeaderID = req.TeamLeaderID
-		entry.DepartmentHeadID = req.DepartmentHeadID
-		entry.UpdatedAt = time.Now()
-		if err := s.DB.Save(&entry).Error; err != nil {
-			RespondError(c, http.StatusInternalServerError, err.Error())
+	if err := tsSvc.UpsertOvertime(reqContext(c), currentUserID(c), &req); err != nil {
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
 			return
 		}
-	} else {
-		entry = models.OvertimeEntry{
-			UserID:           uid,
-			Date:             date,
-			StartTime:        req.StartTime,
-			EndTime:          req.EndTime,
-			TaskDescription:  req.TaskDescription,
-			TeamLeaderID:     req.TeamLeaderID,
-			DepartmentHeadID: req.DepartmentHeadID,
-			IsActive:         true,
-		}
-		if err := s.DB.Create(&entry).Error; err != nil {
-			RespondError(c, http.StatusInternalServerError, err.Error())
-			return
-		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
 	}
 	RespondMessage(c, http.StatusOK, "overtime entry saved successfully")
 }
@@ -617,39 +515,16 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 	year := queryIntDefault(c, "year", time.Now().In(jakarta()).Year())
 	month := queryIntDefault(c, "month", int(time.Now().In(jakarta()).Month()))
 
-	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, jakarta())
-	end := start.AddDate(0, 1, 0)
-
-	var overtimes []models.OvertimeEntry
-	if err := s.DB.Where(queryUserDateRange, currentUserID(c), start, end).
-		Scopes(models.ActiveOnly).
-		Preload("TeamLeader", models.ActiveOnly).
-		Preload("DepartmentHead", models.ActiveOnly).
-		Order(orderDateAsc).Find(&overtimes).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, err.Error())
+	tsSvc := s.getTimesheetService()
+	if tsSvc == nil {
+		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")
 		return
 	}
 
-	resp := make([]response.OvertimeResponse, len(overtimes))
-	for i, ot := range overtimes {
-		var tlName, dhName string
-		if ot.TeamLeader != nil {
-			tlName = ot.TeamLeader.Name
-		}
-		if ot.DepartmentHead != nil {
-			dhName = ot.DepartmentHead.Name
-		}
-		resp[i] = response.OvertimeResponse{
-			ID:                 ot.ID,
-			Date:               ot.Date,
-			StartTime:          ot.StartTime,
-			EndTime:            ot.EndTime,
-			TaskDescription:    ot.TaskDescription,
-			TeamLeaderID:       ot.TeamLeaderID,
-			TeamLeaderName:     tlName,
-			DepartmentHeadID:   ot.DepartmentHeadID,
-			DepartmentHeadName: dhName,
-		}
+	resp, err := tsSvc.ListMonthlyOvertimes(reqContext(c), currentUserID(c), month, year)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
 	}
 	RespondSuccess(c, http.StatusOK, resp)
 }
@@ -666,20 +541,36 @@ func (s *Server) ListMonthlyOvertimes(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/overtimes/{id} [delete]
 func (s *Server) DeleteOvertime(c *gin.Context) {
-	id := c.Param("id")
-	var entry models.OvertimeEntry
-	if err := s.DB.Scopes(models.ActiveOnly).Where("id = ? AND user_id = ?", id, currentUserID(c)).First(&entry).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "overtime entry not found")
+	idParam := c.Param("id")
+	id, err := strconv.ParseUint(idParam, 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid overtime ID")
 		return
 	}
-	if err := s.DB.Model(&entry).Updates(map[string]interface{}{
-		"is_active":  false,
-		"updated_at": time.Now(),
-	}).Error; err != nil {
+
+	tsSvc := s.getTimesheetService()
+	if tsSvc == nil {
+		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")
+		return
+	}
+
+	if err := tsSvc.DeleteOvertime(reqContext(c), uint(id), currentUserID(c)); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "overtime entry not found")
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	RespondDelete(c, http.StatusOK)
+}
+
+func parseActiveFilter(c *gin.Context) *bool {
+	if role, _ := c.Get(ctxRole); role == models.RoleAdmin {
+		return nil
+	}
+	t := true
+	return &t
 }
 
 // ListProjects godoc
@@ -693,9 +584,13 @@ func (s *Server) DeleteOvertime(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/projects [get]
 func (s *Server) ListProjects(c *gin.Context) {
-	var projects []models.Project
-	query := s.DB.Scopes(models.ActiveOnly)
-	if err := query.Order(orderNameAsc).Find(&projects).Error; err != nil {
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	projects, err := svc.ListProjects(reqContext(c), true)
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -713,8 +608,13 @@ func (s *Server) ListProjects(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/companies [get]
 func (s *Server) ListCompanies(c *gin.Context) {
-	var companies []models.Company
-	if err := s.DB.Scopes(models.ActiveOnly).Order(orderIDAsc).Find(&companies).Error; err != nil {
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	companies, err := svc.ListCompanies(reqContext(c), parseActiveFilter(c))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -727,21 +627,18 @@ func (s *Server) ListCompanies(c *gin.Context) {
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive sites"
 // @Success 200 {array} models.Site
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/sites [get]
 func (s *Server) ListSites(c *gin.Context) {
-	var sites []models.Site
-	query := s.DB.Order(orderIDAsc)
-	if c.Query("include_inactive") != "true" && c.Query("is_active") != "false" {
-		query = query.Scopes(models.ActiveOnly)
-	} else if c.Query("is_active") == "false" {
-		query = query.Where(queryIsActive, false)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
 	}
-	if err := query.Find(&sites).Error; err != nil {
+	sites, err := svc.ListSites(reqContext(c), parseActiveFilter(c))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -754,21 +651,18 @@ func (s *Server) ListSites(c *gin.Context) {
 // @Tags Master Data
 // @Security BearerAuth
 // @Produce json
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive divisions"
 // @Success 200 {array} models.Division
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/divisions [get]
 func (s *Server) ListDivisions(c *gin.Context) {
-	var divisions []models.Division
-	query := s.DB.Order(orderIDAsc)
-	if c.Query("include_inactive") != "true" && c.Query("is_active") != "false" {
-		query = query.Scopes(models.ActiveOnly)
-	} else if c.Query("is_active") == "false" {
-		query = query.Where(queryIsActive, false)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
 	}
-	if err := query.Find(&divisions).Error; err != nil {
+	divisions, err := svc.ListDivisions(reqContext(c), parseActiveFilter(c))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -783,29 +677,26 @@ func (s *Server) ListDivisions(c *gin.Context) {
 // @Produce json
 // @Param division query string false "Division name filter"
 // @Param division_id query int false "Division ID filter"
-// @Param is_active query bool false "Filter by active status"
-// @Param include_inactive query bool false "Include inactive departments"
 // @Success 200 {array} models.Department
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/departments [get]
 func (s *Server) ListDepartments(c *gin.Context) {
-	var depts []models.Department
-	query := s.DB.Order(orderNameAsc)
-	if c.Query("include_inactive") != "true" && c.Query("is_active") != "false" {
-		query = query.Scopes(models.ActiveOnly)
-	} else if c.Query("is_active") == "false" {
-		query = query.Where(queryIsActive, false)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
 	}
-	if div := strings.TrimSpace(c.Query("division")); div != "" {
-		query = query.Where("LOWER(division) = LOWER(?)", div)
-	}
+	var divID *uint
 	if divIDStr := c.Query("division_id"); divIDStr != "" {
-		if divID, err := strconv.ParseUint(divIDStr, 10, 64); err == nil {
-			query = query.Where("division_id = ?", divID)
+		if id, err := strconv.ParseUint(divIDStr, 10, 64); err == nil {
+			uID := uint(id)
+			divID = &uID
 		}
 	}
-	if err := query.Find(&depts).Error; err != nil {
+	divName := strings.TrimSpace(c.Query("division"))
+	depts, err := svc.ListDepartments(reqContext(c), divID, divName, parseActiveFilter(c))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -823,8 +714,13 @@ func (s *Server) ListDepartments(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/activity-statuses [get]
 func (s *Server) ListActivityStatuses(c *gin.Context) {
-	var statuses []models.ActivityStatus
-	if err := s.DB.Order("sort_order asc").Find(&statuses).Error; err != nil {
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
+	}
+	statuses, err := svc.ListActivityStatuses(reqContext(c))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -871,12 +767,13 @@ func (s *Server) ListHolidays(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/approvers [get]
 func (s *Server) ListApprovers(c *gin.Context) {
-	var approvers []models.Approver
-	q := s.DB.Scopes(models.ActiveOnly)
-	if roleType := c.Query("role_type"); roleType != "" {
-		q = q.Where("role_type = ?", roleType)
+	svc := s.getMasterService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "master service not initialized")
+		return
 	}
-	if err := q.Order(orderNameAsc).Find(&approvers).Error; err != nil {
+	approvers, err := svc.ListApprovers(reqContext(c), c.Query("role_type"), parseActiveFilter(c))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

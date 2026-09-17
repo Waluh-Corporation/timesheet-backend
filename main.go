@@ -165,7 +165,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	sched := scheduler.New(db, pushSvc, cfg.Timezone)
+	sched := scheduler.New(db, pushSvc, cfg.Timezone, cfg.ReminderCron, cfg.CleanupCron)
 	sched.Start()
 	defer sched.Stop()
 
@@ -209,12 +209,12 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 
 	// --- Public auth routes with rate limiting ---
 	authGroup := api.Group("/auth")
-	rateLimitEnabled := true
+	rateLimitEnabled := false
 	rateLimitRequests := 10
 	rateLimitWindow := 1 * time.Minute
 
 	if s != nil && s.Cfg != nil {
-		rateLimitEnabled = s.Cfg.RateLimitEnabled
+		rateLimitEnabled = s.Cfg.RateLimitEnabled && s.Cfg.RateLimitRequests > 0 && s.Cfg.RateLimitWindow > 0
 		if s.Cfg.RateLimitRequests > 0 {
 			rateLimitRequests = s.Cfg.RateLimitRequests
 		}

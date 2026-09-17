@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -591,61 +594,85 @@ func TestAdminMasterHandlers_AdminListEndpoints(t *testing.T) {
 
 	srv := &Server{DB: tx, Cfg: cfg}
 
-	// Seed one of each
+	// Seed active and inactive entries
 	comp := models.Company{Code: "list_comp", Name: "List Comp", IsActive: true}
 	_ = tx.Create(&comp)
+	compInact := models.Company{Code: "inact_comp", Name: "Inactive Comp"}
+	_ = tx.Create(&compInact)
+	_ = tx.Model(&compInact).Update("is_active", false)
+
 	appr := models.Approver{Name: "List Appr", RoleType: models.ApproverRoleTeamLeader, IsActive: true}
 	_ = tx.Create(&appr)
+	apprInact := models.Approver{Name: "Inactive Appr", RoleType: models.ApproverRoleTeamLeader}
+	_ = tx.Create(&apprInact)
+	_ = tx.Model(&apprInact).Update("is_active", false)
+
 	site := models.Site{Code: "list_site", Name: "List Site", IsActive: true}
 	_ = tx.Create(&site)
+	siteInact := models.Site{Code: "inact_site", Name: "Inactive Site"}
+	_ = tx.Create(&siteInact)
+	_ = tx.Model(&siteInact).Update("is_active", false)
+
 	div := models.Division{Code: "list_div", Name: "List Div", IsActive: true}
 	_ = tx.Create(&div)
+	divInact := models.Division{Code: "inact_div", Name: "Inactive Div"}
+	_ = tx.Create(&divInact)
+	_ = tx.Model(&divInact).Update("is_active", false)
+
 	dept := models.Department{Code: "list_dept", Name: "List Dept", DivisionID: &div.ID, Division: div.Name, IsActive: true}
 	_ = tx.Create(&dept)
+	deptInact := models.Department{Code: "inact_dept", Name: "Inactive Dept", DivisionID: &div.ID, Division: div.Name}
+	_ = tx.Create(&deptInact)
+	_ = tx.Model(&deptInact).Update("is_active", false)
 
 	endpoints := []struct {
-		name    string
-		handler func(*gin.Context)
-		url     string
+		name         string
+		adminHandler func(*gin.Context)
+		adminURL     string
+		userHandler  func(*gin.Context)
+		userURL      string
+		inactKeyword string
 	}{
-		{"AdminListApprovers", srv.AdminListApprovers, "/api/v1/admin/approvers"},
-		{"AdminListCompanies", srv.AdminListCompanies, "/api/v1/admin/companies"},
-		{"AdminListSites", srv.AdminListSites, "/api/v1/admin/sites"},
-		{"AdminListDivisions", srv.AdminListDivisions, "/api/v1/admin/divisions"},
-		{"AdminListDepartments", srv.AdminListDepartments, "/api/v1/admin/departments"},
+		{"Approvers", srv.AdminListApprovers, "/api/v1/admin/approvers", srv.ListApprovers, "/api/v1/approvers", "Inactive Appr"},
+		{"Companies", srv.AdminListCompanies, "/api/v1/admin/companies", srv.ListCompanies, "/api/v1/companies", "inact_comp"},
+		{"Sites", srv.AdminListSites, "/api/v1/admin/sites", srv.ListSites, "/api/v1/sites", "inact_site"},
+		{"Divisions", srv.AdminListDivisions, "/api/v1/admin/divisions", srv.ListDivisions, "/api/v1/divisions", "inact_div"},
+		{"Departments", srv.AdminListDepartments, "/api/v1/admin/departments", srv.ListDepartments, "/api/v1/departments", "inact_dept"},
 	}
 
 	for _, ep := range endpoints {
-		t.Run(ep.name+" default", func(t *testing.T) {
+		t.Run("AdminList "+ep.name+" returns both active and inactive records", func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, ep.url, nil)
-			ep.handler(c)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.adminURL, nil)
+			ep.adminHandler(c)
 			assertFatalCode(t, w, http.StatusOK)
+			if !strings.Contains(w.Body.String(), ep.inactKeyword) {
+				t.Errorf("expected admin response to include inactive item %q, body: %s", ep.inactKeyword, w.Body.String())
+			}
 		})
 
-		t.Run(ep.name+" ?is_active=true", func(t *testing.T) {
+		t.Run("UserList "+ep.name+" returns ONLY active records", func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, ep.url+"?is_active=true", nil)
-			ep.handler(c)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.userURL, nil)
+			ep.userHandler(c)
 			assertFatalCode(t, w, http.StatusOK)
+			if strings.Contains(w.Body.String(), ep.inactKeyword) {
+				t.Errorf("expected user response NOT to include inactive item %q, body: %s", ep.inactKeyword, w.Body.String())
+			}
 		})
 
-		t.Run(ep.name+" ?is_active=false", func(t *testing.T) {
+		t.Run("UserList "+ep.name+" called by Admin returns ALL records including inactive", func(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, ep.url+"?is_active=false", nil)
-			ep.handler(c)
+			c.Set(ctxRole, models.RoleAdmin)
+			c.Request = httptest.NewRequest(http.MethodGet, ep.userURL, nil)
+			ep.userHandler(c)
 			assertFatalCode(t, w, http.StatusOK)
-		})
-
-		t.Run(ep.name+" ?include_inactive=false", func(t *testing.T) {
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			c.Request = httptest.NewRequest(http.MethodGet, ep.url+"?include_inactive=false", nil)
-			ep.handler(c)
-			assertFatalCode(t, w, http.StatusOK)
+			if !strings.Contains(w.Body.String(), ep.inactKeyword) {
+				t.Errorf("expected admin caller on %s to include inactive item %q, body: %s", ep.userURL, ep.inactKeyword, w.Body.String())
+			}
 		})
 	}
 
@@ -663,4 +690,229 @@ func TestAdminMasterHandlers_AdminListEndpoints(t *testing.T) {
 		srv.AdminListDepartments(c)
 		assertFatalCode(t, w, http.StatusOK)
 	})
+}
+
+type mockFailingMasterService struct{}
+
+func (m *mockFailingMasterService) ListApprovers(ctx context.Context, roleType string, activeStatus *bool) ([]models.Approver, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateApprover(ctx context.Context, name string, roleType models.ApproverRoleType, title string, isActive *bool) (*models.Approver, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateApprover(ctx context.Context, id uint, name *string, roleType *models.ApproverRoleType, title *string, isActive *bool) (*models.Approver, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteApprover(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListCompanies(ctx context.Context, activeStatus *bool) ([]models.Company, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateCompany(ctx context.Context, code string, name string) (*models.Company, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateCompany(ctx context.Context, id uint, code *string, name *string, isActive *bool) (*models.Company, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteCompany(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListSites(ctx context.Context, activeStatus *bool) ([]models.Site, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateSite(ctx context.Context, code string, name string, isActive *bool) (*models.Site, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateSite(ctx context.Context, id uint, code *string, name *string, isActive *bool) (*models.Site, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteSite(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListDivisions(ctx context.Context, activeStatus *bool) ([]models.Division, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateDivision(ctx context.Context, code string, name string, isActive *bool) (*models.Division, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateDivision(ctx context.Context, id uint, code *string, name *string, isActive *bool) (*models.Division, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteDivision(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListDepartments(ctx context.Context, divisionID *uint, divisionName string, activeStatus *bool) ([]models.Department, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) CreateDepartment(ctx context.Context, code string, name string, division string, divisionID *uint, isActive *bool) (*models.Department, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) UpdateDepartment(ctx context.Context, id uint, code *string, name *string, division *string, divisionID *uint, isActive *bool) (*models.Department, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) DeleteDepartment(ctx context.Context, id uint) error {
+	return errors.New("db error")
+}
+func (m *mockFailingMasterService) ListProjects(ctx context.Context, activeOnly bool) ([]models.Project, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) ListActivityStatuses(ctx context.Context) ([]models.ActivityStatus, error) {
+	return nil, errors.New("db error")
+}
+
+func TestAdminMasterHandlers_AdminList_ErrorsAndEdgeCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("Uninitialized MasterService returns 500", func(t *testing.T) {
+		srvNil := &Server{} // DB == nil, MasterSvc == nil
+
+		handlers := []struct {
+			name    string
+			handler func(*gin.Context)
+			url     string
+		}{
+			{"AdminListApprovers", srvNil.AdminListApprovers, "/api/v1/admin/approvers"},
+			{"AdminListCompanies", srvNil.AdminListCompanies, "/api/v1/admin/companies"},
+			{"AdminListSites", srvNil.AdminListSites, "/api/v1/admin/sites"},
+			{"AdminListDivisions", srvNil.AdminListDivisions, "/api/v1/admin/divisions"},
+			{"AdminListDepartments", srvNil.AdminListDepartments, "/api/v1/admin/departments"},
+		}
+
+		for _, h := range handlers {
+			t.Run(h.name, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodGet, h.url, nil)
+				h.handler(c)
+				assertFatalCode(t, w, http.StatusInternalServerError)
+				if !strings.Contains(w.Body.String(), "master service not initialized") {
+					t.Errorf("expected error message 'master service not initialized', got %s", w.Body.String())
+				}
+			})
+		}
+	})
+
+	t.Run("Service failure returns 500", func(t *testing.T) {
+		srvFail := &Server{
+			MasterSvc: &mockFailingMasterService{},
+		}
+
+		handlers := []struct {
+			name    string
+			handler func(*gin.Context)
+			url     string
+		}{
+			{"AdminListApprovers", srvFail.AdminListApprovers, "/api/v1/admin/approvers"},
+			{"AdminListCompanies", srvFail.AdminListCompanies, "/api/v1/admin/companies"},
+			{"AdminListSites", srvFail.AdminListSites, "/api/v1/admin/sites"},
+			{"AdminListDivisions", srvFail.AdminListDivisions, "/api/v1/admin/divisions"},
+			{"AdminListDepartments", srvFail.AdminListDepartments, "/api/v1/admin/departments"},
+		}
+
+		for _, h := range handlers {
+			t.Run(h.name, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodGet, h.url, nil)
+				h.handler(c)
+				assertFatalCode(t, w, http.StatusInternalServerError)
+				if !strings.Contains(w.Body.String(), "db error") {
+					t.Errorf("expected error message 'db error', got %s", w.Body.String())
+				}
+			})
+		}
+	})
+
+	t.Run("AdminListDepartments with invalid division_id ignores parse error gracefully", func(t *testing.T) {
+		db, cfg := setupTestDB(t)
+		tx := db.Begin()
+		defer tx.Rollback()
+		srv := &Server{DB: tx, Cfg: cfg}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/departments?division_id=not-a-number", nil)
+		srv.AdminListDepartments(c)
+		assertFatalCode(t, w, http.StatusOK)
+	})
+}
+
+func TestAdminMasterHandlers_ReactivateInactiveRecords(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	srv := &Server{DB: tx, Cfg: cfg}
+
+	// 1. Inactive Approver -> reactivate
+	appr := models.Approver{Name: "Inactive Lead", RoleType: models.ApproverRoleTeamLeader}
+	_ = tx.Create(&appr)
+	_ = tx.Model(&appr).Update("is_active", false)
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	idStr := fmt.Sprintf("%d", appr.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/approvers/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateApprover(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 2. Inactive Company -> reactivate
+	comp := models.Company{Code: "reactcomp", Name: "React Company"}
+	_ = tx.Create(&comp)
+	_ = tx.Model(&comp).Update("is_active", false)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	idStr = fmt.Sprintf("%d", comp.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/companies/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateCompany(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 3. Inactive Site -> reactivate
+	site := models.Site{Code: "reactsite", Name: "React Site"}
+	_ = tx.Create(&site)
+	_ = tx.Model(&site).Update("is_active", false)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	idStr = fmt.Sprintf("%d", site.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/sites/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateSite(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 4. Inactive Division -> reactivate
+	div := models.Division{Code: "reactdiv", Name: "React Division"}
+	_ = tx.Create(&div)
+	_ = tx.Model(&div).Update("is_active", false)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	idStr = fmt.Sprintf("%d", div.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/divisions/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateDivision(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// 5. Inactive Department -> reactivate
+	dept := models.Department{Code: "reactdept", Name: "React Department"}
+	_ = tx.Create(&dept)
+	_ = tx.Model(&dept).Update("is_active", false)
+
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	idStr = fmt.Sprintf("%d", dept.ID)
+	c.Params = gin.Params{{Key: "id", Value: idStr}}
+	c.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/departments/"+idStr, bytes.NewReader([]byte(`{"is_active": true}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.UpdateDepartment(c)
+	assertFatalCode(t, w, http.StatusOK)
 }

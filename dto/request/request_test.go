@@ -1,6 +1,7 @@
 package request
 
 import (
+	"encoding/json"
 	"testing"
 
 	"timesheet-backend/models"
@@ -66,4 +67,39 @@ func TestRequestDTOs(t *testing.T) {
 	if unsubReq.Endpoint != "ep" {
 		t.Errorf("UnsubscribeRequest mismatch: %+v", unsubReq)
 	}
+}
+
+func TestEmployeeID(t *testing.T) {
+	t.Run("CreateUserRequest with employee_id", func(t *testing.T) {
+		var req CreateUserRequest
+		payload := `{"username":"test","email":"test@example.com","role":"user","employee_id":"EMP-123"}`
+		if err := json.Unmarshal([]byte(payload), &req); err != nil {
+			t.Fatalf("unmarshal failed: %v", err)
+		}
+		if req.EmployeeID != "EMP-123" {
+			t.Errorf("expected EMP-123, got %s", req.EmployeeID)
+		}
+	})
+
+	t.Run("UpdateUserRequest with employee_id", func(t *testing.T) {
+		var req UpdateUserRequest
+		payload := `{"employee_id":"EMP-999"}`
+		if err := json.Unmarshal([]byte(payload), &req); err != nil {
+			t.Fatalf("unmarshal failed: %v", err)
+		}
+		if req.EmployeeID == nil || *req.EmployeeID != "EMP-999" {
+			t.Errorf("expected EMP-999, got %v", req.EmployeeID)
+		}
+	})
+
+	t.Run("ProfileChangeRequestDTO with employee_id", func(t *testing.T) {
+		var req ProfileChangeRequestDTO
+		payload := `{"name":"John","employee_id":"EMP-888"}`
+		if err := json.Unmarshal([]byte(payload), &req); err != nil {
+			t.Fatalf("unmarshal failed: %v", err)
+		}
+		if req.EmployeeID != "EMP-888" {
+			t.Errorf("expected EMP-888, got %s", req.EmployeeID)
+		}
+	})
 }

@@ -54,6 +54,11 @@ func (m *mockUserRepo) Create(ctx context.Context, user *models.User) error {
 	return nil
 }
 
+func (m *mockUserRepo) Update(ctx context.Context, user *models.User) error {
+	m.users[user.ID] = user
+	return nil
+}
+
 func (m *mockUserRepo) UpdatePassword(ctx context.Context, id uint, passwordHash string, updatedAt time.Time) error {
 	if m.updatePassErr != nil {
 		return m.updatePassErr
@@ -65,6 +70,43 @@ func (m *mockUserRepo) UpdatePassword(ctx context.Context, id uint, passwordHash
 		u.UpdatedAt = updatedAt
 	}
 	return nil
+}
+
+func TestUserService_ApplyApprovedProfileChange(t *testing.T) {
+	repo := newMockUserRepo()
+	svc := NewUserService(repo, auth.DefaultHasher, nil)
+
+	user := &models.User{
+		ID:         10,
+		Username:   "bob",
+		Email:      "bob@example.com",
+		Role:       models.RoleUser,
+		Name:       "Old Name",
+		EmployeeID: "OLD-1",
+	}
+	repo.users[10] = user
+
+	change := &models.ProfileChangeRequest{
+		UserID:     10,
+		Name:       "New Name",
+		EmployeeID: "NEW-1",
+		Department: "DevOps",
+	}
+
+	err := svc.ApplyApprovedProfileChange(context.Background(), change)
+	if err != nil {
+		t.Fatalf("ApplyApprovedProfileChange failed: %v", err)
+	}
+
+	if repo.users[10].Name != "New Name" {
+		t.Errorf("expected name 'New Name', got %s", repo.users[10].Name)
+	}
+	if repo.users[10].EmployeeID != "NEW-1" {
+		t.Errorf("expected employeeID 'NEW-1', got %s", repo.users[10].EmployeeID)
+	}
+	if repo.users[10].Department != "DevOps" {
+		t.Errorf("expected department 'DevOps', got %s", repo.users[10].Department)
+	}
 }
 
 func TestUserService_CreateUserByAdmin(t *testing.T) {

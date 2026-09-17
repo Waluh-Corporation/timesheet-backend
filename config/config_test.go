@@ -185,13 +185,15 @@ func TestLoad_AppConfigEnv(t *testing.T) {
 }
 
 func TestLoad_RateLimitConfig(t *testing.T) {
-	t.Run("defaults", func(t *testing.T) {
+	t.Run("defaults in release mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
 		t.Setenv("RATE_LIMIT_ENABLED", "")
 		t.Setenv("RATE_LIMIT_REQUESTS", "")
 		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "")
 		cfg := Load()
 		if !cfg.RateLimitEnabled {
-			t.Errorf("expected RateLimitEnabled default to be true, got %v", cfg.RateLimitEnabled)
+			t.Errorf("expected RateLimitEnabled default to be true in release mode, got %v", cfg.RateLimitEnabled)
 		}
 		if cfg.RateLimitRequests != 10 {
 			t.Errorf("expected RateLimitRequests default to be 10, got %d", cfg.RateLimitRequests)
@@ -201,7 +203,20 @@ func TestLoad_RateLimitConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("defaults in debug mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "debug")
+		t.Setenv("RATE_LIMIT_ENABLED", "")
+		t.Setenv("RATE_LIMIT_REQUESTS", "")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "")
+		cfg := Load()
+		if cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled default to be false in debug mode, got %v", cfg.RateLimitEnabled)
+		}
+	})
+
 	t.Run("custom values", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
 		t.Setenv("RATE_LIMIT_ENABLED", "false")
 		t.Setenv("RATE_LIMIT_REQUESTS", "50")
 		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "120")
@@ -217,16 +232,116 @@ func TestLoad_RateLimitConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid or zero values fallback to defaults", func(t *testing.T) {
+	t.Run("zero requests disables rate limiting", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
 		t.Setenv("RATE_LIMIT_ENABLED", "true")
 		t.Setenv("RATE_LIMIT_REQUESTS", "0")
-		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "-5")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "60")
 		cfg := Load()
-		if cfg.RateLimitRequests != 10 {
-			t.Errorf("expected RateLimitRequests fallback to 10, got %d", cfg.RateLimitRequests)
+		if cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled to be false when RATE_LIMIT_REQUESTS=0, got %v", cfg.RateLimitEnabled)
 		}
-		if cfg.RateLimitWindow != 60*time.Second {
-			t.Errorf("expected RateLimitWindow fallback to 60s, got %v", cfg.RateLimitWindow)
+	})
+
+	t.Run("zero window disables rate limiting", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
+		t.Setenv("RATE_LIMIT_ENABLED", "true")
+		t.Setenv("RATE_LIMIT_REQUESTS", "10")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "0")
+		cfg := Load()
+		if cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled to be false when RATE_LIMIT_WINDOW_SECONDS=0, got %v", cfg.RateLimitEnabled)
+		}
+	})
+
+	t.Run("explicit true in debug mode with positive limit enables rate limit", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "debug")
+		t.Setenv("RATE_LIMIT_ENABLED", "true")
+		t.Setenv("RATE_LIMIT_REQUESTS", "20")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "30")
+		cfg := Load()
+		if !cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled to be true when explicitly configured, got %v", cfg.RateLimitEnabled)
+		}
+		if cfg.RateLimitRequests != 20 {
+			t.Errorf("expected RateLimitRequests to be 20, got %d", cfg.RateLimitRequests)
+		}
+		if cfg.RateLimitWindow != 30*time.Second {
+			t.Errorf("expected RateLimitWindow to be 30s, got %v", cfg.RateLimitWindow)
+		}
+	})
+}
+
+func TestLoad_SchedulerCronConfig(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		t.Setenv("SCHEDULER_REMINDER_CRON", "")
+		t.Setenv("SCHEDULER_CRON", "")
+		t.Setenv("SCHEDULER_CLEANUP_CRON", "")
+		cfg := Load()
+		if cfg.ReminderCron != "0 17 * * *" {
+			t.Errorf("expected ReminderCron default to be '0 17 * * *', got %q", cfg.ReminderCron)
+		}
+		if cfg.CleanupCron != "0 2 * * *" {
+			t.Errorf("expected CleanupCron default to be '0 2 * * *', got %q", cfg.CleanupCron)
+		}
+	})
+
+	t.Run("custom SCHEDULER_REMINDER_CRON and SCHEDULER_CLEANUP_CRON", func(t *testing.T) {
+		t.Setenv("SCHEDULER_REMINDER_CRON", "30 18 * * 1-5")
+		t.Setenv("SCHEDULER_CLEANUP_CRON", "0 3 * * *")
+		cfg := Load()
+		if cfg.ReminderCron != "30 18 * * 1-5" {
+			t.Errorf("expected ReminderCron to be '30 18 * * 1-5', got %q", cfg.ReminderCron)
+		}
+		if cfg.CleanupCron != "0 3 * * *" {
+			t.Errorf("expected CleanupCron to be '0 3 * * *', got %q", cfg.CleanupCron)
+		}
+	})
+
+	t.Run("fallback to SCHEDULER_CRON alias", func(t *testing.T) {
+		t.Setenv("SCHEDULER_REMINDER_CRON", "")
+		t.Setenv("SCHEDULER_CRON", "0 16 * * *")
+		cfg := Load()
+		if cfg.ReminderCron != "0 16 * * *" {
+			t.Errorf("expected ReminderCron to fallback to SCHEDULER_CRON '0 16 * * *', got %q", cfg.ReminderCron)
+		}
+	})
+}
+
+func TestLoad_CORSAllowedOriginsConfig(t *testing.T) {
+	t.Run("empty by default", func(t *testing.T) {
+		t.Setenv("CORS_ALLOWED_ORIGINS", "")
+		cfg := Load()
+		if len(cfg.CORSAllowedOrigins) != 0 {
+			t.Errorf("expected empty CORSAllowedOrigins, got %v", cfg.CORSAllowedOrigins)
+		}
+	})
+
+	t.Run("single and multiple comma-separated origins with whitespace", func(t *testing.T) {
+		t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000, https://timesheet-frontend-dev.fafr.my.id, http://127.0.0.1:5173/")
+		cfg := Load()
+		expected := []string{
+			"http://localhost:3000",
+			"https://timesheet-frontend-dev.fafr.my.id",
+			"http://127.0.0.1:5173",
+		}
+		if len(cfg.CORSAllowedOrigins) != len(expected) {
+			t.Fatalf("expected %d origins, got %d: %v", len(expected), len(cfg.CORSAllowedOrigins), cfg.CORSAllowedOrigins)
+		}
+		for i, exp := range expected {
+			if cfg.CORSAllowedOrigins[i] != exp {
+				t.Errorf("origin[%d]: expected %q, got %q", i, exp, cfg.CORSAllowedOrigins[i])
+			}
+		}
+	})
+
+	t.Run("wildcard origin", func(t *testing.T) {
+		t.Setenv("CORS_ALLOWED_ORIGINS", "*")
+		cfg := Load()
+		if len(cfg.CORSAllowedOrigins) != 1 || cfg.CORSAllowedOrigins[0] != "*" {
+			t.Errorf("expected ['*'], got %v", cfg.CORSAllowedOrigins)
 		}
 	})
 }

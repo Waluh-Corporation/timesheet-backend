@@ -41,6 +41,10 @@ type Server struct {
 	UserSvc      service.UserService
 	ActivityRepo repository.ActivityRepository
 	ActivitySvc  service.ActivityService
+	OvertimeRepo repository.OvertimeRepository
+	TimesheetSvc service.TimesheetService
+	MasterRepo   repository.MasterRepository
+	MasterSvc    service.MasterDataService
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
@@ -63,12 +67,20 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	var userSvc service.UserService
 	var activityRepo repository.ActivityRepository
 	var activitySvc service.ActivityService
+	var overtimeRepo repository.OvertimeRepository
+	var timesheetSvc service.TimesheetService
+	var masterRepo repository.MasterRepository
+	var masterSvc service.MasterDataService
 
 	if db != nil {
 		userRepo = repository.NewUserRepository(db)
-		userSvc = service.NewUserService(userRepo, auth.DefaultHasher, m)
+		masterRepo = repository.NewMasterRepository(db)
+		userSvc = service.NewUserService(userRepo, auth.DefaultHasher, m, masterRepo)
 		activityRepo = repository.NewActivityRepository(db)
 		activitySvc = service.NewActivityService(activityRepo)
+		overtimeRepo = repository.NewOvertimeRepository(db)
+		timesheetSvc = service.NewTimesheetService(db, userRepo, activityRepo, overtimeRepo, m)
+		masterSvc = service.NewMasterDataService(masterRepo)
 	}
 
 	return &Server{
@@ -83,6 +95,10 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		UserSvc:          userSvc,
 		ActivityRepo:     activityRepo,
 		ActivitySvc:      activitySvc,
+		OvertimeRepo:     overtimeRepo,
+		TimesheetSvc:     timesheetSvc,
+		MasterRepo:       masterRepo,
+		MasterSvc:        masterSvc,
 		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
 	}, nil
 }
@@ -119,9 +135,61 @@ func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
 	return nil, false
 }
 
+func (s *Server) getUserService() service.UserService {
+	if s.UserSvc != nil {
+		return s.UserSvc
+	}
+	if s.DB != nil {
+		if s.UserRepo == nil {
+			s.UserRepo = repository.NewUserRepository(s.DB)
+		}
+		if s.MasterRepo == nil {
+			s.MasterRepo = repository.NewMasterRepository(s.DB)
+		}
+		s.UserSvc = service.NewUserService(s.UserRepo, s.Hasher, s.Mailer, s.MasterRepo)
+		return s.UserSvc
+	}
+	return nil
+}
+
+func (s *Server) getTimesheetService() service.TimesheetService {
+	if s.TimesheetSvc != nil {
+		return s.TimesheetSvc
+	}
+	if s.DB != nil {
+		if s.OvertimeRepo == nil {
+			s.OvertimeRepo = repository.NewOvertimeRepository(s.DB)
+		}
+		if s.UserRepo == nil {
+			s.UserRepo = repository.NewUserRepository(s.DB)
+		}
+		if s.ActivityRepo == nil {
+			s.ActivityRepo = repository.NewActivityRepository(s.DB)
+		}
+		s.TimesheetSvc = service.NewTimesheetService(s.DB, s.UserRepo, s.ActivityRepo, s.OvertimeRepo, s.Mailer)
+		return s.TimesheetSvc
+	}
+	return nil
+}
+
+func (s *Server) getMasterService() service.MasterDataService {
+	if s.MasterSvc != nil {
+		return s.MasterSvc
+	}
+	if s.DB != nil {
+		if s.MasterRepo == nil {
+			s.MasterRepo = repository.NewMasterRepository(s.DB)
+		}
+		s.MasterSvc = service.NewMasterDataService(s.MasterRepo)
+		return s.MasterSvc
+	}
+	return nil
+}
+
 const (
 	ctxUserID = "userID"
 	ctxRole   = "userRole"
+	queryID   = "id = ?"
 )
 
 // AuthMiddleware validates the bearer JWT and injects the caller identity.
@@ -216,6 +284,12 @@ func (s *Server) isTrustedHost(host string) bool {
 		}
 	}
 
+	for _, origin := range s.Cfg.CORSAllowedOrigins {
+		if origin != "*" && matchHostOrURL(origin, host, hostOnly) {
+			return true
+		}
+	}
+
 	return false
 }
 
@@ -254,33 +328,54 @@ func firstHeaderValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
+func matchCleanOrigin(target, candidate string) bool {
+	if target == "" {
+		return false
+	}
+	return target == "*" || strings.TrimRight(strings.ToLower(target), "/") == candidate
+}
+
+func containsCleanOrigin(origins []string, candidate string) bool {
+	for _, o := range origins {
+		if matchCleanOrigin(o, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) isConfigOriginAllowed(clean string) bool {
+	if s == nil || s.Cfg == nil {
+		return false
+	}
+	if containsCleanOrigin(s.Cfg.CORSAllowedOrigins, clean) {
+		return true
+	}
+	if matchCleanOrigin(s.Cfg.FrontendURL, clean) {
+		return true
+	}
+	return containsCleanOrigin(s.Cfg.RPOrigins, clean)
+}
+
+func isDevOriginAllowed(clean string) bool {
+	if strings.EqualFold(os.Getenv("GIN_MODE"), "release") {
+		return false
+	}
+	switch clean {
+	case "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8080":
+		return true
+	default:
+		return false
+	}
+}
+
 // isOriginAllowed checks whether an origin header is in the allowed CORS list.
 func (s *Server) isOriginAllowed(origin string) bool {
 	if origin == "" {
 		return false
 	}
 	clean := strings.TrimRight(strings.ToLower(origin), "/")
-
-	if s != nil && s.Cfg != nil {
-		if s.Cfg.FrontendURL != "" && strings.TrimRight(strings.ToLower(s.Cfg.FrontendURL), "/") == clean {
-			return true
-		}
-		for _, o := range s.Cfg.RPOrigins {
-			if strings.TrimRight(strings.ToLower(o), "/") == clean {
-				return true
-			}
-		}
-	}
-
-	// Local development allowlist outside release mode
-	if !strings.EqualFold(os.Getenv("GIN_MODE"), "release") {
-		switch clean {
-		case "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:3000", "http://127.0.0.1:8080":
-			return true
-		}
-	}
-
-	return false
+	return s.isConfigOriginAllowed(clean) || isDevOriginAllowed(clean)
 }
 
 // CORSMiddleware sets up cross-origin resource sharing headers.

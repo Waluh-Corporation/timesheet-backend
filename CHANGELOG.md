@@ -11,6 +11,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] - 2026-09-17
+
+### Added
+- **Working Hours Order Validation**: Enforced strict validation on daily activities and overtime entries ensuring check-out time is strictly later than check-in time (`check_out > check_in`), accompanied by polite, user-friendly Indonesian error guidance.
+- **Empty Timesheet Generation Guard**: Added validation on monthly timesheet generation (`POST /api/v1/timesheet/generate`) to reject requests when no activities are recorded for the period, prompting users to fill their daily entries first.
+- **Configurable CORS Allowed Origins via Environment**: Added `CORS_ALLOWED_ORIGINS` environment variable supporting comma-separated origin allowlists (and wildcard `*`) so frontend developers and operators can flexibly enable cross-origin API access across development, staging, and multi-domain deployments without coupling to WebAuthn configuration.
+- **Master Data Inactive Record Retrieval & Reactivation**: Enabled finding inactive companies, departments, approvers, sites, and divisions by ID to allow administrative inspection and reactivation workflows.
+
+### Changed
+- **Clean Architecture & Pure 3NF Normalization**: Refactored monolithic HTTP handlers into decoupled Service and Repository layers (`ActivityService`, `TimesheetService`, `MasterDataService`, `UserService`), normalized database schema to Pure 3NF by removing redundant project denormalization from `daily_activities`, and centralized business validations.
+- **API Surface Cleanup**: Decommissioned redundant timesheet summary export, push schedule, and admin test push endpoints (`/api/v1/timesheet/summary`, `/api/v1/push/schedule`, `/api/v1/admin/push/test`) to maintain a clean, secure API contract.
+
+### Fixed
+- **Rate Limiter Debug Mode and Zero-Threshold Handling**: Resolved issue where rate limiter remained active in development/debug mode (`GIN_MODE=debug`) and when configured with `RATE_LIMIT_ENABLED=false`, `RATE_LIMIT_REQUESTS=0`, or `RATE_LIMIT_WINDOW_SECONDS=0`. The rate limiter now defaults to disabled in non-release mode, configuring requests or window to `<= 0` explicitly disables rate limiting, and middleware guards prevent unintended HTTP 429 rejections.
+- **Inactive Records Visibility in Admin Directory Listings**: Ensured administrative master data listings (approvers, companies, departments, sites, divisions) return both active and inactive records by default with reliable status filtering.
+- **Route Registration Duplication**: Removed duplicate route declarations and redundant variable shadowing in `main.go`.
+
+### Security
+- **Parameterized Queries in Push Handlers**: Hardened user lookup logic in push handlers using parameterized SQL queries to prevent SQL injection vulnerabilities.
+
+### Improved
+- **Modular CORS Origin Validation**: Refactored origin matching and development allowlist evaluation in `handlers/server.go` into focused helper functions to reduce cognitive complexity and streamline cross-origin security rules.
+
+---
+
+## [1.5.0] - 2026-09-15
+
+### Added
+- **Configurable Background Scheduler via Environment**: Added environment variables (`SCHEDULER_REMINDER_CRON` and `SCHEDULER_CLEANUP_CRON`) allowing operators to customize execution schedules for daily Web Push timesheet reminders and database token housekeeping without code changes.
+- **Resilient Cron Fallback & Task Control**: Implemented automatic fallback to default cron expressions upon encountering invalid syntax, along with support for explicitly disabling background jobs (`disabled`, `off`, `false`, or `none`).
+
+---
+
 ## [1.4.0] - 2026-09-15
 
 ### Added
@@ -107,7 +140,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API Route Versioning: Migrated all routes to the `/api/v1` prefix and decommissioned legacy unversioned endpoints.
 - Decoupled Workbook Engine: Replaced database-stored template grids with dedicated programmatic spreadsheet builders.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.1.0...v1.2.0

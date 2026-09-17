@@ -240,31 +240,6 @@ func seedDefaultProjectsAndNormalize(db *gorm.DB) error {
 		}
 	}
 
-	// 4. Backfill daily_activities.project_ref_id
-	_ = db.Exec(`
-		UPDATE daily_activities 
-		SET project_ref_id = (
-			SELECT id FROM projects 
-			WHERE projects.code = daily_activities.project_id 
-			LIMIT 1
-		) 
-		WHERE project_ref_id IS NULL 
-		  AND project_id IS NOT NULL 
-		  AND project_id != ''
-	`).Error
-
-	_ = db.Exec(`
-		UPDATE daily_activities 
-		SET project_ref_id = (
-			SELECT id FROM projects 
-			WHERE LOWER(projects.name) = LOWER(daily_activities.project_name) 
-			LIMIT 1
-		) 
-		WHERE project_ref_id IS NULL 
-		  AND project_name IS NOT NULL 
-		  AND project_name != ''
-	`).Error
-
 	// 5. Seed default activity statuses
 	if err := SeedActivityStatuses(db); err != nil {
 		log.Printf("[database] could not seed activity statuses: %v", err)

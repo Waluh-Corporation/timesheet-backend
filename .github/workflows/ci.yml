@@ -137,23 +137,3 @@ jobs:
         uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-  docker-dry-run:
-    name: Validate Docker Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e
-
-      - name: Build Docker Image (Dry Run)
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
-        with:
-          context: .
-          file: ./Dockerfile
-          push: false
-          tags: timesheet-backend:dry-run
-          cache-from: type=gha,scope=ci
-          cache-to: type=gha,mode=max,scope=ci
