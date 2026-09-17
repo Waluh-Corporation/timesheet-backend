@@ -185,13 +185,15 @@ func TestLoad_AppConfigEnv(t *testing.T) {
 }
 
 func TestLoad_RateLimitConfig(t *testing.T) {
-	t.Run("defaults", func(t *testing.T) {
+	t.Run("defaults in release mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
 		t.Setenv("RATE_LIMIT_ENABLED", "")
 		t.Setenv("RATE_LIMIT_REQUESTS", "")
 		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "")
 		cfg := Load()
 		if !cfg.RateLimitEnabled {
-			t.Errorf("expected RateLimitEnabled default to be true, got %v", cfg.RateLimitEnabled)
+			t.Errorf("expected RateLimitEnabled default to be true in release mode, got %v", cfg.RateLimitEnabled)
 		}
 		if cfg.RateLimitRequests != 10 {
 			t.Errorf("expected RateLimitRequests default to be 10, got %d", cfg.RateLimitRequests)
@@ -201,7 +203,20 @@ func TestLoad_RateLimitConfig(t *testing.T) {
 		}
 	})
 
+	t.Run("defaults in debug mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "debug")
+		t.Setenv("RATE_LIMIT_ENABLED", "")
+		t.Setenv("RATE_LIMIT_REQUESTS", "")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "")
+		cfg := Load()
+		if cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled default to be false in debug mode, got %v", cfg.RateLimitEnabled)
+		}
+	})
+
 	t.Run("custom values", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
 		t.Setenv("RATE_LIMIT_ENABLED", "false")
 		t.Setenv("RATE_LIMIT_REQUESTS", "50")
 		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "120")
@@ -217,16 +232,44 @@ func TestLoad_RateLimitConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid or zero values fallback to defaults", func(t *testing.T) {
+	t.Run("zero requests disables rate limiting", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
 		t.Setenv("RATE_LIMIT_ENABLED", "true")
 		t.Setenv("RATE_LIMIT_REQUESTS", "0")
-		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "-5")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "60")
 		cfg := Load()
-		if cfg.RateLimitRequests != 10 {
-			t.Errorf("expected RateLimitRequests fallback to 10, got %d", cfg.RateLimitRequests)
+		if cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled to be false when RATE_LIMIT_REQUESTS=0, got %v", cfg.RateLimitEnabled)
 		}
-		if cfg.RateLimitWindow != 60*time.Second {
-			t.Errorf("expected RateLimitWindow fallback to 60s, got %v", cfg.RateLimitWindow)
+	})
+
+	t.Run("zero window disables rate limiting", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
+		t.Setenv("RATE_LIMIT_ENABLED", "true")
+		t.Setenv("RATE_LIMIT_REQUESTS", "10")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "0")
+		cfg := Load()
+		if cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled to be false when RATE_LIMIT_WINDOW_SECONDS=0, got %v", cfg.RateLimitEnabled)
+		}
+	})
+
+	t.Run("explicit true in debug mode with positive limit enables rate limit", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "debug")
+		t.Setenv("RATE_LIMIT_ENABLED", "true")
+		t.Setenv("RATE_LIMIT_REQUESTS", "20")
+		t.Setenv("RATE_LIMIT_WINDOW_SECONDS", "30")
+		cfg := Load()
+		if !cfg.RateLimitEnabled {
+			t.Errorf("expected RateLimitEnabled to be true when explicitly configured, got %v", cfg.RateLimitEnabled)
+		}
+		if cfg.RateLimitRequests != 20 {
+			t.Errorf("expected RateLimitRequests to be 20, got %d", cfg.RateLimitRequests)
+		}
+		if cfg.RateLimitWindow != 30*time.Second {
+			t.Errorf("expected RateLimitWindow to be 30s, got %v", cfg.RateLimitWindow)
 		}
 	})
 }

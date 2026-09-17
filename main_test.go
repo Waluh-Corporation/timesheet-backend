@@ -164,4 +164,58 @@ func TestRegisterRoutes_RateLimitConfig(t *testing.T) {
 			t.Errorf("expected second request to be 429 Too Many Requests, got %d", w2.Code)
 		}
 	})
+
+	t.Run("zero requests bypasses rate limiting", func(t *testing.T) {
+		r := gin.New()
+		cfg := &config.Config{
+			RateLimitEnabled:  true,
+			RateLimitRequests: 0,
+			RateLimitWindow:   1 * time.Minute,
+		}
+		srv := &handlers.Server{Cfg: cfg}
+		registerRoutes(r, srv)
+
+		for i := 0; i < 5; i++ {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code == http.StatusTooManyRequests {
+				t.Errorf("expected route not to be rate limited when requests=0, got 429 on iteration %d", i)
+			}
+		}
+	})
+
+	t.Run("zero window bypasses rate limiting", func(t *testing.T) {
+		r := gin.New()
+		cfg := &config.Config{
+			RateLimitEnabled:  true,
+			RateLimitRequests: 1,
+			RateLimitWindow:   0,
+		}
+		srv := &handlers.Server{Cfg: cfg}
+		registerRoutes(r, srv)
+
+		for i := 0; i < 5; i++ {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code == http.StatusTooManyRequests {
+				t.Errorf("expected route not to be rate limited when window=0, got 429 on iteration %d", i)
+			}
+		}
+	})
+
+	t.Run("nil server or nil config defaults to rate limiting disabled", func(t *testing.T) {
+		r := gin.New()
+		registerRoutes(r, nil)
+
+		for i := 0; i < 5; i++ {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code == http.StatusTooManyRequests {
+				t.Errorf("expected route not to be rate limited with nil server, got 429 on iteration %d", i)
+			}
+		}
+	})
 }

@@ -34,7 +34,9 @@ func NewIPRateLimiter(limit int, window time.Duration) *IPRateLimiter {
 		stopChan:    make(chan struct{}),
 	}
 
-	go limiter.cleanupLoop()
+	if limit > 0 && window > 0 {
+		go limiter.cleanupLoop()
+	}
 	return limiter
 }
 
@@ -72,6 +74,10 @@ func (l *IPRateLimiter) cleanupLoop() {
 
 // Allow checks if the given IP is within the rate limit.
 func (l *IPRateLimiter) Allow(ip string) bool {
+	if l == nil || l.limit <= 0 || l.window <= 0 {
+		return true
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -94,7 +100,7 @@ func (l *IPRateLimiter) Allow(ip string) bool {
 // RateLimitMiddleware returns a Gin middleware restricting requests per client IP.
 func RateLimitMiddleware(limiter *IPRateLimiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if limiter == nil {
+		if limiter == nil || limiter.limit <= 0 || limiter.window <= 0 {
 			c.Next()
 			return
 		}

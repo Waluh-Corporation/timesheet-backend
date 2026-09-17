@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Clean Architecture & Pure 3NF Normalization**: Refactored monolithic HTTP handlers into decoupled Service and Repository layers (`ActivityService`, `TimesheetService`, `MasterDataService`, `UserService`), normalized database schema to Pure 3NF by removing redundant project denormalization from `daily_activities`, and centralized business validations.
 
+### Fixed
+- **Rate Limiter Debug Mode and Zero-Threshold Handling**: Resolved issue where rate limiter remained active in development/debug mode (`GIN_MODE=debug`) and when configured with `RATE_LIMIT_ENABLED=false`, `RATE_LIMIT_REQUESTS=0`, or `RATE_LIMIT_WINDOW_SECONDS=0`. The rate limiter now defaults to disabled in non-release mode, configuring requests or window to `<= 0` explicitly disables rate limiting, and middleware guards prevent unintended HTTP 429 rejections.
+
 ### Improved
 - **Modular CORS Origin Validation**: Refactored origin matching and development allowlist evaluation in `handlers/server.go` into focused helper functions to reduce cognitive complexity and streamline cross-origin security rules.
 
