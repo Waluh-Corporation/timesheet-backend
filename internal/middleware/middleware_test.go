@@ -137,3 +137,43 @@ func TestRateLimiter_NilLimiter(t *testing.T) {
 		t.Errorf("expected 200 with nil limiter, got %d", w.Code)
 	}
 }
+
+func TestRateLimiter_ZeroOrNegativeLimits(t *testing.T) {
+	t.Run("zero limit bypassed", func(t *testing.T) {
+		r := gin.New()
+		limiter := middleware.NewIPRateLimiter(0, 1*time.Minute)
+		defer limiter.Stop()
+		r.Use(middleware.RateLimitMiddleware(limiter))
+		r.GET("/test-zero-limit", func(c *gin.Context) {
+			c.String(http.StatusOK, "ok")
+		})
+
+		for i := 0; i < 3; i++ {
+			req := httptest.NewRequest(http.MethodGet, "/test-zero-limit", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Errorf("expected 200 with zero limit limiter, got %d", w.Code)
+			}
+		}
+	})
+
+	t.Run("zero window bypassed", func(t *testing.T) {
+		r := gin.New()
+		limiter := middleware.NewIPRateLimiter(10, 0)
+		defer limiter.Stop()
+		r.Use(middleware.RateLimitMiddleware(limiter))
+		r.GET("/test-zero-window", func(c *gin.Context) {
+			c.String(http.StatusOK, "ok")
+		})
+
+		for i := 0; i < 3; i++ {
+			req := httptest.NewRequest(http.MethodGet, "/test-zero-window", nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != http.StatusOK {
+				t.Errorf("expected 200 with zero window limiter, got %d", w.Code)
+			}
+		}
+	})
+}
