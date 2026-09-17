@@ -801,48 +801,6 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		assertFatalCode(t, wCompID, http.StatusOK)
 	})
 
-	t.Run("GetTimesheetSummary", func(t *testing.T) {
-		// 1. Missing or invalid year
-		wBadYear := httptest.NewRecorder()
-		cBadYear, _ := gin.CreateTestContext(wBadYear)
-		cBadYear.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/summary?year=invalid", nil)
-		cBadYear.Set(ctxUserID, user.ID)
-		srv.GetTimesheetSummary(cBadYear)
-		// queryIntDefault falls back to current year, so it succeeds or handles gracefully
-
-		// Invalid year range (e.g., year 1999)
-		wOutYear := httptest.NewRecorder()
-		cOutYear, _ := gin.CreateTestContext(wOutYear)
-		cOutYear.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/summary?year=1999", nil)
-		cOutYear.Set(ctxUserID, user.ID)
-		srv.GetTimesheetSummary(cOutYear)
-		assertFatalCode(t, wOutYear, http.StatusBadRequest)
-
-		// Invalid month (e.g., month 13)
-		wBadMonth := httptest.NewRecorder()
-		cBadMonth, _ := gin.CreateTestContext(wBadMonth)
-		cBadMonth.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/summary?year=2026&month=13", nil)
-		cBadMonth.Set(ctxUserID, user.ID)
-		srv.GetTimesheetSummary(cBadMonth)
-		assertFatalCode(t, wBadMonth, http.StatusBadRequest)
-
-		// Valid monthly summary query (year=2026, month=9)
-		wMonth := httptest.NewRecorder()
-		cMonth, _ := gin.CreateTestContext(wMonth)
-		cMonth.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/summary?year=2026&month=9", nil)
-		cMonth.Set(ctxUserID, user.ID)
-		srv.GetTimesheetSummary(cMonth)
-		assertFatalCode(t, wMonth, http.StatusOK)
-
-		// Valid yearly summary query (year=2026)
-		wYear := httptest.NewRecorder()
-		cYear, _ := gin.CreateTestContext(wYear)
-		cYear.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/summary?year=2026", nil)
-		cYear.Set(ctxUserID, user.ID)
-		srv.GetTimesheetSummary(cYear)
-		assertFatalCode(t, wYear, http.StatusOK)
-	})
-
 	t.Run("sanitize helper", func(t *testing.T) {
 		s := sanitize("Hello\r\nWorld\t!")
 		if s != "HelloWorld" {

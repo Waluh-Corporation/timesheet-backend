@@ -1380,75 +1380,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/admin/push/test": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Dispatches an immediate test push notification to a designated user to verify browser notifications.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Push Notification",
-                    "Admin"
-                ],
-                "summary": "Send test push notification to a user (Admin only)",
-                "parameters": [
-                    {
-                        "description": "Push notification test parameters including target user_id",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/request.AdminTestPushRequest"
-                        }
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Target User ID (when using /admin/users/:id/push/test)",
-                        "name": "id",
-                        "in": "path"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.AdminTestPushResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request (missing user_id)",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden (admin only)",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "User not found",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/admin/sites": {
             "get": {
                 "security": [
@@ -3146,37 +3077,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/push/schedule": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns the configured cron schedule, timezone, status, and next execution time for daily timesheet reminders. Accessible by authenticated users and admins.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Push Notification"
-                ],
-                "summary": "Get Web Push reminder schedule",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.PushScheduleResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/push/subscribe": {
             "post": {
                 "security": [
@@ -3510,63 +3410,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Generation failed",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/timesheet/summary": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns aggregated timesheet metrics including working days, days filled, working hours, overtime hours, and attendance breakdown per month.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Timesheet"
-                ],
-                "summary": "Get monthly and yearly historical timesheet summary",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Year filter (e.g. 2026, default current year)",
-                        "name": "year",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Optional month filter (1-12)",
-                        "name": "month",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.TimesheetSummaryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid year or month",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -4514,27 +4357,6 @@ const docTemplate = `{
                 }
             }
         },
-        "request.AdminTestPushRequest": {
-            "type": "object",
-            "properties": {
-                "body": {
-                    "type": "string",
-                    "example": "Waktunya isi timesheet hari ini!"
-                },
-                "title": {
-                    "type": "string",
-                    "example": "Timesheet Reminder"
-                },
-                "url": {
-                    "type": "string",
-                    "example": "/activity"
-                },
-                "user_id": {
-                    "type": "integer",
-                    "example": 1
-                }
-            }
-        },
         "request.BeginPasskeyLoginRequest": {
             "type": "object",
             "properties": {
@@ -4974,27 +4796,6 @@ const docTemplate = `{
                 }
             }
         },
-        "response.AdminTestPushResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string",
-                    "example": "test notification dispatched"
-                },
-                "subscriptions_count": {
-                    "type": "integer",
-                    "example": 2
-                },
-                "user_id": {
-                    "type": "integer",
-                    "example": 1
-                },
-                "username": {
-                    "type": "string",
-                    "example": "johndoe"
-                }
-            }
-        },
         "response.AdminUserResponse": {
             "type": "object",
             "properties": {
@@ -5189,38 +4990,6 @@ const docTemplate = `{
                 }
             }
         },
-        "response.MonthlySummaryDTO": {
-            "type": "object",
-            "properties": {
-                "attendance_breakdown": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
-                },
-                "days_filled": {
-                    "type": "integer"
-                },
-                "is_complete": {
-                    "type": "boolean"
-                },
-                "month": {
-                    "type": "integer"
-                },
-                "month_name": {
-                    "type": "string"
-                },
-                "overtime_hours": {
-                    "type": "number"
-                },
-                "working_days": {
-                    "type": "integer"
-                },
-                "working_hours": {
-                    "type": "number"
-                }
-            }
-        },
         "response.OriginsResponse": {
             "type": "object",
             "properties": {
@@ -5377,31 +5146,6 @@ const docTemplate = `{
                 }
             }
         },
-        "response.PushScheduleResponse": {
-            "type": "object",
-            "properties": {
-                "cron_expression": {
-                    "type": "string",
-                    "example": "0 17 * * *"
-                },
-                "human_readable": {
-                    "type": "string",
-                    "example": "Setiap hari pukul 17:00 (Asia/Jakarta)"
-                },
-                "is_enabled": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "next_run": {
-                    "type": "string",
-                    "example": "2026-09-15T17:00:00+07:00"
-                },
-                "timezone": {
-                    "type": "string",
-                    "example": "Asia/Jakarta"
-                }
-            }
-        },
         "response.SubmitProfileChangeResponse": {
             "type": "object",
             "properties": {
@@ -5419,41 +5163,6 @@ const docTemplate = `{
                 "status": {
                     "type": "string",
                     "example": "success"
-                }
-            }
-        },
-        "response.TimesheetSummaryResponse": {
-            "type": "object",
-            "properties": {
-                "month": {
-                    "type": "integer"
-                },
-                "months": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/response.MonthlySummaryDTO"
-                    }
-                },
-                "total_days_filled": {
-                    "type": "integer"
-                },
-                "total_overtime_hours": {
-                    "type": "number"
-                },
-                "total_working_days": {
-                    "type": "integer"
-                },
-                "total_working_hours": {
-                    "type": "number"
-                },
-                "year": {
-                    "type": "integer"
-                },
-                "yearly_attendance_breakdown": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "integer"
-                    }
                 }
             }
         },

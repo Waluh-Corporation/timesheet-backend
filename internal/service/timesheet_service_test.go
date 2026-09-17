@@ -156,36 +156,4 @@ func TestTimesheetService_OvertimeAndWorkbook(t *testing.T) {
 	if err := svc.UpsertOvertime(ctx, user.ID, otInvalidTime); !errors.Is(err, domain.ErrInvalidInput) {
 		t.Fatalf("expected ErrInvalidInput for start > end, got %v", err)
 	}
-
-	// 8. GetHistoricalSummary
-	// Invalid parameters
-	if _, err := svc.GetHistoricalSummary(ctx, user.ID, 1990, nil); !errors.Is(err, domain.ErrInvalidInput) {
-		t.Fatalf("expected ErrInvalidInput for year 1990, got %v", err)
-	}
-	invalidMonth := 15
-	if _, err := svc.GetHistoricalSummary(ctx, user.ID, 2026, &invalidMonth); !errors.Is(err, domain.ErrInvalidInput) {
-		t.Fatalf("expected ErrInvalidInput for month 15, got %v", err)
-	}
-	if _, err := svc.GetHistoricalSummary(ctx, 999999, 2026, nil); !errors.Is(err, domain.ErrNotFound) {
-		t.Fatalf("expected ErrNotFound for non-existent user, got %v", err)
-	}
-
-	// Successful yearly summary
-	yearlySummary, err := svc.GetHistoricalSummary(ctx, user.ID, 2026, nil)
-	if err != nil {
-		t.Fatalf("GetHistoricalSummary yearly failed: %v", err)
-	}
-	if yearlySummary.Year != 2026 || len(yearlySummary.Months) != 12 {
-		t.Fatalf("unexpected yearly summary: %+v", yearlySummary)
-	}
-
-	// Successful specific month summary
-	targetMonth := 6
-	monthlySummary, err := svc.GetHistoricalSummary(ctx, user.ID, 2026, &targetMonth)
-	if err != nil {
-		t.Fatalf("GetHistoricalSummary monthly failed: %v", err)
-	}
-	if len(monthlySummary.Months) != 1 || monthlySummary.Months[0].Month != 6 {
-		t.Fatalf("unexpected monthly summary: %+v", monthlySummary)
-	}
 }

@@ -10,12 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Historical Timesheet Summary Endpoint**: Introduced `GET /api/v1/timesheet/summary?year=YYYY[&month=M]` allowing users to retrieve aggregated monthly metrics (total work hours, overtime, active days, leaves, sickness) and a comprehensive 12-month annual attendance breakdown.
 - **Working Hours Order Validation**: Enforced strict validation on daily activities and overtime entries ensuring check-out time is strictly later than check-in time (`check_out > check_in`), accompanied by polite, user-friendly Indonesian error guidance.
 - **Empty Timesheet Generation Guard**: Added validation on monthly timesheet generation (`POST /api/v1/timesheet/generate`) to reject requests when no activities are recorded for the period, prompting users to fill their daily entries first.
 - **Configurable CORS Allowed Origins via Environment**: Added `CORS_ALLOWED_ORIGINS` environment variable supporting comma-separated origin allowlists (and wildcard `*`) so frontend developers and operators can flexibly enable cross-origin API access across development, staging, and multi-domain deployments without coupling to WebAuthn configuration.
-- **Web Push Cron Schedule Endpoint**: Introduced `GET /api/v1/push/schedule` accessible to all authenticated users and administrators, exposing cron expression, active status, timezone, human-readable schedule description, and next planned execution timestamp.
-- **Admin Test Web Push to User Endpoint**: Added `POST /api/v1/admin/push/test` and `POST /api/v1/admin/users/:id/push/test` allowing administrators to trigger and test instant Web Push notifications targeted to specific users with customizable title, body, and destination URL, including active subscription counts.
 
 ### Changed
 - **Clean Architecture & Pure 3NF Normalization**: Refactored monolithic HTTP handlers into decoupled Service and Repository layers (`ActivityService`, `TimesheetService`, `MasterDataService`, `UserService`), normalized database schema to Pure 3NF by removing redundant project denormalization from `daily_activities`, and centralized business validations.
