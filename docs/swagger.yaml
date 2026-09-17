@@ -602,21 +602,6 @@ definitions:
       user_id:
         type: integer
     type: object
-  request.AdminTestPushRequest:
-    properties:
-      body:
-        example: Waktunya isi timesheet hari ini!
-        type: string
-      title:
-        example: Timesheet Reminder
-        type: string
-      url:
-        example: /activity
-        type: string
-      user_id:
-        example: 1
-        type: integer
-    type: object
   request.BeginPasskeyLoginRequest:
     properties:
       identifier:
@@ -927,21 +912,6 @@ definitions:
       user_name:
         type: string
     type: object
-  response.AdminTestPushResponse:
-    properties:
-      message:
-        example: test notification dispatched
-        type: string
-      subscriptions_count:
-        example: 2
-        type: integer
-      user_id:
-        example: 1
-        type: integer
-      username:
-        example: johndoe
-        type: string
-    type: object
   response.AdminUserResponse:
     properties:
       bni_id:
@@ -1074,27 +1044,6 @@ definitions:
         example: success
         type: string
     type: object
-  response.MonthlySummaryDTO:
-    properties:
-      attendance_breakdown:
-        additionalProperties:
-          type: integer
-        type: object
-      days_filled:
-        type: integer
-      is_complete:
-        type: boolean
-      month:
-        type: integer
-      month_name:
-        type: string
-      overtime_hours:
-        type: number
-      working_days:
-        type: integer
-      working_hours:
-        type: number
-    type: object
   response.OriginsResponse:
     properties:
       origins:
@@ -1200,24 +1149,6 @@ definitions:
       user_id:
         type: integer
     type: object
-  response.PushScheduleResponse:
-    properties:
-      cron_expression:
-        example: 0 17 * * *
-        type: string
-      human_readable:
-        example: Setiap hari pukul 17:00 (Asia/Jakarta)
-        type: string
-      is_enabled:
-        example: true
-        type: boolean
-      next_run:
-        example: "2026-09-15T17:00:00+07:00"
-        type: string
-      timezone:
-        example: Asia/Jakarta
-        type: string
-    type: object
   response.SubmitProfileChangeResponse:
     properties:
       code:
@@ -1231,29 +1162,6 @@ definitions:
       status:
         example: success
         type: string
-    type: object
-  response.TimesheetSummaryResponse:
-    properties:
-      month:
-        type: integer
-      months:
-        items:
-          $ref: '#/definitions/response.MonthlySummaryDTO'
-        type: array
-      total_days_filled:
-        type: integer
-      total_overtime_hours:
-        type: number
-      total_working_days:
-        type: integer
-      total_working_hours:
-        type: number
-      year:
-        type: integer
-      yearly_attendance_breakdown:
-        additionalProperties:
-          type: integer
-        type: object
     type: object
   response.UpdateUserResponse:
     properties:
@@ -2226,51 +2134,6 @@ paths:
       - BearerAuth: []
       summary: Review profile change request (Admin)
       tags:
-      - Admin
-  /api/v1/admin/push/test:
-    post:
-      consumes:
-      - application/json
-      description: Dispatches an immediate test push notification to a designated
-        user to verify browser notifications.
-      parameters:
-      - description: Push notification test parameters including target user_id
-        in: body
-        name: request
-        schema:
-          $ref: '#/definitions/request.AdminTestPushRequest'
-      - description: Target User ID (when using /admin/users/:id/push/test)
-        in: path
-        name: id
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/response.AdminTestPushResponse'
-        "400":
-          description: Bad request (missing user_id)
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "403":
-          description: Forbidden (admin only)
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "404":
-          description: User not found
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Send test push notification to a user (Admin only)
-      tags:
-      - Push Notification
       - Admin
   /api/v1/admin/sites:
     get:
@@ -3373,27 +3236,6 @@ paths:
       summary: List active projects
       tags:
       - Master Data
-  /api/v1/push/schedule:
-    get:
-      description: Returns the configured cron schedule, timezone, status, and next
-        execution time for daily timesheet reminders. Accessible by authenticated
-        users and admins.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/response.PushScheduleResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get Web Push reminder schedule
-      tags:
-      - Push Notification
   /api/v1/push/subscribe:
     post:
       consumes:
@@ -3615,43 +3457,6 @@ paths:
       security:
       - BearerAuth: []
       summary: Generate timesheet spreadsheet
-      tags:
-      - Timesheet
-  /api/v1/timesheet/summary:
-    get:
-      description: Returns aggregated timesheet metrics including working days, days
-        filled, working hours, overtime hours, and attendance breakdown per month.
-      parameters:
-      - description: Year filter (e.g. 2026, default current year)
-        in: query
-        name: year
-        type: integer
-      - description: Optional month filter (1-12)
-        in: query
-        name: month
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/response.TimesheetSummaryResponse'
-        "400":
-          description: Invalid year or month
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get monthly and yearly historical timesheet summary
       tags:
       - Timesheet
   /api/v1/users/change-password:
