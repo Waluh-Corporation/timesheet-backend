@@ -1,0 +1,51 @@
+name: Sync Main to Development
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: sync-main-to-development
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync Main into Development
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: development
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync main into development
+        run: |
+          git fetch origin main
+
+          # Check if development is already up to date with main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "development is already up to date with main. Nothing to do."
+            exit 0
+          fi
+
+          echo "Merging origin/main into development..."
+          if git merge --no-edit origin/main -m "chore: sync main into development"; then
+            git push origin development
+            echo "Successfully synced main into development."
+          else
+            echo "::error::Merge conflict encountered when syncing main into development. Manual resolution required."
+            git merge --abort || true
+            exit 1
+          fi
