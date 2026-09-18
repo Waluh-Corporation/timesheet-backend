@@ -46,6 +46,7 @@ type Config struct {
 	Timezone     string
 	ReminderCron string
 	CleanupCron  string
+	EOMCron      string
 
 	// Bootstrap admin credentials, applied on first boot when no admin exists.
 	AdminEmail    string
@@ -214,6 +215,7 @@ func Load() *Config {
 		Timezone:     getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
 		ReminderCron: getEnv("SCHEDULER_REMINDER_CRON", getEnv("SCHEDULER_CRON", "0 17 * * *")),
 		CleanupCron:  getEnv("SCHEDULER_CLEANUP_CRON", "0 2 * * *"),
+		EOMCron:      getEnv("SCHEDULER_EOM_CRON", "0 18 * * *"),
 
 		AdminEmail:    getEnv("ADMIN_EMAIL", getEnv("BOOTSTRAP_ADMIN_EMAIL", "admin@timesheet.local")),
 		AdminUsername: getEnv("BOOTSTRAP_ADMIN_USERNAME", "admin"),
