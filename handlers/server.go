@@ -146,7 +146,8 @@ func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
 	return nil, false
 }
 
-func (s *Server) getUserService() service.UserService {
+// GetUserService retrieves or lazily initializes the UserService.
+func (s *Server) GetUserService() service.UserService {
 	if s.UserSvc != nil {
 		return s.UserSvc
 	}
