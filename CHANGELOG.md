@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Automated End-of-the-Month Timesheet Delivery**: Added background scheduler task (`SCHEDULER_EOM_CRON`, defaulting to `0 18 * * *`) that automatically compiles and dispatches timesheet documents via email and Web Push notification to all active users on the last day of each month (`IsEndOfMonth`), even if the daily activity log on the End-of-the-Month date itself has not yet been filled.
+
 ---
 
 ## [1.6.0] - 2026-09-17

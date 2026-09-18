@@ -165,7 +165,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	sched := scheduler.New(db, pushSvc, cfg.Timezone, cfg.ReminderCron, cfg.CleanupCron)
+	sched := scheduler.New(db, pushSvc, cfg.Timezone, cfg.ReminderCron, cfg.CleanupCron, cfg.EOMCron)
+	sched.SetTimesheetService(srv.TimesheetSvc)
 	sched.Start()
 	defer sched.Stop()
 

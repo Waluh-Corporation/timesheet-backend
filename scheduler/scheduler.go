@@ -1,6 +1,8 @@
 package scheduler
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -10,6 +12,9 @@ import (
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 
+	"timesheet-backend/internal/domain"
+	"timesheet-backend/internal/service"
+	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/push"
 )
@@ -17,6 +22,7 @@ import (
 const (
 	DefaultReminderCron = "0 17 * * *"
 	DefaultCleanupCron  = "0 2 * * *"
+	DefaultEOMCron      = "0 18 * * *"
 )
 
 // ScheduleInfo carries details about a cron schedule for frontend presentation.
@@ -91,14 +97,17 @@ func GetScheduleInfo(tz, cronExpr string) ScheduleInfo {
 	return info
 }
 
-// Scheduler owns the cron runner that dispatches the daily timesheet reminder and housekeeping tasks.
+// Scheduler owns the cron runner that dispatches the daily timesheet reminder,
+// end-of-the-month automated timesheet delivery, and housekeeping tasks.
 type Scheduler struct {
 	db           *gorm.DB
 	push         *push.Service
+	timesheetSvc service.TimesheetService
 	cron         *cron.Cron
 	loc          *time.Location
 	reminderCron string
 	cleanupCron  string
+	eomCron      string
 }
 
 // IsJobDisabled checks if a cron expression explicitly disables the scheduled task.
@@ -108,9 +117,10 @@ func IsJobDisabled(expr string) bool {
 }
 
 // New builds a Scheduler pinned to the given IANA timezone (Asia/Jakarta for
-// WIB) and optional cron expressions for reminders and token housekeeping.
-// If crons are omitted or empty, DefaultReminderCron ("0 17 * * *") and
-// DefaultCleanupCron ("0 2 * * *") are used.
+// WIB) and optional cron expressions for reminders, token housekeeping, and
+// end-of-the-month timesheet delivery.
+// If crons are omitted or empty, DefaultReminderCron ("0 17 * * *"),
+// DefaultCleanupCron ("0 2 * * *"), and DefaultEOMCron ("0 18 * * *") are used.
 func New(db *gorm.DB, pushSvc *push.Service, tz string, crons ...string) *Scheduler {
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
@@ -121,11 +131,15 @@ func New(db *gorm.DB, pushSvc *push.Service, tz string, crons ...string) *Schedu
 
 	reminderCron := DefaultReminderCron
 	cleanupCron := DefaultCleanupCron
+	eomCron := DefaultEOMCron
 	if len(crons) > 0 && strings.TrimSpace(crons[0]) != "" {
 		reminderCron = strings.TrimSpace(crons[0])
 	}
 	if len(crons) > 1 && strings.TrimSpace(crons[1]) != "" {
 		cleanupCron = strings.TrimSpace(crons[1])
+	}
+	if len(crons) > 2 && strings.TrimSpace(crons[2]) != "" {
+		eomCron = strings.TrimSpace(crons[2])
 	}
 
 	return &Scheduler{
@@ -135,7 +149,13 @@ func New(db *gorm.DB, pushSvc *push.Service, tz string, crons ...string) *Schedu
 		loc:          loc,
 		reminderCron: reminderCron,
 		cleanupCron:  cleanupCron,
+		eomCron:      eomCron,
 	}
+}
+
+// SetTimesheetService assigns the timesheet business service used for automated generation and delivery.
+func (s *Scheduler) SetTimesheetService(ts service.TimesheetService) {
+	s.timesheetSvc = ts
 }
 
 // registerJob attempts to register a task with the given cron expression,
@@ -154,14 +174,16 @@ func (s *Scheduler) registerJob(name, cronExpr, defaultCron string, task func())
 	}
 }
 
-// Start registers the configured daily reminder and token housekeeping cron jobs
+// Start registers the configured daily reminder, housekeeping, and EOM delivery cron jobs
 // and launches the runner.
 func (s *Scheduler) Start() {
 	s.registerJob("daily reminder", s.reminderCron, DefaultReminderCron, s.sendDailyReminders)
 	s.registerJob("token housekeeping", s.cleanupCron, DefaultCleanupCron, s.cleanupExpiredTokens)
+	s.registerJob("end-of-the-month timesheet delivery", s.eomCron, DefaultEOMCron, s.sendEndOfMonthTimesheets)
 
 	s.cron.Start()
 	log.Printf("[scheduler] daily timesheet reminder armed with cron %q in %s", s.reminderCron, s.loc.String())
+	log.Printf("[scheduler] end-of-the-month timesheet delivery armed with cron %q in %s", s.eomCron, s.loc.String())
 }
 
 // Stop gracefully halts the cron runner.
@@ -222,4 +244,84 @@ func (s *Scheduler) cleanupExpiredTokens() {
 	} else if res.RowsAffected > 0 {
 		log.Printf("[scheduler] token housekeeping purged %d stale tokens", res.RowsAffected)
 	}
+}
+
+// IsEndOfMonth determines whether the given date is the last calendar day of its month.
+func IsEndOfMonth(t time.Time) bool {
+	return t.AddDate(0, 0, 1).Day() == 1
+}
+
+// sendEndOfMonthTimesheets executes automated timesheet delivery on the last day of the current month.
+func (s *Scheduler) sendEndOfMonthTimesheets() {
+	s.SendEndOfMonthTimesheetsAt(time.Now().In(s.loc))
+}
+
+// SendEndOfMonthTimesheetsAt triggers automated timesheet generation and delivery for all active users
+// evaluated against targetDate. If targetDate is not the last day of the month, the process is skipped.
+// Daily activity entries on targetDate itself are NOT required; if activities exist for the month,
+// the timesheet is generated and delivered via email and push notification.
+func (s *Scheduler) SendEndOfMonthTimesheetsAt(targetDate time.Time) {
+	if !IsEndOfMonth(targetDate) {
+		log.Printf("[scheduler] %s is not end-of-the-month, skipping automated timesheet delivery", targetDate.Format("2006-01-02"))
+		return
+	}
+
+	if s.db == nil || s.timesheetSvc == nil {
+		log.Printf("[scheduler] db or timesheet service is nil, skipping automated timesheet delivery")
+		return
+	}
+
+	month := int(targetDate.Month())
+	year := targetDate.Year()
+	period := mailer.FormatMonthYearIndonesian(month, year)
+
+	log.Printf("[scheduler] running automated end-of-the-month timesheet delivery for %s (period: %s)", targetDate.Format("2006-01-02"), period)
+
+	var users []models.User
+	if err := s.db.Where("is_active = ? AND role = ?", true, models.RoleUser).Find(&users).Error; err != nil {
+		log.Printf("[scheduler] failed to load active users for timesheet delivery: %v", err)
+		return
+	}
+
+	ctx := context.Background()
+	sentCount := 0
+	skippedCount := 0
+	failedCount := 0
+
+	for _, u := range users {
+		// Notice: We intentionally do NOT check or require that daily activity on targetDate is filled.
+		// GenerateWorkbook generates the workbook and sends it asynchronously via mailer if configured.
+		_, filename, err := s.timesheetSvc.GenerateWorkbook(ctx, u.ID, month, year)
+		if err != nil {
+			if errors.Is(err, domain.ErrInvalidInput) {
+				// No activities recorded at all for this month
+				log.Printf("[scheduler] user %s (ID %d) has no activities for period %s, skipping", u.Username, u.ID, period)
+				skippedCount++
+				if s.push != nil {
+					s.push.SendToUser(u.ID, push.Payload{
+						Title: "Timesheet Belum Lengkap",
+						Body:  fmt.Sprintf("Timesheet periode %s belum dapat dikirim otomatis karena belum ada aktivitas yang tercatat.", period),
+						URL:   "/activity",
+					})
+				}
+				continue
+			}
+			log.Printf("[scheduler] failed to generate/send timesheet for user %s (ID %d): %v", u.Username, u.ID, err)
+			failedCount++
+			continue
+		}
+
+		sentCount++
+		log.Printf("[scheduler] timesheet %s generated and dispatched for user %s (ID %d)", filename, u.Username, u.ID)
+
+		if s.push != nil {
+			s.push.SendToUser(u.ID, push.Payload{
+				Title: "Timesheet Bulanan Terkirim",
+				Body:  fmt.Sprintf("Timesheet periode %s telah dibuat dan dikirimkan otomatis ke email Anda.", period),
+				URL:   "/dashboard",
+			})
+		}
+	}
+
+	log.Printf("[scheduler] end-of-the-month timesheet delivery complete: %d sent, %d skipped (no activities), %d failed", sentCount, skippedCount, failedCount)
 }
