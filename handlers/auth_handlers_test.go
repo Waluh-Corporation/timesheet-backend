@@ -241,6 +241,16 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		srv.BeginPasskeyLogin(cBPL)
 		assertResponseCode(t, wBPL, http.StatusInternalServerError)
 
+		// BeginPasskeyLogin with identifier and nil repo
+		wa, _ := webauthn.New(&webauthn.Config{RPDisplayName: "Test", RPID: "localhost"})
+		srvWithWA := &Server{WebAuthn: wa}
+		wBPL2 := httptest.NewRecorder()
+		cBPL2, _ := gin.CreateTestContext(wBPL2)
+		cBPL2.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/begin", strings.NewReader(`{"identifier":"user123"}`))
+		cBPL2.Request.Header.Set("Content-Type", "application/json")
+		srvWithWA.BeginPasskeyLogin(cBPL2)
+		assertResponseCode(t, wBPL2, http.StatusInternalServerError)
+
 		// Logout with empty token
 		wLogout := httptest.NewRecorder()
 		cLogout, _ := gin.CreateTestContext(wLogout)

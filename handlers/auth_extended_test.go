@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"bytes"
+	"context"
+	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +19,7 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/request"
+	"timesheet-backend/internal/repository"
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 )
@@ -311,6 +315,27 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		cGhost.Request.Header.Set("Content-Type", "application/json")
 		srv.ResetPassword(cGhost)
 		assertResponseCode(t, wGhost, http.StatusBadRequest)
+
+		// Reset with valid token but weak password (< 12 chars, violates NIST policy)
+		rawWeak := "weak-token-xyz"
+		tokWeak := models.PasswordResetToken{
+			UserID:    testUser.ID,
+			TokenType: "password_reset",
+			TokenHash: auth.HashToken(rawWeak),
+			ExpiresAt: time.Now().Add(1 * time.Hour),
+		}
+		_ = tx.Create(&tokWeak)
+
+		weakPayload, _ := json.Marshal(request.ResetRequest{
+			Token:    rawWeak,
+			Password: "short",
+		})
+		wWeak := httptest.NewRecorder()
+		cWeak, _ := gin.CreateTestContext(wWeak)
+		cWeak.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/reset-password", bytes.NewReader(weakPayload))
+		cWeak.Request.Header.Set("Content-Type", "application/json")
+		srv.ResetPassword(cWeak)
+		assertResponseCode(t, wWeak, http.StatusBadRequest)
 	})
 
 	t.Run("Passkey endpoints and decodeUserHandle", func(t *testing.T) {
@@ -334,6 +359,16 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		if err := tx.Create(&cred).Error; err != nil {
 			t.Fatalf("failed to create credential: %v", err)
 		}
+
+		// FinishPasskeyLogin with non-existent user handle
+		var nonexistentUIDBytes [8]byte
+		binary.LittleEndian.PutUint64(nonexistentUIDBytes[:], 99999999)
+		srv.putSession("test-nonexistent-user-sid", &webauthn.SessionData{UserID: nonexistentUIDBytes[:]})
+		wNonexistent := httptest.NewRecorder()
+		cNonexistent, _ := gin.CreateTestContext(wNonexistent)
+		cNonexistent.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/finish?session_id=test-nonexistent-user-sid", nil)
+		srv.FinishPasskeyLogin(cNonexistent)
+		assertResponseCode(t, wNonexistent, http.StatusUnauthorized)
 
 		// ListPasskeys
 		wList := httptest.NewRecorder()
@@ -1035,4 +1070,180 @@ func TestMe_Endpoint(t *testing.T) {
 	c404.Request = httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
 	srv.Me(c404)
 	assertResponseCode(t, w404, http.StatusNotFound)
+}
+
+func TestAuthHandlers_RepoErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", time.Hour)
+	srv, err := NewServer(tx, cfg, authSvc, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+
+	testUser := models.User{
+		Username: "erruser",
+		Email:    "erruser@example.com",
+		Role:     models.RoleAdmin,
+		IsActive: true,
+	}
+	_ = tx.Create(&testUser)
+
+	t.Run("Passkey repository error branches", func(t *testing.T) {
+		errUserRepo := &testErrUserRepo{
+			UserRepository: srv.UserRepo,
+			err:            errors.New("db error"),
+		}
+		savedUserRepo := srv.UserRepo
+		srv.UserRepo = errUserRepo
+		defer func() { srv.UserRepo = savedUserRepo }()
+
+		// ListPasskeys error
+		wL := httptest.NewRecorder()
+		cL, _ := gin.CreateTestContext(wL)
+		cL.Set("user_id", testUser.ID)
+		cL.Request = httptest.NewRequest(http.MethodGet, "/api/v1/passkeys", nil)
+		srv.ListPasskeys(cL)
+		assertResponseCode(t, wL, http.StatusInternalServerError)
+
+		// DeletePasskey error
+		wD := httptest.NewRecorder()
+		cD, _ := gin.CreateTestContext(wD)
+		cD.Set("user_id", testUser.ID)
+		cD.Params = []gin.Param{{Key: "id", Value: "123"}}
+		cD.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/passkeys/123", nil)
+		srv.DeletePasskey(cD)
+		assertResponseCode(t, wD, http.StatusInternalServerError)
+
+		// AdminListPasskeys error
+		wAL := httptest.NewRecorder()
+		cAL, _ := gin.CreateTestContext(wAL)
+		cAL.Params = []gin.Param{{Key: "id", Value: "123"}}
+		cAL.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users/123/passkeys", nil)
+		srv.AdminListPasskeys(cAL)
+		assertResponseCode(t, wAL, http.StatusInternalServerError)
+
+		// AdminDeletePasskey error
+		wAD := httptest.NewRecorder()
+		cAD, _ := gin.CreateTestContext(wAD)
+		cAD.Params = []gin.Param{{Key: "id", Value: "123"}, {Key: "pid", Value: "456"}}
+		cAD.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/123/passkeys/456", nil)
+		srv.AdminDeletePasskey(cAD)
+		assertResponseCode(t, wAD, http.StatusInternalServerError)
+	})
+
+	t.Run("Token repository error branches", func(t *testing.T) {
+		errTokRepo := &testErrTokenRepo{
+			TokenRepository: srv.TokenRepo,
+			err:             errors.New("db error"),
+		}
+		savedTokRepo := srv.TokenRepo
+		srv.TokenRepo = errTokRepo
+		defer func() { srv.TokenRepo = savedTokRepo }()
+
+		// Refresh token error revoking
+		rawTok := "seed-refresh-for-err"
+		seedTok := models.RefreshToken{
+			UserID:    testUser.ID,
+			TokenHash: auth.HashToken(rawTok),
+			FamilyID:  uuid.NewString(),
+			ExpiresAt: time.Now().Add(1 * time.Hour),
+		}
+		_ = tx.Create(&seedTok)
+
+		refreshPayload, _ := json.Marshal(request.RefreshRequest{
+			RefreshToken: rawTok,
+		})
+		wRef := httptest.NewRecorder()
+		cRef, _ := gin.CreateTestContext(wRef)
+		cRef.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh-token", bytes.NewReader(refreshPayload))
+		cRef.Request.Header.Set("Content-Type", "application/json")
+		srv.RefreshToken(cRef)
+		assertResponseCode(t, wRef, http.StatusInternalServerError)
+
+		// Reset password error on update password
+		rawReset := "reset-token-for-err"
+		seedReset := models.PasswordResetToken{
+			UserID:    testUser.ID,
+			TokenType: "password_reset",
+			TokenHash: auth.HashToken(rawReset),
+			ExpiresAt: time.Now().Add(1 * time.Hour),
+		}
+		_ = tx.Create(&seedReset)
+
+		errUserRepo := &testErrUserRepo{
+			UserRepository: srv.UserRepo,
+			err:            errors.New("db update password error"),
+		}
+		savedUserRepo := srv.UserRepo
+		srv.UserRepo = errUserRepo
+		defer func() { srv.UserRepo = savedUserRepo }()
+
+		resetPayload, _ := json.Marshal(request.ResetRequest{
+			Token:    rawReset,
+			Password: "ValidPassword123!",
+		})
+		wReset := httptest.NewRecorder()
+		cReset, _ := gin.CreateTestContext(wReset)
+		cReset.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/reset-password", bytes.NewReader(resetPayload))
+		cReset.Request.Header.Set("Content-Type", "application/json")
+		srv.ResetPassword(cReset)
+		assertResponseCode(t, wReset, http.StatusInternalServerError)
+	})
+}
+
+type testErrUserRepo struct {
+	repository.UserRepository
+	err error
+}
+
+func (r *testErrUserRepo) ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error) {
+	if r.err != nil {
+		return nil, r.err
+	}
+	return r.UserRepository.ListPasskeysByUserID(ctx, userID)
+}
+
+func (r *testErrUserRepo) DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error) {
+	if r.err != nil {
+		return false, r.err
+	}
+	return r.UserRepository.DeletePasskey(ctx, id, userID)
+}
+
+func (r *testErrUserRepo) UpdatePassword(ctx context.Context, id uint, passwordHash string, updatedAt time.Time) error {
+	if r.err != nil {
+		return r.err
+	}
+	return r.UserRepository.UpdatePassword(ctx, id, passwordHash, updatedAt)
+}
+
+type testErrTokenRepo struct {
+	repository.TokenRepository
+	err error
+}
+
+func (r *testErrTokenRepo) CreateRefreshToken(ctx context.Context, token *models.RefreshToken) error {
+	if r.err != nil {
+		return r.err
+	}
+	return r.TokenRepository.CreateRefreshToken(ctx, token)
+}
+
+func (r *testErrTokenRepo) RevokeRefreshToken(ctx context.Context, id uint, revokedAt time.Time) error {
+	if r.err != nil {
+		return r.err
+	}
+	return r.TokenRepository.RevokeRefreshToken(ctx, id, revokedAt)
+}
+
+func (r *testErrTokenRepo) ConsumeResetToken(ctx context.Context, tokenID uint, usedAt time.Time, usedIP string) error {
+	if r.err != nil {
+		return r.err
+	}
+	return r.TokenRepository.ConsumeResetToken(ctx, tokenID, usedAt, usedIP)
 }
