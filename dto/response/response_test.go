@@ -216,4 +216,3 @@ func TestRegistrationResponseDTO(t *testing.T) {
 		t.Errorf("RegisterResponse mismatch: %+v", regEnvelope)
 	}
 }
-

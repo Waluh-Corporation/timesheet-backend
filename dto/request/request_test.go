@@ -125,4 +125,3 @@ func TestRegisterRequestDTO(t *testing.T) {
 		t.Errorf("ReviewRegistrationRequest mismatch: %+v", revReq)
 	}
 }
-

@@ -396,4 +396,3 @@ type UserRegistration struct {
 
 	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
 }
-

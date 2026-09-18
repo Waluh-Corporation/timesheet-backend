@@ -124,21 +124,21 @@ func (s *Server) Register(c *gin.Context) {
 		user.IsActive = false
 
 		reg = models.UserRegistration{
-			UserID:        user.ID,
-			Status:        models.RegistrationPending,
-			Name:          req.Name,
-			BniID:         strings.TrimSpace(req.BniID),
-			EmployeeID:    strings.TrimSpace(req.EmployeeID),
-			Division:      resolvedDiv,
-			DivisionID:    resolvedDivID,
-			Department:    resolvedDept,
-			DepartmentID:  resolvedDeptID,
-			Site:          resolvedSite,
-			SiteID:        resolvedSiteID,
-			Company:       resolvedCompany,
-			CompanyID:     resolvedCompanyID,
-			Position:      strings.TrimSpace(req.Position),
-			GroupName:     strings.TrimSpace(req.GroupName),
+			UserID:       user.ID,
+			Status:       models.RegistrationPending,
+			Name:         req.Name,
+			BniID:        strings.TrimSpace(req.BniID),
+			EmployeeID:   strings.TrimSpace(req.EmployeeID),
+			Division:     resolvedDiv,
+			DivisionID:   resolvedDivID,
+			Department:   resolvedDept,
+			DepartmentID: resolvedDeptID,
+			Site:         resolvedSite,
+			SiteID:       resolvedSiteID,
+			Company:      resolvedCompany,
+			CompanyID:    resolvedCompanyID,
+			Position:     strings.TrimSpace(req.Position),
+			GroupName:    strings.TrimSpace(req.GroupName),
 		}
 		if err := tx.Create(&reg).Error; err != nil {
 			return err
