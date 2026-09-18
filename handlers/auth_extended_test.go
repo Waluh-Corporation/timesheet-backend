@@ -900,6 +900,56 @@ func TestPasskeyManagement_FullFlow(t *testing.T) {
 	cAdminDel404.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%d/passkeys/999999", user.ID), nil)
 	srv.AdminDeletePasskey(cAdminDel404)
 	assertResponseCode(t, wAdminDel404, http.StatusNotFound)
+
+	// 8. BeginPasskeyRegistration for authenticated user
+	wReg := httptest.NewRecorder()
+	cReg, _ := gin.CreateTestContext(wReg)
+	cReg.Set(ctxUserID, user.ID)
+	cReg.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/begin", nil)
+	srv.BeginPasskeyRegistration(cReg)
+	assertResponseCode(t, wReg, http.StatusOK)
+
+	// 9. BeginPasskeyLogin (discoverable)
+	wDisc := httptest.NewRecorder()
+	cDisc, _ := gin.CreateTestContext(wDisc)
+	cDisc.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/begin", strings.NewReader(`{}`))
+	cDisc.Request.Header.Set("Content-Type", "application/json")
+	srv.BeginPasskeyLogin(cDisc)
+	assertResponseCode(t, wDisc, http.StatusOK)
+
+	// 10. BeginPasskeyLogin (with valid identifier)
+	credLogin := models.WebAuthnCredential{
+		UserID:          user.ID,
+		CredentialID:    []byte("cred-test-id-for-login"),
+		PublicKey:       []byte("public-key-bytes-login"),
+		AttestationType: "none",
+		AAGUID:          []byte("00000000-0000-0000-0000-000000000000"),
+		SignCount:       1,
+		FriendlyName:    "Login Test Key",
+	}
+	_ = tx.Create(&credLogin)
+
+	wUserLogin := httptest.NewRecorder()
+	cUserLogin, _ := gin.CreateTestContext(wUserLogin)
+	cUserLogin.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/begin", strings.NewReader(`{"identifier":"`+user.Username+`"}`))
+	cUserLogin.Request.Header.Set("Content-Type", "application/json")
+	srv.BeginPasskeyLogin(cUserLogin)
+	assertResponseCode(t, wUserLogin, http.StatusOK)
+
+	// 10b. BeginPasskeyLogin (with unknown identifier)
+	wUserUnknown := httptest.NewRecorder()
+	cUserUnknown, _ := gin.CreateTestContext(wUserUnknown)
+	cUserUnknown.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/begin", strings.NewReader(`{"identifier":"unknown-user"}`))
+	cUserUnknown.Request.Header.Set("Content-Type", "application/json")
+	srv.BeginPasskeyLogin(cUserUnknown)
+	assertResponseCode(t, wUserUnknown, http.StatusUnauthorized)
+
+	// 11. WebAuthnRelatedOrigins
+	wRel := httptest.NewRecorder()
+	cRel, _ := gin.CreateTestContext(wRel)
+	cRel.Request = httptest.NewRequest(http.MethodGet, "/.well-known/webauthn", nil)
+	srv.WebAuthnRelatedOrigins(cRel)
+	assertResponseCode(t, wRel, http.StatusOK)
 }
 
 func TestMe_Endpoint(t *testing.T) {
