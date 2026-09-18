@@ -21,3 +21,13 @@ type ResetRequest struct {
 type BeginPasskeyLoginRequest struct {
 	Identifier string `json:"identifier" example:"john_doe"`
 }
+
+// RefreshRequest carries a refresh token to obtain a new access token and rotated refresh token.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required" example:"8f12c3d4..."`
+}
+
+// LogoutRequest optionally carries a refresh token to invalidate on logout.
+type LogoutRequest struct {
+	RefreshToken string `json:"refresh_token" example:"8f12c3d4..."`
+}

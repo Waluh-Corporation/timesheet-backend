@@ -35,7 +35,8 @@ func TestTimesheetService_OvertimeAndWorkbook(t *testing.T) {
 	userRepo := repository.NewUserRepository(tx)
 	actRepo := repository.NewActivityRepository(tx)
 	otRepo := repository.NewOvertimeRepository(tx)
-	svc := service.NewTimesheetService(tx, userRepo, actRepo, otRepo, nil)
+	masterRepo := repository.NewMasterRepository(tx)
+	svc := service.NewTimesheetService(userRepo, actRepo, otRepo, masterRepo, nil)
 	ctx := context.Background()
 
 	// Seed user

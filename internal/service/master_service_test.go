@@ -253,6 +253,14 @@ func (m *mockMasterRepo) ListActivityStatuses(ctx context.Context) ([]models.Act
 	return m.statuses, nil
 }
 
+func (m *mockMasterRepo) ListHolidaysByMonth(ctx context.Context, year, month int) ([]models.Holiday, error) {
+	return nil, nil
+}
+
+func (m *mockMasterRepo) UpsertHolidays(ctx context.Context, holidays []models.Holiday) error {
+	return nil
+}
+
 var _ repository.MasterRepository = (*mockMasterRepo)(nil)
 
 func TestMasterDataService_Approvers(t *testing.T) {

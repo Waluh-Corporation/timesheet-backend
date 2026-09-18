@@ -22,7 +22,7 @@ import (
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
 	"timesheet-backend/database"
-	_ "timesheet-backend/docs"
+	"timesheet-backend/docs"
 	_ "timesheet-backend/dto/request"
 	_ "timesheet-backend/dto/response"
 	"timesheet-backend/handlers"
@@ -39,7 +39,6 @@ import (
 // @termsOfService https://github.com/Waluh-Corporation/timesheet-backend
 // @contact.name API Support
 // @license.name MIT
-// @host localhost:8080
 // @BasePath /
 // @securityDefinitions.apikey BearerAuth
 // @in header
@@ -82,7 +81,23 @@ func registerHealthRoutes(r *gin.Engine, db *gorm.DB) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unready", "database": "disconnected"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "connected"})
+
+		stats := sqlDB.Stats()
+		c.JSON(http.StatusOK, gin.H{
+			"status":   "ready",
+			"database": "connected",
+			"pool": gin.H{
+				"max_open_connections": stats.MaxOpenConnections,
+				"open_connections":     stats.OpenConnections,
+				"in_use":               stats.InUse,
+				"idle":                 stats.Idle,
+				"wait_count":           stats.WaitCount,
+				"wait_duration_ms":     stats.WaitDuration.Milliseconds(),
+				"max_idle_closed":      stats.MaxIdleClosed,
+				"max_idle_time_closed": stats.MaxIdleTimeClosed,
+				"max_lifetime_closed":  stats.MaxLifetimeClosed,
+			},
+		})
 	})
 }
 
@@ -192,6 +207,10 @@ const (
 
 // registerRoutes wires the full Phase 2 API surface.
 func registerRoutes(r *gin.Engine, s *handlers.Server) {
+	// Dynamically inherit host & protocol from the accessing browser origin (OpenAPI 2.0 spec compliant)
+	docs.SwaggerInfo.Host = ""
+	docs.SwaggerInfo.Schemes = []string{}
+
 	// Swagger documentation UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.GET("/swagger", func(c *gin.Context) {
@@ -229,6 +248,8 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	}
 	{
 		authGroup.POST("/login", s.Login)
+		authGroup.POST("/refresh", s.RefreshToken)
+		authGroup.POST("/logout", s.Logout)
 		authGroup.POST("/forgot-password", s.ForgotPassword)
 		authGroup.POST("/reset-password", s.ResetPassword)
 		authGroup.POST("/passkey/login/begin", s.BeginPasskeyLogin)

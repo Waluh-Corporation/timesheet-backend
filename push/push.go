@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"gorm.io/gorm"
@@ -57,6 +58,7 @@ func (s *Service) SendToSubscription(sub *models.PushSubscription, payload Paylo
 			Auth:   sub.Auth,
 		},
 	}, &webpush.Options{
+		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
 		Subscriber:      s.cfg.VAPIDSubject,
 		VAPIDPublicKey:  s.cfg.VAPIDPublicKey,
 		VAPIDPrivateKey: s.cfg.VAPIDPrivateKey,

@@ -47,10 +47,11 @@ func (s *Service) GenerateToken(u *models.User) (string, error) {
 }
 
 // ParseToken validates a JWT string and returns its claims.
+// It strictly pins the signing algorithm to HS256 to prevent algorithm confusion/downgrade attacks.
 func (s *Service) ParseToken(tokenStr string) (*Claims, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		if t.Method == nil || t.Method.Alg() != jwt.SigningMethodHS256.Alg() {
 			return nil, errors.New("unexpected signing method")
 		}
 		return s.secret, nil
@@ -62,6 +63,18 @@ func (s *Service) ParseToken(tokenStr string) (*Claims, error) {
 		return nil, errors.New("invalid token")
 	}
 	return claims, nil
+}
+
+// GenerateRefreshToken returns a cryptographically secure 32-byte hex random string
+// and its SHA-256 hash. The raw token is returned to the client and only its hash
+// is persisted in the database.
+func GenerateRefreshToken() (raw string, hash string, err error) {
+	b := make([]byte, 32)
+	if _, err = rand.Read(b); err != nil {
+		return "", "", err
+	}
+	raw = hex.EncodeToString(b)
+	return raw, HashToken(raw), nil
 }
 
 // GenerateResetToken returns a random opaque token plus its SHA-256 hash. Only

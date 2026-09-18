@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"timesheet-backend/models"
 )
@@ -54,6 +55,10 @@ type MasterRepository interface {
 	// Projects & ActivityStatuses
 	ListProjects(ctx context.Context, activeOnly bool) ([]models.Project, error)
 	ListActivityStatuses(ctx context.Context) ([]models.ActivityStatus, error)
+
+	// Holidays
+	ListHolidaysByMonth(ctx context.Context, year, month int) ([]models.Holiday, error)
+	UpsertHolidays(ctx context.Context, holidays []models.Holiday) error
 }
 
 type masterRepository struct {
@@ -299,4 +304,26 @@ func (r *masterRepository) ListActivityStatuses(ctx context.Context) ([]models.A
 	var items []models.ActivityStatus
 	err := r.db.WithContext(ctx).Order("sort_order asc").Find(&items).Error
 	return items, err
+}
+
+// --- Holidays ---
+func (r *masterRepository) ListHolidaysByMonth(ctx context.Context, year, month int) ([]models.Holiday, error) {
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 1, 0)
+	var holidays []models.Holiday
+	err := r.db.WithContext(ctx).
+		Where("date >= ? AND date < ?", start, end).
+		Order("date asc").
+		Find(&holidays).Error
+	return holidays, err
+}
+
+func (r *masterRepository) UpsertHolidays(ctx context.Context, holidays []models.Holiday) error {
+	if len(holidays) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "date"}},
+		DoUpdates: clause.AssignmentColumns([]string{"description", "is_joint_leave", "is_civic", "is_religious", "updated_at"}),
+	}).Create(&holidays).Error
 }

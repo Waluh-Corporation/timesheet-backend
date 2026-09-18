@@ -11,6 +11,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0] - 2026-09-18
+
+### Added
+- **Dual-Token Authentication Architecture**: Short-lived (15 min) JWT access tokens paired with long-lived (7 days) SHA-256 hashed refresh tokens (`refresh_tokens`), configurable via `ACCESS_TOKEN_EXPIRY_MINUTES` and `REFRESH_TOKEN_TTL_DAYS`.
+- **Refresh Token Rotation & Family Reuse Detection**: New endpoint `POST /api/v1/auth/refresh` rotates refresh tokens on every exchange and automatically revokes all chained tokens in the family if an already-consumed token is replayed.
+- **Server-Side Session Logout**: New endpoint `POST /api/v1/auth/logout` allows clients to invalidate active refresh tokens in the database upon user logout.
+- **Immediate Account Revocation in AuthMiddleware**: Live database validation on every authenticated request ensuring deactivated or suspended accounts (`is_active = false`) are rejected immediately (`401 Unauthorized`) without waiting for access token expiration.
+- **Dynamic Connection Pooling Configuration**: Added environment variables (`DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, `DB_CONN_MAX_LIFETIME_MINUTES`, `DB_CONN_MAX_IDLE_TIME_MINUTES`) for tunable PostgreSQL connection management.
+- **Connection Pool Health Observability**: Real-time pool metrics (`open_connections`, `in_use`, `idle`, `wait_count`, `wait_duration_ms`) exposed on `/readyz`.
+- **Background Holiday Synchronization Scheduler**: Decoupled monthly timesheet generation from external HTTP latency by introducing weekly background synchronization (`syncHolidays`) from the Kemendesa national holiday API.
+
+### Changed
+- **Clean Architecture Repository Delegation**: Eliminated direct database queries from HTTP handlers and timesheet services, redirecting all data access through decoupled repository contracts (`UserRepository`, `TokenRepository`, `MasterRepository`).
+- **Workbook Generation Performance**: Replaced inline external HTTP calls during Excel timesheet generation with local indexed database lookups.
+- **Atomic Profile Change Approvals**: Wrapped administrative profile change reviews (`ReviewProfileChange`) inside atomic ACID database transactions.
+
+### Improved
+- **Covering Index for Timesheet Range Queries**: Migration 000026 adds `idx_daily_activities_range_covering` with `INCLUDE (status, project_ref_id, start_time, end_time) WHERE is_active = true`, enabling index-only scans for monthly timesheet reporting.
+- **Master Data Search Acceleration**: Added PostgreSQL trigram GIN indexes (`pg_trgm`) and functional lowercase indexes (`LOWER(code)`) across companies, departments, divisions, projects, and approvers for sub-millisecond search queries.
+- **I/O Resilience & Bounded Timeouts**: Added 10-second bounded timeouts for SMTP email delivery and WebPush notifications to eliminate thread pool exhaustion risks.
+- **Extensible Rate Limiting Abstraction**: Extracted `RateLimiter` interface to facilitate seamless switching between in-memory and distributed caching solutions.
+
+### Security
+- **Strict Algorithm Pinning**: Enforced cryptographic algorithm verification strictly to `HS256` in `auth.ParseToken`, eliminating algorithm confusion and `none`-algorithm vulnerabilities.
+- **Structured Security Event Logging**: Integrated standard library `log/slog` structured logging for authentication successes/failures, token reuse alerts, logout events, passkey operations, and password updates.
+- **Single Source of Truth Migrations**: Removed legacy raw DDL from application startup and consolidated all schema evolution in versioned migration files.
+
 ## [1.6.0] - 2026-09-17
 
 ### Added
