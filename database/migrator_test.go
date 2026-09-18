@@ -273,4 +273,46 @@ func TestRunMigrationsOnDB(t *testing.T) {
 	if !hasProjectsActiveIndex {
 		t.Errorf("index idx_projects_active_lookup should exist on projects")
 	}
+
+	// 17. Verify user_registrations table, foreign key relations, and indexes after migration 000026
+	var hasUserRegistrationsTable bool
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_registrations')`).Scan(&hasUserRegistrationsTable)
+	if !hasUserRegistrationsTable {
+		t.Errorf("expected table user_registrations to exist after migration 000026")
+	}
+
+	expectedFKs := []string{
+		"fk_user_registrations_user_id",
+		"fk_user_registrations_division_id",
+		"fk_user_registrations_department_id",
+		"fk_user_registrations_site_id",
+		"fk_user_registrations_company_id",
+		"fk_user_registrations_reviewed_by",
+	}
+	for _, fk := range expectedFKs {
+		var exists bool
+		_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = ?)`, fk).Scan(&exists)
+		if !exists {
+			t.Errorf("expected foreign key constraint %s to exist on user_registrations", fk)
+		}
+	}
+
+	expectedIndexes := []string{
+		"idx_user_registrations_user_id",
+		"idx_user_registrations_division_id",
+		"idx_user_registrations_department_id",
+		"idx_user_registrations_site_id",
+		"idx_user_registrations_company_id",
+		"idx_user_registrations_reviewed_by",
+		"idx_user_registrations_status",
+		"idx_user_registrations_status_created_at",
+		"idx_user_registrations_pending_user",
+	}
+	for _, idx := range expectedIndexes {
+		var exists bool
+		_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'user_registrations' AND indexname = ?)`, idx).Scan(&exists)
+		if !exists {
+			t.Errorf("expected index %s to exist on user_registrations", idx)
+		}
+	}
 }

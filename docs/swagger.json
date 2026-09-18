@@ -1374,6 +1374,229 @@
                 }
             }
         },
+        "/api/v1/admin/registrations": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a list of user registrations, optionally filtered by status (Admin only).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List user self-registrations (Admin)",
+                "parameters": [
+                    {
+                        "enum": [
+                            "pending",
+                            "approved",
+                            "rejected"
+                        ],
+                        "type": "string",
+                        "description": "Filter by registration status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.RegistrationListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/registrations/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the detailed record of a registration submission (Admin only).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get registration details (Admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Registration ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.RegistrationDetailResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Registration not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/registrations/{id}/review": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Approves or rejects a submitted user registration. Approving activates the user account (Admin only).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Review user registration (Admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Registration ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "approve",
+                            "reject"
+                        ],
+                        "type": "string",
+                        "description": "Review action (approve or reject)",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Review notes and action payload",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.ReviewRegistrationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid action or ID",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Registration not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Registration already reviewed",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/sites": {
             "get": {
                 "security": [
@@ -2206,6 +2429,58 @@
                     },
                     "403": {
                         "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/register": {
+            "post": {
+                "description": "Creates a new user account with status pending administrator approval.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "User self-registration",
+                "parameters": [
+                    {
+                        "description": "Self-registration payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.RegisterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/response.RegisterResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid payload or password policy failure",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Username or email already exists",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -4219,6 +4494,19 @@
                 }
             }
         },
+        "models.RegistrationStatus": {
+            "type": "string",
+            "enum": [
+                "approved",
+                "pending",
+                "rejected"
+            ],
+            "x-enum-varnames": [
+                "RegistrationApproved",
+                "RegistrationPending",
+                "RegistrationRejected"
+            ]
+        },
         "models.Role": {
             "type": "string",
             "enum": [
@@ -4610,6 +4898,85 @@
                 }
             }
         },
+        "request.RegisterRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "name",
+                "password",
+                "username"
+            ],
+            "properties": {
+                "bni_id": {
+                    "type": "string",
+                    "example": "12345678"
+                },
+                "company": {
+                    "type": "string",
+                    "example": "MII"
+                },
+                "company_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "department": {
+                    "type": "string",
+                    "example": "Wholesale Channel and Service Delivery"
+                },
+                "department_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "division": {
+                    "type": "string",
+                    "example": "Wholesale Digital Delivery"
+                },
+                "division_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "employee_id": {
+                    "type": "string",
+                    "example": "EMP-001"
+                },
+                "group_name": {
+                    "type": "string",
+                    "example": "SDD"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 8,
+                    "example": "SecurePass123!"
+                },
+                "position": {
+                    "type": "string",
+                    "example": "Software Engineer"
+                },
+                "site": {
+                    "type": "string",
+                    "example": "Citicon"
+                },
+                "site_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 3,
+                    "example": "john_doe"
+                }
+            }
+        },
         "request.ResetRequest": {
             "type": "object",
             "required": [
@@ -4625,6 +4992,26 @@
                 "token": {
                     "type": "string",
                     "example": "a8f9c0e2b1d3..."
+                }
+            }
+        },
+        "request.ReviewRegistrationRequest": {
+            "type": "object",
+            "required": [
+                "action"
+            ],
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": [
+                        "approve",
+                        "reject"
+                    ],
+                    "example": "approve"
+                },
+                "admin_notes": {
+                    "type": "string",
+                    "example": "Approved after HR validation"
                 }
             }
         },
@@ -5140,6 +5527,94 @@
                 }
             }
         },
+        "response.RegisterResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 201
+                },
+                "data": {
+                    "$ref": "#/definitions/response.RegisterResultData"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Registration submitted successfully"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
+        "response.RegisterResultData": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Registration submitted successfully. Your account is pending administrator approval."
+                },
+                "registration_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "status": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.RegistrationStatus"
+                        }
+                    ],
+                    "example": "pending"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "username": {
+                    "type": "string",
+                    "example": "john_doe"
+                }
+            }
+        },
+        "response.RegistrationDetailResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "$ref": "#/definitions/response.UserRegistrationResponse"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
+        "response.RegistrationListResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.UserRegistrationResponse"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
+                }
+            }
+        },
         "response.SubmitProfileChangeResponse": {
             "type": "object",
             "properties": {
@@ -5177,6 +5652,120 @@
                 "status": {
                     "type": "string",
                     "example": "success"
+                }
+            }
+        },
+        "response.UserRegistrationResponse": {
+            "type": "object",
+            "properties": {
+                "admin_notes": {
+                    "type": "string",
+                    "example": "Verified"
+                },
+                "bni_id": {
+                    "type": "string",
+                    "example": "12345678"
+                },
+                "company": {
+                    "type": "string",
+                    "example": "MII"
+                },
+                "company_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "company_rel": {
+                    "$ref": "#/definitions/models.Company"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "department": {
+                    "type": "string",
+                    "example": "Wholesale Channel and Service Delivery"
+                },
+                "department_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "department_rel": {
+                    "$ref": "#/definitions/models.Department"
+                },
+                "division": {
+                    "type": "string",
+                    "example": "Wholesale Digital Delivery"
+                },
+                "division_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "division_rel": {
+                    "$ref": "#/definitions/models.Division"
+                },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "employee_id": {
+                    "type": "string",
+                    "example": "EMP-001"
+                },
+                "group_name": {
+                    "type": "string",
+                    "example": "SDD"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "position": {
+                    "type": "string",
+                    "example": "Software Engineer"
+                },
+                "reviewed_at": {
+                    "type": "string"
+                },
+                "reviewed_by": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "reviewer_name": {
+                    "type": "string",
+                    "example": "Admin"
+                },
+                "site": {
+                    "type": "string",
+                    "example": "Citicon"
+                },
+                "site_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "site_rel": {
+                    "$ref": "#/definitions/models.Site"
+                },
+                "status": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.RegistrationStatus"
+                        }
+                    ],
+                    "example": "pending"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "username": {
+                    "type": "string",
+                    "example": "john_doe"
                 }
             }
         },

@@ -25,8 +25,17 @@ const (
 	ProfilePending  ProfileStatus = "pending"
 )
 
-// User is the core account entity. Registration is strictly admin-driven;
-// there is no public sign-up path anywhere in the API.
+// RegistrationStatus tracks the approval state of a self-service user registration.
+type RegistrationStatus string
+
+const (
+	RegistrationApproved RegistrationStatus = "approved"
+	RegistrationPending  RegistrationStatus = "pending"
+	RegistrationRejected RegistrationStatus = "rejected"
+)
+
+// User is the core account entity. Self-service registration creates an inactive account
+// awaiting administrator approval, while admin user creation activates directly.
 type User struct {
 	ID        uint           `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time      `json:"created_at"`
@@ -64,6 +73,7 @@ type User struct {
 	Credentials       []WebAuthnCredential   `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	PushSubscriptions []PushSubscription     `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	ProfileRequests   []ProfileChangeRequest `gorm:"constraint:OnDelete:CASCADE" json:"-"`
+	Registrations     []UserRegistration     `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	Overtimes         []OvertimeEntry        `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	DailyActivities   []DailyActivity        `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
 }
@@ -350,4 +360,39 @@ type SystemSetting struct {
 	Key       string    `gorm:"primaryKey;size:64" json:"key"`
 	Value     string    `gorm:"type:text;not null" json:"value"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// UserRegistration tracks a self-service registration submission that requires
+// administrator review and approval before activating the corresponding user account.
+type UserRegistration struct {
+	ID        uint               `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time          `json:"created_at"`
+	UpdatedAt time.Time          `json:"updated_at"`
+	UserID    uint               `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
+	Status    RegistrationStatus `gorm:"size:16;not null;default:pending;check:status IN ('pending', 'approved', 'rejected')" json:"status"`
+
+	Name          string      `gorm:"size:255" json:"name"`
+	BniID         string      `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
+	EmployeeID    string      `gorm:"size:64" json:"employee_id"`            // NPP or Vendor ID
+	Division      string      `gorm:"size:255" json:"division"`
+	DivisionID    *uint       `gorm:"index" json:"division_id,omitempty"`
+	DivisionRel   *Division   `gorm:"foreignKey:DivisionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"division_rel,omitempty"`
+	Department    string      `gorm:"size:255" json:"department"`
+	DepartmentID  *uint       `gorm:"index" json:"department_id,omitempty"`
+	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
+	GroupName     string      `gorm:"size:255" json:"group_name,omitempty"`
+	Position      string      `gorm:"size:128" json:"position,omitempty"`
+	Site          string      `gorm:"size:128" json:"site,omitempty"`
+	SiteID        *uint       `gorm:"index" json:"site_id,omitempty"`
+	SiteRel       *Site       `gorm:"foreignKey:SiteID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"site_rel,omitempty"`
+	Company       string      `gorm:"size:64" json:"company,omitempty"`
+	CompanyID     *uint       `gorm:"index" json:"company_id,omitempty"`
+	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
+
+	AdminNotes string     `gorm:"type:text" json:"admin_notes,omitempty"`
+	ReviewedBy *uint      `gorm:"index:idx_user_registrations_reviewed_by" json:"reviewed_by,omitempty"`
+	ReviewedAt *time.Time `json:"reviewed_at,omitempty"`
+	Reviewer   *User      `gorm:"foreignKey:ReviewedBy;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"reviewer,omitempty"`
+
+	User User `gorm:"foreignKey:UserID" json:"user,omitempty"`
 }

@@ -513,6 +513,16 @@ definitions:
       updated_at:
         type: string
     type: object
+  models.RegistrationStatus:
+    enum:
+    - approved
+    - pending
+    - rejected
+    type: string
+    x-enum-varnames:
+    - RegistrationApproved
+    - RegistrationPending
+    - RegistrationRejected
   models.Role:
     enum:
     - admin
@@ -789,6 +799,66 @@ definitions:
     - auth
     - p256dh
     type: object
+  request.RegisterRequest:
+    properties:
+      bni_id:
+        example: "12345678"
+        type: string
+      company:
+        example: MII
+        type: string
+      company_id:
+        example: 1
+        type: integer
+      department:
+        example: Wholesale Channel and Service Delivery
+        type: string
+      department_id:
+        example: 1
+        type: integer
+      division:
+        example: Wholesale Digital Delivery
+        type: string
+      division_id:
+        example: 1
+        type: integer
+      email:
+        example: john.doe@example.com
+        type: string
+      employee_id:
+        example: EMP-001
+        type: string
+      group_name:
+        example: SDD
+        type: string
+      name:
+        example: John Doe
+        type: string
+      password:
+        example: SecurePass123!
+        maxLength: 128
+        minLength: 8
+        type: string
+      position:
+        example: Software Engineer
+        type: string
+      site:
+        example: Citicon
+        type: string
+      site_id:
+        example: 1
+        type: integer
+      username:
+        example: john_doe
+        maxLength: 64
+        minLength: 3
+        type: string
+    required:
+    - email
+    - name
+    - password
+    - username
+    type: object
   request.ResetRequest:
     properties:
       password:
@@ -801,6 +871,20 @@ definitions:
     required:
     - password
     - token
+    type: object
+  request.ReviewRegistrationRequest:
+    properties:
+      action:
+        enum:
+        - approve
+        - reject
+        example: approve
+        type: string
+      admin_notes:
+        example: Approved after HR validation
+        type: string
+    required:
+    - action
     type: object
   request.SubscribeRequest:
     properties:
@@ -1149,6 +1233,67 @@ definitions:
       user_id:
         type: integer
     type: object
+  response.RegisterResponse:
+    properties:
+      code:
+        example: 201
+        type: integer
+      data:
+        $ref: '#/definitions/response.RegisterResultData'
+      message:
+        example: Registration submitted successfully
+        type: string
+      status:
+        example: success
+        type: string
+    type: object
+  response.RegisterResultData:
+    properties:
+      email:
+        example: john.doe@example.com
+        type: string
+      message:
+        example: Registration submitted successfully. Your account is pending administrator
+          approval.
+        type: string
+      registration_id:
+        example: 1
+        type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/models.RegistrationStatus'
+        example: pending
+      user_id:
+        example: 10
+        type: integer
+      username:
+        example: john_doe
+        type: string
+    type: object
+  response.RegistrationDetailResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        $ref: '#/definitions/response.UserRegistrationResponse'
+      status:
+        example: success
+        type: string
+    type: object
+  response.RegistrationListResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data:
+        items:
+          $ref: '#/definitions/response.UserRegistrationResponse'
+        type: array
+      status:
+        example: success
+        type: string
+    type: object
   response.SubmitProfileChangeResponse:
     properties:
       code:
@@ -1175,6 +1320,87 @@ definitions:
         type: string
       status:
         example: success
+        type: string
+    type: object
+  response.UserRegistrationResponse:
+    properties:
+      admin_notes:
+        example: Verified
+        type: string
+      bni_id:
+        example: "12345678"
+        type: string
+      company:
+        example: MII
+        type: string
+      company_id:
+        example: 1
+        type: integer
+      company_rel:
+        $ref: '#/definitions/models.Company'
+      created_at:
+        type: string
+      department:
+        example: Wholesale Channel and Service Delivery
+        type: string
+      department_id:
+        example: 1
+        type: integer
+      department_rel:
+        $ref: '#/definitions/models.Department'
+      division:
+        example: Wholesale Digital Delivery
+        type: string
+      division_id:
+        example: 1
+        type: integer
+      division_rel:
+        $ref: '#/definitions/models.Division'
+      email:
+        example: john.doe@example.com
+        type: string
+      employee_id:
+        example: EMP-001
+        type: string
+      group_name:
+        example: SDD
+        type: string
+      id:
+        example: 1
+        type: integer
+      name:
+        example: John Doe
+        type: string
+      position:
+        example: Software Engineer
+        type: string
+      reviewed_at:
+        type: string
+      reviewed_by:
+        example: 1
+        type: integer
+      reviewer_name:
+        example: Admin
+        type: string
+      site:
+        example: Citicon
+        type: string
+      site_id:
+        example: 1
+        type: integer
+      site_rel:
+        $ref: '#/definitions/models.Site'
+      status:
+        allOf:
+        - $ref: '#/definitions/models.RegistrationStatus'
+        example: pending
+      updated_at:
+        type: string
+      user_id:
+        example: 10
+        type: integer
+      username:
+        example: john_doe
         type: string
     type: object
   response.UserResponse:
@@ -2135,6 +2361,153 @@ paths:
       summary: Review profile change request (Admin)
       tags:
       - Admin
+  /api/v1/admin/registrations:
+    get:
+      description: Returns a list of user registrations, optionally filtered by status
+        (Admin only).
+      parameters:
+      - description: Filter by registration status
+        enum:
+        - pending
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.RegistrationListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List user self-registrations (Admin)
+      tags:
+      - Admin
+  /api/v1/admin/registrations/{id}:
+    get:
+      description: Returns the detailed record of a registration submission (Admin
+        only).
+      parameters:
+      - description: Registration ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.RegistrationDetailResponse'
+        "400":
+          description: Invalid ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Registration not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get registration details (Admin)
+      tags:
+      - Admin
+  /api/v1/admin/registrations/{id}/review:
+    post:
+      consumes:
+      - application/json
+      description: Approves or rejects a submitted user registration. Approving activates
+        the user account (Admin only).
+      parameters:
+      - description: Registration ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Review action (approve or reject)
+        enum:
+        - approve
+        - reject
+        in: query
+        name: action
+        type: string
+      - description: Review notes and action payload
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/request.ReviewRegistrationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Invalid action or ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Registration not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Registration already reviewed
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Review user registration (Admin)
+      tags:
+      - Admin
   /api/v1/admin/sites:
     get:
       description: Returns all registered office/placement sites (both active and
@@ -2688,6 +3061,40 @@ paths:
       summary: Finish passkey login
       tags:
       - Passkey
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account with status pending administrator approval.
+      parameters:
+      - description: Self-registration payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/response.RegisterResponse'
+        "400":
+          description: Invalid payload or password policy failure
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Username or email already exists
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: User self-registration
+      tags:
+      - Auth
   /api/v1/auth/reset-password:
     post:
       consumes:
