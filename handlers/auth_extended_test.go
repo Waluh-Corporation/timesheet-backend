@@ -790,6 +790,23 @@ func TestRefreshToken_EdgeCases(t *testing.T) {
 	cDeact.Request.Header.Set("Content-Type", "application/json")
 	srv.RefreshToken(cDeact)
 	assertResponseCode(t, wDeact, http.StatusUnauthorized)
+
+	// 4. Successful refresh token rotation on active user
+	_ = tx.Model(&user).Update("is_active", true)
+	rawGood, hashGood, _ := auth.GenerateRefreshToken()
+	goodToken := models.RefreshToken{
+		UserID:    user.ID,
+		TokenHash: hashGood,
+		FamilyID:  uuid.New().String(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	_ = srv.getTokenRepository().CreateRefreshToken(c2.Request.Context(), &goodToken)
+	wGood := httptest.NewRecorder()
+	cGood, _ := gin.CreateTestContext(wGood)
+	cGood.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", strings.NewReader(`{"refresh_token":"`+rawGood+`"}`))
+	cGood.Request.Header.Set("Content-Type", "application/json")
+	srv.RefreshToken(cGood)
+	assertResponseCode(t, wGood, http.StatusOK)
 }
 
 func TestPasskeyManagement_FullFlow(t *testing.T) {

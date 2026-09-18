@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"timesheet-backend/config"
 )
 
@@ -188,5 +189,34 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		c3.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/1/passkeys/not-an-id", nil)
 		srv.AdminDeletePasskey(c3)
 		assertResponseCode(t, w3, http.StatusBadRequest)
+
+		// FinishPasskeyRegistration unknown session
+		w4 := httptest.NewRecorder()
+		c4, _ := gin.CreateTestContext(w4)
+		c4.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=unknown-sid", nil)
+		srv.FinishPasskeyRegistration(c4)
+		assertResponseCode(t, w4, http.StatusBadRequest)
+
+		// FinishPasskeyLogin unknown session
+		w5 := httptest.NewRecorder()
+		c5, _ := gin.CreateTestContext(w5)
+		c5.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/finish?session_id=unknown-sid", nil)
+		srv.FinishPasskeyLogin(c5)
+		assertResponseCode(t, w5, http.StatusBadRequest)
+
+		// Put dummy session and test nil repo for finish endpoints
+		srv.putSession("test-dummy-sid", &webauthn.SessionData{})
+		w6 := httptest.NewRecorder()
+		c6, _ := gin.CreateTestContext(w6)
+		c6.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=test-dummy-sid", nil)
+		srv.FinishPasskeyRegistration(c6)
+		assertResponseCode(t, w6, http.StatusInternalServerError)
+
+		srv.putSession("test-dummy-sid-2", &webauthn.SessionData{})
+		w7 := httptest.NewRecorder()
+		c7, _ := gin.CreateTestContext(w7)
+		c7.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/finish?session_id=test-dummy-sid-2", nil)
+		srv.FinishPasskeyLogin(c7)
+		assertResponseCode(t, w7, http.StatusInternalServerError)
 	})
 }

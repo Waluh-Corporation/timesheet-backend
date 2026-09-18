@@ -111,6 +111,10 @@ func (s *Server) putSession(id string, data *webauthn.SessionData) {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
 
+	if s.webAuthnSessions == nil {
+		s.webAuthnSessions = make(map[string]*webAuthnSessionEntry)
+	}
+
 	// Proactively clean up expired sessions (> 5 minutes old)
 	cutoff := time.Now().Add(-5 * time.Minute)
 	for k, v := range s.webAuthnSessions {
@@ -128,6 +132,9 @@ func (s *Server) putSession(id string, data *webauthn.SessionData) {
 func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
+	if s.webAuthnSessions == nil {
+		return nil, false
+	}
 	entry, ok := s.webAuthnSessions[id]
 	if ok {
 		delete(s.webAuthnSessions, id)
