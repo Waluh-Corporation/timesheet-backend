@@ -22,7 +22,7 @@ import (
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
 	"timesheet-backend/database"
-	_ "timesheet-backend/docs"
+	"timesheet-backend/docs"
 	_ "timesheet-backend/dto/request"
 	_ "timesheet-backend/dto/response"
 	"timesheet-backend/handlers"
@@ -39,7 +39,6 @@ import (
 // @termsOfService https://github.com/Waluh-Corporation/timesheet-backend
 // @contact.name API Support
 // @license.name MIT
-// @host localhost:8080
 // @BasePath /
 // @securityDefinitions.apikey BearerAuth
 // @in header
@@ -208,6 +207,10 @@ const (
 
 // registerRoutes wires the full Phase 2 API surface.
 func registerRoutes(r *gin.Engine, s *handlers.Server) {
+	// Dynamically inherit host & protocol from the accessing browser origin (OpenAPI 2.0 spec compliant)
+	docs.SwaggerInfo.Host = ""
+	docs.SwaggerInfo.Schemes = []string{}
+
 	// Swagger documentation UI
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	r.GET("/swagger", func(c *gin.Context) {
