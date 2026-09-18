@@ -79,9 +79,114 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/finish", bytes.NewReader([]byte("{}")))
-		c.Request.Header.Set("Content-Type", "application/json")
-
 		srv.FinishPasskeyLogin(c)
 		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("RefreshToken rejects invalid payload", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader([]byte("{}")))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		srv.RefreshToken(c)
+		assertResponseCode(t, w, http.StatusBadRequest)
+	})
+
+	t.Run("Auth endpoints with nil repositories return 500", func(t *testing.T) {
+		// Login nil repo
+		w1 := httptest.NewRecorder()
+		c1, _ := gin.CreateTestContext(w1)
+		c1.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader([]byte(`{"identifier":"user","password":"pass"}`)))
+		c1.Request.Header.Set("Content-Type", "application/json")
+		srv.Login(c1)
+		assertResponseCode(t, w1, http.StatusInternalServerError)
+
+		// RefreshToken nil repo
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader([]byte(`{"refresh_token":"abc"}`)))
+		c2.Request.Header.Set("Content-Type", "application/json")
+		srv.RefreshToken(c2)
+		assertResponseCode(t, w2, http.StatusInternalServerError)
+
+		// Me nil repo
+		w3 := httptest.NewRecorder()
+		c3, _ := gin.CreateTestContext(w3)
+		c3.Request = httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+		srv.Me(c3)
+		assertResponseCode(t, w3, http.StatusInternalServerError)
+
+		// ResetPassword nil repo
+		w4 := httptest.NewRecorder()
+		c4, _ := gin.CreateTestContext(w4)
+		c4.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/reset-password", bytes.NewReader([]byte(`{"token":"abc","password":"Password123!"}`)))
+		c4.Request.Header.Set("Content-Type", "application/json")
+		srv.ResetPassword(c4)
+		assertResponseCode(t, w4, http.StatusInternalServerError)
+
+		// BeginPasskeyRegistration nil repo
+		w5 := httptest.NewRecorder()
+		c5, _ := gin.CreateTestContext(w5)
+		c5.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/begin", nil)
+		srv.BeginPasskeyRegistration(c5)
+		assertResponseCode(t, w5, http.StatusInternalServerError)
+
+		// ListPasskeys nil repo
+		w6 := httptest.NewRecorder()
+		c6, _ := gin.CreateTestContext(w6)
+		c6.Request = httptest.NewRequest(http.MethodGet, "/api/v1/passkeys", nil)
+		srv.ListPasskeys(c6)
+		assertResponseCode(t, w6, http.StatusInternalServerError)
+
+		// DeletePasskey nil repo
+		w7 := httptest.NewRecorder()
+		c7, _ := gin.CreateTestContext(w7)
+		c7.Params = gin.Params{{Key: "id", Value: "1"}}
+		c7.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/passkeys/1", nil)
+		srv.DeletePasskey(c7)
+		assertResponseCode(t, w7, http.StatusInternalServerError)
+
+		// AdminListPasskeys nil repo
+		w8 := httptest.NewRecorder()
+		c8, _ := gin.CreateTestContext(w8)
+		c8.Params = gin.Params{{Key: "id", Value: "1"}}
+		c8.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users/1/passkeys", nil)
+		srv.AdminListPasskeys(c8)
+		assertResponseCode(t, w8, http.StatusInternalServerError)
+
+		// AdminDeletePasskey nil repo
+		w9 := httptest.NewRecorder()
+		c9, _ := gin.CreateTestContext(w9)
+		c9.Params = gin.Params{{Key: "id", Value: "1"}, {Key: "pid", Value: "1"}}
+		c9.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/1/passkeys/1", nil)
+		srv.AdminDeletePasskey(c9)
+		assertResponseCode(t, w9, http.StatusInternalServerError)
+	})
+
+	t.Run("Passkey endpoints reject invalid id parameters", func(t *testing.T) {
+		// DeletePasskey invalid id
+		w1 := httptest.NewRecorder()
+		c1, _ := gin.CreateTestContext(w1)
+		c1.Params = gin.Params{{Key: "id", Value: "not-an-id"}}
+		c1.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/passkeys/not-an-id", nil)
+		srv.DeletePasskey(c1)
+		assertResponseCode(t, w1, http.StatusBadRequest)
+
+		// AdminListPasskeys invalid user id
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Params = gin.Params{{Key: "id", Value: "not-an-id"}}
+		c2.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users/not-an-id/passkeys", nil)
+		srv.AdminListPasskeys(c2)
+		assertResponseCode(t, w2, http.StatusBadRequest)
+
+		// AdminDeletePasskey invalid pid
+		w3 := httptest.NewRecorder()
+		c3, _ := gin.CreateTestContext(w3)
+		c3.Params = gin.Params{{Key: "id", Value: "1"}, {Key: "pid", Value: "not-an-id"}}
+		c3.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/1/passkeys/not-an-id", nil)
+		srv.AdminDeletePasskey(c3)
+		assertResponseCode(t, w3, http.StatusBadRequest)
 	})
 }

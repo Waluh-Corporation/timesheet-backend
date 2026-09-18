@@ -116,6 +116,13 @@ func TestTokenRepository_RefreshTokenFlow(t *testing.T) {
 		t.Errorf("expected token3 to be revoked by RevokeUserTokens")
 	}
 
+	// 8. Test DeleteExpiredRefreshTokens
+	olderThan := time.Now().Add(8 * 24 * time.Hour)
+	deletedTokens, err := tokenRepo.DeleteExpiredRefreshTokens(ctx, olderThan)
+	if err != nil || deletedTokens == 0 {
+		t.Errorf("expected DeleteExpiredRefreshTokens to delete tokens, deleted: %d, err: %v", deletedTokens, err)
+	}
+
 	_ = raw1
 }
 
@@ -170,6 +177,24 @@ func TestTokenRepository_ResetTokenFlow(t *testing.T) {
 	_, err = tokenRepo.FindValidResetTokenByHash(ctx, hash)
 	if err == nil {
 		t.Errorf("expected consumed reset token to not be returned by FindValidResetTokenByHash")
+	}
+
+	// Test InvalidateResetTokensByUserID
+	_, hash2, _ := auth.GenerateResetToken()
+	_ = tokenRepo.CreateResetToken(ctx, &models.PasswordResetToken{
+		UserID:    user.ID,
+		TokenType: "password_reset",
+		TokenHash: hash2,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	})
+	if err := tokenRepo.InvalidateResetTokensByUserID(ctx, user.ID, time.Now()); err != nil {
+		t.Fatalf("failed to invalidate reset tokens by user ID: %v", err)
+	}
+
+	// Test DeleteExpiredResetTokens
+	deletedResetTokens, err := tokenRepo.DeleteExpiredResetTokens(ctx, time.Now().Add(2*time.Hour), time.Now().Add(2*time.Hour))
+	if err != nil || deletedResetTokens == 0 {
+		t.Errorf("expected DeleteExpiredResetTokens to delete tokens, deleted: %d, err: %v", deletedResetTokens, err)
 	}
 
 	_ = raw

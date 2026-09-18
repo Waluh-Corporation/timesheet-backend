@@ -3205,43 +3205,6 @@ paths:
       summary: List current user's passkeys
       tags:
       - Passkey
-  /api/v1/passkeys/{id}:
-    delete:
-      description: Deletes a registered passkey owned by the authenticated user.
-      parameters:
-      - description: Passkey credential ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/response.MessageResponse'
-        "400":
-          description: Invalid passkey ID
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "404":
-          description: Passkey not found
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete current user's passkey
-      tags:
-      - Passkey
   /api/v1/profile/change:
     post:
       consumes:

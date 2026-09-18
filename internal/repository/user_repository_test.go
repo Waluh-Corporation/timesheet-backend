@@ -107,4 +107,96 @@ func TestUserRepository(t *testing.T) {
 	if refreshed.PasswordHash != newHash {
 		t.Fatalf("expected password hash %q, got %q", newHash, refreshed.PasswordHash)
 	}
+
+	// 8. FindByIDWithDetails
+	withDetails, err := repo.FindByIDWithDetails(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("repo.FindByIDWithDetails failed: %v", err)
+	}
+	if withDetails == nil || withDetails.ID != user.ID {
+		t.Fatalf("expected user with ID %d, got %v", user.ID, withDetails)
+	}
+
+	// 9. FindByIDWithCredentials
+	withCreds, err := repo.FindByIDWithCredentials(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("repo.FindByIDWithCredentials failed: %v", err)
+	}
+	if withCreds == nil || withCreds.ID != user.ID {
+		t.Fatalf("expected user with ID %d, got %v", user.ID, withCreds)
+	}
+
+	// 10. FindByUsernameOrEmailWithCredentials
+	byCreds, err := repo.FindByUsernameOrEmailWithCredentials(ctx, user.Username)
+	if err != nil {
+		t.Fatalf("repo.FindByUsernameOrEmailWithCredentials failed: %v", err)
+	}
+	if byCreds.ID != user.ID {
+		t.Fatalf("expected user ID %d, got %d", user.ID, byCreds.ID)
+	}
+
+	// 11. FindByEmail
+	byEmailFound, err := repo.FindByEmail(ctx, user.Email)
+	if err != nil {
+		t.Fatalf("repo.FindByEmail failed: %v", err)
+	}
+	if byEmailFound.ID != user.ID {
+		t.Fatalf("expected user ID %d, got %d", user.ID, byEmailFound.ID)
+	}
+
+	// 12. Update
+	user.Name = "Updated Name"
+	if err := repo.Update(ctx, user); err != nil {
+		t.Fatalf("repo.Update failed: %v", err)
+	}
+
+	// 13. Passkey Operations
+	cred := &models.WebAuthnCredential{
+		UserID:          user.ID,
+		CredentialID:    []byte("test-credential-id-123"),
+		PublicKey:       []byte("test-public-key-bytes"),
+		AttestationType: "none",
+		AAGUID:          []byte("00000000-0000-0000-0000-000000000000"),
+		SignCount:       0,
+		FriendlyName:    "My Security Key",
+	}
+	if err := repo.CreatePasskeyCredential(ctx, cred); err != nil {
+		t.Fatalf("repo.CreatePasskeyCredential failed: %v", err)
+	}
+
+	// UpdatePasskeySignCount
+	if err := repo.UpdatePasskeySignCount(ctx, cred.CredentialID, 5, true); err != nil {
+		t.Fatalf("repo.UpdatePasskeySignCount failed: %v", err)
+	}
+
+	// ListPasskeysByUserID
+	keys, err := repo.ListPasskeysByUserID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("repo.ListPasskeysByUserID failed: %v", err)
+	}
+	if len(keys) != 1 || keys[0].SignCount != 5 {
+		t.Fatalf("expected 1 passkey with sign count 5, got %v", keys)
+	}
+
+	// DeletePasskey with matching userID
+	deleted, err := repo.DeletePasskey(ctx, cred.ID, &user.ID)
+	if err != nil || !deleted {
+		t.Fatalf("repo.DeletePasskey failed: deleted=%v, err=%v", deleted, err)
+	}
+
+	// Re-create and delete without userID (admin delete)
+	cred2 := &models.WebAuthnCredential{
+		UserID:          user.ID,
+		CredentialID:    []byte("test-credential-id-456"),
+		PublicKey:       []byte("test-public-key-bytes-2"),
+		AttestationType: "none",
+		AAGUID:          []byte("00000000-0000-0000-0000-000000000000"),
+		SignCount:       1,
+		FriendlyName:    "Admin Deleted Key",
+	}
+	_ = repo.CreatePasskeyCredential(ctx, cred2)
+	deleted2, err := repo.DeletePasskey(ctx, cred2.ID, nil)
+	if err != nil || !deleted2 {
+		t.Fatalf("repo.DeletePasskey(admin) failed: deleted=%v, err=%v", deleted2, err)
+	}
 }

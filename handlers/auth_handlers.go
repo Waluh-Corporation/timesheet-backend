@@ -675,16 +675,16 @@ func (s *Server) ListPasskeys(c *gin.Context) {
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 404 {object} response.ErrorResponse "Passkey not found"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
-// @Router /api/v1/passkeys/{id} [delete]
+// DeletePasskey removes a registered WebAuthn credential owned by the caller.
 func (s *Server) DeletePasskey(c *gin.Context) {
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
-		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
-		return
-	}
 	id64, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		RespondError(c, http.StatusBadRequest, "invalid passkey ID")
+		return
+	}
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
 	uid := currentUserID(c)
@@ -717,14 +717,14 @@ func (s *Server) DeletePasskey(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users/{id}/passkeys [get]
 func (s *Server) AdminListPasskeys(c *gin.Context) {
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
-		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
-		return
-	}
 	id64, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		RespondError(c, http.StatusBadRequest, "invalid user ID")
+		return
+	}
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
 	creds, err := userRepo.ListPasskeysByUserID(c.Request.Context(), uint(id64))
@@ -759,14 +759,14 @@ func (s *Server) AdminListPasskeys(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users/{id}/passkeys/{pid} [delete]
 func (s *Server) AdminDeletePasskey(c *gin.Context) {
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
-		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
-		return
-	}
 	pid64, err := strconv.ParseUint(c.Param("pid"), 10, 32)
 	if err != nil {
 		RespondError(c, http.StatusBadRequest, "invalid passkey ID")
+		return
+	}
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
 	deleted, err := userRepo.DeletePasskey(c.Request.Context(), uint(pid64), nil)

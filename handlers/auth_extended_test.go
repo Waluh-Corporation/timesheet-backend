@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/google/uuid"
 
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/request"
@@ -706,4 +707,236 @@ func TestAuthMiddleware_ImmediateRevocation(t *testing.T) {
 	req2.Header.Set("Authorization", "Bearer "+token)
 	router.ServeHTTP(w2, req2)
 	assertResponseCode(t, w2, http.StatusUnauthorized)
+}
+
+func TestRefreshToken_EdgeCases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", 15*time.Minute)
+	srv, err := NewServer(tx, cfg, authSvc, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+
+	user := models.User{
+		Username:     "rfedgeuser",
+		Email:        "rfedge@example.com",
+		Name:         "RF Edge User",
+		PasswordHash: "dummyhash",
+		Role:         models.RoleUser,
+		IsActive:     true,
+	}
+	if err := tx.Create(&user).Error; err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// 1. Non-existent refresh token
+	w1 := httptest.NewRecorder()
+	c1, _ := gin.CreateTestContext(w1)
+	c1.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", strings.NewReader(`{"refresh_token":"nonexistenttoken"}`))
+	c1.Request.Header.Set("Content-Type", "application/json")
+	srv.RefreshToken(c1)
+	assertResponseCode(t, w1, http.StatusUnauthorized)
+
+	// 2. Expired refresh token
+	_, expHash, _ := auth.GenerateRefreshToken()
+	expToken := models.RefreshToken{
+		UserID:    user.ID,
+		TokenHash: expHash,
+		FamilyID:  uuid.New().String(),
+		ExpiresAt: time.Now().Add(-2 * time.Hour),
+	}
+	_ = srv.getTokenRepository().CreateRefreshToken(c1.Request.Context(), &expToken)
+
+	w2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(w2)
+	c2.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", strings.NewReader(`{"refresh_token":"`+expHash+`"}`))
+	c2.Request.Header.Set("Content-Type", "application/json")
+	srv.RefreshToken(c2)
+	// Because hash lookup will find it by hash, let's look up using the hash directly:
+	// wait, auth.HashToken(raw) is computed on input. So if input raw was expHash, the stored hash must match auth.HashToken(raw).
+	rawExpToken, hashedExpToken, _ := auth.GenerateRefreshToken()
+	expToken2 := models.RefreshToken{
+		UserID:    user.ID,
+		TokenHash: hashedExpToken,
+		FamilyID:  uuid.New().String(),
+		ExpiresAt: time.Now().Add(-2 * time.Hour),
+	}
+	_ = srv.getTokenRepository().CreateRefreshToken(c2.Request.Context(), &expToken2)
+	wExp := httptest.NewRecorder()
+	cExp, _ := gin.CreateTestContext(wExp)
+	cExp.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", strings.NewReader(`{"refresh_token":"`+rawExpToken+`"}`))
+	cExp.Request.Header.Set("Content-Type", "application/json")
+	srv.RefreshToken(cExp)
+	assertResponseCode(t, wExp, http.StatusUnauthorized)
+
+	// 3. Refresh token for deactivated user
+	_ = tx.Model(&user).Update("is_active", false)
+	rawValid, hashValid, _ := auth.GenerateRefreshToken()
+	validToken := models.RefreshToken{
+		UserID:    user.ID,
+		TokenHash: hashValid,
+		FamilyID:  uuid.New().String(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	_ = srv.getTokenRepository().CreateRefreshToken(c2.Request.Context(), &validToken)
+	wDeact := httptest.NewRecorder()
+	cDeact, _ := gin.CreateTestContext(wDeact)
+	cDeact.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", strings.NewReader(`{"refresh_token":"`+rawValid+`"}`))
+	cDeact.Request.Header.Set("Content-Type", "application/json")
+	srv.RefreshToken(cDeact)
+	assertResponseCode(t, wDeact, http.StatusUnauthorized)
+}
+
+func TestPasskeyManagement_FullFlow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", 15*time.Minute)
+	srv, err := NewServer(tx, cfg, authSvc, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+
+	user := models.User{
+		Username: "pkflowuser",
+		Email:    "pkflow@example.com",
+		Name:     "PK Flow User",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+	_ = tx.Create(&user)
+
+	// 1. ListPasskeys initially empty
+	w1 := httptest.NewRecorder()
+	c1, _ := gin.CreateTestContext(w1)
+	c1.Set("userID", user.ID)
+	c1.Request = httptest.NewRequest(http.MethodGet, "/api/v1/passkeys", nil)
+	srv.ListPasskeys(c1)
+	assertResponseCode(t, w1, http.StatusOK)
+
+	// 2. Add a passkey to DB
+	cred := models.WebAuthnCredential{
+		UserID:          user.ID,
+		CredentialID:    []byte("cred-test-id-999"),
+		PublicKey:       []byte("public-key-bytes"),
+		AttestationType: "none",
+		AAGUID:          []byte("00000000-0000-0000-0000-000000000000"),
+		SignCount:       1,
+		FriendlyName:    "Office Key",
+	}
+	_ = tx.Create(&cred)
+
+	// 3. ListPasskeys now returns 1
+	w2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(w2)
+	c2.Set("userID", user.ID)
+	c2.Request = httptest.NewRequest(http.MethodGet, "/api/v1/passkeys", nil)
+	srv.ListPasskeys(c2)
+	assertResponseCode(t, w2, http.StatusOK)
+
+	// 4. AdminListPasskeys
+	wAdmin := httptest.NewRecorder()
+	cAdmin, _ := gin.CreateTestContext(wAdmin)
+	cAdmin.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", user.ID)}}
+	cAdmin.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/admin/users/%d/passkeys", user.ID), nil)
+	srv.AdminListPasskeys(cAdmin)
+	assertResponseCode(t, wAdmin, http.StatusOK)
+
+	// 5. DeletePasskey not found
+	wDelNotFound := httptest.NewRecorder()
+	cDelNotFound, _ := gin.CreateTestContext(wDelNotFound)
+	cDelNotFound.Set("userID", user.ID)
+	cDelNotFound.Params = gin.Params{{Key: "id", Value: "999999"}}
+	cDelNotFound.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/passkeys/999999", nil)
+	srv.DeletePasskey(cDelNotFound)
+	assertResponseCode(t, wDelNotFound, http.StatusNotFound)
+
+	// 6. DeletePasskey success
+	wDelSuccess := httptest.NewRecorder()
+	cDelSuccess, _ := gin.CreateTestContext(wDelSuccess)
+	cDelSuccess.Set("userID", user.ID)
+	cDelSuccess.Params = gin.Params{{Key: "id", Value: fmt.Sprintf("%d", cred.ID)}}
+	cDelSuccess.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/passkeys/%d", cred.ID), nil)
+	srv.DeletePasskey(cDelSuccess)
+	assertResponseCode(t, wDelSuccess, http.StatusOK)
+
+	// 7. AdminDeletePasskey
+	credAdmin := models.WebAuthnCredential{
+		UserID:          user.ID,
+		CredentialID:    []byte("cred-test-id-admin"),
+		PublicKey:       []byte("public-key-bytes-2"),
+		AttestationType: "none",
+		AAGUID:          []byte("00000000-0000-0000-0000-000000000000"),
+		SignCount:       1,
+		FriendlyName:    "Admin Test Key",
+	}
+	_ = tx.Create(&credAdmin)
+
+	wAdminDel := httptest.NewRecorder()
+	cAdminDel, _ := gin.CreateTestContext(wAdminDel)
+	cAdminDel.Params = gin.Params{
+		{Key: "id", Value: fmt.Sprintf("%d", user.ID)},
+		{Key: "pid", Value: fmt.Sprintf("%d", credAdmin.ID)},
+	}
+	cAdminDel.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%d/passkeys/%d", user.ID, credAdmin.ID), nil)
+	srv.AdminDeletePasskey(cAdminDel)
+	assertResponseCode(t, wAdminDel, http.StatusOK)
+
+	// AdminDeletePasskey not found
+	wAdminDel404 := httptest.NewRecorder()
+	cAdminDel404, _ := gin.CreateTestContext(wAdminDel404)
+	cAdminDel404.Params = gin.Params{
+		{Key: "id", Value: fmt.Sprintf("%d", user.ID)},
+		{Key: "pid", Value: "999999"},
+	}
+	cAdminDel404.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%d/passkeys/999999", user.ID), nil)
+	srv.AdminDeletePasskey(cAdminDel404)
+	assertResponseCode(t, wAdminDel404, http.StatusNotFound)
+}
+
+func TestMe_Endpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", 15*time.Minute)
+	srv, err := NewServer(tx, cfg, authSvc, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+
+	user := models.User{
+		Username: "meuser",
+		Email:    "meuser@example.com",
+		Name:     "Me User",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+	_ = tx.Create(&user)
+
+	// Me success
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set("userID", user.ID)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	srv.Me(c)
+	assertResponseCode(t, w, http.StatusOK)
+
+	// Me not found
+	w404 := httptest.NewRecorder()
+	c404, _ := gin.CreateTestContext(w404)
+	c404.Set("userID", uint(999999))
+	c404.Request = httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	srv.Me(c404)
+	assertResponseCode(t, w404, http.StatusNotFound)
 }
