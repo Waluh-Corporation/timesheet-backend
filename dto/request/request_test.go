@@ -103,3 +103,26 @@ func TestEmployeeID(t *testing.T) {
 		}
 	})
 }
+
+func TestRegisterRequestDTO(t *testing.T) {
+	regReq := RegisterRequest{
+		Username:   "self_user",
+		Email:      "self@example.com",
+		Password:   "ValidPass123!",
+		Name:       "Self User",
+		BniID:      "123456",
+		EmployeeID: "EMP-007",
+	}
+	if regReq.Username != "self_user" || regReq.EmployeeID != "EMP-007" {
+		t.Errorf("RegisterRequest mismatch: %+v", regReq)
+	}
+
+	revReq := ReviewRegistrationRequest{
+		Action:     "approve",
+		AdminNotes: "looks good",
+	}
+	if revReq.Action != "approve" || revReq.AdminNotes != "looks good" {
+		t.Errorf("ReviewRegistrationRequest mismatch: %+v", revReq)
+	}
+}
+

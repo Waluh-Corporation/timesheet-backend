@@ -163,3 +163,57 @@ func TestUserResponseDTOs(t *testing.T) {
 		t.Errorf("UserListResponse mismatch: %+v", listResp)
 	}
 }
+
+func TestRegistrationResponseDTO(t *testing.T) {
+	now := time.Now()
+	reg := &models.UserRegistration{
+		ID:         1,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		UserID:     10,
+		Status:     models.RegistrationPending,
+		Name:       "Test Pendaftar",
+		BniID:      "87654321",
+		EmployeeID: "EMP-099",
+		Division:   "WDD",
+		Department: "WCSD",
+		Site:       "Citicon",
+		Company:    "MII",
+		Position:   "Lead Engineer",
+		GroupName:  "SDD",
+		User: models.User{
+			ID:       10,
+			Username: "testpendaftar",
+			Email:    "testpendaftar@example.com",
+		},
+		Reviewer: &models.User{
+			ID:       1,
+			Username: "superadmin",
+			Name:     "Super Admin",
+		},
+	}
+
+	dto := ToUserRegistrationResponse(reg)
+	if dto.ID != 1 || dto.UserID != 10 || dto.Username != "testpendaftar" || dto.ReviewerName != "Super Admin" {
+		t.Errorf("ToUserRegistrationResponse mismatch: %+v", dto)
+	}
+
+	regResult := RegisterResultData{
+		RegistrationID: 1,
+		UserID:         10,
+		Username:       "testpendaftar",
+		Email:          "testpendaftar@example.com",
+		Status:         models.RegistrationPending,
+		Message:        "ok",
+	}
+	regEnvelope := RegisterResponse{
+		Code:    201,
+		Status:  "success",
+		Message: "Registration submitted successfully",
+		Data:    regResult,
+	}
+	if regEnvelope.Code != 201 || regEnvelope.Data.UserID != 10 {
+		t.Errorf("RegisterResponse mismatch: %+v", regEnvelope)
+	}
+}
+

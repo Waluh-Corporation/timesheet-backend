@@ -228,6 +228,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
 	}
 	{
+		authGroup.POST("/register", s.Register)
 		authGroup.POST("/login", s.Login)
 		authGroup.POST("/forgot-password", s.ForgotPassword)
 		authGroup.POST("/reset-password", s.ResetPassword)
@@ -298,6 +299,10 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)
+
+		admin.GET("/registrations", s.ListRegistrations)
+		admin.GET("/registrations/:id", s.GetRegistration)
+		admin.POST("/registrations/:id/review", s.ReviewRegistration)
 
 		// Master data management (approvers, companies, sites, divisions, departments)
 		admin.GET(routeApprovers, s.AdminListApprovers)

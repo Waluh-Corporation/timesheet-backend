@@ -49,6 +49,17 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 	if !user.IsActive {
+		var reg models.UserRegistration
+		if err := s.DB.Where("user_id = ?", user.ID).Order("created_at DESC").First(&reg).Error; err == nil {
+			if reg.Status == models.RegistrationPending {
+				RespondError(c, http.StatusForbidden, "account registration is pending administrator approval")
+				return
+			}
+			if reg.Status == models.RegistrationRejected {
+				RespondError(c, http.StatusForbidden, "account registration was rejected by administrator")
+				return
+			}
+		}
 		RespondError(c, http.StatusForbidden, "account is disabled")
 		return
 	}
