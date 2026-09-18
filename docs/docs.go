@@ -1892,6 +1892,12 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "400": {
+                        "description": "Invalid user ID",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
@@ -1949,6 +1955,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid passkey ID",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
@@ -2068,7 +2080,7 @@ const docTemplate = `{
         },
         "/api/v1/auth/login": {
             "post": {
-                "description": "Authenticates user with username/email and password, returning a JWT token and user profile.",
+                "description": "Authenticates user with username/email and password, returning a JWT access token, refresh token, and user profile.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2124,6 +2136,39 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/auth/logout": {
+            "post": {
+                "description": "Invalidate the refresh token on server logout.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Revoke session and refresh token",
+                "parameters": [
+                    {
+                        "description": "Optional refresh token to revoke",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.LogoutRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/auth/passkey/login/begin": {
             "post": {
                 "description": "Starts WebAuthn assertion ceremony for passwordless sign-in (discoverable or username-scoped).",
@@ -2171,7 +2216,7 @@ const docTemplate = `{
         },
         "/api/v1/auth/passkey/login/finish": {
             "post": {
-                "description": "Verifies WebAuthn assertion signature and returns a JWT token on success.",
+                "description": "Verifies WebAuthn assertion signature and returns JWT access token and refresh token on success.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2212,6 +2257,58 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/refresh": {
+            "post": {
+                "description": "Validates refresh token, rotates it, and issues a new access token and rotated refresh token.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Refresh access token",
+                "parameters": [
+                    {
+                        "description": "Refresh token payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.RefreshRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.RefreshResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid payload",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Invalid, expired, or reused token",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -2917,6 +3014,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid passkey ID",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "401": {
@@ -4554,6 +4657,15 @@ const docTemplate = `{
                 }
             }
         },
+        "request.LogoutRequest": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
+                    "type": "string",
+                    "example": "8f12c3d4..."
+                }
+            }
+        },
         "request.ProfileChangeRequestDTO": {
             "type": "object",
             "properties": {
@@ -4613,6 +4725,18 @@ const docTemplate = `{
                 "p256dh": {
                     "type": "string",
                     "example": "BCVxsG6..."
+                }
+            }
+        },
+        "request.RefreshRequest": {
+            "type": "object",
+            "required": [
+                "refresh_token"
+            ],
+            "properties": {
+                "refresh_token": {
+                    "type": "string",
+                    "example": "8f12c3d4..."
                 }
             }
         },
@@ -4964,6 +5088,10 @@ const docTemplate = `{
         "response.LoginResponse": {
             "type": "object",
             "properties": {
+                "refresh_token": {
+                    "type": "string",
+                    "example": "8f12c3d4..."
+                },
                 "token": {
                     "type": "string",
                     "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -5143,6 +5271,19 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "response.RefreshResponse": {
+            "type": "object",
+            "properties": {
+                "refresh_token": {
+                    "type": "string",
+                    "example": "a4b3c2d1..."
+                },
+                "token": {
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                 }
             }
         },

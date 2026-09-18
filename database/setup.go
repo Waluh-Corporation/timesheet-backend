@@ -127,60 +127,9 @@ func seedDefaultSitesAndDivisions(db *gorm.DB) error {
 }
 
 // AutoMigrate runs GORM migrations for every entity.
+// Schema modifications and DDL statements are managed exclusively via versioned
+// SQL migrations in database/migrations/*.sql as the Single Source of Truth.
 func AutoMigrate(db *gorm.DB) error {
-	// Clean up any dangling foreign key references that would prevent constraint creation
-	_ = db.Exec(`DELETE FROM daily_activities WHERE user_id NOT IN (SELECT id FROM users)`).Error
-	_ = db.Exec(`UPDATE profile_change_requests SET reviewed_by = NULL WHERE reviewed_by IS NOT NULL AND reviewed_by NOT IN (SELECT id FROM users)`).Error
-	_ = db.Exec(`UPDATE daily_activities SET project_ref_id = NULL WHERE project_ref_id IS NOT NULL AND project_ref_id NOT IN (SELECT id FROM projects)`).Error
-	_ = db.Exec(`UPDATE overtime_entries SET daily_activity_id = NULL WHERE daily_activity_id IS NOT NULL AND daily_activity_id NOT IN (SELECT id FROM daily_activities)`).Error
-	_ = db.Exec(`UPDATE overtime_entries SET team_leader_id = NULL WHERE team_leader_id IS NOT NULL AND team_leader_id NOT IN (SELECT id FROM approvers)`).Error
-	_ = db.Exec(`UPDATE overtime_entries SET department_head_id = NULL WHERE department_head_id IS NOT NULL AND department_head_id NOT IN (SELECT id FROM approvers)`).Error
-	// Drop legacy duplicate foreign key constraint on daily_activities if it exists
-	_ = db.Exec(`ALTER TABLE daily_activities DROP CONSTRAINT IF EXISTS daily_activities_user_id_fkey`).Error
-	// Drop holidays company_id foreign key constraint, index, and column if they exist
-	_ = db.Exec(`ALTER TABLE holidays DROP CONSTRAINT IF EXISTS holidays_company_id_fkey`).Error
-	_ = db.Exec(`DROP INDEX IF EXISTS idx_holidays_company_id`).Error
-	_ = db.Exec(`ALTER TABLE holidays DROP COLUMN IF EXISTS company_id`).Error
-	// Drop projects company_id foreign key constraint, index, and column if they exist
-	_ = db.Exec(`ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_company_id_fkey`).Error
-	_ = db.Exec(`DROP INDEX IF EXISTS idx_projects_company_id`).Error
-	_ = db.Exec(`ALTER TABLE projects DROP COLUMN IF EXISTS company_id`).Error
-	// Drop departments company_id foreign key constraint, index, and column if they exist
-	_ = db.Exec(`ALTER TABLE departments DROP CONSTRAINT IF EXISTS departments_company_id_fkey`).Error
-	_ = db.Exec(`ALTER TABLE departments DROP CONSTRAINT IF EXISTS fk_departments_company`).Error
-	_ = db.Exec(`ALTER TABLE departments DROP CONSTRAINT IF EXISTS fk_companies_departments`).Error
-	_ = db.Exec(`ALTER TABLE departments DROP CONSTRAINT IF EXISTS uq_departments_company_name`).Error
-	_ = db.Exec(`DROP INDEX IF EXISTS idx_departments_company_id`).Error
-	_ = db.Exec(`ALTER TABLE departments DROP COLUMN IF EXISTS company_id`).Error
-	// Drop obsolete full unique index on daily_activities(user_id, date) and ensure partial unique index
-	_ = db.Exec(`DROP INDEX IF EXISTS idx_user_date`).Error
-	_ = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_activities_user_date_active ON daily_activities(user_id, date) WHERE is_active = true`).Error
-	// Rename mii_id to bni_id and set comment on users and profile_change_requests if needed
-	_ = db.Exec(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'mii_id') THEN ALTER TABLE users RENAME COLUMN mii_id TO bni_id; END IF; END $$;`).Error
-	_ = db.Exec(`COMMENT ON COLUMN users.bni_id IS 'NPP BNI'`).Error
-	_ = db.Exec(`DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profile_change_requests' AND column_name = 'mii_id') THEN ALTER TABLE profile_change_requests RENAME COLUMN mii_id TO bni_id; END IF; END $$;`).Error
-	// Standardize soft delete: backfill is_active from legacy is_delete if present and drop is_delete
-	_ = db.Exec(`
-		DO $$
-		DECLARE
-			tbl text;
-			tables text[] := ARRAY['departments', 'companies', 'projects', 'approvers', 'users', 'daily_activities', 'overtime_entries'];
-		BEGIN
-			FOREACH tbl IN ARRAY tables
-			LOOP
-				IF EXISTS (
-					SELECT 1 FROM information_schema.columns 
-					WHERE table_schema = 'public' AND table_name = tbl AND column_name = 'is_delete'
-				) THEN
-					EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;', tbl);
-					EXECUTE format('UPDATE %I SET is_active = CASE WHEN UPPER(TRIM(is_delete::text)) IN (''Y'', ''YES'', ''1'', ''TRUE'') THEN false ELSE true END;', tbl);
-					EXECUTE format('DROP INDEX IF EXISTS %I;', 'idx_' || tbl || '_is_delete');
-					EXECUTE format('ALTER TABLE %I DROP COLUMN IF EXISTS is_delete;', tbl);
-				END IF;
-			END LOOP;
-		END $$;
-	`).Error
-
 	return db.AutoMigrate(
 		&models.Site{},
 		&models.Division{},
@@ -197,6 +146,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.PushSubscription{},
 		&models.ProfileChangeRequest{},
 		&models.PasswordResetToken{},
+		&models.RefreshToken{},
 		&models.SystemSetting{},
 	)
 }

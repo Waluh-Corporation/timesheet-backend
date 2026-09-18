@@ -97,10 +97,17 @@ func (l *IPRateLimiter) Allow(ip string) bool {
 	return false
 }
 
+// RateLimiter defines the contract for request rate limiters, allowing
+// in-memory token bucket implementations or distributed backends (e.g. Redis).
+type RateLimiter interface {
+	Allow(key string) bool
+	Stop()
+}
+
 // RateLimitMiddleware returns a Gin middleware restricting requests per client IP.
-func RateLimitMiddleware(limiter *IPRateLimiter) gin.HandlerFunc {
+func RateLimitMiddleware(limiter RateLimiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if limiter == nil || limiter.limit <= 0 || limiter.window <= 0 {
+		if limiter == nil {
 			c.Next()
 			return
 		}

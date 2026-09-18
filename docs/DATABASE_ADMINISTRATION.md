@@ -61,6 +61,14 @@ Through a 3-phase normalization roadmap, the database achieves **Third Normal Fo
        ▼ [Normalization Phase 5: Migration 000017 - Drop Redundant app_impacted]
   daily_activities.app_impacted column dropped to eliminate transitive redundancy
   Canonical single source of truth: projects.app_impacted referenced via project_ref_id FK
+       │
+       ▼ [Hardening Phase 6: Migration 000026 - Security Hardening & Covering Index Optimization]
+  refresh_tokens table created (token_hash, family_id, user_id, expires_at, revoked_at)
+  Covering index: idx_daily_activities_range_covering ON daily_activities(user_id, date)
+    INCLUDE (status, project_ref_id, start_time, end_time) WHERE is_active = true
+  Functional lowercase indexes: LOWER(code) on companies, departments, divisions, projects; LOWER(name) on approvers
+  pg_trgm trigram GIN indexes: companies, departments, divisions, projects, approvers for LIKE '%term%' acceleration
+  Unselective standalone is_active boolean indexes dropped in favor of partial filtered composite indexes
 ```
 
 ---

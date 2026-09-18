@@ -21,6 +21,16 @@ type Config struct {
 	JWTExpiry     time.Duration
 	ResetTokenTTL time.Duration
 
+	// Database connection pool configuration.
+	DBMaxOpenConns    int
+	DBMaxIdleConns    int
+	DBConnMaxLifetime time.Duration
+	DBConnMaxIdleTime time.Duration
+
+	// Token lifetime configuration.
+	AccessTokenExpiry time.Duration
+	RefreshTokenTTL   time.Duration
+
 	// WebAuthn relying-party configuration.
 	RPDisplayName string
 	RPID          string
@@ -193,6 +203,14 @@ func Load() *Config {
 		JWTSecret:     getEnv("JWT_SECRET", ""),
 		JWTExpiry:     time.Duration(getEnvInt("JWT_EXPIRY_HOURS", 24)) * time.Hour,
 		ResetTokenTTL: time.Duration(getEnvInt("RESET_TOKEN_TTL_MINUTES", 60)) * time.Minute,
+
+		DBMaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 100),
+		DBMaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 25),
+		DBConnMaxLifetime: time.Duration(getEnvInt("DB_CONN_MAX_LIFETIME_MINUTES", 60)) * time.Minute,
+		DBConnMaxIdleTime: time.Duration(getEnvInt("DB_CONN_MAX_IDLE_TIME_MINUTES", 15)) * time.Minute,
+
+		AccessTokenExpiry: time.Duration(getEnvInt("ACCESS_TOKEN_EXPIRY_MINUTES", 15)) * time.Minute,
+		RefreshTokenTTL:   time.Duration(getEnvInt("REFRESH_TOKEN_TTL_DAYS", 7)) * 24 * time.Hour,
 
 		RPDisplayName: getEnv("WEBAUTHN_RP_NAME", appName),
 		RPID:          sanitizeRPID(getEnv("WEBAUTHN_RP_ID", "localhost")),

@@ -82,7 +82,23 @@ func registerHealthRoutes(r *gin.Engine, db *gorm.DB) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "unready", "database": "disconnected"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "ready", "database": "connected"})
+
+		stats := sqlDB.Stats()
+		c.JSON(http.StatusOK, gin.H{
+			"status":   "ready",
+			"database": "connected",
+			"pool": gin.H{
+				"max_open_connections": stats.MaxOpenConnections,
+				"open_connections":     stats.OpenConnections,
+				"in_use":               stats.InUse,
+				"idle":                 stats.Idle,
+				"wait_count":           stats.WaitCount,
+				"wait_duration_ms":     stats.WaitDuration.Milliseconds(),
+				"max_idle_closed":      stats.MaxIdleClosed,
+				"max_idle_time_closed": stats.MaxIdleTimeClosed,
+				"max_lifetime_closed":  stats.MaxLifetimeClosed,
+			},
+		})
 	})
 }
 
@@ -229,6 +245,8 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	}
 	{
 		authGroup.POST("/login", s.Login)
+		authGroup.POST("/refresh", s.RefreshToken)
+		authGroup.POST("/logout", s.Logout)
 		authGroup.POST("/forgot-password", s.ForgotPassword)
 		authGroup.POST("/reset-password", s.ResetPassword)
 		authGroup.POST("/passkey/login/begin", s.BeginPasskeyLogin)

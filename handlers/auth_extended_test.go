@@ -487,3 +487,223 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		assertResponseCode(t, wLoginFinBad, http.StatusUnauthorized)
 	})
 }
+
+func TestRefreshToken_RotationAndReuseDetection(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", 15*time.Minute)
+	srv, err := NewServer(tx, cfg, authSvc, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+
+	rawPass := "MyStr0ngPassw0rd!2026"
+	hash, _ := auth.HashPassword(rawPass)
+	testUser := models.User{
+		Username:     "rotatetestuser",
+		Email:        "rotate@example.com",
+		Name:         "Rotate Test User",
+		PasswordHash: hash,
+		Role:         models.RoleUser,
+		IsActive:     true,
+	}
+	if err := tx.Create(&testUser).Error; err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// Step 1: Login to acquire access token and refresh token
+	loginBody, _ := json.Marshal(request.LoginRequest{
+		Identifier: "rotatetestuser",
+		Password:   rawPass,
+	})
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginBody))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.Login(c)
+	assertResponseCode(t, w, http.StatusOK)
+
+	var loginResp struct {
+		Data struct {
+			Token        string `json:"token"`
+			RefreshToken string `json:"refresh_token"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &loginResp)
+	initialRefreshToken := loginResp.Data.RefreshToken
+	if initialRefreshToken == "" {
+		t.Fatalf("expected refresh token in login response, got empty")
+	}
+
+	// Step 2: Rotate refresh token
+	refreshBody, _ := json.Marshal(request.RefreshRequest{
+		RefreshToken: initialRefreshToken,
+	})
+	w2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(w2)
+	c2.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(refreshBody))
+	c2.Request.Header.Set("Content-Type", "application/json")
+	srv.RefreshToken(c2)
+	assertResponseCode(t, w2, http.StatusOK)
+
+	var refreshResp struct {
+		Data struct {
+			Token        string `json:"token"`
+			RefreshToken string `json:"refresh_token"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(w2.Body.Bytes(), &refreshResp)
+	secondRefreshToken := refreshResp.Data.RefreshToken
+	if secondRefreshToken == "" || secondRefreshToken == initialRefreshToken {
+		t.Fatalf("expected new distinct refresh token on rotation, got: %s", secondRefreshToken)
+	}
+
+	// Step 3: Reuse Detection! Attempting to reuse initialRefreshToken (which was already revoked upon rotation)
+	w3 := httptest.NewRecorder()
+	c3, _ := gin.CreateTestContext(w3)
+	c3.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(refreshBody))
+	c3.Request.Header.Set("Content-Type", "application/json")
+	srv.RefreshToken(c3)
+	assertResponseCode(t, w3, http.StatusUnauthorized)
+
+	// Step 4: Verify family revocation! Since reuse was detected, the secondRefreshToken (in the same family) should also be revoked!
+	reuseCheckBody, _ := json.Marshal(request.RefreshRequest{
+		RefreshToken: secondRefreshToken,
+	})
+	w4 := httptest.NewRecorder()
+	c4, _ := gin.CreateTestContext(w4)
+	c4.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(reuseCheckBody))
+	c4.Request.Header.Set("Content-Type", "application/json")
+	srv.RefreshToken(c4)
+	assertResponseCode(t, w4, http.StatusUnauthorized)
+}
+
+func TestLogout_RevokesRefreshToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", 15*time.Minute)
+	srv, err := NewServer(tx, cfg, authSvc, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+
+	rawPass := "MyStr0ngPassw0rd!2026"
+	hash, _ := auth.HashPassword(rawPass)
+	testUser := models.User{
+		Username:     "logouttestuser",
+		Email:        "logout@example.com",
+		Name:         "Logout Test User",
+		PasswordHash: hash,
+		Role:         models.RoleUser,
+		IsActive:     true,
+	}
+	if err := tx.Create(&testUser).Error; err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	// 1. Login
+	loginBody, _ := json.Marshal(request.LoginRequest{
+		Identifier: "logouttestuser",
+		Password:   rawPass,
+	})
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginBody))
+	c.Request.Header.Set("Content-Type", "application/json")
+	srv.Login(c)
+	assertResponseCode(t, w, http.StatusOK)
+
+	var loginResp struct {
+		Data struct {
+			RefreshToken string `json:"refresh_token"`
+		} `json:"data"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &loginResp)
+	rfToken := loginResp.Data.RefreshToken
+
+	// 2. Logout with refresh token
+	logoutBody, _ := json.Marshal(request.LogoutRequest{
+		RefreshToken: rfToken,
+	})
+	w2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(w2)
+	c2.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", bytes.NewReader(logoutBody))
+	c2.Request.Header.Set("Content-Type", "application/json")
+	srv.Logout(c2)
+	assertResponseCode(t, w2, http.StatusOK)
+
+	// 3. Trying to refresh should fail
+	refreshBody, _ := json.Marshal(request.RefreshRequest{
+		RefreshToken: rfToken,
+	})
+	w3 := httptest.NewRecorder()
+	c3, _ := gin.CreateTestContext(w3)
+	c3.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewReader(refreshBody))
+	c3.Request.Header.Set("Content-Type", "application/json")
+	srv.RefreshToken(c3)
+	assertResponseCode(t, w3, http.StatusUnauthorized)
+}
+
+func TestAuthMiddleware_ImmediateRevocation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", 15*time.Minute)
+	srv, err := NewServer(tx, cfg, authSvc, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create server: %v", err)
+	}
+
+	user := models.User{
+		Username: "midrevoketest",
+		Email:    "midrevoke@example.com",
+		Name:     "Mid Revoke User",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+	if err := tx.Create(&user).Error; err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
+
+	// Issue token
+	token, err := authSvc.GenerateToken(&user)
+	if err != nil {
+		t.Fatalf("token error: %v", err)
+	}
+
+	router := gin.New()
+	router.Use(srv.AuthMiddleware())
+	router.GET("/protected", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Request while active: 200 OK
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(w, req)
+	assertResponseCode(t, w, http.StatusOK)
+
+	// Deactivate user in database
+	if err := tx.Model(&user).Update("is_active", false).Error; err != nil {
+		t.Fatalf("deactivate user error: %v", err)
+	}
+
+	// Immediate Revocation: Same token, but user is now inactive: 401 Unauthorized
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req2.Header.Set("Authorization", "Bearer "+token)
+	router.ServeHTTP(w2, req2)
+	assertResponseCode(t, w2, http.StatusUnauthorized)
+}

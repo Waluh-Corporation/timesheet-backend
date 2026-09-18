@@ -47,38 +47,46 @@ Versioned migrations run automatically via `RunMigrations(db)` in `backend/datab
 
 ## 2. Authentication & RBAC
 
-- **Password login** (`/api/auth/login`): username **or** email + password
-  verified against an **Argon2id** hash → signed JWT (`backend/auth`). Hashes are
-  PHC-encoded adhering to OWASP recommendations.
-- **Passkey login** (WebAuthn assertion): `/api/auth/passkey/login/{begin,finish}`
-  using `go-webauthn/webauthn`. Registration (`/api/passkey/register/*`) requires
+- **Password login** (`/api/v1/auth/login`): username **or** email + password
+  verified against an **Argon2id** hash → Dual-Token issuance (`backend/auth`):
+  - **Access Token**: Short-lived (15 minutes), stateless Bearer JWT pinned strictly to HMAC-SHA256 (`HS256`).
+  - **Refresh Token**: Long-lived (7 days), cryptographically-secure random string stored as SHA-256 hash in `refresh_tokens`.
+- **Dual-Token Refresh & Rotation** (`/api/v1/auth/refresh`):
+  - Rotates refresh token on every exchange and generates a new access token.
+  - **Reuse Detection**: If a revoked refresh token is presented, the server immediately revokes the entire token family (`family_id`) to prevent replay/theft attacks.
+- **Server-Side Logout** (`/api/v1/auth/logout`):
+  - Revokes active refresh token immediately in the database.
+- **Immediate Revocation in Middleware**:
+  - `AuthMiddleware` verifies that the caller's account exists and has `is_active = true` in the database on every authenticated request, rejecting suspended/deactivated accounts immediately without waiting for token expiry.
+- **Passkey login** (WebAuthn assertion): `/api/v1/auth/passkey/login/{begin,finish}`
+  using `go-webauthn/webauthn`. Issues the same dual-token credentials upon completion. Registration (`/api/v1/passkey/register/*`) requires
   an existing session, so passkeys are added from the dashboard.
 - **Multi-domain passkeys**: `WEBAUTHN_RP_ORIGIN` accepts a comma-separated list
   of allowed origins, and `/.well-known/webauthn` serves the WebAuthn *Related
   Origin Requests* document listing those origins, so one relying party's
   passkeys work across several domains rather than a single origin.
 - **No public sign-up.** The only account-creation path is admin-only
-  `POST /api/admin/users`, which emails a setup link.
+  `POST /api/v1/admin/users`, which emails a setup link.
 - **Password policy (NIST SP 800-63B)**: `auth.ValidatePassword` enforces an
   8–64 character length window and a common/context-specific blocklist (no
   composition rules), applied at admin create-user, self-service reset, and the
   bootstrap-admin seed. When `BOOTSTRAP_ADMIN_PASSWORD` is unset the seeder
   generates a strong, policy-compliant password and logs it once.
 - **Admin self-protection**: an admin can never deactivate, delete, or demote
-  their own account (`DELETE`/`PATCH /api/admin/users/:id` reject self-targeting),
+  their own account (`DELETE`/`PATCH /api/v1/admin/users/:id` reject self-targeting),
   preventing an accidental last-admin lockout.
-- **Forgot/Reset password**: `/api/auth/forgot-password` issues a hashed,
-  time-limited token emailed as a link; `/api/auth/reset-password` consumes it.
+- **Forgot/Reset password**: `/api/v1/auth/forgot-password` issues a hashed,
+  time-limited token emailed as a link; `/api/v1/auth/reset-password` consumes it and revokes all active refresh tokens.
   Setup/reset links are built from the **public** request origin
   (`X-Forwarded-Proto`/`X-Forwarded-Host` behind a reverse proxy), falling back
   to `FRONTEND_URL`, so emailed links open on the real domain rather than a
   localhost default.
 - **Route protection**: `AuthMiddleware` (Bearer JWT) + `AdminOnly` guard the
-  `/api/admin/*` group. The frontend mirrors this with `Guard` on route-group
+  `/api/v1/admin/*` group. The frontend mirrors this with `Guard` on route-group
   layouts.
-- **Profile approval flow**: users submit `POST /api/profile/change` →
+- **Profile approval flow**: users submit `POST /api/v1/profile/change` →
   `ProfileChangeRequest` (status `pending`); an admin approves/rejects at
-  `/api/admin/profile-changes/:id/review`, and approval copies the values onto
+  `/api/v1/admin/profile-changes/:id/review` executed within an ACID database transaction, and approval copies the values onto
   the live `User`.
 
 ## 3. Dynamic template management

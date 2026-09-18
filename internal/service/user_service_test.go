@@ -72,6 +72,38 @@ func (m *mockUserRepo) UpdatePassword(ctx context.Context, id uint, passwordHash
 	return nil
 }
 
+func (m *mockUserRepo) FindByIDWithDetails(ctx context.Context, id uint) (*models.User, error) {
+	return m.FindByID(ctx, id)
+}
+
+func (m *mockUserRepo) FindByIDWithCredentials(ctx context.Context, id uint) (*models.User, error) {
+	return m.FindByID(ctx, id)
+}
+
+func (m *mockUserRepo) FindByUsernameOrEmailWithCredentials(ctx context.Context, identifier string) (*models.User, error) {
+	return m.FindByUsernameOrEmail(ctx, identifier)
+}
+
+func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*models.User, error) {
+	return m.FindByUsernameOrEmail(ctx, email)
+}
+
+func (m *mockUserRepo) CreatePasskeyCredential(ctx context.Context, cred *models.WebAuthnCredential) error {
+	return nil
+}
+
+func (m *mockUserRepo) UpdatePasskeySignCount(ctx context.Context, credID []byte, signCount uint32, backupState bool) error {
+	return nil
+}
+
+func (m *mockUserRepo) ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error) {
+	return nil, nil
+}
+
+func (m *mockUserRepo) DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error) {
+	return true, nil
+}
+
 func TestUserService_ApplyApprovedProfileChange(t *testing.T) {
 	repo := newMockUserRepo()
 	svc := NewUserService(repo, auth.DefaultHasher, nil)
