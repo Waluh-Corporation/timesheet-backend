@@ -282,6 +282,35 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		cReused.Request.Header.Set("Content-Type", "application/json")
 		srv.ResetPassword(cReused)
 		assertResponseCode(t, wReused, http.StatusBadRequest)
+
+		// Reset with token for deleted/inactive user
+		ghostUser := models.User{
+			Username: "ghostresetuser",
+			Email:    "ghostreset@example.com",
+			IsActive: false,
+		}
+		_ = tx.Create(&ghostUser)
+		_ = tx.Delete(&ghostUser) // soft delete
+
+		rawGhost := "ghost-raw-token"
+		tokGhost := models.PasswordResetToken{
+			UserID:    ghostUser.ID,
+			TokenType: "password_reset",
+			TokenHash: auth.HashToken(rawGhost),
+			ExpiresAt: time.Now().Add(1 * time.Hour),
+		}
+		_ = tx.Create(&tokGhost)
+
+		ghostPayload, _ := json.Marshal(request.ResetRequest{
+			Token:    rawGhost,
+			Password: "ValidPassword123!",
+		})
+		wGhost := httptest.NewRecorder()
+		cGhost, _ := gin.CreateTestContext(wGhost)
+		cGhost.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/reset-password", bytes.NewReader(ghostPayload))
+		cGhost.Request.Header.Set("Content-Type", "application/json")
+		srv.ResetPassword(cGhost)
+		assertResponseCode(t, wGhost, http.StatusBadRequest)
 	})
 
 	t.Run("Passkey endpoints and decodeUserHandle", func(t *testing.T) {

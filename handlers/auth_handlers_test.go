@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -218,5 +219,34 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		c7.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/finish?session_id=test-dummy-sid-2", nil)
 		srv.FinishPasskeyLogin(c7)
 		assertResponseCode(t, w7, http.StatusInternalServerError)
+
+		// Me nil repo
+		wMe := httptest.NewRecorder()
+		cMe, _ := gin.CreateTestContext(wMe)
+		cMe.Request = httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+		srv.Me(cMe)
+		assertResponseCode(t, wMe, http.StatusInternalServerError)
+
+		// BeginPasskeyRegistration nil repo
+		wBPR := httptest.NewRecorder()
+		cBPR, _ := gin.CreateTestContext(wBPR)
+		cBPR.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/begin", nil)
+		srv.BeginPasskeyRegistration(cBPR)
+		assertResponseCode(t, wBPR, http.StatusInternalServerError)
+
+		// BeginPasskeyLogin nil WebAuthn
+		wBPL := httptest.NewRecorder()
+		cBPL, _ := gin.CreateTestContext(wBPL)
+		cBPL.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/login/begin", nil)
+		srv.BeginPasskeyLogin(cBPL)
+		assertResponseCode(t, wBPL, http.StatusInternalServerError)
+
+		// Logout with empty token
+		wLogout := httptest.NewRecorder()
+		cLogout, _ := gin.CreateTestContext(wLogout)
+		cLogout.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", strings.NewReader(`{}`))
+		cLogout.Request.Header.Set("Content-Type", "application/json")
+		srv.Logout(cLogout)
+		assertResponseCode(t, wLogout, http.StatusOK)
 	})
 }
