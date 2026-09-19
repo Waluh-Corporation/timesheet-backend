@@ -322,7 +322,13 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 					CreatedIP: c.ClientIP(),
 				})
 				link := s.publicBaseURL(c) + "/reset-password?token=" + raw
-				_ = s.Mailer.SendResetEmailWithUser(user.Email, user.Username, link)
+				if s.Mailer != nil {
+					go func(toEmail, username, resetLink string) {
+						if err := s.Mailer.SendResetEmailWithUser(toEmail, username, resetLink); err != nil {
+							slog.Error("failed to send password reset email", "error", err, "email", toEmail)
+						}
+					}(user.Email, user.Username, link)
+				}
 				slog.Info("password reset link issued", "user_id", user.ID, "ip", c.ClientIP())
 			}
 		}

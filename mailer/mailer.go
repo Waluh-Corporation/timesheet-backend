@@ -37,6 +37,10 @@ const (
 )
 
 func (m *Mailer) send(msg *gomail.Message) error {
+	if m.cfg == nil || strings.TrimSpace(m.cfg.SMTPHost) == "" {
+		log.Printf("[mailer] SMTPHost not configured; skipping email dispatch")
+		return fmt.Errorf("smtp host not configured")
+	}
 	msg.SetHeader("Auto-Submitted", "auto-generated")
 	msg.SetHeader("X-Mailer", "Timesheet-Portal-Mailer")
 
