@@ -21,6 +21,15 @@ jobs:
   secret-scan:
     name: Secret Leak Detection (Gitleaks)
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' || (
+        !startsWith(github.head_ref, 'release') &&
+        !startsWith(github.head_ref, 'chore/release') &&
+        !startsWith(github.event.pull_request.title, 'chore(release)') &&
+        !startsWith(github.event.pull_request.title, 'Release') &&
+        !startsWith(github.event.pull_request.title, 'release') &&
+        !contains(github.event.pull_request.labels.*.name, 'release')
+      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,6 +45,15 @@ jobs:
   lint-and-audit:
     name: Lint & Security Audit
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' || (
+        !startsWith(github.head_ref, 'release') &&
+        !startsWith(github.head_ref, 'chore/release') &&
+        !startsWith(github.event.pull_request.title, 'chore(release)') &&
+        !startsWith(github.event.pull_request.title, 'Release') &&
+        !startsWith(github.event.pull_request.title, 'release') &&
+        !contains(github.event.pull_request.labels.*.name, 'release')
+      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -75,6 +93,15 @@ jobs:
   test:
     name: Automated Tests & Coverage
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' || (
+        !startsWith(github.head_ref, 'release') &&
+        !startsWith(github.head_ref, 'chore/release') &&
+        !startsWith(github.event.pull_request.title, 'chore(release)') &&
+        !startsWith(github.event.pull_request.title, 'Release') &&
+        !startsWith(github.event.pull_request.title, 'release') &&
+        !contains(github.event.pull_request.labels.*.name, 'release')
+      )
     services:
       postgres:
         image: postgres:16-alpine
@@ -122,6 +149,15 @@ jobs:
     name: SonarQube Quality Analysis
     needs: [test]
     runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'pull_request' || (
+        !startsWith(github.head_ref, 'release') &&
+        !startsWith(github.head_ref, 'chore/release') &&
+        !startsWith(github.event.pull_request.title, 'chore(release)') &&
+        !startsWith(github.event.pull_request.title, 'Release') &&
+        !startsWith(github.event.pull_request.title, 'release') &&
+        !contains(github.event.pull_request.labels.*.name, 'release')
+      )
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

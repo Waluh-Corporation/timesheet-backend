@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.7.0] - 2026-09-19
+
 ### Added
 - **Dual-Token Authentication Architecture**: Short-lived (15 min) JWT access tokens paired with long-lived (7 days) SHA-256 hashed refresh tokens (`refresh_tokens`), configurable via `ACCESS_TOKEN_EXPIRY_MINUTES` and `REFRESH_TOKEN_TTL_DAYS`.
 - **Refresh Token Rotation & Family Reuse Detection**: New endpoint `POST /api/v1/auth/refresh` rotates refresh tokens on every exchange and automatically revokes all chained tokens in the family if an already-consumed token is replayed.
@@ -17,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dynamic Connection Pooling Configuration**: Added environment variables (`DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, `DB_CONN_MAX_LIFETIME_MINUTES`, `DB_CONN_MAX_IDLE_TIME_MINUTES`) for tunable PostgreSQL connection management.
 - **Connection Pool Health Observability**: Real-time pool metrics (`open_connections`, `in_use`, `idle`, `wait_count`, `wait_duration_ms`) exposed on `/readyz`.
 - **Background Holiday Synchronization Scheduler**: Decoupled monthly timesheet generation from external HTTP latency by introducing weekly background synchronization (`syncHolidays`) from the Kemendesa national holiday API.
+- **Dynamic Swagger Documentation Host**: Configured Swagger UI and OpenAPI specifications to resolve the API host dynamically based on the incoming request URL rather than relying on a static address.
 
 ### Changed
 - **Clean Architecture Repository Delegation**: Eliminated direct database queries from HTTP handlers and timesheet services, redirecting all data access through decoupled repository contracts (`UserRepository`, `TokenRepository`, `MasterRepository`).
@@ -26,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 - **Client-Facing Error Message Standardization**: Standardized validation and domain error messages across all backend services (`TimesheetService`, `ActivityService`, `UserService`, and `MasterDataService`) into readable, user-friendly sentence case, eliminating internal system error prefixes (e.g. `"invalid input: "`) from JSON responses.
 - **Decoupled User Error Architecture**: Introduced `domain.UserError` implementing `Unwrap()` to cleanly separate client error text from backend sentinel errors while maintaining accurate HTTP status mapping (`400 Bad Request`, `404 Not Found`, etc.).
+- **Streamlined Transactional Email Layout**: Cleaned up email templates by removing redundant header titles across password changed, reset, reminder, setup, and timesheet notifications for a cleaner visual appearance.
 - **Covering Index for Timesheet Range Queries**: Migration 000026 adds `idx_daily_activities_range_covering` with `INCLUDE (status, project_ref_id, start_time, end_time) WHERE is_active = true`, enabling index-only scans for monthly timesheet reporting.
 - **Master Data Search Acceleration**: Added PostgreSQL trigram GIN indexes (`pg_trgm`) and functional lowercase indexes (`LOWER(code)`) across companies, departments, divisions, projects, and approvers for sub-millisecond search queries.
 - **I/O Resilience & Bounded Timeouts**: Added 10-second bounded timeouts for SMTP email delivery and WebPush notifications to eliminate thread pool exhaustion risks.
@@ -167,7 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API Route Versioning: Migrated all routes to the `/api/v1` prefix and decommissioned legacy unversioned endpoints.
 - Decoupled Workbook Engine: Replaced database-stored template grids with dedicated programmatic spreadsheet builders.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.3.0...v1.4.0
