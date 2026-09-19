@@ -173,7 +173,7 @@ func (s *Server) RefreshToken(c *gin.Context) {
 	user, uerr := userRepo.FindByID(c.Request.Context(), tokenRecord.UserID)
 	if uerr != nil || user == nil || !user.IsActive {
 		slog.Warn("refresh attempt for deactivated user", "user_id", tokenRecord.UserID, "ip", c.ClientIP())
-		RespondError(c, http.StatusUnauthorized, "account is deactivated or suspended")
+		RespondError(c, http.StatusUnauthorized, "Account is deactivated")
 		return
 	}
 

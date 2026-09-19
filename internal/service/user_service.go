@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -87,20 +86,20 @@ func (s *userService) CreateUserByAdmin(ctx context.Context, user *models.User, 
 func (s *userService) ChangePassword(ctx context.Context, userID uint, oldPassword, newPassword string) error {
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil {
-		return domain.ErrNotFound
+		return domain.NewUserError(domain.ErrNotFound, "User not found")
 	}
 	if !user.IsActive {
-		return domain.ErrAccountDisabled
+		return domain.NewUserError(domain.ErrAccountDisabled, "Account is disabled")
 	}
 
 	// 1. Verifikasi password lama sesuai akun aktif di database
 	if user.PasswordHash == "" || !s.hasher.Verify(user.PasswordHash, oldPassword) {
-		return errors.New("old password does not match")
+		return domain.NewUserError(domain.ErrInvalidInput, "Old password does not match")
 	}
 
 	// 2. Konfirmasi password baru tidak boleh sama dengan password lama
 	if oldPassword == newPassword || s.hasher.Verify(user.PasswordHash, newPassword) {
-		return errors.New("new password cannot be the same as the old password")
+		return domain.NewUserError(domain.ErrInvalidInput, "New password cannot be the same as old password")
 	}
 
 	// 3. Pengecekan kekuatan password baru: tolak jika lemah (pendek, pola sederhana, blocklist)
@@ -133,11 +132,11 @@ func (s *userService) ChangePassword(ctx context.Context, userID uint, oldPasswo
 // ApplyApprovedProfileChange updates a user entity based on the approved profile change request.
 func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error {
 	if change == nil {
-		return domain.ErrInvalidInput
+		return domain.NewUserError(domain.ErrInvalidInput, "Profile change request is required")
 	}
 	user, err := s.repo.FindByID(ctx, change.UserID)
 	if err != nil || user == nil {
-		return domain.ErrNotFound
+		return domain.NewUserError(domain.ErrNotFound, "User not found")
 	}
 
 	user.Name = change.Name

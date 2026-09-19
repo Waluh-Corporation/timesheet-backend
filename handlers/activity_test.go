@@ -754,7 +754,7 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		cEmpty.Set(ctxUserID, user.ID)
 		srv.GenerateTimesheet(cEmpty)
 		assertFatalCode(t, wEmpty, http.StatusBadRequest)
-		if !strings.Contains(wEmpty.Body.String(), "belum ada aktivitas yang tercatat") {
+		if !strings.Contains(wEmpty.Body.String(), "No activities recorded for this period") {
 			t.Errorf("expected polite empty timesheet error, got: %s", wEmpty.Body.String())
 		}
 

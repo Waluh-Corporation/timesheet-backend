@@ -59,12 +59,12 @@ func sanitizeFilename(s string) string {
 
 func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
 	if month < 1 || month > 12 || year < 2000 || year > 2100 {
-		return nil, "", fmt.Errorf("%w: invalid month or year", domain.ErrInvalidInput)
+		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Invalid month or year")
 	}
 	loc := jakartaLocation()
 	user, err := s.userRepo.FindByIDWithDetails(ctx, userID)
 	if err != nil || user == nil {
-		return nil, "", fmt.Errorf("%w: user not found", domain.ErrNotFound)
+		return nil, "", domain.NewUserError(domain.ErrNotFound, "User not found")
 	}
 
 	companyCode := ""
@@ -83,7 +83,7 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		companyName = user.Company
 	}
 	if companyCode == "" {
-		return nil, "", fmt.Errorf("%w: user has no company assigned", domain.ErrInvalidInput)
+		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "User has no company assigned")
 	}
 
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
@@ -100,7 +100,7 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		return nil, "", err
 	}
 	if len(activities) == 0 {
-		return nil, "", fmt.Errorf("%w: timesheet belum dapat dibuat karena belum ada aktivitas yang tercatat pada periode ini. Silakan isi aktivitas harian Anda terlebih dahulu sebelum mengunduh timesheet", domain.ErrInvalidInput)
+		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "No activities recorded for this period")
 	}
 
 	overtimes, err := s.overtimeRepo.FindByUserAndMonth(ctx, user.ID, start, end)
@@ -152,7 +152,7 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 
 func (s *timesheetService) UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error {
 	if req == nil {
-		return fmt.Errorf("%w: request is required", domain.ErrInvalidInput)
+		return domain.NewUserError(domain.ErrInvalidInput, "Request payload is required")
 	}
 	if err := validateWorkingHours(req.StartTime, req.EndTime); err != nil {
 		return err
@@ -160,7 +160,7 @@ func (s *timesheetService) UpsertOvertime(ctx context.Context, userID uint, req 
 	loc := jakartaLocation()
 	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, loc)
 	if err != nil {
-		return fmt.Errorf("%w: invalid date format, expected YYYY-MM-DD", domain.ErrInvalidInput)
+		return domain.NewUserError(domain.ErrInvalidInput, "Invalid date format, expected YYYY-MM-DD")
 	}
 
 	var entry *models.OvertimeEntry
@@ -232,7 +232,7 @@ func (s *timesheetService) ListMonthlyOvertimes(ctx context.Context, userID uint
 func (s *timesheetService) DeleteOvertime(ctx context.Context, id uint, userID uint) error {
 	entry, err := s.overtimeRepo.FindActiveByID(ctx, id, userID)
 	if err != nil || entry == nil {
-		return domain.ErrNotFound
+		return domain.NewUserError(domain.ErrNotFound, "Overtime entry not found")
 	}
 	return s.overtimeRepo.SoftDelete(ctx, id, userID)
 }
