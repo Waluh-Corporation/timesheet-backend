@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -332,7 +333,11 @@ func (s *Server) CreateUser(c *gin.Context) {
 	// Send account creation / welcome notification email completely separate from password reset flow.
 	if s.Mailer != nil && user.Email != "" {
 		loginLink := s.publicBaseURL(c) + "/login"
-		_ = s.Mailer.SendAccountWelcomeEmail(user.Email, user.Username, plainPass, loginLink)
+		go func(toEmail, username, pass, link string) {
+			if err := s.Mailer.SendAccountWelcomeEmail(toEmail, username, pass, link); err != nil {
+				slog.Error("failed to send account welcome email", "error", err, "email", toEmail)
+			}
+		}(user.Email, user.Username, plainPass, loginLink)
 	}
 
 	RespondSuccess(c, http.StatusCreated, response.CreateUserData{

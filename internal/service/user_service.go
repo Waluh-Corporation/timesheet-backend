@@ -75,7 +75,9 @@ func (s *userService) CreateUserByAdmin(ctx context.Context, user *models.User, 
 
 	// 4. Kirimkan notifikasi selamat datang dan kredensial terpisah dari flow reset password
 	if s.mailer != nil && user.Email != "" {
-		_ = s.mailer.SendAccountWelcomeEmail(user.Email, user.Username, plainPass, loginURL)
+		go func(toEmail, username, pass, link string) {
+			_ = s.mailer.SendAccountWelcomeEmail(toEmail, username, pass, link)
+		}(user.Email, user.Username, plainPass, loginURL)
 	}
 
 	return plainPass, nil

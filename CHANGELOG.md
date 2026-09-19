@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.1] - 2026-09-19
+
+### Fixed
+- **Non-Blocking Transactional Email Dispatch**: Resolved an issue where requesting a password reset (`POST /api/v1/auth/forgot-password`) or creating a new user could hang for 30+ seconds if external SMTP servers encounter connection timeouts in containerized Docker networks. Email dispatch is now handled asynchronously in background worker goroutines, allowing HTTP endpoints to respond immediately (< 10 ms).
+- **Fast-Fail on Unconfigured SMTP Host**: Added immediate configuration validation in the mailer to bypass dialing attempts when `SMTP_HOST` is unconfigured, preventing redundant retry cycles and connection timeout delays.
+
+---
+
 ## [1.7.0] - 2026-09-19
 
 ### Added
