@@ -392,28 +392,28 @@ func TestActivityService_WorkingHoursValidation(t *testing.T) {
 			startTime:   "07:00",
 			endTime:     "06:00",
 			expectError: true,
-			errContains: "jam check-out (06:00) tidak boleh lebih awal dari atau sama dengan jam check-in (07:00)",
+			errContains: "Check-out time (06:00) must be later than check-in time (07:00)",
 		},
 		{
 			name:        "check-in equals check-out (08:00 == 08:00)",
 			startTime:   "08:00",
 			endTime:     "08:00",
 			expectError: true,
-			errContains: "jam check-out (08:00) tidak boleh lebih awal dari atau sama dengan jam check-in (08:00)",
+			errContains: "Check-out time (08:00) must be later than check-in time (08:00)",
 		},
 		{
 			name:        "invalid check-in format",
 			startTime:   "25:00",
 			endTime:     "17:00",
 			expectError: true,
-			errContains: "format jam check-in tidak valid",
+			errContains: "Invalid check-in time format",
 		},
 		{
 			name:        "invalid check-out format",
 			startTime:   "08:00",
 			endTime:     "99:99",
 			expectError: true,
-			errContains: "format jam check-out tidak valid",
+			errContains: "Invalid check-out time format",
 		},
 	}
 

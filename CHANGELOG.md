@@ -9,10 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
----
-
-## [1.7.0] - 2026-09-18
-
 ### Added
 - **Dual-Token Authentication Architecture**: Short-lived (15 min) JWT access tokens paired with long-lived (7 days) SHA-256 hashed refresh tokens (`refresh_tokens`), configurable via `ACCESS_TOKEN_EXPIRY_MINUTES` and `REFRESH_TOKEN_TTL_DAYS`.
 - **Refresh Token Rotation & Family Reuse Detection**: New endpoint `POST /api/v1/auth/refresh` rotates refresh tokens on every exchange and automatically revokes all chained tokens in the family if an already-consumed token is replayed.
@@ -28,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Atomic Profile Change Approvals**: Wrapped administrative profile change reviews (`ReviewProfileChange`) inside atomic ACID database transactions.
 
 ### Improved
+- **Client-Facing Error Message Standardization**: Standardized validation and domain error messages across all backend services (`TimesheetService`, `ActivityService`, `UserService`, and `MasterDataService`) into readable, user-friendly sentence case, eliminating internal system error prefixes (e.g. `"invalid input: "`) from JSON responses.
+- **Decoupled User Error Architecture**: Introduced `domain.UserError` implementing `Unwrap()` to cleanly separate client error text from backend sentinel errors while maintaining accurate HTTP status mapping (`400 Bad Request`, `404 Not Found`, etc.).
 - **Covering Index for Timesheet Range Queries**: Migration 000026 adds `idx_daily_activities_range_covering` with `INCLUDE (status, project_ref_id, start_time, end_time) WHERE is_active = true`, enabling index-only scans for monthly timesheet reporting.
 - **Master Data Search Acceleration**: Added PostgreSQL trigram GIN indexes (`pg_trgm`) and functional lowercase indexes (`LOWER(code)`) across companies, departments, divisions, projects, and approvers for sub-millisecond search queries.
 - **I/O Resilience & Bounded Timeouts**: Added 10-second bounded timeouts for SMTP email delivery and WebPush notifications to eliminate thread pool exhaustion risks.
@@ -37,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Strict Algorithm Pinning**: Enforced cryptographic algorithm verification strictly to `HS256` in `auth.ParseToken`, eliminating algorithm confusion and `none`-algorithm vulnerabilities.
 - **Structured Security Event Logging**: Integrated standard library `log/slog` structured logging for authentication successes/failures, token reuse alerts, logout events, passkey operations, and password updates.
 - **Single Source of Truth Migrations**: Removed legacy raw DDL from application startup and consolidated all schema evolution in versioned migration files.
+
+---
 
 ## [1.6.0] - 2026-09-17
 

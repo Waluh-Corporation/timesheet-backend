@@ -46,7 +46,7 @@ func RenderTimesheetEmail(data TimesheetEmailData) (htmlBody string, textBody st
 
 	htmlBody, err = renderWithLayout(layout, timesheetTmpl, data)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("render timesheet template: %w", err)
 	}
 
 	textBody = fmt.Sprintf(`Halo %s,

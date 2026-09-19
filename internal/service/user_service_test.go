@@ -229,14 +229,14 @@ func TestUserService_ChangePassword(t *testing.T) {
 
 	t.Run("Wrong old password", func(t *testing.T) {
 		err := svc.ChangePassword(context.Background(), 1, "IncorrectOldPass1!", "NewPass123!@#")
-		if err == nil || !strings.Contains(err.Error(), "old password does not match") {
+		if err == nil || !strings.Contains(err.Error(), "Old password does not match") {
 			t.Fatalf("expected old password mismatch error, got: %v", err)
 		}
 	})
 
 	t.Run("Same new password as old password", func(t *testing.T) {
 		err := svc.ChangePassword(context.Background(), 1, oldPass, oldPass)
-		if err == nil || !strings.Contains(err.Error(), "new password cannot be the same") {
+		if err == nil || !strings.Contains(err.Error(), "New password cannot be the same") {
 			t.Fatalf("expected same password error, got: %v", err)
 		}
 	})
