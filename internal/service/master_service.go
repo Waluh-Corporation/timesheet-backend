@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"timesheet-backend/internal/domain"
@@ -64,7 +63,7 @@ func (s *masterDataService) ListApprovers(ctx context.Context, roleType string, 
 func (s *masterDataService) CreateApprover(ctx context.Context, name string, roleType models.ApproverRoleType, title string, isActive *bool) (*models.Approver, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, fmt.Errorf("%w: name is required", domain.ErrInvalidInput)
+		return nil, domain.NewUserError(domain.ErrInvalidInput, "Name is required")
 	}
 	active := true
 	if isActive != nil {
@@ -85,12 +84,12 @@ func (s *masterDataService) CreateApprover(ctx context.Context, name string, rol
 func (s *masterDataService) UpdateApprover(ctx context.Context, id uint, name *string, roleType *models.ApproverRoleType, title *string, isActive *bool) (*models.Approver, error) {
 	a, err := s.repo.FindApproverByID(ctx, id)
 	if err != nil || a == nil {
-		return nil, domain.ErrNotFound
+		return nil, domain.NewUserError(domain.ErrNotFound, "Approver not found")
 	}
 	if name != nil {
 		trimmed := strings.TrimSpace(*name)
 		if trimmed == "" {
-			return nil, fmt.Errorf("%w: name cannot be empty", domain.ErrInvalidInput)
+			return nil, domain.NewUserError(domain.ErrInvalidInput, "Name cannot be empty")
 		}
 		a.Name = trimmed
 	}
@@ -112,7 +111,7 @@ func (s *masterDataService) UpdateApprover(ctx context.Context, id uint, name *s
 func (s *masterDataService) DeleteApprover(ctx context.Context, id uint) error {
 	a, err := s.repo.FindApproverByID(ctx, id)
 	if err != nil || a == nil {
-		return domain.ErrNotFound
+		return domain.NewUserError(domain.ErrNotFound, "Approver not found")
 	}
 	return s.repo.SoftDeleteApprover(ctx, id)
 }
@@ -126,7 +125,7 @@ func (s *masterDataService) CreateCompany(ctx context.Context, code string, name
 	code = strings.ToLower(strings.TrimSpace(code))
 	name = strings.TrimSpace(name)
 	if code == "" || name == "" {
-		return nil, fmt.Errorf("%w: code and name are required", domain.ErrInvalidInput)
+		return nil, domain.NewUserError(domain.ErrInvalidInput, "Code and name are required")
 	}
 	c := &models.Company{
 		Code:     code,
@@ -142,7 +141,7 @@ func (s *masterDataService) CreateCompany(ctx context.Context, code string, name
 func (s *masterDataService) UpdateCompany(ctx context.Context, id uint, code *string, name *string, isActive *bool) (*models.Company, error) {
 	c, err := s.repo.FindCompanyByID(ctx, id)
 	if err != nil || c == nil {
-		return nil, domain.ErrNotFound
+		return nil, domain.NewUserError(domain.ErrNotFound, "Company not found")
 	}
 	if code != nil {
 		c.Code = strings.ToLower(strings.TrimSpace(*code))
@@ -162,7 +161,7 @@ func (s *masterDataService) UpdateCompany(ctx context.Context, id uint, code *st
 func (s *masterDataService) DeleteCompany(ctx context.Context, id uint) error {
 	c, err := s.repo.FindCompanyByID(ctx, id)
 	if err != nil || c == nil {
-		return domain.ErrNotFound
+		return domain.NewUserError(domain.ErrNotFound, "Company not found")
 	}
 	return s.repo.SoftDeleteCompany(ctx, id)
 }
@@ -176,7 +175,7 @@ func (s *masterDataService) CreateSite(ctx context.Context, code string, name st
 	code = strings.ToLower(strings.TrimSpace(code))
 	name = strings.TrimSpace(name)
 	if code == "" || name == "" {
-		return nil, fmt.Errorf("%w: code and name are required", domain.ErrInvalidInput)
+		return nil, domain.NewUserError(domain.ErrInvalidInput, "Code and name are required")
 	}
 	active := true
 	if isActive != nil {
@@ -196,7 +195,7 @@ func (s *masterDataService) CreateSite(ctx context.Context, code string, name st
 func (s *masterDataService) UpdateSite(ctx context.Context, id uint, code *string, name *string, isActive *bool) (*models.Site, error) {
 	site, err := s.repo.FindSiteByID(ctx, id)
 	if err != nil || site == nil {
-		return nil, domain.ErrNotFound
+		return nil, domain.NewUserError(domain.ErrNotFound, "Site not found")
 	}
 	if code != nil {
 		site.Code = strings.ToLower(strings.TrimSpace(*code))
@@ -216,7 +215,7 @@ func (s *masterDataService) UpdateSite(ctx context.Context, id uint, code *strin
 func (s *masterDataService) DeleteSite(ctx context.Context, id uint) error {
 	site, err := s.repo.FindSiteByID(ctx, id)
 	if err != nil || site == nil {
-		return domain.ErrNotFound
+		return domain.NewUserError(domain.ErrNotFound, "Site not found")
 	}
 	return s.repo.SoftDeleteSite(ctx, id)
 }
@@ -230,7 +229,7 @@ func (s *masterDataService) CreateDivision(ctx context.Context, code string, nam
 	code = strings.ToLower(strings.TrimSpace(code))
 	name = strings.TrimSpace(name)
 	if code == "" || name == "" {
-		return nil, fmt.Errorf("%w: code and name are required", domain.ErrInvalidInput)
+		return nil, domain.NewUserError(domain.ErrInvalidInput, "Code and name are required")
 	}
 	active := true
 	if isActive != nil {
@@ -250,7 +249,7 @@ func (s *masterDataService) CreateDivision(ctx context.Context, code string, nam
 func (s *masterDataService) UpdateDivision(ctx context.Context, id uint, code *string, name *string, isActive *bool) (*models.Division, error) {
 	div, err := s.repo.FindDivisionByID(ctx, id)
 	if err != nil || div == nil {
-		return nil, domain.ErrNotFound
+		return nil, domain.NewUserError(domain.ErrNotFound, "Division not found")
 	}
 	if code != nil {
 		div.Code = strings.ToLower(strings.TrimSpace(*code))
@@ -270,7 +269,7 @@ func (s *masterDataService) UpdateDivision(ctx context.Context, id uint, code *s
 func (s *masterDataService) DeleteDivision(ctx context.Context, id uint) error {
 	div, err := s.repo.FindDivisionByID(ctx, id)
 	if err != nil || div == nil {
-		return domain.ErrNotFound
+		return domain.NewUserError(domain.ErrNotFound, "Division not found")
 	}
 	return s.repo.SoftDeleteDivision(ctx, id)
 }
@@ -284,7 +283,7 @@ func (s *masterDataService) CreateDepartment(ctx context.Context, code string, n
 	name = strings.TrimSpace(name)
 	code = strings.ToUpper(strings.TrimSpace(code))
 	if name == "" {
-		return nil, fmt.Errorf("%w: name is required", domain.ErrInvalidInput)
+		return nil, domain.NewUserError(domain.ErrInvalidInput, "Name is required")
 	}
 	active := true
 	if isActive != nil {
@@ -323,7 +322,7 @@ func (s *masterDataService) CreateDepartment(ctx context.Context, code string, n
 func (s *masterDataService) UpdateDepartment(ctx context.Context, id uint, code *string, name *string, division *string, divisionID *uint, isActive *bool) (*models.Department, error) {
 	dept, err := s.repo.FindDepartmentByID(ctx, id)
 	if err != nil || dept == nil {
-		return nil, domain.ErrNotFound
+		return nil, domain.NewUserError(domain.ErrNotFound, "Department not found")
 	}
 	if name != nil {
 		dept.Name = strings.TrimSpace(*name)
@@ -370,7 +369,7 @@ func (s *masterDataService) UpdateDepartment(ctx context.Context, id uint, code 
 func (s *masterDataService) DeleteDepartment(ctx context.Context, id uint) error {
 	dept, err := s.repo.FindDepartmentByID(ctx, id)
 	if err != nil || dept == nil {
-		return domain.ErrNotFound
+		return domain.NewUserError(domain.ErrNotFound, "Department not found")
 	}
 	return s.repo.SoftDeleteDepartment(ctx, id)
 }

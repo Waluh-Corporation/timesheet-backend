@@ -19,6 +19,12 @@ jobs:
   validate-pr-title:
     name: Validate Conventional Commit Title
     runs-on: ubuntu-latest
+    if: >-
+      !startsWith(github.head_ref, 'release') &&
+      !startsWith(github.head_ref, 'chore/release') &&
+      !startsWith(github.event.pull_request.title, 'Release') &&
+      !startsWith(github.event.pull_request.title, 'release') &&
+      !contains(github.event.pull_request.labels.*.name, 'release')
     steps:
       - name: Validate PR Title
         uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50

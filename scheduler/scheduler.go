@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strconv"
@@ -10,13 +11,16 @@ import (
 	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 
+	"timesheet-backend/internal/repository"
 	"timesheet-backend/models"
 	"timesheet-backend/push"
+	"timesheet-backend/services"
 )
 
 const (
 	DefaultReminderCron = "0 17 * * *"
 	DefaultCleanupCron  = "0 2 * * *"
+	DefaultHolidayCron  = "0 3 * * 0"
 )
 
 // ScheduleInfo carries details about a cron schedule for frontend presentation.
@@ -154,11 +158,12 @@ func (s *Scheduler) registerJob(name, cronExpr, defaultCron string, task func())
 	}
 }
 
-// Start registers the configured daily reminder and token housekeeping cron jobs
+// Start registers the configured daily reminder, token housekeeping, and holiday synchronization cron jobs
 // and launches the runner.
 func (s *Scheduler) Start() {
 	s.registerJob("daily reminder", s.reminderCron, DefaultReminderCron, s.sendDailyReminders)
 	s.registerJob("token housekeeping", s.cleanupCron, DefaultCleanupCron, s.cleanupExpiredTokens)
+	s.registerJob("holiday synchronization", DefaultHolidayCron, DefaultHolidayCron, s.syncHolidays)
 
 	s.cron.Start()
 	log.Printf("[scheduler] daily timesheet reminder armed with cron %q in %s", s.reminderCron, s.loc.String())
@@ -206,20 +211,59 @@ func (s *Scheduler) sendDailyReminders() {
 	}
 }
 
-// cleanupExpiredTokens performs DBA housekeeping on password_reset_tokens to prevent table bloat.
+// syncHolidays asynchronously fetches national holidays from Kemendesa and upserts into local DB.
+func (s *Scheduler) syncHolidays() {
+	if s.db == nil {
+		return
+	}
+	year := time.Now().In(s.loc).Year()
+	yearlyHolidays, err := services.FetchHolidaysByYear(year)
+	if err != nil {
+		log.Printf("[scheduler] failed to sync holidays for %d: %v", year, err)
+		return
+	}
+	masterRepo := repository.NewMasterRepository(s.db)
+	var holidays []models.Holiday
+	for _, h := range yearlyHolidays {
+		if t, parseErr := time.Parse("2006-01-02", h.Date); parseErr == nil {
+			holidays = append(holidays, models.Holiday{
+				Date:         t,
+				Description:  h.Description,
+				IsJointLeave: h.IsJointLeave,
+				IsCivic:      h.IsCivic,
+				IsReligious:  h.IsReligious,
+			})
+		}
+	}
+	if err := masterRepo.UpsertHolidays(context.Background(), holidays); err != nil {
+		log.Printf("[scheduler] failed to upsert holidays: %v", err)
+	} else {
+		log.Printf("[scheduler] synchronized %d holidays for year %d", len(holidays), year)
+	}
+}
+
+// cleanupExpiredTokens performs DBA housekeeping on password_reset_tokens and refresh_tokens to prevent table bloat.
 func (s *Scheduler) cleanupExpiredTokens() {
 	if s.db == nil {
 		return
 	}
 
 	now := time.Now()
-	// Delete tokens that expired more than 7 days ago, or were used more than 30 days ago.
+	// Delete password reset tokens that expired more than 7 days ago, or were used more than 30 days ago.
 	res := s.db.Where("expires_at < ?", now.AddDate(0, 0, -7)).
 		Or("used_at IS NOT NULL AND created_at < ?", now.AddDate(0, 0, -30)).
 		Delete(&models.PasswordResetToken{})
 	if res.Error != nil {
-		log.Printf("[scheduler] token housekeeping error: %v", res.Error)
+		log.Printf("[scheduler] reset token housekeeping error: %v", res.Error)
 	} else if res.RowsAffected > 0 {
-		log.Printf("[scheduler] token housekeeping purged %d stale tokens", res.RowsAffected)
+		log.Printf("[scheduler] reset token housekeeping purged %d stale reset tokens", res.RowsAffected)
+	}
+
+	// Delete refresh tokens that expired or were revoked more than 7 days ago.
+	tokenRepo := repository.NewTokenRepository(s.db)
+	if purged, err := tokenRepo.DeleteExpiredRefreshTokens(context.Background(), now.AddDate(0, 0, -7)); err != nil {
+		log.Printf("[scheduler] refresh token housekeeping error: %v", err)
+	} else if purged > 0 {
+		log.Printf("[scheduler] refresh token housekeeping purged %d stale refresh tokens", purged)
 	}
 }

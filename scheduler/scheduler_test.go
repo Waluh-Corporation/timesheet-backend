@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
@@ -157,17 +158,72 @@ func TestScheduler_WithDB(t *testing.T) {
 		Role:     models.RoleUser,
 		IsActive: true,
 	}
-	_ = tx.Create(&u).Error
+	if err := tx.Create(&u).Error; err != nil {
+		t.Fatalf("failed to create user: %v", err)
+	}
 
+	// 1. Send reminders when user has no activity
 	s.sendDailyReminders()
 
-	tok := models.PasswordResetToken{
+	// 2. Add activity today and verify sendDailyReminders skips
+	now := time.Now().In(s.loc)
+	act := models.DailyActivity{
+		UserID:   u.ID,
+		Date:     time.Date(now.Year(), now.Month(), now.Day(), 10, 0, 0, 0, s.loc),
+		Activity: "Working",
+		IsActive: true,
+	}
+	_ = tx.Create(&act).Error
+	s.sendDailyReminders()
+
+	// 3. Cleanup expired and used password reset tokens
+	tok1 := models.PasswordResetToken{
 		UserID:    u.ID,
 		TokenType: "password_reset",
 		TokenHash: "dummyhash123",
 		ExpiresAt: time.Now().AddDate(0, 0, -10),
 	}
-	_ = tx.Create(&tok).Error
+	_ = tx.Create(&tok1).Error
+
+	usedTime := time.Now().AddDate(0, 0, -35)
+	tok2 := models.PasswordResetToken{
+		UserID:    u.ID,
+		TokenType: "password_reset",
+		TokenHash: "dummyhash456",
+		ExpiresAt: time.Now().Add(time.Hour),
+		UsedAt:    &usedTime,
+	}
+	_ = tx.Create(&tok2).Error
+	// Set created_at in the past for tok2
+	_ = tx.Model(&tok2).Update("created_at", time.Now().AddDate(0, 0, -35)).Error
+
+	// 4. Cleanup expired and revoked refresh tokens
+	rf1 := models.RefreshToken{
+		UserID:    u.ID,
+		TokenHash: "rfdummyhash1",
+		FamilyID:  uuid.New().String(),
+		ExpiresAt: time.Now().AddDate(0, 0, -10),
+	}
+	_ = tx.Create(&rf1).Error
+
+	revokedAt := time.Now().AddDate(0, 0, -10)
+	rf2 := models.RefreshToken{
+		UserID:    u.ID,
+		TokenHash: "rfdummyhash2",
+		FamilyID:  uuid.New().String(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		RevokedAt: &revokedAt,
+	}
+	_ = tx.Create(&rf2).Error
 
 	s.cleanupExpiredTokens()
+
+	// 5. Test holiday sync
+	s.syncHolidays()
+
+	// 6. Test nil guards for all methods
+	sNil := &Scheduler{}
+	sNil.syncHolidays()
+	sNil.cleanupExpiredTokens()
+	sNil.sendDailyReminders()
 }

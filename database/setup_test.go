@@ -25,6 +25,7 @@ func TestSetup_SeedFunctions(t *testing.T) {
 	defer tx.Rollback()
 
 	t.Run("seedDefaultCompanies", func(t *testing.T) {
+		_ = tx.Exec("DELETE FROM companies WHERE LOWER(code) IN ('mii', 'sdd', 'adidata', 'ntt')").Error
 		err := seedDefaultCompanies(tx)
 		if err != nil {
 			t.Fatalf("seedDefaultCompanies failed: %v", err)
@@ -34,6 +35,11 @@ func TestSetup_SeedFunctions(t *testing.T) {
 		_ = tx.Model(&models.Company{}).Where("LOWER(code) IN ?", []string{"mii", "sdd", "adidata", "ntt"}).Count(&count)
 		if count < 4 {
 			t.Errorf("expected at least 4 default companies, got %d", count)
+		}
+
+		// Idempotent test (covers cnt > 0 branch)
+		if err := seedDefaultCompanies(tx); err != nil {
+			t.Fatalf("seedDefaultCompanies idempotent failed: %v", err)
 		}
 	})
 
@@ -48,9 +54,15 @@ func TestSetup_SeedFunctions(t *testing.T) {
 		if count == 0 {
 			t.Error("expected activity statuses to be seeded, got 0")
 		}
+
+		// Idempotent
+		if err := SeedActivityStatuses(tx); err != nil {
+			t.Fatalf("SeedActivityStatuses idempotent failed: %v", err)
+		}
 	})
 
 	t.Run("EnsureSystemSettings", func(t *testing.T) {
+		_ = tx.Exec("DELETE FROM system_settings WHERE key = 'is_new'").Error
 		err := EnsureSystemSettings(tx)
 		if err != nil {
 			t.Fatalf("EnsureSystemSettings failed: %v", err)
@@ -59,6 +71,11 @@ func TestSetup_SeedFunctions(t *testing.T) {
 		var setting models.SystemSetting
 		if err := tx.Where("key = ?", "is_new").First(&setting).Error; err != nil {
 			t.Errorf("expected is_new setting to exist: %v", err)
+		}
+
+		// Idempotent
+		if err := EnsureSystemSettings(tx); err != nil {
+			t.Fatalf("EnsureSystemSettings idempotent failed: %v", err)
 		}
 	})
 
@@ -70,6 +87,7 @@ func TestSetup_SeedFunctions(t *testing.T) {
 	})
 
 	t.Run("seedDefaultDepartments", func(t *testing.T) {
+		_ = tx.Exec("DELETE FROM departments WHERE LOWER(code) = 'wdl'").Error
 		err := seedDefaultDepartments(tx)
 		if err != nil {
 			t.Fatalf("seedDefaultDepartments failed: %v", err)
@@ -80,6 +98,8 @@ func TestSetup_SeedFunctions(t *testing.T) {
 	})
 
 	t.Run("seedDefaultSitesAndDivisions", func(t *testing.T) {
+		_ = tx.Exec("DELETE FROM sites WHERE LOWER(code) IN ('ctcn', 'rdtx', 'pjp')").Error
+		_ = tx.Exec("DELETE FROM divisions WHERE LOWER(code) = 'wdd'").Error
 		err := seedDefaultSitesAndDivisions(tx)
 		if err != nil {
 			t.Fatalf("seedDefaultSitesAndDivisions failed: %v", err)
@@ -112,15 +132,37 @@ func TestSetup_SeedFunctions(t *testing.T) {
 			AdminEmail:    "admboot@example.com",
 			AdminPassword: "SuperAdminPass2026!",
 		}
-		_ = tx.Exec("DELETE FROM users WHERE username = 'testadmboot'").Error
+		_ = tx.Exec("DELETE FROM users WHERE role = 'admin'").Error
 		err := seedAdmin(tx, adminCfg)
 		if err != nil {
 			t.Fatalf("seedAdmin failed: %v", err)
 		}
-		// Idempotent
+		// Idempotent (count > 0 branch)
 		err = seedAdmin(tx, adminCfg)
 		if err != nil {
 			t.Fatalf("seedAdmin idempotent run failed: %v", err)
+		}
+	})
+
+	t.Run("AutoMigrate in isolated schema", func(t *testing.T) {
+		txMig := db.Begin()
+		defer func() {
+			_ = txMig.Exec("DROP SCHEMA IF EXISTS test_automigrate CASCADE").Error
+			txMig.Rollback()
+		}()
+		_ = txMig.Exec("CREATE SCHEMA IF NOT EXISTS test_automigrate").Error
+		_ = txMig.Exec("SET search_path TO test_automigrate").Error
+		if err := AutoMigrate(txMig); err != nil {
+			t.Fatalf("AutoMigrate failed: %v", err)
+		}
+	})
+
+	t.Run("Setup", func(t *testing.T) {
+		txSetup := db.Begin()
+		defer txSetup.Rollback()
+		cfg := config.Load()
+		if err := Setup(txSetup, cfg); err != nil {
+			t.Fatalf("Setup failed: %v", err)
 		}
 	})
 }

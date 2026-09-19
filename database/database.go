@@ -24,10 +24,27 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxIdleConns(25)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(1 * time.Hour)
-	sqlDB.SetConnMaxIdleTime(15 * time.Minute)
+	maxIdle := cfg.DBMaxIdleConns
+	if maxIdle <= 0 {
+		maxIdle = 25
+	}
+	maxOpen := cfg.DBMaxOpenConns
+	if maxOpen <= 0 {
+		maxOpen = 100
+	}
+	connMaxLifetime := cfg.DBConnMaxLifetime
+	if connMaxLifetime <= 0 {
+		connMaxLifetime = 1 * time.Hour
+	}
+	connMaxIdleTime := cfg.DBConnMaxIdleTime
+	if connMaxIdleTime <= 0 {
+		connMaxIdleTime = 15 * time.Minute
+	}
+
+	sqlDB.SetMaxIdleConns(maxIdle)
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetConnMaxLifetime(connMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(connMaxIdleTime)
 
 	return db, nil
 }

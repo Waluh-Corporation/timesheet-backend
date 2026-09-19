@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -47,7 +46,7 @@ func (s *activityService) resolveProject(ctx context.Context, req *request.Daily
 	if req.ProjectRefID != nil && *req.ProjectRefID != 0 {
 		proj, err := s.repo.FindActiveProjectByRefID(ctx, *req.ProjectRefID)
 		if err != nil {
-			return errors.New("invalid project_ref_id: project does not exist or is inactive")
+			return domain.NewUserError(domain.ErrInvalidInput, "Invalid project ID: project does not exist or is inactive")
 		}
 		activity.ProjectRefID = &proj.ID
 		activity.ProjectRef = proj
@@ -67,14 +66,14 @@ func validateWorkingHours(startTime, endTime string) error {
 	}
 	start, err := time.Parse("15:04", s)
 	if err != nil {
-		return fmt.Errorf("%w: format jam check-in tidak valid ('%s'). Mohon gunakan format JJ:MM (contoh: 08:00)", domain.ErrInvalidInput, s)
+		return domain.NewUserError(domain.ErrInvalidInput, fmt.Sprintf("Invalid check-in time format ('%s'), expected HH:MM (e.g. 08:00)", s))
 	}
 	end, err := time.Parse("15:04", e)
 	if err != nil {
-		return fmt.Errorf("%w: format jam check-out tidak valid ('%s'). Mohon gunakan format JJ:MM (contoh: 17:00)", domain.ErrInvalidInput, e)
+		return domain.NewUserError(domain.ErrInvalidInput, fmt.Sprintf("Invalid check-out time format ('%s'), expected HH:MM (e.g. 17:00)", e))
 	}
 	if !start.Before(end) {
-		return fmt.Errorf("%w: jam check-out (%s) tidak boleh lebih awal dari atau sama dengan jam check-in (%s). Mohon periksa kembali jam kerja yang Anda masukkan", domain.ErrInvalidInput, e, s)
+		return domain.NewUserError(domain.ErrInvalidInput, fmt.Sprintf("Check-out time (%s) must be later than check-in time (%s)", e, s))
 	}
 	return nil
 }
@@ -86,7 +85,7 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 
 	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, jakartaLocation())
 	if err != nil {
-		return fmt.Errorf("%w: invalid date format, expected YYYY-MM-DD", domain.ErrInvalidInput)
+		return domain.NewUserError(domain.ErrInvalidInput, "Invalid date format, expected YYYY-MM-DD")
 	}
 
 	// Default status to 'P' if not provided
@@ -97,7 +96,7 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 	// Validate status against activity_statuses
 	valid, err := s.repo.ValidateStatus(ctx, req.Status)
 	if err != nil || !valid {
-		return fmt.Errorf("%w: invalid status code: must be a valid activity status (e.g. P, BT, S, PM, V, X)", domain.ErrInvalidInput)
+		return domain.NewUserError(domain.ErrInvalidInput, "Invalid status code: must be a valid activity status (e.g. P, BT, S, PM, V, X)")
 	}
 
 	activity := models.DailyActivity{
@@ -111,7 +110,7 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 	}
 
 	if err := s.resolveProject(ctx, req, &activity); err != nil {
-		return fmt.Errorf("%w: %s", domain.ErrInvalidInput, err.Error())
+		return domain.NewUserError(domain.ErrInvalidInput, err.Error())
 	}
 
 	existing, err := s.repo.FindActiveByUserAndDate(ctx, userID, date)
@@ -134,11 +133,11 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 func (s *activityService) GetDailyActivity(ctx context.Context, userID uint, id uint) (*response.DailyActivityResponse, error) {
 	activity, err := s.repo.FindActiveByID(ctx, id)
 	if err != nil || activity == nil {
-		return nil, domain.ErrNotFound
+		return nil, domain.NewUserError(domain.ErrNotFound, "Daily activity not found")
 	}
 
 	if activity.UserID != userID {
-		return nil, domain.ErrForbidden
+		return nil, domain.NewUserError(domain.ErrForbidden, "Forbidden: you do not have access to this activity")
 	}
 
 	return &response.DailyActivityResponse{

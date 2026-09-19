@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/gorm"
-
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
@@ -25,26 +23,26 @@ type TimesheetService interface {
 }
 
 type timesheetService struct {
-	db           *gorm.DB
 	userRepo     repository.UserRepository
 	activityRepo repository.ActivityRepository
 	overtimeRepo repository.OvertimeRepository
+	masterRepo   repository.MasterRepository
 	mailer       *mailer.Mailer
 }
 
 // NewTimesheetService constructs a TimesheetService implementation.
 func NewTimesheetService(
-	db *gorm.DB,
 	userRepo repository.UserRepository,
 	activityRepo repository.ActivityRepository,
 	overtimeRepo repository.OvertimeRepository,
+	masterRepo repository.MasterRepository,
 	m *mailer.Mailer,
 ) TimesheetService {
 	return &timesheetService{
-		db:           db,
 		userRepo:     userRepo,
 		activityRepo: activityRepo,
 		overtimeRepo: overtimeRepo,
+		masterRepo:   masterRepo,
 		mailer:       m,
 	}
 }
@@ -61,17 +59,12 @@ func sanitizeFilename(s string) string {
 
 func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
 	if month < 1 || month > 12 || year < 2000 || year > 2100 {
-		return nil, "", fmt.Errorf("%w: invalid month or year", domain.ErrInvalidInput)
+		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Invalid month or year")
 	}
 	loc := jakartaLocation()
-	var user models.User
-	if err := s.db.WithContext(ctx).Scopes(models.ActiveOnly).
-		Preload("CompanyRel").
-		Preload("SiteRel").
-		Preload("DepartmentRel").
-		Preload("DivisionRel").
-		Where("id = ?", userID).First(&user).Error; err != nil {
-		return nil, "", fmt.Errorf("%w: user not found", domain.ErrNotFound)
+	user, err := s.userRepo.FindByIDWithDetails(ctx, userID)
+	if err != nil || user == nil {
+		return nil, "", domain.NewUserError(domain.ErrNotFound, "User not found")
 	}
 
 	companyCode := ""
@@ -79,9 +72,8 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 	if user.CompanyRel != nil {
 		companyCode = user.CompanyRel.Code
 		companyName = user.CompanyRel.Name
-	} else if user.CompanyID != nil && *user.CompanyID != 0 {
-		var comp models.Company
-		if err := s.db.WithContext(ctx).Where("id = ?", *user.CompanyID).First(&comp).Error; err == nil {
+	} else if user.CompanyID != nil && *user.CompanyID != 0 && s.masterRepo != nil {
+		if comp, cerr := s.masterRepo.FindCompanyByID(ctx, *user.CompanyID); cerr == nil && comp != nil {
 			companyCode = comp.Code
 			companyName = comp.Name
 		}
@@ -91,24 +83,24 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		companyName = user.Company
 	}
 	if companyCode == "" {
-		return nil, "", fmt.Errorf("%w: user has no company assigned", domain.ErrInvalidInput)
+		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "User has no company assigned")
 	}
 
 	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
 	end := start.AddDate(0, 1, 0)
 
-	var activities []models.DailyActivity
-	if err := s.db.WithContext(ctx).
-		Where("user_id = ? AND date >= ? AND date < ?", user.ID, start, end).
-		Scopes(models.ActiveOnly).
-		Preload("ProjectRef", models.ActiveOnly).
-		Preload("StatusRef").
-		Order("date asc").
-		Find(&activities).Error; err != nil {
+	filter := repository.ActivityFilter{
+		Month:     &month,
+		Year:      &year,
+		SortOrder: "asc",
+		IsAll:     true,
+	}
+	activities, _, err := s.activityRepo.ListActiveByUser(ctx, user.ID, filter)
+	if err != nil {
 		return nil, "", err
 	}
 	if len(activities) == 0 {
-		return nil, "", fmt.Errorf("%w: timesheet belum dapat dibuat karena belum ada aktivitas yang tercatat pada periode ini. Silakan isi aktivitas harian Anda terlebih dahulu sebelum mengunduh timesheet", domain.ErrInvalidInput)
+		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "No activities recorded for this period")
 	}
 
 	overtimes, err := s.overtimeRepo.FindByUserAndMonth(ctx, user.ID, start, end)
@@ -117,21 +109,23 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 	}
 
 	holidays := map[int]string{}
-	if hs, herr := services.FetchHolidays(year, month); herr == nil {
-		for _, h := range hs {
-			var y, m, d int
-			if _, e := fmt.Sscanf(h.Date, "%d-%d-%d", &y, &m, &d); e == nil {
-				holidays[d] = h.Description
+	if s.masterRepo != nil {
+		if hs, herr := s.masterRepo.ListHolidaysByMonth(ctx, year, month); herr == nil {
+			for _, h := range hs {
+				holidays[h.Date.Day()] = h.Description
 			}
 		}
 	}
 
 	var approvers []models.Approver
-	_ = s.db.WithContext(ctx).Scopes(models.ActiveOnly).Order("id asc").Find(&approvers).Error
+	if s.masterRepo != nil {
+		activeStatus := true
+		approvers, _ = s.masterRepo.ListApprovers(ctx, "", &activeStatus)
+	}
 
 	out, err := services.GenerateFromTemplate(services.GenerationInput{
 		CompanyCode: companyCode,
-		User:        &user,
+		User:        user,
 		Month:       month,
 		Year:        year,
 		Activities:  activities,
@@ -158,7 +152,7 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 
 func (s *timesheetService) UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error {
 	if req == nil {
-		return fmt.Errorf("%w: request is required", domain.ErrInvalidInput)
+		return domain.NewUserError(domain.ErrInvalidInput, "Request payload is required")
 	}
 	if err := validateWorkingHours(req.StartTime, req.EndTime); err != nil {
 		return err
@@ -166,7 +160,7 @@ func (s *timesheetService) UpsertOvertime(ctx context.Context, userID uint, req 
 	loc := jakartaLocation()
 	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, loc)
 	if err != nil {
-		return fmt.Errorf("%w: invalid date format, expected YYYY-MM-DD", domain.ErrInvalidInput)
+		return domain.NewUserError(domain.ErrInvalidInput, "Invalid date format, expected YYYY-MM-DD")
 	}
 
 	var entry *models.OvertimeEntry
@@ -238,7 +232,7 @@ func (s *timesheetService) ListMonthlyOvertimes(ctx context.Context, userID uint
 func (s *timesheetService) DeleteOvertime(ctx context.Context, id uint, userID uint) error {
 	entry, err := s.overtimeRepo.FindActiveByID(ctx, id, userID)
 	if err != nil || entry == nil {
-		return domain.ErrNotFound
+		return domain.NewUserError(domain.ErrNotFound, "Overtime entry not found")
 	}
 	return s.overtimeRepo.SoftDelete(ctx, id, userID)
 }

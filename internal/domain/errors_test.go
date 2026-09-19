@@ -33,3 +33,20 @@ func TestMapErrorToHTTPStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestUserError(t *testing.T) {
+	msg := "No activities recorded for this period"
+	userErr := domain.NewUserError(domain.ErrInvalidInput, msg)
+
+	if userErr.Error() != msg {
+		t.Errorf("expected error message %q, got %q", msg, userErr.Error())
+	}
+
+	if !errors.Is(userErr, domain.ErrInvalidInput) {
+		t.Errorf("expected userErr to match domain.ErrInvalidInput via Unwrap")
+	}
+
+	if status := domain.MapErrorToHTTPStatus(userErr); status != http.StatusBadRequest {
+		t.Errorf("expected HTTP 400 Bad Request, got %d", status)
+	}
+}

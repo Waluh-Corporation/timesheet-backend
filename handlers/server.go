@@ -39,6 +39,7 @@ type Server struct {
 	Hasher       auth.PasswordHasher
 	UserRepo     repository.UserRepository
 	UserSvc      service.UserService
+	TokenRepo    repository.TokenRepository
 	ActivityRepo repository.ActivityRepository
 	ActivitySvc  service.ActivityService
 	OvertimeRepo repository.OvertimeRepository
@@ -65,6 +66,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 
 	var userRepo repository.UserRepository
 	var userSvc service.UserService
+	var tokenRepo repository.TokenRepository
 	var activityRepo repository.ActivityRepository
 	var activitySvc service.ActivityService
 	var overtimeRepo repository.OvertimeRepository
@@ -74,12 +76,13 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 
 	if db != nil {
 		userRepo = repository.NewUserRepository(db)
+		tokenRepo = repository.NewTokenRepository(db)
 		masterRepo = repository.NewMasterRepository(db)
 		userSvc = service.NewUserService(userRepo, auth.DefaultHasher, m, masterRepo)
 		activityRepo = repository.NewActivityRepository(db)
 		activitySvc = service.NewActivityService(activityRepo)
 		overtimeRepo = repository.NewOvertimeRepository(db)
-		timesheetSvc = service.NewTimesheetService(db, userRepo, activityRepo, overtimeRepo, m)
+		timesheetSvc = service.NewTimesheetService(userRepo, activityRepo, overtimeRepo, masterRepo, m)
 		masterSvc = service.NewMasterDataService(masterRepo)
 	}
 
@@ -93,6 +96,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		Hasher:           auth.DefaultHasher,
 		UserRepo:         userRepo,
 		UserSvc:          userSvc,
+		TokenRepo:        tokenRepo,
 		ActivityRepo:     activityRepo,
 		ActivitySvc:      activitySvc,
 		OvertimeRepo:     overtimeRepo,
@@ -106,6 +110,10 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 func (s *Server) putSession(id string, data *webauthn.SessionData) {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
+
+	if s.webAuthnSessions == nil {
+		s.webAuthnSessions = make(map[string]*webAuthnSessionEntry)
+	}
 
 	// Proactively clean up expired sessions (> 5 minutes old)
 	cutoff := time.Now().Add(-5 * time.Minute)
@@ -124,6 +132,9 @@ func (s *Server) putSession(id string, data *webauthn.SessionData) {
 func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
+	if s.webAuthnSessions == nil {
+		return nil, false
+	}
 	entry, ok := s.webAuthnSessions[id]
 	if ok {
 		delete(s.webAuthnSessions, id)
@@ -135,7 +146,8 @@ func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
 	return nil, false
 }
 
-func (s *Server) getUserService() service.UserService {
+// GetUserService retrieves or lazily initializes the UserService.
+func (s *Server) GetUserService() service.UserService {
 	if s.UserSvc != nil {
 		return s.UserSvc
 	}
@@ -166,8 +178,33 @@ func (s *Server) getTimesheetService() service.TimesheetService {
 		if s.ActivityRepo == nil {
 			s.ActivityRepo = repository.NewActivityRepository(s.DB)
 		}
-		s.TimesheetSvc = service.NewTimesheetService(s.DB, s.UserRepo, s.ActivityRepo, s.OvertimeRepo, s.Mailer)
+		if s.MasterRepo == nil {
+			s.MasterRepo = repository.NewMasterRepository(s.DB)
+		}
+		s.TimesheetSvc = service.NewTimesheetService(s.UserRepo, s.ActivityRepo, s.OvertimeRepo, s.MasterRepo, s.Mailer)
 		return s.TimesheetSvc
+	}
+	return nil
+}
+
+func (s *Server) getUserRepository() repository.UserRepository {
+	if s.UserRepo != nil {
+		return s.UserRepo
+	}
+	if s.DB != nil {
+		s.UserRepo = repository.NewUserRepository(s.DB)
+		return s.UserRepo
+	}
+	return nil
+}
+
+func (s *Server) getTokenRepository() repository.TokenRepository {
+	if s.TokenRepo != nil {
+		return s.TokenRepo
+	}
+	if s.DB != nil {
+		s.TokenRepo = repository.NewTokenRepository(s.DB)
+		return s.TokenRepo
 	}
 	return nil
 }
@@ -193,6 +230,8 @@ const (
 )
 
 // AuthMiddleware validates the bearer JWT and injects the caller identity.
+// It also enforces immediate account revocation by verifying that the user account
+// exists and is currently active (is_active = true) in the database.
 func (s *Server) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
@@ -206,6 +245,17 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 			RespondAbortError(c, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
+
+		// Immediate Account Revocation: Validate that the user account exists and is active
+		userRepo := s.getUserRepository()
+		if userRepo != nil {
+			user, uerr := userRepo.FindByID(c.Request.Context(), claims.UserID)
+			if uerr != nil || user == nil || !user.IsActive {
+				RespondAbortError(c, http.StatusUnauthorized, "account is deactivated or suspended")
+				return
+			}
+		}
+
 		c.Set(ctxUserID, claims.UserID)
 		c.Set(ctxRole, claims.Role)
 		c.Next()

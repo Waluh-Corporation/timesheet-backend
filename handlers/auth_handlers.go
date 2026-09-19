@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +26,7 @@ const (
 
 // Login godoc
 // @Summary Authenticate user with credentials
-// @Description Authenticates user with username/email and password, returning a JWT token and user profile.
+// @Description Authenticates user with username/email and password, returning a JWT access token, refresh token, and user profile.
 // @Tags Auth
 // @Accept json
 // @Produce json
@@ -42,17 +44,25 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	var user models.User
-	err := s.DB.Where("username = ? OR email = ?", req.Identifier, req.Identifier).First(&user).Error
-	if err != nil {
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+
+	user, err := userRepo.FindByUsernameOrEmail(c.Request.Context(), req.Identifier)
+	if err != nil || user == nil {
+		slog.Warn("login failed: user not found", "identifier", req.Identifier, "ip", c.ClientIP())
 		RespondError(c, http.StatusUnauthorized, errInvalidAuth)
 		return
 	}
 	if !user.IsActive {
+		slog.Warn("login failed: account deactivated", "user_id", user.ID, "username", user.Username, "ip", c.ClientIP())
 		RespondError(c, http.StatusForbidden, "account is disabled")
 		return
 	}
 	if user.PasswordHash == "" || !auth.CheckPassword(user.PasswordHash, req.Password) {
+		slog.Warn("login failed: invalid password", "user_id", user.ID, "username", user.Username, "ip", c.ClientIP())
 		RespondError(c, http.StatusUnauthorized, errInvalidAuth)
 		return
 	}
@@ -61,19 +71,187 @@ func (s *Server) Login(c *gin.Context) {
 	// configurations) to the current Argon2id parameters now that we have the plaintext in hand.
 	if auth.NeedsRehash(user.PasswordHash) {
 		if newHash, herr := auth.HashPassword(req.Password); herr == nil {
-			s.DB.Model(&models.User{}).Where(queryID, user.ID).Update("password_hash", newHash)
+			_ = userRepo.UpdatePassword(c.Request.Context(), user.ID, newHash, time.Now())
 		}
 	}
 
-	token, err := s.Auth.GenerateToken(&user)
+	token, err := s.Auth.GenerateToken(user)
 	if err != nil {
+		slog.Error("failed to generate access token", "user_id", user.ID, "error", err)
 		RespondError(c, http.StatusInternalServerError, "could not issue token")
 		return
 	}
+
+	// Issue Dual-Token: Cryptographically secure Refresh Token
+	rawRefreshToken, refreshHash, err := auth.GenerateRefreshToken()
+	if err != nil {
+		slog.Error("failed to generate refresh token", "user_id", user.ID, "error", err)
+		RespondError(c, http.StatusInternalServerError, "could not issue refresh token")
+		return
+	}
+
+	tokenRepo := s.getTokenRepository()
+	if tokenRepo != nil {
+		refreshRecord := &models.RefreshToken{
+			UserID:    user.ID,
+			TokenHash: refreshHash,
+			FamilyID:  uuid.NewString(),
+			ExpiresAt: time.Now().Add(s.Cfg.RefreshTokenTTL),
+			CreatedIP: c.ClientIP(),
+			UserAgent: c.Request.UserAgent(),
+		}
+		if terr := tokenRepo.CreateRefreshToken(c.Request.Context(), refreshRecord); terr != nil {
+			slog.Error("failed to persist refresh token", "user_id", user.ID, "error", terr)
+			RespondError(c, http.StatusInternalServerError, "could not persist refresh token")
+			return
+		}
+	}
+
+	slog.Info("user logged in successfully", "user_id", user.ID, "username", user.Username, "ip", c.ClientIP(), "user_agent", c.Request.UserAgent())
 	RespondSuccess(c, http.StatusOK, response.LoginResponse{
-		Token: token,
-		User:  user,
+		Token:        token,
+		RefreshToken: rawRefreshToken,
+		User:         *user,
 	})
+}
+
+// RefreshToken godoc
+// @Summary Refresh access token
+// @Description Validates refresh token, rotates it, and issues a new access token and rotated refresh token.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body request.RefreshRequest true "Refresh token payload"
+// @Success 200 {object} response.RefreshResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid payload"
+// @Failure 401 {object} response.ErrorResponse "Invalid, expired, or reused token"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/refresh [post]
+func (s *Server) RefreshToken(c *gin.Context) {
+	var req request.RefreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.RefreshToken == "" {
+		RespondError(c, http.StatusBadRequest, errInvalidPayload)
+		return
+	}
+
+	tokenRepo := s.getTokenRepository()
+	userRepo := s.getUserRepository()
+	if tokenRepo == nil || userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "service unavailable")
+		return
+	}
+
+	hash := auth.HashToken(req.RefreshToken)
+	tokenRecord, err := tokenRepo.FindRefreshTokenByHash(c.Request.Context(), hash)
+	if err != nil || tokenRecord == nil {
+		slog.Warn("refresh token lookup failed", "ip", c.ClientIP())
+		RespondError(c, http.StatusUnauthorized, "invalid refresh token")
+		return
+	}
+
+	// Token Reuse Detection: If token is already revoked, an attacker or compromised client is reusing it
+	if tokenRecord.RevokedAt != nil {
+		slog.Warn("SECURITY ALERT: refresh token reuse detected; revoking family",
+			"family_id", tokenRecord.FamilyID,
+			"user_id", tokenRecord.UserID,
+			"ip", c.ClientIP(),
+		)
+		// Revoke the entire family
+		_ = tokenRepo.RevokeFamily(c.Request.Context(), tokenRecord.FamilyID, time.Now())
+		RespondError(c, http.StatusUnauthorized, "token reuse detected, please sign in again")
+		return
+	}
+
+	// Expiration check
+	if time.Now().After(tokenRecord.ExpiresAt) {
+		slog.Warn("expired refresh token presented", "user_id", tokenRecord.UserID, "ip", c.ClientIP())
+		RespondError(c, http.StatusUnauthorized, "refresh token expired")
+		return
+	}
+
+	// Validate user status
+	user, uerr := userRepo.FindByID(c.Request.Context(), tokenRecord.UserID)
+	if uerr != nil || user == nil || !user.IsActive {
+		slog.Warn("refresh attempt for deactivated user", "user_id", tokenRecord.UserID, "ip", c.ClientIP())
+		RespondError(c, http.StatusUnauthorized, "Account is deactivated")
+		return
+	}
+
+	// Rotate token: revoke current token
+	now := time.Now()
+	if err := tokenRepo.RevokeRefreshToken(c.Request.Context(), tokenRecord.ID, now); err != nil {
+		slog.Error("failed to revoke old refresh token during rotation", "token_id", tokenRecord.ID, "error", err)
+		RespondError(c, http.StatusInternalServerError, "failed to rotate token")
+		return
+	}
+
+	// Generate new access token
+	newAccessToken, err := s.Auth.GenerateToken(user)
+	if err != nil {
+		slog.Error("failed to generate new access token", "user_id", user.ID, "error", err)
+		RespondError(c, http.StatusInternalServerError, "could not issue token")
+		return
+	}
+
+	// Generate new rotated refresh token in the same family
+	newRaw, newHash, err := auth.GenerateRefreshToken()
+	if err != nil {
+		slog.Error("failed to generate new refresh token", "user_id", user.ID, "error", err)
+		RespondError(c, http.StatusInternalServerError, "could not issue refresh token")
+		return
+	}
+
+	newRecord := &models.RefreshToken{
+		UserID:    user.ID,
+		TokenHash: newHash,
+		FamilyID:  tokenRecord.FamilyID,
+		ExpiresAt: now.Add(s.Cfg.RefreshTokenTTL),
+		CreatedIP: c.ClientIP(),
+		UserAgent: c.Request.UserAgent(),
+	}
+	if err := tokenRepo.CreateRefreshToken(c.Request.Context(), newRecord); err != nil {
+		slog.Error("failed to persist rotated refresh token", "user_id", user.ID, "error", err)
+		RespondError(c, http.StatusInternalServerError, "could not persist refresh token")
+		return
+	}
+
+	slog.Info("refresh token rotated successfully",
+		"user_id", user.ID,
+		"family_id", tokenRecord.FamilyID,
+		"ip", c.ClientIP(),
+	)
+
+	RespondSuccess(c, http.StatusOK, response.RefreshResponse{
+		Token:        newAccessToken,
+		RefreshToken: newRaw,
+	})
+}
+
+// Logout godoc
+// @Summary Revoke session and refresh token
+// @Description Invalidate the refresh token on server logout.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param request body request.LogoutRequest false "Optional refresh token to revoke"
+// @Success 200 {object} response.MessageResponse
+// @Router /api/v1/auth/logout [post]
+func (s *Server) Logout(c *gin.Context) {
+	var req request.LogoutRequest
+	_ = c.ShouldBindJSON(&req)
+
+	if req.RefreshToken != "" {
+		tokenRepo := s.getTokenRepository()
+		if tokenRepo != nil {
+			hash := auth.HashToken(req.RefreshToken)
+			if tokenRecord, err := tokenRepo.FindRefreshTokenByHash(c.Request.Context(), hash); err == nil && tokenRecord != nil {
+				_ = tokenRepo.RevokeRefreshToken(c.Request.Context(), tokenRecord.ID, time.Now())
+				slog.Info("refresh token revoked on logout", "token_id", tokenRecord.ID, "user_id", tokenRecord.UserID, "ip", c.ClientIP())
+			}
+		}
+	}
+
+	RespondMessage(c, http.StatusOK, "logged out successfully")
 }
 
 // WebAuthnRelatedOrigins godoc
@@ -98,8 +276,13 @@ func (s *Server) WebAuthnRelatedOrigins(c *gin.Context) {
 // @Failure 404 {object} response.ErrorResponse "User not found"
 // @Router /api/v1/me [get]
 func (s *Server) Me(c *gin.Context) {
-	var user models.User
-	if err := s.DB.Where(queryID, currentUserID(c)).First(&user).Error; err != nil {
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+	user, err := userRepo.FindByID(c.Request.Context(), currentUserID(c))
+	if err != nil || user == nil {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
@@ -123,25 +306,25 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	var user models.User
-	if err := s.DB.Where("email = ?", req.Email).First(&user).Error; err == nil {
-		raw, hash, err := auth.GenerateResetToken()
-		if err == nil {
-			now := time.Now()
-			// Invalidate any previously unconsumed active tokens for this user
-			s.DB.Model(&models.PasswordResetToken{}).
-				Where("user_id = ? AND used_at IS NULL", user.ID).
-				Update("used_at", now)
-
-			s.DB.Create(&models.PasswordResetToken{
-				UserID:    user.ID,
-				TokenType: "password_reset",
-				TokenHash: hash,
-				ExpiresAt: now.Add(s.Cfg.ResetTokenTTL),
-				CreatedIP: c.ClientIP(),
-			})
-			link := s.publicBaseURL(c) + "/reset-password?token=" + raw
-			_ = s.Mailer.SendResetEmailWithUser(user.Email, user.Username, link)
+	userRepo := s.getUserRepository()
+	tokenRepo := s.getTokenRepository()
+	if userRepo != nil && tokenRepo != nil {
+		if user, err := userRepo.FindByEmail(c.Request.Context(), req.Email); err == nil && user != nil {
+			raw, hash, err := auth.GenerateResetToken()
+			if err == nil {
+				now := time.Now()
+				_ = tokenRepo.InvalidateResetTokensByUserID(c.Request.Context(), user.ID, now)
+				_ = tokenRepo.CreateResetToken(c.Request.Context(), &models.PasswordResetToken{
+					UserID:    user.ID,
+					TokenType: "password_reset",
+					TokenHash: hash,
+					ExpiresAt: now.Add(s.Cfg.ResetTokenTTL),
+					CreatedIP: c.ClientIP(),
+				})
+				link := s.publicBaseURL(c) + "/reset-password?token=" + raw
+				_ = s.Mailer.SendResetEmailWithUser(user.Email, user.Username, link)
+				slog.Info("password reset link issued", "user_id", user.ID, "ip", c.ClientIP())
+			}
 		}
 	}
 	RespondMessage(c, http.StatusOK, "if the email exists, a reset link has been sent")
@@ -165,18 +348,27 @@ func (s *Server) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	var token models.PasswordResetToken
-	err := s.DB.Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", auth.HashToken(req.Token), time.Now()).First(&token).Error
-	if err != nil {
+	tokenRepo := s.getTokenRepository()
+	userRepo := s.getUserRepository()
+	if tokenRepo == nil || userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+
+	tokenHash := auth.HashToken(req.Token)
+	token, err := tokenRepo.FindValidResetTokenByHash(c.Request.Context(), tokenHash)
+	if err != nil || token == nil {
 		RespondError(c, http.StatusBadRequest, "invalid or expired token")
 		return
 	}
 
-	// Enforce the NIST SP 800-63B password policy (length + blocklist +
-	// context-specific terms) before accepting the new secret. Look up the
-	// account so its username/email can be treated as context-specific words.
-	var user models.User
-	_ = s.DB.Where(queryID, token.UserID).First(&user).Error
+	user, err := userRepo.FindByID(c.Request.Context(), token.UserID)
+	if err != nil || user == nil {
+		RespondError(c, http.StatusBadRequest, "user not found")
+		return
+	}
+
+	// Enforce the NIST SP 800-63B password policy (length + blocklist + context-specific terms)
 	if err := auth.ValidatePassword(req.Password, user.Username, user.Email); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
@@ -189,13 +381,20 @@ func (s *Server) ResetPassword(c *gin.Context) {
 	}
 
 	now := time.Now()
-	s.DB.Model(&models.User{}).Where(queryID, token.UserID).Update("password_hash", hash)
-	token.UsedAt = &now
-	token.UsedIP = c.ClientIP()
-	if err := s.DB.Save(&token).Error; err != nil {
+	if err := userRepo.UpdatePassword(c.Request.Context(), user.ID, hash, now); err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to update password")
+		return
+	}
+
+	if err := tokenRepo.ConsumeResetToken(c.Request.Context(), token.ID, now, c.ClientIP()); err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to update reset token")
 		return
 	}
+
+	// Invalidate any active refresh tokens for the user upon password reset
+	_ = tokenRepo.RevokeUserTokens(c.Request.Context(), user.ID, now)
+
+	slog.Info("password reset successfully completed", "user_id", user.ID, "ip", c.ClientIP())
 
 	if s.Mailer != nil && user.Email != "" {
 		go func(to, username string) {
@@ -220,16 +419,20 @@ func (s *Server) ResetPassword(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/passkey/register/begin [post]
 func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
-	var user models.User
-	if err := s.DB.Preload("Credentials").Where(queryID, currentUserID(c)).First(&user).Error; err != nil {
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+	user, err := userRepo.FindByIDWithCredentials(c.Request.Context(), currentUserID(c))
+	if err != nil || user == nil {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
-	// Request a resident (discoverable) credential so the user can later sign in
-	// without typing a username.
+	// Request a resident (discoverable) credential so the user can later sign in without typing a username.
 	options, sessionData, err := s.WebAuthn.BeginRegistration(
-		user,
+		*user,
 		webauthn.WithResidentKeyRequirement(protocol.ResidentKeyRequirementPreferred),
 	)
 	if err != nil {
@@ -264,23 +467,29 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 		return
 	}
 
-	var user models.User
-	if err := s.DB.Preload("Credentials").Where(queryID, currentUserID(c)).First(&user).Error; err != nil {
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+	user, err := userRepo.FindByIDWithCredentials(c.Request.Context(), currentUserID(c))
+	if err != nil || user == nil {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
 
-	credential, err := s.WebAuthn.FinishRegistration(user, *sessionData, c.Request)
+	credential, err := s.WebAuthn.FinishRegistration(*user, *sessionData, c.Request)
 	if err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	record := models.NewWebAuthnCredential(user.ID, credential, c.Query("name"))
-	if err := s.DB.Create(&record).Error; err != nil {
+	if err := userRepo.CreatePasskeyCredential(c.Request.Context(), &record); err != nil {
 		RespondError(c, http.StatusInternalServerError, "could not save credential")
 		return
 	}
+	slog.Info("passkey registered successfully", "user_id", user.ID, "name", c.Query("name"), "ip", c.ClientIP())
 	RespondMessage(c, http.StatusOK, "passkey registered")
 }
 
@@ -315,14 +524,17 @@ func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 	if strings.TrimSpace(req.Identifier) == "" {
 		options, sessionData, err = s.WebAuthn.BeginDiscoverableLogin()
 	} else {
-		var user models.User
-		if e := s.DB.Preload("Credentials").
-			Where("username = ? OR email = ?", req.Identifier, req.Identifier).
-			First(&user).Error; e != nil {
+		userRepo := s.getUserRepository()
+		if userRepo == nil {
+			RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+			return
+		}
+		user, e := userRepo.FindByUsernameOrEmailWithCredentials(c.Request.Context(), req.Identifier)
+		if e != nil || user == nil {
 			RespondError(c, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
-		options, sessionData, err = s.WebAuthn.BeginLogin(user)
+		options, sessionData, err = s.WebAuthn.BeginLogin(*user)
 	}
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
@@ -335,7 +547,7 @@ func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 
 // FinishPasskeyLogin godoc
 // @Summary Finish passkey login
-// @Description Verifies WebAuthn assertion signature and returns a JWT token on success.
+// @Description Verifies WebAuthn assertion signature and returns JWT access token and refresh token on success.
 // @Tags Passkey
 // @Accept json
 // @Produce json
@@ -354,52 +566,74 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 		return
 	}
 
-	var user models.User
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+
+	var user *models.User
 	var credential *webauthn.Credential
 	var err error
 
 	if len(sessionData.UserID) == 0 {
 		// Discoverable login: resolve the user from the assertion's user handle.
 		handler := func(_, userHandle []byte) (webauthn.User, error) {
-			if e := s.DB.Preload("Credentials").Where(queryID, decodeUserHandle(userHandle)).First(&user).Error; e != nil {
+			u, e := userRepo.FindByIDWithCredentials(c.Request.Context(), decodeUserHandle(userHandle))
+			if e != nil || u == nil {
 				return nil, e
 			}
-			return user, nil
+			user = u
+			return *u, nil
 		}
 		credential, err = s.WebAuthn.FinishDiscoverableLogin(handler, *sessionData, c.Request)
 	} else {
-		if e := s.DB.Preload("Credentials").Where(queryID, decodeUserHandle(sessionData.UserID)).First(&user).Error; e != nil {
+		user, err = userRepo.FindByIDWithCredentials(c.Request.Context(), decodeUserHandle(sessionData.UserID))
+		if err != nil || user == nil {
 			RespondError(c, http.StatusUnauthorized, "invalid credentials")
 			return
 		}
-		credential, err = s.WebAuthn.FinishLogin(user, *sessionData, c.Request)
+		credential, err = s.WebAuthn.FinishLogin(*user, *sessionData, c.Request)
 	}
 	if err != nil {
 		RespondError(c, http.StatusUnauthorized, err.Error())
 		return
 	}
-	if !user.IsActive {
+	if user == nil || !user.IsActive {
 		RespondError(c, http.StatusForbidden, "account is disabled")
 		return
 	}
 
-	// Persist the updated signature counter (clone detection) and backup state,
-	// which the spec allows to change over the credential's lifetime.
-	s.DB.Model(&models.WebAuthnCredential{}).
-		Where("credential_id = ?", credential.ID).
-		Updates(map[string]interface{}{
-			"sign_count":   credential.Authenticator.SignCount,
-			"backup_state": credential.Flags.BackupState,
-		})
+	// Persist the updated signature counter (clone detection) and backup state
+	_ = userRepo.UpdatePasskeySignCount(c.Request.Context(), credential.ID, credential.Authenticator.SignCount, credential.Flags.BackupState)
 
-	token, err := s.Auth.GenerateToken(&user)
+	token, err := s.Auth.GenerateToken(user)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "could not issue token")
 		return
 	}
+
+	// Generate Dual-Token refresh token
+	rawRefreshToken, refreshHash, err := auth.GenerateRefreshToken()
+	if err == nil {
+		tokenRepo := s.getTokenRepository()
+		if tokenRepo != nil {
+			_ = tokenRepo.CreateRefreshToken(c.Request.Context(), &models.RefreshToken{
+				UserID:    user.ID,
+				TokenHash: refreshHash,
+				FamilyID:  uuid.NewString(),
+				ExpiresAt: time.Now().Add(s.Cfg.RefreshTokenTTL),
+				CreatedIP: c.ClientIP(),
+				UserAgent: c.Request.UserAgent(),
+			})
+		}
+	}
+
+	slog.Info("passkey login successful", "user_id", user.ID, "username", user.Username, "ip", c.ClientIP())
 	RespondSuccess(c, http.StatusOK, response.LoginResponse{
-		Token: token,
-		User:  user,
+		Token:        token,
+		RefreshToken: rawRefreshToken,
+		User:         *user,
 	})
 }
 
@@ -416,9 +650,13 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/passkeys [get]
 func (s *Server) ListPasskeys(c *gin.Context) {
-	var creds []models.WebAuthnCredential
-	if err := s.DB.Where("user_id = ?", currentUserID(c)).
-		Order("created_at desc").Find(&creds).Error; err != nil {
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+	creds, err := userRepo.ListPasskeysByUserID(c.Request.Context(), currentUserID(c))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -433,21 +671,33 @@ func (s *Server) ListPasskeys(c *gin.Context) {
 // @Produce json
 // @Param id path int true "Passkey credential ID"
 // @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid passkey ID"
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 404 {object} response.ErrorResponse "Passkey not found"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
-// @Router /api/v1/passkeys/{id} [delete]
+// DeletePasskey removes a registered WebAuthn credential owned by the caller.
 func (s *Server) DeletePasskey(c *gin.Context) {
-	res := s.DB.Where("id = ? AND user_id = ?", c.Param("id"), currentUserID(c)).
-		Delete(&models.WebAuthnCredential{})
-	if res.Error != nil {
-		RespondError(c, http.StatusInternalServerError, res.Error.Error())
+	id64, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid passkey ID")
 		return
 	}
-	if res.RowsAffected == 0 {
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+	uid := currentUserID(c)
+	deleted, err := userRepo.DeletePasskey(c.Request.Context(), uint(id64), &uid)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !deleted {
 		RespondError(c, http.StatusNotFound, "passkey not found")
 		return
 	}
+	slog.Info("passkey deleted", "user_id", uid, "passkey_id", id64, "ip", c.ClientIP())
 	RespondMessage(c, http.StatusOK, "passkey removed")
 }
 
@@ -461,14 +711,24 @@ func (s *Server) DeletePasskey(c *gin.Context) {
 // @Produce json
 // @Param id path int true "User ID"
 // @Success 200 {array} response.AdminPasskeyResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid user ID"
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users/{id}/passkeys [get]
 func (s *Server) AdminListPasskeys(c *gin.Context) {
-	var creds []models.WebAuthnCredential
-	if err := s.DB.Where("user_id = ?", c.Param("id")).
-		Order("created_at desc").Find(&creds).Error; err != nil {
+	id64, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid user ID")
+		return
+	}
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+	creds, err := userRepo.ListPasskeysByUserID(c.Request.Context(), uint(id64))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -492,22 +752,33 @@ func (s *Server) AdminListPasskeys(c *gin.Context) {
 // @Param id path int true "User ID"
 // @Param pid path int true "Passkey ID"
 // @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid passkey ID"
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 403 {object} response.ErrorResponse "Admin only"
 // @Failure 404 {object} response.ErrorResponse "Passkey not found"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users/{id}/passkeys/{pid} [delete]
 func (s *Server) AdminDeletePasskey(c *gin.Context) {
-	res := s.DB.Where("id = ? AND user_id = ?", c.Param("pid"), c.Param("id")).
-		Delete(&models.WebAuthnCredential{})
-	if res.Error != nil {
-		RespondError(c, http.StatusInternalServerError, res.Error.Error())
+	pid64, err := strconv.ParseUint(c.Param("pid"), 10, 32)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid passkey ID")
 		return
 	}
-	if res.RowsAffected == 0 {
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+	deleted, err := userRepo.DeletePasskey(c.Request.Context(), uint(pid64), nil)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !deleted {
 		RespondError(c, http.StatusNotFound, "passkey not found")
 		return
 	}
+	slog.Info("admin deleted passkey", "admin_id", currentUserID(c), "passkey_id", pid64, "ip", c.ClientIP())
 	RespondMessage(c, http.StatusOK, "passkey removed")
 }
 

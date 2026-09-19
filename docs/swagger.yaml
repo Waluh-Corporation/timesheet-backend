@@ -744,6 +744,12 @@ definitions:
     - identifier
     - password
     type: object
+  request.LogoutRequest:
+    properties:
+      refresh_token:
+        example: 8f12c3d4...
+        type: string
+    type: object
   request.ProfileChangeRequestDTO:
     properties:
       bni_id:
@@ -788,6 +794,14 @@ definitions:
     required:
     - auth
     - p256dh
+    type: object
+  request.RefreshRequest:
+    properties:
+      refresh_token:
+        example: 8f12c3d4...
+        type: string
+    required:
+    - refresh_token
     type: object
   request.ResetRequest:
     properties:
@@ -1026,6 +1040,9 @@ definitions:
     type: object
   response.LoginResponse:
     properties:
+      refresh_token:
+        example: 8f12c3d4...
+        type: string
       token:
         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         type: string
@@ -1149,6 +1166,15 @@ definitions:
       user_id:
         type: integer
     type: object
+  response.RefreshResponse:
+    properties:
+      refresh_token:
+        example: a4b3c2d1...
+        type: string
+      token:
+        example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        type: string
+    type: object
   response.SubmitProfileChangeResponse:
     properties:
       code:
@@ -1245,7 +1271,6 @@ definitions:
         example: BEl62iUYgUivxIkv...
         type: string
     type: object
-host: localhost:8080
 info:
   contact:
     name: API Support
@@ -2464,6 +2489,10 @@ paths:
             items:
               $ref: '#/definitions/response.AdminPasskeyResponse'
             type: array
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
@@ -2502,6 +2531,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Invalid passkey ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
         "401":
           description: Unauthorized
           schema:
@@ -2586,7 +2619,7 @@ paths:
       consumes:
       - application/json
       description: Authenticates user with username/email and password, returning
-        a JWT token and user profile.
+        a JWT access token, refresh token, and user profile.
       parameters:
       - description: Login credentials
         in: body
@@ -2618,6 +2651,27 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Authenticate user with credentials
+      tags:
+      - Auth
+  /api/v1/auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Invalidate the refresh token on server logout.
+      parameters:
+      - description: Optional refresh token to revoke
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/request.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+      summary: Revoke session and refresh token
       tags:
       - Auth
   /api/v1/auth/passkey/login/begin:
@@ -2654,8 +2708,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Verifies WebAuthn assertion signature and returns a JWT token on
-        success.
+      description: Verifies WebAuthn assertion signature and returns JWT access token
+        and refresh token on success.
       parameters:
       - description: Session ID returned from begin ceremony
         in: query
@@ -2688,6 +2742,41 @@ paths:
       summary: Finish passkey login
       tags:
       - Passkey
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Validates refresh token, rotates it, and issues a new access token
+        and rotated refresh token.
+      parameters:
+      - description: Refresh token payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.RefreshResponse'
+        "400":
+          description: Invalid payload
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Invalid, expired, or reused token
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Refresh access token
+      tags:
+      - Auth
   /api/v1/auth/reset-password:
     post:
       consumes:
@@ -3113,39 +3202,6 @@ paths:
       security:
       - BearerAuth: []
       summary: List current user's passkeys
-      tags:
-      - Passkey
-  /api/v1/passkeys/{id}:
-    delete:
-      description: Deletes a registered passkey owned by the authenticated user.
-      parameters:
-      - description: Passkey credential ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/response.MessageResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "404":
-          description: Passkey not found
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete current user's passkey
       tags:
       - Passkey
   /api/v1/profile/change:

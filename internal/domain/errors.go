@@ -18,6 +18,28 @@ var (
 	ErrAccountDisabled  = errors.New("account is disabled")
 )
 
+// UserError wraps an underlying sentinel error with a clean message suitable for clients and front-ends.
+type UserError struct {
+	Err error
+	Msg string
+}
+
+func (e *UserError) Error() string {
+	return e.Msg
+}
+
+func (e *UserError) Unwrap() error {
+	return e.Err
+}
+
+// NewUserError creates a UserError wrapping a sentinel error while presenting only the user-facing message.
+func NewUserError(err error, message string) error {
+	return &UserError{
+		Err: err,
+		Msg: message,
+	}
+}
+
 // MapErrorToHTTPStatus maps standard domain errors to corresponding HTTP status codes.
 func MapErrorToHTTPStatus(err error) int {
 	if err == nil {

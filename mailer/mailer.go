@@ -31,7 +31,10 @@ func (m *Mailer) dialer() *gomail.Dialer {
 	return gomail.NewDialer(m.cfg.SMTPHost, m.cfg.SMTPPort, m.cfg.SMTPUser, m.cfg.SMTPPass)
 }
 
-const maxSendRetries = 3
+const (
+	maxSendRetries = 3
+	smtpTimeout    = 10 * time.Second
+)
 
 func (m *Mailer) send(msg *gomail.Message) error {
 	msg.SetHeader("Auto-Submitted", "auto-generated")
@@ -42,15 +45,30 @@ func (m *Mailer) send(msg *gomail.Message) error {
 	backoff := 50 * time.Millisecond
 
 	for attempt := 1; attempt <= maxSendRetries; attempt++ {
-		if err := dialer.DialAndSend(msg); err != nil {
-			lastErr = err
+		done := make(chan error, 1)
+		go func() {
+			done <- dialer.DialAndSend(msg)
+		}()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				lastErr = err
+				if attempt < maxSendRetries {
+					time.Sleep(backoff)
+					backoff *= 2
+				}
+				continue
+			}
+			return nil
+		case <-time.After(smtpTimeout):
+			lastErr = fmt.Errorf("smtp send timeout after %s", smtpTimeout)
 			if attempt < maxSendRetries {
 				time.Sleep(backoff)
 				backoff *= 2
 			}
 			continue
 		}
-		return nil
 	}
 
 	log.Printf("[mailer] failed to send mail after %d attempts: %v", maxSendRetries, lastErr)

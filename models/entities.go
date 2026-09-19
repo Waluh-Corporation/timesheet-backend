@@ -351,3 +351,18 @@ type SystemSetting struct {
 	Value     string    `gorm:"type:text;not null" json:"value"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+// RefreshToken represents a long-lived refresh token for dual-token authentication and rotation.
+type RefreshToken struct {
+	ID        uint       `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	UserID    uint       `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
+	User      *User      `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	TokenHash string     `gorm:"size:64;uniqueIndex;not null" json:"-"`
+	FamilyID  string     `gorm:"size:64;index;not null" json:"family_id"`
+	ExpiresAt time.Time  `gorm:"index;not null" json:"expires_at"`
+	RevokedAt *time.Time `gorm:"index" json:"revoked_at,omitempty"`
+	CreatedIP string     `gorm:"size:45" json:"created_ip"`
+	UserAgent string     `gorm:"type:text" json:"user_agent"`
+}

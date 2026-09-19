@@ -794,17 +794,26 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	reviewer := currentUserID(c)
 	now := time.Now()
 
-	if action == "approve" {
-		if userSvc := s.getUserService(); userSvc != nil {
-			_ = userSvc.ApplyApprovedProfileChange(c.Request.Context(), &change)
+	err = s.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+		if action == "approve" {
+			txUserRepo := repository.NewUserRepository(tx)
+			txMasterRepo := repository.NewMasterRepository(tx)
+			txUserSvc := service.NewUserService(txUserRepo, s.Hasher, s.Mailer, txMasterRepo)
+			if err := txUserSvc.ApplyApprovedProfileChange(c.Request.Context(), &change); err != nil {
+				return err
+			}
+			change.Status = models.ProfileApproved
+		} else {
+			change.Status = "rejected"
 		}
-		change.Status = models.ProfileApproved
-	} else {
-		change.Status = "rejected"
+		change.ReviewedBy = &reviewer
+		change.ReviewedAt = &now
+		return tx.Save(&change).Error
+	})
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to process profile change review: "+err.Error())
+		return
 	}
-	change.ReviewedBy = &reviewer
-	change.ReviewedAt = &now
-	s.DB.Save(&change)
 
 	RespondMessage(c, http.StatusOK, "profile change request "+action+"d")
 }

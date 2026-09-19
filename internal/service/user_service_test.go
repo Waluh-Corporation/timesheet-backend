@@ -72,6 +72,38 @@ func (m *mockUserRepo) UpdatePassword(ctx context.Context, id uint, passwordHash
 	return nil
 }
 
+func (m *mockUserRepo) FindByIDWithDetails(ctx context.Context, id uint) (*models.User, error) {
+	return m.FindByID(ctx, id)
+}
+
+func (m *mockUserRepo) FindByIDWithCredentials(ctx context.Context, id uint) (*models.User, error) {
+	return m.FindByID(ctx, id)
+}
+
+func (m *mockUserRepo) FindByUsernameOrEmailWithCredentials(ctx context.Context, identifier string) (*models.User, error) {
+	return m.FindByUsernameOrEmail(ctx, identifier)
+}
+
+func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*models.User, error) {
+	return m.FindByUsernameOrEmail(ctx, email)
+}
+
+func (m *mockUserRepo) CreatePasskeyCredential(ctx context.Context, cred *models.WebAuthnCredential) error {
+	return nil
+}
+
+func (m *mockUserRepo) UpdatePasskeySignCount(ctx context.Context, credID []byte, signCount uint32, backupState bool) error {
+	return nil
+}
+
+func (m *mockUserRepo) ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error) {
+	return nil, nil
+}
+
+func (m *mockUserRepo) DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error) {
+	return true, nil
+}
+
 func TestUserService_ApplyApprovedProfileChange(t *testing.T) {
 	repo := newMockUserRepo()
 	svc := NewUserService(repo, auth.DefaultHasher, nil)
@@ -197,14 +229,14 @@ func TestUserService_ChangePassword(t *testing.T) {
 
 	t.Run("Wrong old password", func(t *testing.T) {
 		err := svc.ChangePassword(context.Background(), 1, "IncorrectOldPass1!", "NewPass123!@#")
-		if err == nil || !strings.Contains(err.Error(), "old password does not match") {
+		if err == nil || !strings.Contains(err.Error(), "Old password does not match") {
 			t.Fatalf("expected old password mismatch error, got: %v", err)
 		}
 	})
 
 	t.Run("Same new password as old password", func(t *testing.T) {
 		err := svc.ChangePassword(context.Background(), 1, oldPass, oldPass)
-		if err == nil || !strings.Contains(err.Error(), "new password cannot be the same") {
+		if err == nil || !strings.Contains(err.Error(), "New password cannot be the same") {
 			t.Fatalf("expected same password error, got: %v", err)
 		}
 	})
