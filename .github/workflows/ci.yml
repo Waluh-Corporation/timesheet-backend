@@ -6,9 +6,6 @@ on:
       - "main"
   pull_request:
     types: [opened, synchronize, reopened]
-    branches:
-      - "development"
-      - "main"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"math"
 	"net"
 	"net/http"
@@ -29,6 +30,11 @@ type webAuthnSessionEntry struct {
 	createdAt time.Time
 }
 
+type clientCooldownRecord struct {
+	windowStart time.Time
+	count       int
+}
+
 // Server carries the shared dependencies used by all HTTP handlers.
 type Server struct {
 	DB           *gorm.DB
@@ -53,7 +59,12 @@ type Server struct {
 	webAuthnSessions map[string]*webAuthnSessionEntry
 	sessionsMu       sync.Mutex
 
+	resetCooldowns map[string]time.Time
+	ipCooldowns    map[string]*clientCooldownRecord
+	cooldownMu     sync.Mutex
+
 	finishRegistrationFunc func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error)
+	sendResetEmailFunc     func(toEmail, username, resetLink string) error
 }
 
 // NewServer wires up a Server and its WebAuthn relying party.
@@ -111,7 +122,92 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		MasterRepo:       masterRepo,
 		MasterSvc:        masterSvc,
 		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
+		resetCooldowns:   make(map[string]time.Time),
+		ipCooldowns:      make(map[string]*clientCooldownRecord),
 	}, nil
+}
+
+func (s *Server) checkAndRecordResetCooldown(email, ip string, cooldown time.Duration) bool {
+	if cooldown <= 0 {
+		return true
+	}
+	s.cooldownMu.Lock()
+	defer s.cooldownMu.Unlock()
+
+	if s.resetCooldowns == nil {
+		s.resetCooldowns = make(map[string]time.Time)
+	}
+	if s.ipCooldowns == nil {
+		s.ipCooldowns = make(map[string]*clientCooldownRecord)
+	}
+
+	now := time.Now()
+
+	// Proactively clean up expired entries older than 2 * cooldown
+	cutoff := now.Add(-2 * cooldown)
+	for k, v := range s.resetCooldowns {
+		if v.Before(cutoff) {
+			delete(s.resetCooldowns, k)
+		}
+	}
+	for k, v := range s.ipCooldowns {
+		if v.windowStart.Before(cutoff) {
+			delete(s.ipCooldowns, k)
+		}
+	}
+
+	normEmail := strings.ToLower(strings.TrimSpace(email))
+	cleanIP := strings.TrimSpace(ip)
+
+	// 1. Check email cooldown: strictly 1 request per cooldown duration to prevent email bombing
+	if normEmail != "" {
+		if last, exists := s.resetCooldowns[normEmail]; exists && now.Sub(last) < cooldown {
+			return false
+		}
+	}
+
+	// 2. Check IP rate limit: allow up to 5 requests per cooldown duration per IP to prevent spamming
+	// while supporting multiple legitimate users behind shared corporate NAT / proxy.
+	const maxIPRequestsPerWindow = 5
+	if cleanIP != "" {
+		if rec, exists := s.ipCooldowns[cleanIP]; exists && now.Sub(rec.windowStart) < cooldown {
+			if rec.count >= maxIPRequestsPerWindow {
+				return false
+			}
+		}
+	}
+
+	// Record timestamps and counts
+	if normEmail != "" {
+		s.resetCooldowns[normEmail] = now
+	}
+	if cleanIP != "" {
+		if rec, exists := s.ipCooldowns[cleanIP]; exists && now.Sub(rec.windowStart) < cooldown {
+			rec.count++
+		} else {
+			s.ipCooldowns[cleanIP] = &clientCooldownRecord{windowStart: now, count: 1}
+		}
+	}
+
+	return true
+}
+
+func (s *Server) dispatchResetEmail(toEmail, username, resetLink string) {
+	if s.sendResetEmailFunc != nil {
+		go func() {
+			if err := s.sendResetEmailFunc(toEmail, username, resetLink); err != nil {
+				slog.Error("failed to send password reset email via custom func", "error", err, "email", toEmail)
+			}
+		}()
+		return
+	}
+	if s.Mailer != nil {
+		go func() {
+			if err := s.Mailer.SendResetEmailWithUser(toEmail, username, resetLink); err != nil {
+				slog.Error("failed to send password reset email", "error", err, "email", toEmail)
+			}
+		}()
+	}
 }
 
 func (s *Server) putSession(id string, data *webauthn.SessionData) {
