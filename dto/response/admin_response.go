@@ -28,10 +28,11 @@ type AdminUserResponse struct {
 
 // AdminProfileChangeResponse represents a concise profile change request for review by administrators.
 type AdminProfileChangeResponse struct {
-	ID           uint                 `json:"id"`
-	UserID       uint                 `json:"user_id"`
-	UserName     string               `json:"user_name"`
-	UserEmail    string               `json:"user_email"`
+	ID        uint   `json:"id"`
+	UserID    uint   `json:"user_id"`
+	UserName  string `json:"user_name"`
+	UserEmail string `json:"user_email"`
+
 	Status       models.ProfileStatus `json:"status"`
 	Name         string               `json:"name"`
 	BniID        string               `json:"bni_id"`
@@ -51,7 +52,10 @@ type AdminProfileChangeResponse struct {
 
 // AdminPasskeyResponse represents a concise passkey summary without raw cryptographic byte arrays.
 type AdminPasskeyResponse struct {
-	ID           uint      `json:"id"`
-	FriendlyName string    `json:"friendly_name"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID                  uint      `json:"id"`
+	FriendlyName        string    `json:"friendly_name"`
+	AuthenticatorAAGUID *string   `json:"authenticator_aaguid,omitempty"`
+	IconLight           string    `json:"icon_light,omitempty"`
+	IconDark            string    `json:"icon_dark,omitempty"`
+	CreatedAt           time.Time `json:"created_at"`
 }

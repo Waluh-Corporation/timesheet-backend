@@ -178,6 +178,55 @@ func TestUserRepository(t *testing.T) {
 		t.Fatalf("expected 1 passkey with sign count 5, got %v", keys)
 	}
 
+	// Test ListPasskeysByUserID with Authenticator preloaded & in-memory fallback
+	authAAGUID := "fa264024-4a24-4e2b-a489-3224b1263d95" // gitleaks:allow
+	_ = tx.Create(&models.AuthenticatorAAGUID{
+		AAGUID:    authAAGUID,
+		Name:      "Preloaded Authenticator",
+		IconLight: "data:image/svg+xml;base64,bGlnaHQ=",
+		IconDark:  "data:image/svg+xml;base64,ZGFyaw==",
+	}).Error
+
+	credPreload := &models.WebAuthnCredential{
+		UserID:              user.ID,
+		CredentialID:        []byte("test-credential-preload"),
+		PublicKey:           []byte("test-public-key-bytes"),
+		AttestationType:     "none",
+		AAGUID:              []byte{0xfa, 0x26, 0x40, 0x24, 0x4a, 0x24, 0x4e, 0x2b, 0xa4, 0x89, 0x32, 0x24, 0xb1, 0x26, 0x3d, 0x95},
+		AuthenticatorAAGUID: &authAAGUID,
+		FriendlyName:        "Preloaded Key",
+	}
+	_ = repo.CreatePasskeyCredential(ctx, credPreload)
+
+	inMemAAGUID := "fa264024-4a24-4e2b-a489-3224b1263d96" // gitleaks:allow
+	models.RegisterAuthenticator(inMemAAGUID, "InMem Authenticator", "light_mem", "dark_mem")
+	credInMem := &models.WebAuthnCredential{
+		UserID:          user.ID,
+		CredentialID:    []byte("test-credential-inmem"),
+		PublicKey:       []byte("test-public-key-bytes"),
+		AttestationType: "none",
+		AAGUID:          []byte{0xfa, 0x26, 0x40, 0x24, 0x4a, 0x24, 0x4e, 0x2b, 0xa4, 0x89, 0x32, 0x24, 0xb1, 0x26, 0x3d, 0x96},
+		FriendlyName:    "InMem Key",
+	}
+	_ = repo.CreatePasskeyCredential(ctx, credInMem)
+
+	keysWithIcons, err := repo.ListPasskeysByUserID(ctx, user.ID)
+	if err != nil || len(keysWithIcons) < 3 {
+		t.Fatalf("expected at least 3 passkeys, got %d (err: %v)", len(keysWithIcons), err)
+	}
+
+	// UpdatePasskeyName tests
+	updated, err := repo.UpdatePasskeyName(ctx, cred.ID, &user.ID, "Renamed Key")
+	if err != nil || !updated {
+		t.Fatalf("repo.UpdatePasskeyName failed: updated=%v, err=%v", updated, err)
+	}
+
+	wrongUID := user.ID + 999
+	updatedWrong, err := repo.UpdatePasskeyName(ctx, cred.ID, &wrongUID, "Should Not Work")
+	if err != nil || updatedWrong {
+		t.Fatalf("expected update to fail for wrong user ID: updated=%v, err=%v", updatedWrong, err)
+	}
+
 	// DeletePasskey with matching userID
 	deleted, err := repo.DeletePasskey(ctx, cred.ID, &user.ID)
 	if err != nil || !deleted {
@@ -195,6 +244,13 @@ func TestUserRepository(t *testing.T) {
 		FriendlyName:    "Admin Deleted Key",
 	}
 	_ = repo.CreatePasskeyCredential(ctx, cred2)
+
+	// Admin update (nil userID)
+	updatedAdmin, err := repo.UpdatePasskeyName(ctx, cred2.ID, nil, "Admin Renamed Key")
+	if err != nil || !updatedAdmin {
+		t.Fatalf("repo.UpdatePasskeyName(admin) failed: updated=%v, err=%v", updatedAdmin, err)
+	}
+
 	deleted2, err := repo.DeletePasskey(ctx, cred2.ID, nil)
 	if err != nil || !deleted2 {
 		t.Fatalf("repo.DeletePasskey(admin) failed: deleted=%v, err=%v", deleted2, err)

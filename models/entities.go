@@ -220,7 +220,7 @@ func (u User) WebAuthnCredentials() []webauthn.Credential {
 type WebAuthnCredential struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
-	UserID    uint      `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
+	UserID    uint      `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"-"`
 
 	CredentialID    []byte `gorm:"uniqueIndex;not null" json:"-"`
 	PublicKey       []byte `gorm:"not null" json:"-"`
@@ -237,6 +237,11 @@ type WebAuthnCredential struct {
 	// Transports is stored as a JSON array of transport strings.
 	Transports   datatypes.JSON `json:"-"`
 	FriendlyName string         `gorm:"size:128" json:"friendly_name"`
+	IconLight    string         `gorm:"-" json:"icon_light,omitempty"`
+	IconDark     string         `gorm:"-" json:"icon_dark,omitempty"`
+
+	AuthenticatorAAGUID *string              `gorm:"column:authenticator_aaguid;size:36;index;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"authenticator_aaguid,omitempty"`
+	Authenticator       *AuthenticatorAAGUID `gorm:"foreignKey:AuthenticatorAAGUID;references:AAGUID" json:"-"`
 }
 
 // DailyActivity stores one user's timesheet entry for a single calendar day.
@@ -365,4 +370,19 @@ type RefreshToken struct {
 	RevokedAt *time.Time `gorm:"index" json:"revoked_at,omitempty"`
 	CreatedIP string     `gorm:"size:45" json:"created_ip"`
 	UserAgent string     `gorm:"type:text" json:"user_agent"`
+}
+
+// AuthenticatorAAGUID maps canonical AAGUIDs to human-friendly authenticator names and icons in the database.
+type AuthenticatorAAGUID struct {
+	AAGUID    string    `gorm:"primaryKey;column:aaguid;size:36" json:"aaguid"`
+	Name      string    `gorm:"column:name;size:255;not null;index:idx_authenticator_aaguids_name" json:"name"`
+	IconLight string    `gorm:"column:icon_light;type:text" json:"icon_light,omitempty"`
+	IconDark  string    `gorm:"column:icon_dark;type:text" json:"icon_dark,omitempty"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
+}
+
+// TableName returns the explicit table name for AuthenticatorAAGUID.
+func (AuthenticatorAAGUID) TableName() string {
+	return "authenticator_aaguids"
 }

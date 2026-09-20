@@ -30,6 +30,9 @@ func Setup(db *gorm.DB, cfg *config.Config) error {
 	if err := EnsureSystemSettings(db); err != nil {
 		log.Printf("[database] could not ensure system settings: %v", err)
 	}
+	if err := SyncAuthenticatorAAGUIDs(db); err != nil {
+		log.Printf("[database] could not sync authenticator aaguids: %v", err)
+	}
 	if err := seedAdmin(db, cfg); err != nil {
 		return err
 	}
@@ -148,6 +151,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.PasswordResetToken{},
 		&models.RefreshToken{},
 		&models.SystemSetting{},
+		&models.AuthenticatorAAGUID{},
 	)
 }
 
@@ -375,5 +379,19 @@ func EnsureSystemSettings(db *gorm.DB) error {
 			UpdatedAt: time.Now(),
 		}).Error
 	}
+	return nil
+}
+
+// SyncAuthenticatorAAGUIDs loads all AAGUID authenticator mappings from the database
+// into the thread-safe in-memory models registry.
+func SyncAuthenticatorAAGUIDs(db *gorm.DB) error {
+	var rows []models.AuthenticatorAAGUID
+	if err := db.Find(&rows).Error; err != nil {
+		return err
+	}
+	for _, r := range rows {
+		models.RegisterAuthenticator(r.AAGUID, r.Name, r.IconLight, r.IconDark)
+	}
+	log.Printf("[database] synced %d authenticator aaguids from database into in-memory registry", len(rows))
 	return nil
 }

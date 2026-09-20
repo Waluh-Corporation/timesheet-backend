@@ -157,13 +157,13 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		srv.AdminListPasskeys(c8)
 		assertResponseCode(t, w8, http.StatusInternalServerError)
 
-		// AdminDeletePasskey nil repo
+		// AdminDeletePasskey is forbidden by policy
 		w9 := httptest.NewRecorder()
 		c9, _ := gin.CreateTestContext(w9)
 		c9.Params = gin.Params{{Key: "id", Value: "1"}, {Key: "pid", Value: "1"}}
 		c9.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/1/passkeys/1", nil)
 		srv.AdminDeletePasskey(c9)
-		assertResponseCode(t, w9, http.StatusInternalServerError)
+		assertResponseCode(t, w9, http.StatusForbidden)
 	})
 
 	t.Run("Passkey endpoints reject invalid id parameters", func(t *testing.T) {
@@ -183,13 +183,13 @@ func TestAuthHandlers_Validation(t *testing.T) {
 		srv.AdminListPasskeys(c2)
 		assertResponseCode(t, w2, http.StatusBadRequest)
 
-		// AdminDeletePasskey invalid pid
+		// AdminDeletePasskey is forbidden by policy regardless of pid
 		w3 := httptest.NewRecorder()
 		c3, _ := gin.CreateTestContext(w3)
 		c3.Params = gin.Params{{Key: "id", Value: "1"}, {Key: "pid", Value: "not-an-id"}}
 		c3.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/1/passkeys/not-an-id", nil)
 		srv.AdminDeletePasskey(c3)
-		assertResponseCode(t, w3, http.StatusBadRequest)
+		assertResponseCode(t, w3, http.StatusForbidden)
 
 		// FinishPasskeyRegistration unknown session
 		w4 := httptest.NewRecorder()

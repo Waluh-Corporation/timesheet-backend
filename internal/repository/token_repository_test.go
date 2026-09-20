@@ -173,10 +173,25 @@ func TestTokenRepository_ResetTokenFlow(t *testing.T) {
 		t.Fatalf("failed to consume reset token: %v", err)
 	}
 
-	// Should no longer be valid
+	// Should no longer be valid via FindValidResetTokenByHash
 	_, err = tokenRepo.FindValidResetTokenByHash(ctx, hash)
 	if err == nil {
 		t.Errorf("expected consumed reset token to not be returned by FindValidResetTokenByHash")
+	}
+
+	// But should still be found via FindResetTokenByHash to inspect its status
+	consumedFound, err := tokenRepo.FindResetTokenByHash(ctx, hash)
+	if err != nil || consumedFound == nil {
+		t.Fatalf("expected FindResetTokenByHash to return consumed token, err: %v", err)
+	}
+	if consumedFound.UsedAt == nil {
+		t.Errorf("expected UsedAt to be set on consumed token")
+	}
+
+	// Non-existent hash should return error
+	_, err = tokenRepo.FindResetTokenByHash(ctx, "nonexistent-hash")
+	if err == nil {
+		t.Errorf("expected error for nonexistent hash")
 	}
 
 	// Test InvalidateResetTokensByUserID

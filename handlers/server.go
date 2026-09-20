@@ -16,6 +16,7 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/config"
+	"timesheet-backend/database"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
 	"timesheet-backend/mailer"
@@ -84,6 +85,10 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		overtimeRepo = repository.NewOvertimeRepository(db)
 		timesheetSvc = service.NewTimesheetService(userRepo, activityRepo, overtimeRepo, masterRepo, m)
 		masterSvc = service.NewMasterDataService(masterRepo)
+	}
+
+	if db != nil {
+		_ = database.SyncAuthenticatorAAGUIDs(db)
 	}
 
 	return &Server{

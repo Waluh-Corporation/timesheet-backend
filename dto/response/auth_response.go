@@ -25,3 +25,12 @@ type PasskeySessionResponse struct {
 	SessionID string      `json:"session_id" example:"a1b2c3d4-e5f6-7890-abcd-ef1234567890"`
 	Options   interface{} `json:"options"`
 }
+
+// VerifyResetTokenResponse represents the validity check result for a password reset token.
+type VerifyResetTokenResponse struct {
+	Valid    bool   `json:"valid" example:"true"`
+	Status   string `json:"status" example:"valid"`
+	Message  string `json:"message" example:"token valid"`
+	Email    string `json:"email,omitempty" example:"j***@example.com"`
+	Username string `json:"username,omitempty" example:"john_doe"`
+}
