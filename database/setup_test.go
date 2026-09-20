@@ -169,7 +169,7 @@ func TestSetup_SeedFunctions(t *testing.T) {
 	t.Run("SyncAuthenticatorAAGUIDs", func(t *testing.T) {
 		txSync := db.Begin()
 		defer txSync.Rollback()
-		aaguid := "fa264024-4a24-4e2b-a489-3224b1263d91"
+		aaguid := "fa264024-4a24-4e2b-a489-3224b1263d91" // gitleaks:allow
 		_ = txSync.Create(&models.AuthenticatorAAGUID{
 			AAGUID:    aaguid,
 			Name:      "Sync Test Authenticator",
