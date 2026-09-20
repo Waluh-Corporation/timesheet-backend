@@ -42,11 +42,10 @@ func (c WebAuthnCredential) ToLibrary() (webauthn.Credential, error) {
 	}, nil
 }
 
-// AuthenticatorInfo stores authenticator metadata including friendly name and SVG icons.
+// AuthenticatorInfo stores authenticator metadata including friendly name and SVG icon.
 type AuthenticatorInfo struct {
-	Name      string
-	IconLight string
-	IconDark  string
+	Name string
+	Icon string
 }
 
 var (
@@ -55,25 +54,24 @@ var (
 )
 
 // RegisterAuthenticator dynamically maps an AAGUID canonical string to authenticator info.
-func RegisterAuthenticator(aaguid, name, iconLight, iconDark string) {
+func RegisterAuthenticator(aaguid, name, icon string) {
 	aaguidMu.Lock()
 	defer aaguidMu.Unlock()
 	knownAAGUIDs[strings.ToLower(strings.TrimSpace(aaguid))] = AuthenticatorInfo{
-		Name:      strings.TrimSpace(name),
-		IconLight: strings.TrimSpace(iconLight),
-		IconDark:  strings.TrimSpace(iconDark),
+		Name: strings.TrimSpace(name),
+		Icon: strings.TrimSpace(icon),
 	}
 }
 
 // RegisterAAGUID dynamically maps an AAGUID canonical string to an authenticator name.
 func RegisterAAGUID(aaguid, name string) {
-	RegisterAuthenticator(aaguid, name, "", "")
+	RegisterAuthenticator(aaguid, name, "")
 }
 
 // RegisterAAGUIDs dynamically registers a batch of AAGUID to name mappings.
 func RegisterAAGUIDs(mapping map[string]string) {
 	for k, v := range mapping {
-		RegisterAuthenticator(k, v, "", "")
+		RegisterAuthenticator(k, v, "")
 	}
 }
 
@@ -178,7 +176,6 @@ func NewWebAuthnCredential(userID uint, cred *webauthn.Credential, friendlyName 
 		BackupState:         cred.Flags.BackupState,
 		Transports:          datatypes.JSON(raw),
 		FriendlyName:        name,
-		IconLight:           info.IconLight,
-		IconDark:            info.IconDark,
+		Icon:                info.Icon,
 	}
 }

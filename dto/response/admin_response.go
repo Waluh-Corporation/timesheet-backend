@@ -55,7 +55,6 @@ type AdminPasskeyResponse struct {
 	ID                  uint      `json:"id"`
 	FriendlyName        string    `json:"friendly_name"`
 	AuthenticatorAAGUID *string   `json:"authenticator_aaguid,omitempty"`
-	IconLight           string    `json:"icon_light,omitempty"`
-	IconDark            string    `json:"icon_dark,omitempty"`
+	Icon                string    `json:"icon,omitempty"`
 	CreatedAt           time.Time `json:"created_at"`
 }

@@ -73,9 +73,14 @@ func TestResponseDTOs(t *testing.T) {
 		t.Errorf("AdminProfileChangeResponse mismatch: %+v", adminProfResp)
 	}
 
-	adminPkResp := AdminPasskeyResponse{ID: 1, FriendlyName: "My Key"}
-	if adminPkResp.FriendlyName != "My Key" {
+	adminPkResp := AdminPasskeyResponse{ID: 1, FriendlyName: "My Key", Icon: "data:image/svg+xml;base64,aWNvbg=="}
+	if adminPkResp.FriendlyName != "My Key" || adminPkResp.Icon != "data:image/svg+xml;base64,aWNvbg==" {
 		t.Errorf("AdminPasskeyResponse mismatch: %+v", adminPkResp)
+	}
+
+	authItemResp := AuthenticatorItemResponse{AAGUID: "test-guid", Name: "Test", Icon: "icon-val"}
+	if authItemResp.Icon != "icon-val" {
+		t.Errorf("AuthenticatorItemResponse mismatch: %+v", authItemResp)
 	}
 
 	verifyResp := VerifyResetTokenResponse{Valid: true, Status: "valid", Message: "token valid", Email: "j***@example.com", Username: "john"}

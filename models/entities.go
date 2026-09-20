@@ -237,8 +237,7 @@ type WebAuthnCredential struct {
 	// Transports is stored as a JSON array of transport strings.
 	Transports   datatypes.JSON `json:"-"`
 	FriendlyName string         `gorm:"size:128" json:"friendly_name"`
-	IconLight    string         `gorm:"-" json:"icon_light,omitempty"`
-	IconDark     string         `gorm:"-" json:"icon_dark,omitempty"`
+	Icon         string         `gorm:"-" json:"icon,omitempty"`
 
 	AuthenticatorAAGUID *string              `gorm:"column:authenticator_aaguid;size:36;index;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"authenticator_aaguid,omitempty"`
 	Authenticator       *AuthenticatorAAGUID `gorm:"foreignKey:AuthenticatorAAGUID;references:AAGUID" json:"-"`
@@ -376,8 +375,7 @@ type RefreshToken struct {
 type AuthenticatorAAGUID struct {
 	AAGUID    string    `gorm:"primaryKey;column:aaguid;size:36" json:"aaguid"`
 	Name      string    `gorm:"column:name;size:255;not null;index:idx_authenticator_aaguids_name" json:"name"`
-	IconLight string    `gorm:"column:icon_light;type:text" json:"icon_light,omitempty"`
-	IconDark  string    `gorm:"column:icon_dark;type:text" json:"icon_dark,omitempty"`
+	Icon      string    `gorm:"column:icon;type:text" json:"icon,omitempty"`
 	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
 }

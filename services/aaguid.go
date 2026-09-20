@@ -26,9 +26,8 @@ var CommunityAAGUIDURL = DefaultCommunityAAGUIDURL
 
 // CommunityAAGUIDEntry represents the JSON schema of each authenticator in the community catalog.
 type CommunityAAGUIDEntry struct {
-	Name      string `json:"name"`
-	IconLight string `json:"icon_light"`
-	IconDark  string `json:"icon_dark"`
+	Name string `json:"name"`
+	Icon string `json:"icon_light"`
 }
 
 var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -103,8 +102,7 @@ func SyncCommunityAAGUIDsToDB(ctx context.Context, db *gorm.DB) (int, error) {
 		records = append(records, models.AuthenticatorAAGUID{
 			AAGUID:    aaguid,
 			Name:      strings.TrimSpace(entry.Name),
-			IconLight: strings.TrimSpace(entry.IconLight),
-			IconDark:  strings.TrimSpace(entry.IconDark),
+			Icon:      strings.TrimSpace(entry.Icon),
 			UpdatedAt: now,
 		})
 	}
@@ -123,8 +121,7 @@ func SyncCommunityAAGUIDsToDB(ctx context.Context, db *gorm.DB) (int, error) {
 				Columns: []clause.Column{{Name: "aaguid"}},
 				DoUpdates: clause.AssignmentColumns([]string{
 					"name",
-					"icon_light",
-					"icon_dark",
+					"icon",
 					"updated_at",
 				}),
 			}).Create(&batch).Error; err != nil {

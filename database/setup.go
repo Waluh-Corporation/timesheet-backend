@@ -390,7 +390,7 @@ func SyncAuthenticatorAAGUIDs(db *gorm.DB) error {
 		return err
 	}
 	for _, r := range rows {
-		models.RegisterAuthenticator(r.AAGUID, r.Name, r.IconLight, r.IconDark)
+		models.RegisterAuthenticator(r.AAGUID, r.Name, r.Icon)
 	}
 	log.Printf("[database] synced %d authenticator aaguids from database into in-memory registry", len(rows))
 	return nil

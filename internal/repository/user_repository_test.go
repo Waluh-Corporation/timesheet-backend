@@ -181,10 +181,9 @@ func TestUserRepository(t *testing.T) {
 	// Test ListPasskeysByUserID with Authenticator preloaded & in-memory fallback
 	authAAGUID := "fa264024-4a24-4e2b-a489-3224b1263d95" // gitleaks:allow
 	_ = tx.Create(&models.AuthenticatorAAGUID{
-		AAGUID:    authAAGUID,
-		Name:      "Preloaded Authenticator",
-		IconLight: "data:image/svg+xml;base64,bGlnaHQ=",
-		IconDark:  "data:image/svg+xml;base64,ZGFyaw==",
+		AAGUID: authAAGUID,
+		Name:   "Preloaded Authenticator",
+		Icon:   "data:image/svg+xml;base64,bGlnaHQ=",
 	}).Error
 
 	credPreload := &models.WebAuthnCredential{
@@ -199,7 +198,7 @@ func TestUserRepository(t *testing.T) {
 	_ = repo.CreatePasskeyCredential(ctx, credPreload)
 
 	inMemAAGUID := "fa264024-4a24-4e2b-a489-3224b1263d96" // gitleaks:allow
-	models.RegisterAuthenticator(inMemAAGUID, "InMem Authenticator", "light_mem", "dark_mem")
+	models.RegisterAuthenticator(inMemAAGUID, "InMem Authenticator", "icon_mem")
 	credInMem := &models.WebAuthnCredential{
 		UserID:          user.ID,
 		CredentialID:    []byte("test-credential-inmem"),

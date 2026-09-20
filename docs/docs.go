@@ -4700,10 +4700,7 @@ const docTemplate = `{
                 "friendly_name": {
                     "type": "string"
                 },
-                "icon_dark": {
-                    "type": "string"
-                },
-                "icon_light": {
+                "icon": {
                     "type": "string"
                 },
                 "id": {
@@ -5132,10 +5129,7 @@ const docTemplate = `{
                 "friendly_name": {
                     "type": "string"
                 },
-                "icon_dark": {
-                    "type": "string"
-                },
-                "icon_light": {
+                "icon": {
                     "type": "string"
                 },
                 "id": {
@@ -5265,10 +5259,7 @@ const docTemplate = `{
                     "type": "string",
                     "example": "42a048a9-4b68-45a8-aa5a-cfb3d4a462ec"
                 },
-                "icon_dark": {
-                    "type": "string"
-                },
-                "icon_light": {
+                "icon": {
                     "type": "string"
                 },
                 "name": {

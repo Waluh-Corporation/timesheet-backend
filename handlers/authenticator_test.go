@@ -26,10 +26,9 @@ func TestAdminAuthenticators_Endpoints(t *testing.T) {
 	testAAGUID := "fa264024-4a24-4e2b-a489-3224b1263d90"
 	_ = db.Where("aaguid = ?", testAAGUID).Delete(&models.AuthenticatorAAGUID{})
 	testAuth := models.AuthenticatorAAGUID{
-		AAGUID:    testAAGUID,
-		Name:      "Test Authenticator Pro",
-		IconLight: "data:image/svg+xml;base64,bGlnaHQ=",
-		IconDark:  "data:image/svg+xml;base64,ZGFyaw==",
+		AAGUID: testAAGUID,
+		Name:   "Test Authenticator Pro",
+		Icon:   "data:image/svg+xml;base64,bGlnaHQ=",
 	}
 	if err := db.Create(&testAuth).Error; err != nil {
 		t.Fatalf("failed to create test authenticator: %v", err)
@@ -107,9 +106,8 @@ func TestAdminAuthenticators_Endpoints(t *testing.T) {
 		mockAAGUID := "89d70fb5-1b03-4c9f-8ec0-7f9999999999"
 		mockData := map[string]services.CommunityAAGUIDEntry{
 			mockAAGUID: {
-				Name:      "Mock Community Passkey",
-				IconLight: "data:image/svg+xml;base64,bW9jaw==",
-				IconDark:  "data:image/svg+xml;base64,bW9jaw==",
+				Name: "Mock Community Passkey",
+				Icon: "data:image/svg+xml;base64,bW9jaw==",
 			},
 		}
 

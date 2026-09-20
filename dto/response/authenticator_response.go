@@ -12,8 +12,7 @@ type AuthenticatorSyncResponse struct {
 type AuthenticatorItemResponse struct {
 	AAGUID    string    `json:"aaguid" example:"42a048a9-4b68-45a8-aa5a-cfb3d4a462ec"`
 	Name      string    `json:"name" example:"Bitwarden"`
-	IconLight string    `json:"icon_light,omitempty"`
-	IconDark  string    `json:"icon_dark,omitempty"`
+	Icon      string    `json:"icon,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
