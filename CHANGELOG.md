@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.1] - 2026-09-20
+
+### Fixed
+- **Seamless Passkey Device Recognition**: Resolved an issue where newly added passkeys did not remember how they connect to your device (such as built-in fingerprint, face unlock, or security keys). The system now reliably remembers your device setup so your browser immediately opens the right sign-in prompt—like Touch ID, Windows Hello, or your security key—without extra steps or delays.
+
+---
+
 ## [1.9.0] - 2026-09-20
 
 ### Added
@@ -175,7 +182,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Daily browser push notifications at 17:00 WIB to remind staff to fill out missing timesheet entries.
   - Email delivery for generated timesheet reports and account setup links.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.1...HEAD
+[1.9.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.0...v1.7.1
