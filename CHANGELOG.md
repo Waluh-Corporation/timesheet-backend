@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.10.0] - 2026-09-20
+
 ### Added
 - **Password Reset Rate Limiting & Cooldown**: Implemented a defense-in-depth throttling mechanism (configurable via `RESET_PASSWORD_COOLDOWN_SECONDS`, default 60 seconds) per email and IP address on the password reset endpoint to prevent email bombing, spamming, and resource exhaustion.
 
 ### Improved
 - **Modular Sub-Domain Architecture**: Modularized core API handlers into dedicated domain components (Passkey/WebAuthn, Password Reset, Self-Service Profile, Admin User Operations, and Overtime Tracking), significantly improving code maintainability, isolation of responsibilities, and long-term service stability without any breaking changes to API contracts.
+- **CI/CD Quality Gates for Stacked Pull Requests**: Enhanced GitHub Actions workflows to automatically trigger full test, lint, and security quality gates across all pull request targets including intermediate stacked branches.
 
 ### Security & Privacy
 - **Single Active Reset Token Policy**: Enabled atomic revocation of previous active reset tokens in a single database transaction upon issuing a new reset request. Only the most recently issued link remains valid, immediately invalidating older links to prevent unauthorized reuse.
@@ -192,7 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Daily browser push notifications at 17:00 WIB to remind staff to fill out missing timesheet entries.
   - Email delivery for generated timesheet reports and account setup links.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.1...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.1...v1.8.0
