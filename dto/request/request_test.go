@@ -67,6 +67,16 @@ func TestRequestDTOs(t *testing.T) {
 	if unsubReq.Endpoint != "ep" {
 		t.Errorf("UnsubscribeRequest mismatch: %+v", unsubReq)
 	}
+
+	updatePkReq := UpdatePasskeyRequest{Name: "My Passkey"}
+	if updatePkReq.Name != "My Passkey" {
+		t.Errorf("UpdatePasskeyRequest mismatch: %+v", updatePkReq)
+	}
+
+	verifyTokenReq := VerifyResetTokenRequest{Token: "test-token"}
+	if verifyTokenReq.Token != "test-token" {
+		t.Errorf("VerifyResetTokenRequest mismatch: %+v", verifyTokenReq)
+	}
 }
 
 func TestEmployeeID(t *testing.T) {
