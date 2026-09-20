@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.8.0] - 2026-09-20
+
 ### Added
 - **Automatic Passkey Brand & Icon Recognition**: When registering a passkey, the system now automatically recognizes your device or password manager (such as Apple iCloud Keychain, Google Password Manager, Windows Hello, 1Password, or Bitwarden) and displays its official logo in both light and dark themes.
 - **Custom Passkey Nicknames**: You can now rename your registered passkeys at any time (e.g., "Work MacBook", "Personal iPhone") to easily distinguish between multiple devices.
@@ -159,7 +163,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Daily browser push notifications at 17:00 WIB to remind staff to fill out missing timesheet entries.
   - Email delivery for generated timesheet reports and account setup links.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.1...v1.8.0
+[1.7.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.4.0...v1.5.0
