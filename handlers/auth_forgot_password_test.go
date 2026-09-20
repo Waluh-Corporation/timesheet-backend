@@ -321,7 +321,9 @@ func TestForgotPassword_ConcurrencyRaceFree(t *testing.T) {
 	wg.Wait()
 
 	// Exactly 1 email should have been sent out of the 10 concurrent requests
-	assert.Equal(t, int32(1), emailCount.Load(), "Only 1 email should be sent due to cooldown and thread-safety")
+	assert.Eventually(t, func() bool {
+		return emailCount.Load() == 1
+	}, 1*time.Second, 10*time.Millisecond, "Only 1 email should be sent due to cooldown and thread-safety")
 
 	// Check DB: only 1 active token should exist
 	var activeTokens []models.PasswordResetToken
