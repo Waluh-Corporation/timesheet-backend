@@ -605,50 +605,14 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 
 	record := models.NewWebAuthnCredential(user.ID, credential, passkeyName)
 
-	// Fallback guarantee: if AuthenticatorAAGUID or icons are missing, query DB directly
-	if (record.AuthenticatorAAGUID == nil || record.IconLight == "") && len(credential.Authenticator.AAGUID) == 16 && s.DB != nil {
-		if formatted, ok := models.FormatAAGUID(credential.Authenticator.AAGUID); ok {
-			var auth models.AuthenticatorAAGUID
-			if err := s.DB.WithContext(c.Request.Context()).Where("LOWER(aaguid) = LOWER(?)", formatted).First(&auth).Error; err == nil {
-				record.AuthenticatorAAGUID = &auth.AAGUID
-				if record.IconLight == "" {
-					record.IconLight = auth.IconLight
-				}
-				if record.IconDark == "" {
-					record.IconDark = auth.IconDark
-				}
-				if passkeyName == "" || record.FriendlyName == "Passkey" {
-					record.FriendlyName = auth.Name
-				}
-				models.RegisterAuthenticator(auth.AAGUID, auth.Name, auth.IconLight, auth.IconDark)
-			}
-		}
-	}
-
 	if err := userRepo.CreatePasskeyCredential(c.Request.Context(), &record); err != nil {
 		RespondError(c, http.StatusInternalServerError, "could not save credential")
 		return
 	}
 
-	// Post-registration double-check: ensure database record has AAGUID linked
-	if record.ID > 0 && s.DB != nil && len(record.AAGUID) == 16 {
-		if formatted, ok := models.FormatAAGUID(record.AAGUID); ok {
-			var auth models.AuthenticatorAAGUID
-			if err := s.DB.WithContext(c.Request.Context()).Where("LOWER(aaguid) = LOWER(?)", formatted).First(&auth).Error; err == nil {
-				if record.IconLight == "" {
-					record.IconLight = auth.IconLight
-				}
-				if record.IconDark == "" {
-					record.IconDark = auth.IconDark
-				}
-				if record.AuthenticatorAAGUID == nil {
-					record.AuthenticatorAAGUID = &auth.AAGUID
-					_ = s.DB.WithContext(c.Request.Context()).Model(&models.WebAuthnCredential{}).
-						Where("id = ?", record.ID).Update("authenticator_aaguid", auth.AAGUID).Error
-				}
-			}
-		}
-	}
+	info := models.GetAuthenticatorInfo(record.AAGUID)
+	record.IconLight = info.IconLight
+	record.IconDark = info.IconDark
 
 	slog.Info("passkey registered successfully", "user_id", user.ID, "name", record.FriendlyName, "ip", c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{
