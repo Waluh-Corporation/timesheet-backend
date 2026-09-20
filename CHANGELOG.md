@@ -1,6 +1,6 @@
 # Changelog
 
-All notable feature changes to the Timesheet Backend project are documented in this file.
+All notable user-facing feature updates, improvements, and fixes to the Timesheet platform are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -11,177 +11,161 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.0] - 2026-09-20
+
+### Added
+- **Automatic Passkey Brand & Icon Recognition**: When registering a passkey, the system now automatically recognizes your device or password manager (such as Apple iCloud Keychain, Google Password Manager, Windows Hello, 1Password, or Bitwarden) and displays its official logo in both light and dark themes.
+- **Custom Passkey Nicknames**: You can now rename your registered passkeys at any time (e.g., "Work MacBook", "Personal iPhone") to easily distinguish between multiple devices.
+- **Always Up-to-Date Authenticator Catalog**: Administrators can now synchronize the system's authenticator catalog with the official passkey community registry with a single click, keeping device names and brand logos up to date.
+- **Authenticator Directory Search**: Administrators can easily browse and search through supported passkey authenticators by name to verify device support.
+- **Real-Time Icon Synchronization**: When brand logos are updated in the catalog, your passkeys automatically display the latest icons immediately without requiring any re-registration.
+- **Pre-Check for Password Reset Links**: The password reset screen now immediately verifies whether your reset link is still valid before you type a new password, providing helpful warnings if the link has expired or was already used.
+
+### Security & Privacy
+- **Strict Passkey Privacy Protection**: Passkeys remain strictly personal and private. Administrators cannot view, modify, or delete your passkeys, ensuring full credential ownership and protection against unauthorized account access.
+- **Safe External Catalog Downloads**: Synchronization with the community registry is secured with strict timeouts and size limits to prevent system slowdowns or disruptions.
+
+---
+
 ## [1.7.1] - 2026-09-19
 
 ### Fixed
-- **Non-Blocking Transactional Email Dispatch**: Resolved an issue where requesting a password reset (`POST /api/v1/auth/forgot-password`) or creating a new user could hang for 30+ seconds if external SMTP servers encounter connection timeouts in containerized Docker networks. Email dispatch is now handled asynchronously in background worker goroutines, allowing HTTP endpoints to respond immediately (< 10 ms).
-- **Fast-Fail on Unconfigured SMTP Host**: Added immediate configuration validation in the mailer to bypass dialing attempts when `SMTP_HOST` is unconfigured, preventing redundant retry cycles and connection timeout delays.
+- **Instant Password Reset & User Creation Response**: Fixed a delay where requesting a password reset or creating a new user took a long time if email delivery was slow. Requests now complete instantly while confirmation emails are sent smoothly in the background.
+- **Smarter Email Service Check**: Prevented system delays by skipping email sending attempts immediately when email delivery is not configured.
 
 ---
 
 ## [1.7.0] - 2026-09-19
 
 ### Added
-- **Dual-Token Authentication Architecture**: Short-lived (15 min) JWT access tokens paired with long-lived (7 days) SHA-256 hashed refresh tokens (`refresh_tokens`), configurable via `ACCESS_TOKEN_EXPIRY_MINUTES` and `REFRESH_TOKEN_TTL_DAYS`.
-- **Refresh Token Rotation & Family Reuse Detection**: New endpoint `POST /api/v1/auth/refresh` rotates refresh tokens on every exchange and automatically revokes all chained tokens in the family if an already-consumed token is replayed.
-- **Server-Side Session Logout**: New endpoint `POST /api/v1/auth/logout` allows clients to invalidate active refresh tokens in the database upon user logout.
-- **Immediate Account Revocation in AuthMiddleware**: Live database validation on every authenticated request ensuring deactivated or suspended accounts (`is_active = false`) are rejected immediately (`401 Unauthorized`) without waiting for access token expiration.
-- **Dynamic Connection Pooling Configuration**: Added environment variables (`DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, `DB_CONN_MAX_LIFETIME_MINUTES`, `DB_CONN_MAX_IDLE_TIME_MINUTES`) for tunable PostgreSQL connection management.
-- **Connection Pool Health Observability**: Real-time pool metrics (`open_connections`, `in_use`, `idle`, `wait_count`, `wait_duration_ms`) exposed on `/readyz`.
-- **Background Holiday Synchronization Scheduler**: Decoupled monthly timesheet generation from external HTTP latency by introducing weekly background synchronization (`syncHolidays`) from the Kemendesa national holiday API.
-- **Dynamic Swagger Documentation Host**: Configured Swagger UI and OpenAPI specifications to resolve the API host dynamically based on the incoming request URL rather than relying on a static address.
-
-### Changed
-- **Clean Architecture Repository Delegation**: Eliminated direct database queries from HTTP handlers and timesheet services, redirecting all data access through decoupled repository contracts (`UserRepository`, `TokenRepository`, `MasterRepository`).
-- **Workbook Generation Performance**: Replaced inline external HTTP calls during Excel timesheet generation with local indexed database lookups.
-- **Atomic Profile Change Approvals**: Wrapped administrative profile change reviews (`ReviewProfileChange`) inside atomic ACID database transactions.
+- **Seamless Secure Sessions**: Extended login sessions with automatic background renewal so you stay securely logged in without interruptions, while ensuring that old sessions cannot be reused.
+- **True Account Logout**: Logging out now terminates your session across all devices immediately.
+- **Instant Account Deactivation**: Suspended or deactivated accounts lose access immediately across all active sessions.
+- **Automated Public Holiday Sync**: National holidays are now updated weekly in the background, ensuring timesheets always reflect the latest holiday schedule without delays.
+- **System Health Monitoring**: Added real-time health checks to ensure database and service performance remain optimal.
 
 ### Improved
-- **Client-Facing Error Message Standardization**: Standardized validation and domain error messages across all backend services (`TimesheetService`, `ActivityService`, `UserService`, and `MasterDataService`) into readable, user-friendly sentence case, eliminating internal system error prefixes (e.g. `"invalid input: "`) from JSON responses.
-- **Decoupled User Error Architecture**: Introduced `domain.UserError` implementing `Unwrap()` to cleanly separate client error text from backend sentinel errors while maintaining accurate HTTP status mapping (`400 Bad Request`, `404 Not Found`, etc.).
-- **Streamlined Transactional Email Layout**: Cleaned up email templates by removing redundant header titles across password changed, reset, reminder, setup, and timesheet notifications for a cleaner visual appearance.
-- **Covering Index for Timesheet Range Queries**: Migration 000026 adds `idx_daily_activities_range_covering` with `INCLUDE (status, project_ref_id, start_time, end_time) WHERE is_active = true`, enabling index-only scans for monthly timesheet reporting.
-- **Master Data Search Acceleration**: Added PostgreSQL trigram GIN indexes (`pg_trgm`) and functional lowercase indexes (`LOWER(code)`) across companies, departments, divisions, projects, and approvers for sub-millisecond search queries.
-- **I/O Resilience & Bounded Timeouts**: Added 10-second bounded timeouts for SMTP email delivery and WebPush notifications to eliminate thread pool exhaustion risks.
-- **Extensible Rate Limiting Abstraction**: Extracted `RateLimiter` interface to facilitate seamless switching between in-memory and distributed caching solutions.
+- **Faster Timesheet Generation**: Generating monthly Excel timesheets is now significantly faster and no longer affected by external network slowness.
+- **Clearer, User-Friendly Error Messages**: System messages and validation warnings are now written in clear, polite, and readable sentences without technical error codes.
+- **Cleaner Email Notifications**: Streamlined email notifications for timesheets, reminders, and account alerts with a cleaner, clutter-free design.
+- **Faster Search in Master Data**: Searching for projects, departments, approvers, and companies is now much faster and responsive.
+- **Enhanced System Reliability**: Added safeguards to prevent email or push notification delays from slowing down the rest of the application.
 
 ### Security
-- **Strict Algorithm Pinning**: Enforced cryptographic algorithm verification strictly to `HS256` in `auth.ParseToken`, eliminating algorithm confusion and `none`-algorithm vulnerabilities.
-- **Structured Security Event Logging**: Integrated standard library `log/slog` structured logging for authentication successes/failures, token reuse alerts, logout events, passkey operations, and password updates.
-- **Single Source of Truth Migrations**: Removed legacy raw DDL from application startup and consolidated all schema evolution in versioned migration files.
+- **Enhanced Token Protection**: Hardened login verification to prevent token tampering and replay attacks.
+- **Comprehensive Audit Logging**: Improved activity tracking for logins, logouts, passkey changes, and password updates to ensure platform accountability and security.
 
 ---
 
 ## [1.6.0] - 2026-09-17
 
 ### Added
-- **Working Hours Order Validation**: Enforced strict validation on daily activities and overtime entries ensuring check-out time is strictly later than check-in time (`check_out > check_in`), accompanied by polite, user-friendly Indonesian error guidance.
-- **Empty Timesheet Generation Guard**: Added validation on monthly timesheet generation (`POST /api/v1/timesheet/generate`) to reject requests when no activities are recorded for the period, prompting users to fill their daily entries first.
-- **Configurable CORS Allowed Origins via Environment**: Added `CORS_ALLOWED_ORIGINS` environment variable supporting comma-separated origin allowlists (and wildcard `*`) so frontend developers and operators can flexibly enable cross-origin API access across development, staging, and multi-domain deployments without coupling to WebAuthn configuration.
-- **Master Data Inactive Record Retrieval & Reactivation**: Enabled finding inactive companies, departments, approvers, sites, and divisions by ID to allow administrative inspection and reactivation workflows.
-
-### Changed
-- **Clean Architecture & Pure 3NF Normalization**: Refactored monolithic HTTP handlers into decoupled Service and Repository layers (`ActivityService`, `TimesheetService`, `MasterDataService`, `UserService`), normalized database schema to Pure 3NF by removing redundant project denormalization from `daily_activities`, and centralized business validations.
-- **API Surface Cleanup**: Decommissioned redundant timesheet summary export, push schedule, and admin test push endpoints (`/api/v1/timesheet/summary`, `/api/v1/push/schedule`, `/api/v1/admin/push/test`) to maintain a clean, secure API contract.
+- **Work Hours Validation**: Added friendly guidance ensuring check-out time is later than check-in time when entering daily activities and overtime.
+- **Empty Timesheet Warning**: Helpful alert when trying to generate a monthly timesheet without any logged activities, reminding you to fill in your work days first.
+- **Restoration of Inactive Records**: Administrators can now inspect and reactivate previously archived companies, departments, sites, or divisions.
+- **Flexible Multi-Domain Access**: Enabled flexible access configuration so teams across different web domains can connect smoothly.
 
 ### Fixed
-- **Rate Limiter Debug Mode and Zero-Threshold Handling**: Resolved issue where rate limiter remained active in development/debug mode (`GIN_MODE=debug`) and when configured with `RATE_LIMIT_ENABLED=false`, `RATE_LIMIT_REQUESTS=0`, or `RATE_LIMIT_WINDOW_SECONDS=0`. The rate limiter now defaults to disabled in non-release mode, configuring requests or window to `<= 0` explicitly disables rate limiting, and middleware guards prevent unintended HTTP 429 rejections.
-- **Inactive Records Visibility in Admin Directory Listings**: Ensured administrative master data listings (approvers, companies, departments, sites, divisions) return both active and inactive records by default with reliable status filtering.
-- **Route Registration Duplication**: Removed duplicate route declarations and redundant variable shadowing in `main.go`.
+- **Accurate Administrative Listings**: Ensured archived and active records are consistently visible and filterable in administration management screens.
+- **Request Limiter Improvements**: Prevented unintended access blocks during development and high-traffic periods.
 
 ### Security
-- **Parameterized Queries in Push Handlers**: Hardened user lookup logic in push handlers using parameterized SQL queries to prevent SQL injection vulnerabilities.
-
-### Improved
-- **Modular CORS Origin Validation**: Refactored origin matching and development allowlist evaluation in `handlers/server.go` into focused helper functions to reduce cognitive complexity and streamline cross-origin security rules.
+- **Hardened Data Queries**: Strengthened backend data handling to safeguard user notification subscriptions against tampering.
 
 ---
 
 ## [1.5.0] - 2026-09-15
 
 ### Added
-- **Configurable Background Scheduler via Environment**: Added environment variables (`SCHEDULER_REMINDER_CRON` and `SCHEDULER_CLEANUP_CRON`) allowing operators to customize execution schedules for daily Web Push timesheet reminders and database token housekeeping without code changes.
-- **Resilient Cron Fallback & Task Control**: Implemented automatic fallback to default cron expressions upon encountering invalid syntax, along with support for explicitly disabling background jobs (`disabled`, `off`, `false`, or `none`).
+- **Customizable Reminder & Cleanup Schedules**: Timesheet reminders and routine data maintenance schedules can now be tailored to match company working hours.
+- **Resilient Background Automation**: Improved automated task handling with automatic recovery if a schedule setting is misconfigured.
 
 ---
 
 ## [1.4.0] - 2026-09-15
 
 ### Added
-- **Site & Division Master Data APIs**: New directory endpoints (`GET /api/v1/sites`, `GET /api/v1/divisions`) and full administrative CRUD endpoints (`/api/v1/admin/sites`, `/api/v1/admin/divisions`, `/api/v1/admin/departments`) to manage company work locations and organizational divisions.
-- **Relational Schema Integrity**: Migration 000024 introducing `sites` and `divisions` tables with foreign keys on `users`, `departments`, and `profile_change_requests`, complete with automated relational data backfill.
-- **Cascading Department Division Filter**: Support for `?division=...` and `?division_id=...` query filters on `GET /api/v1/departments`.
-- **Admin Master Data List Endpoints**: Administrative list endpoints for companies (`GET /api/v1/admin/companies`) and approvers (`GET /api/v1/admin/approvers`).
-- **Configurable Rate Limiter via Environment**: Added environment-driven configuration for authentication route rate limiting (`RATE_LIMIT_ENABLED`, `RATE_LIMIT_REQUESTS`, and `RATE_LIMIT_WINDOW_SECONDS`), allowing operators to adjust request limits and window thresholds dynamically without redeploying code.
+- **Work Locations & Divisions Management**: Added comprehensive support for organizing users and departments by work site (e.g., Citicon, RDTX) and corporate divisions.
+- **Division-Based Department Filtering**: Filter departments conveniently by their parent division when assigning staff or viewing reports.
+- **Company & Approver Directory Management**: Added dedicated views for administrators to manage company profiles and timesheet signers.
+- **Adjustable Traffic Protection**: Protected system responsiveness by allowing administrators to tune access thresholds.
 
-### Changed
-- **Human-Readable User Responses**: User and profile DTO responses now return descriptive string names (`site`, `division`, `department`, `company`) alongside relational foreign key IDs, preserving seamless frontend display and spreadsheet generator compatibility.
-- **Expanded API Documentation & Postman Collection**: Full 100% test coverage across all 65 Swagger endpoints with 71 automated Postman test cases.
+### Improved
+- **Readable User Information**: Account and employee profiles now clearly display full organization names (site, division, department, company) across all screens and exported documents.
 
 ### Fixed
-- **Inactive Users Visibility in Admin Directory**: Returned both active and inactive users by default in `GET /api/v1/admin/users` to prevent deactivated accounts from disappearing from admin management screens, with optional `is_active` and `include_inactive` filtering.
+- **Deactivated Users Management**: Deactivated accounts now remain visible in administrative user management for auditing and reactivation.
 
 ---
 
 ## [1.3.0] - 2026-09-14
 
 ### Added
-- **User Profile in Login Responses**: Included user profile entity in `LoginResponse` across standard password and WebAuthn/passkey login flows (`POST /api/v1/auth/login`, `POST /api/v1/passkey/login/finish`) to eliminate redundant initial profile requests.
+- **Instant Profile Loading on Login**: Your full profile and company details are now loaded immediately upon logging in, making the dashboard feel instant and responsive.
 
-### Changed
-- **Activity Layer Architecture**: Refactored activity domain into decoupled repository and service layers (`ActivityRepository`, `ActivityService`) for streamlined business logic and improved maintainability.
-- **Mailer Reliability with Auto-Retry**: Added exponential backoff retry logic and automatic `Message-ID` & `Date` header injection to transactional email delivery.
-- **Graceful Rate Limiter Lifecycle**: Added graceful cleanup handling to IP rate limiting background workers during server shutdown.
+### Improved
+- **Reliable Email Delivery**: Added automatic retries with smart delays to ensure important notification emails arrive reliably even during temporary network interruptions.
+- **Smooth System Shutdowns**: Background tasks now shut down cleanly during maintenance windows without interrupting active user requests.
 
 ---
 
 ## [1.2.0] - 2026-09-13
 
 ### Added
-- **Admin User Provisioning Endpoint**: Direct administrative user creation (`POST /api/v1/admin/users`) with CSPRNG password generation, 409 Conflict duplicate checks, and welcome email dispatch.
-- **Self-Service Change Password Endpoint**: Authenticated user password update endpoint (`POST /api/v1/users/change-password`) with current password verification and automated security notification email alerts.
-- **Modern Responsive Email Notification System**: Redesigned transactional emails (account setup, password reset, timesheet delivery, daily reminder, and password change confirmations) with mobile-responsive layouts, localized expiration timestamps, and secure fallback links.
-- **Automated Timesheet Approver Filling**: Timesheet workbooks across all company templates now dynamically resolve and populate designated approver names from the master approver directory.
+- **Direct User Invitation by Admin**: Administrators can quickly create user accounts with strong generated passwords and automatic welcome emails.
+- **Self-Service Password Change**: Users can securely change their password directly from account settings with email confirmation alerts.
+- **Modern, Mobile-Friendly Email Notifications**: Redesigned all notification emails (account setup, password resets, reminders, and timesheet delivery) with clean mobile-responsive layouts and easy-to-tap buttons.
+- **Automatic Approver Signatures in Timesheets**: Timesheet documents now automatically fill in the correct manager and approver names based on company rules.
 
-### Changed
-- **Flexible Department Management**: Decoupled departments from single-company constraints, enabling departments to span multiple companies, and isolated administrative roles from company assignments.
-- **Optimized API Payloads**: Streamlined response structures for daily activities, overtimes, and admin user listings to reduce payload size and enhance client performance.
-- **Welcome Email Redesign**: Refreshed onboarding email template to present initial login credentials clearly and remove activation steps for administrator-created accounts.
+### Improved
+- **Cross-Company Departments**: Departments can now span multiple company entities, supporting flexible organizational structures.
+- **Clearer Onboarding Emails**: Welcome emails now display initial credentials clearly with straightforward next steps.
 
 ### Security
-- **Argon2id Password Hashing**: Upgraded password hashing architecture to Argon2id across the entire application with transparent legacy hash verification.
-- **API Protection & Origin Validation**: Restricted CORS origins to configured allowlists, prevented host header poisoning via `X-Forwarded-Host` validation, and enforced rate limiting across all authentication and password reset routes.
-- **Account Uniqueness & Schema Hardening**: Enforced database-level unique constraints on email and username to prevent account collisions.
+- **Next-Generation Password Protection**: Upgraded password encryption to industry-leading standards to safeguard user accounts.
+- **Account Duplication Prevention**: Enforced unique usernames and email addresses to eliminate accidental account collisions.
 
 ---
 
 ## [1.1.0] - 2026-09-12
 
 ### Added
-- **Multi-Vendor Workbook Metadata**: Automated configuration of Excel workbook properties setting `Creator` to "Waluh Corporation" and `LastModifiedBy` dynamically to the requesting user across all generated timesheet workbooks.
-- **Activity Detail Endpoint**: Dedicated retrieval endpoint for individual daily activity records with complete relational project details (`GET /api/v1/activities/:id`).
-- **Activity Ownership Protection**: Restricted daily activity retrieval and management strictly to the authenticated owner to safeguard private activity entries from unauthorized access.
-- **Passkey Authentication Enhancements**: Full support for discoverable and user-scoped WebAuthn/FIDO2 passwordless login ceremonies.
+- **Timesheet Author Metadata**: Exported Excel timesheets now automatically record author and company information in document properties.
+- **Detailed Activity View**: View complete details of any logged daily activity, including project assignment and working hours.
+- **Passkey Biometric & Security Key Support**: Full support for logging in password-free using fingerprint, face recognition, or security keys.
 
+### Security
+- **Strict Personal Activity Privacy**: Users can only view and edit their own activities, ensuring private work records cannot be accessed by other users.
 
 ---
 
 ## [1.0.0] - 2026-09-11
 
 ### Added
-- Multi-Company Spreadsheet Generation:
-  - Automated company-specific Excel timesheet generation for MII, NTT, SDD, and Adidata formats with corporate cell styling, formulas, and company logos.
-  - Automatic month-length trimming to adjust row ranges dynamically for months with fewer than 31 days.
-  - Headless LibreOffice integration for automated landscape PDF export.
-- Dual Authentication & Security:
-  - FIDO2 / WebAuthn passkey authentication support using biometric and hardware authenticators.
-  - Argon2id password hashing with automatic transparent migration from legacy hashes.
-  - Role-Based Access Control (RBAC) middleware guarding admin and user endpoints.
-  - Password policy enforcement adhering to NIST SP 800-63B guidelines.
-- First-Time Onboarding:
-  - System setup initialization endpoints (`GET /api/v1/setup/status` and `POST /api/v1/setup/init`) to bootstrap the first administrator account and default platform settings.
-- Indonesian Public Holiday Synchronization:
-  - Automated integration with the Kemendesa Public Holiday API (`api.kemendesa.link/libur-nasional`) with civic, religious, and joint leave classifications.
-  - Yearly caching mechanism and manual holiday synchronization endpoint (`POST /api/v1/holidays/sync`).
-- Daily Activity Logging & History:
-  - Daily activity entry logging with direct relational linkage to billable projects.
-  - Activity history listing with date range filtering and page-based pagination (`limit`, `page`).
-- Overtime Management:
-  - Overtime logging for Surat Perintah Lembur (SPL) reporting with designated Team Leader and Department Head approver assignments.
-- Master Data Management:
-  - Administrative endpoints for managing company entities and approver directories.
-  - Public and authenticated directory endpoints for companies, departments, projects, and timesheet activity statuses.
-- Automated Reminders & Notifications:
-  - Scheduled daily Web Push notification at 17:00 WIB reminding users who have not yet submitted daily timesheet entries.
-  - Transactional email dispatch for generated timesheet workbooks, account setup links, and password reset requests.
-- Standardized API Response Envelopes:
-  - Uniform API response envelope structure (`code`, `status`, `data`) across all endpoints under the `/api/v1` namespace.
+- **Automated Multi-Company Timesheets**:
+  - Automatically generate professional Excel timesheets tailored to corporate formats (MII, NTT, SDD, and Adidata) with exact formulas, logos, and correct day counts.
+  - Export timesheets directly to print-ready PDF documents.
+- **Password-Free & Secure Logins**:
+  - Sign in quickly using biometric passkeys (fingerprint, face unlock) or strong passwords.
+  - Role-based permissions ensuring users and administrators have appropriate access levels.
+- **Initial Setup Wizard**:
+  - Simple first-time setup process to create the initial administrator account and configure platform settings.
+- **Indonesian National Holidays**:
+  - Automatically loads and synchronizes official Indonesian public holidays and collective leave (cuti bersama) to mark non-working days accurately.
+- **Daily Activity Tracking**:
+  - Log daily tasks with assigned client projects, start times, and end times.
+  - Browse past activity logs with date range and page navigation.
+- **Overtime Tracking (Surat Perintah Lembur)**:
+  - Submit and track overtime hours with designated Team Leader and Department Head approvers.
+- **Company & Organization Directories**:
+  - Centralized management for companies, departments, projects, and work statuses.
+- **Smart Reminders**:
+  - Daily browser push notifications at 17:00 WIB to remind staff to fill out missing timesheet entries.
+  - Email delivery for generated timesheet reports and account setup links.
 
-### Changed
-- API Route Versioning: Migrated all routes to the `/api/v1` prefix and decommissioned legacy unversioned endpoints.
-- Decoupled Workbook Engine: Replaced database-stored template grids with dedicated programmatic spreadsheet builders.
-
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.1...v1.8.0
+[1.7.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.4.0...v1.5.0

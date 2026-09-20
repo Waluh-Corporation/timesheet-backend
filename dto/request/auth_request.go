@@ -31,3 +31,13 @@ type RefreshRequest struct {
 type LogoutRequest struct {
 	RefreshToken string `json:"refresh_token" example:"8f12c3d4..."`
 }
+
+// UpdatePasskeyRequest carries the new friendly name for a registered passkey.
+type UpdatePasskeyRequest struct {
+	Name string `json:"name" binding:"required,max=128" example:"MacBook Pro Touch ID"`
+}
+
+// VerifyResetTokenRequest carries a password reset token to check validity.
+type VerifyResetTokenRequest struct {
+	Token string `json:"token" binding:"required" example:"a8f9c0e2b1d3..."`
+}

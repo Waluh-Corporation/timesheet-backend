@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

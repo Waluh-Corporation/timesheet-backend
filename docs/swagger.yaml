@@ -593,13 +593,17 @@ definitions:
     type: object
   models.WebAuthnCredential:
     properties:
+      authenticator_aaguid:
+        type: string
       created_at:
         type: string
       friendly_name:
         type: string
+      icon_dark:
+        type: string
+      icon_light:
+        type: string
       id:
-        type: integer
-      user_id:
         type: integer
     type: object
   request.BeginPasskeyLoginRequest:
@@ -833,6 +837,15 @@ definitions:
         example: https://fcm.googleapis.com/fcm/send/...
         type: string
     type: object
+  request.UpdatePasskeyRequest:
+    properties:
+      name:
+        example: MacBook Pro Touch ID
+        maxLength: 128
+        type: string
+    required:
+    - name
+    type: object
   request.UpdateUserRequest:
     properties:
       bni_id:
@@ -876,11 +889,25 @@ definitions:
         example: 1
         type: integer
     type: object
+  request.VerifyResetTokenRequest:
+    properties:
+      token:
+        example: a8f9c0e2b1d3...
+        type: string
+    required:
+    - token
+    type: object
   response.AdminPasskeyResponse:
     properties:
+      authenticator_aaguid:
+        type: string
       created_at:
         type: string
       friendly_name:
+        type: string
+      icon_dark:
+        type: string
+      icon_light:
         type: string
       id:
         type: integer
@@ -960,6 +987,46 @@ definitions:
         type: integer
       username:
         type: string
+    type: object
+  response.AuthenticatorItemResponse:
+    properties:
+      aaguid:
+        example: 42a048a9-4b68-45a8-aa5a-cfb3d4a462ec
+        type: string
+      icon_dark:
+        type: string
+      icon_light:
+        type: string
+      name:
+        example: Bitwarden
+        type: string
+      updated_at:
+        type: string
+    type: object
+  response.AuthenticatorListResponse:
+    properties:
+      authenticators:
+        items:
+          $ref: '#/definitions/response.AuthenticatorItemResponse'
+        type: array
+      limit:
+        example: 50
+        type: integer
+      page:
+        example: 1
+        type: integer
+      total:
+        example: 56
+        type: integer
+    type: object
+  response.AuthenticatorSyncResponse:
+    properties:
+      synced_at:
+        example: "2026-09-20T10:30:00Z"
+        type: string
+      total_synced:
+        example: 56
+        type: integer
     type: object
   response.ChangePasswordResponse:
     properties:
@@ -1270,6 +1337,24 @@ definitions:
       public_key:
         example: BEl62iUYgUivxIkv...
         type: string
+    type: object
+  response.VerifyResetTokenResponse:
+    properties:
+      email:
+        example: j***@example.com
+        type: string
+      message:
+        example: token valid
+        type: string
+      status:
+        example: valid
+        type: string
+      username:
+        example: john_doe
+        type: string
+      valid:
+        example: true
+        type: boolean
     type: object
 info:
   contact:
@@ -1607,6 +1692,79 @@ paths:
       summary: Update an existing approver (admin only)
       tags:
       - Master Data
+  /api/v1/admin/authenticators:
+    get:
+      description: Retrieves all known AAGUID authenticators stored in the database
+        with pagination and search.
+      parameters:
+      - description: Search query by name or AAGUID
+        in: query
+        name: search
+        type: string
+      - description: Page number (defaults to 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (defaults to 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.AuthenticatorListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List registered authenticators (Admin)
+      tags:
+      - Admin
+  /api/v1/admin/authenticators/sync:
+    post:
+      description: Fetches the latest AAGUID and icon definitions from passkeydeveloper/passkey-authenticator-aaguids,
+        upserts them into the database, and refreshes the in-memory cache.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.AuthenticatorSyncResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "502":
+          description: Bad gateway / failed to fetch external registry
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Synchronize authenticators from community registry (Admin)
+      tags:
+      - Admin
   /api/v1/admin/companies:
     get:
       description: Returns all companies (both active and inactive).
@@ -2512,7 +2670,8 @@ paths:
       - Admin
   /api/v1/admin/users/{id}/passkeys/{pid}:
     delete:
-      description: Removes a specified passkey belonging to a user (admin only).
+      description: Passkeys are strictly user-managed credentials; admins cannot delete
+        user passkeys.
       parameters:
       - description: User ID
         in: path
@@ -2527,33 +2686,47 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/response.MessageResponse'
-        "400":
-          description: Invalid passkey ID
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
         "403":
-          description: Admin only
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "404":
-          description: Passkey not found
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "500":
-          description: Internal server error
+          description: Admin cannot delete user passkeys
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Delete a passkey for a user (Admin)
+      summary: Delete a passkey for a user (Forbidden)
+      tags:
+      - Admin
+    patch:
+      consumes:
+      - application/json
+      description: Passkeys are strictly user-managed credentials; admins cannot modify
+        user passkeys.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Passkey ID
+        in: path
+        name: pid
+        required: true
+        type: integer
+      - description: Updated passkey name
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdatePasskeyRequest'
+      produces:
+      - application/json
+      responses:
+        "403":
+          description: Admin cannot modify user passkeys
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a passkey name for a user (Forbidden)
       tags:
       - Admin
   /api/v1/approvers:
@@ -2806,6 +2979,73 @@ paths:
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       summary: Complete password reset
+      tags:
+      - Auth
+  /api/v1/auth/reset-password/verify:
+    get:
+      consumes:
+      - application/json
+      description: Checks if a password reset token is valid, expired, or already
+        used before displaying the reset password form.
+      parameters:
+      - description: Reset token (query parameter)
+        in: query
+        name: token
+        type: string
+      - description: Reset token (JSON body)
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/request.VerifyResetTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token is valid
+          schema:
+            $ref: '#/definitions/response.VerifyResetTokenResponse'
+        "400":
+          description: Token is invalid, expired, or already used
+          schema:
+            $ref: '#/definitions/response.VerifyResetTokenResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Verify password reset token
+      tags:
+      - Auth
+    post:
+      consumes:
+      - application/json
+      description: Checks if a password reset token is valid, expired, or already
+        used before displaying the reset password form.
+      parameters:
+      - description: Reset token (query parameter)
+        in: query
+        name: token
+        type: string
+      - description: Reset token (JSON body)
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/request.VerifyResetTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Token is valid
+          schema:
+            $ref: '#/definitions/response.VerifyResetTokenResponse'
+        "400":
+          description: Token is invalid, expired, or already used
+          schema:
+            $ref: '#/definitions/response.VerifyResetTokenResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Verify password reset token
       tags:
       - Auth
   /api/v1/companies:
@@ -3202,6 +3442,53 @@ paths:
       security:
       - BearerAuth: []
       summary: List current user's passkeys
+      tags:
+      - Passkey
+  /api/v1/passkeys/{id}:
+    patch:
+      consumes:
+      - application/json
+      description: Updates the friendly name of a registered passkey owned by the
+        authenticated user (accessible to all roles; users can only rename their own
+        passkeys).
+      parameters:
+      - description: Passkey credential ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated passkey name
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdatePasskeyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Invalid passkey ID or payload
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Passkey not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update passkey name
       tags:
       - Passkey
   /api/v1/profile/change:

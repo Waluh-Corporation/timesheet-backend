@@ -23,6 +23,7 @@ type TokenRepository interface {
 	// Password reset token operations
 	CreateResetToken(ctx context.Context, token *models.PasswordResetToken) error
 	FindValidResetTokenByHash(ctx context.Context, hash string) (*models.PasswordResetToken, error)
+	FindResetTokenByHash(ctx context.Context, hash string) (*models.PasswordResetToken, error)
 	InvalidateResetTokensByUserID(ctx context.Context, userID uint, at time.Time) error
 	ConsumeResetToken(ctx context.Context, tokenID uint, usedAt time.Time, usedIP string) error
 	DeleteExpiredResetTokens(ctx context.Context, olderThan time.Time, usedOlderThan time.Time) (int64, error)
@@ -83,6 +84,16 @@ func (r *tokenRepository) FindValidResetTokenByHash(ctx context.Context, hash st
 	var token models.PasswordResetToken
 	if err := r.db.WithContext(ctx).
 		Where("token_hash = ? AND used_at IS NULL AND expires_at > ?", hash, time.Now()).
+		First(&token).Error; err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+func (r *tokenRepository) FindResetTokenByHash(ctx context.Context, hash string) (*models.PasswordResetToken, error) {
+	var token models.PasswordResetToken
+	if err := r.db.WithContext(ctx).
+		Where("token_hash = ?", hash).
 		First(&token).Error; err != nil {
 		return nil, err
 	}

@@ -2,6 +2,8 @@ package models
 
 import (
 	"database/sql/driver"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/go-webauthn/webauthn/protocol"
@@ -130,6 +132,159 @@ func TestWebAuthnCredential_ToLibraryAndNew(t *testing.T) {
 	}
 }
 
+func parseUUIDBytes(s string) []byte {
+	var clean string
+	for _, c := range s {
+		if c != '-' {
+			clean += string(c)
+		}
+	}
+	var out []byte
+	for i := 0; i+1 < len(clean); i += 2 {
+		var b byte
+		for j := 0; j < 2; j++ {
+			c := clean[i+j]
+			b <<= 4
+			switch {
+			case c >= '0' && c <= '9':
+				b |= c - '0'
+			case c >= 'a' && c <= 'f':
+				b |= c - 'a' + 10
+			case c >= 'A' && c <= 'F':
+				b |= c - 'A' + 10
+			}
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
+func TestAuthenticatorNameFromAAGUID(t *testing.T) {
+	RegisterAAGUIDs(map[string]string{
+		"d548826e-79b4-db40-a3d8-11116f7e8349": "Bitwarden",               // gitleaks:allow
+		"b87b7a24-9407-4e38-9cfd-d5588cf3b1b6": "1Password",               // gitleaks:allow
+		"ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4": "Google Password Manager", // gitleaks:allow
+		"fbfc3007-154e-4ecc-8c0b-6e020557d7bd": "iCloud Keychain",         // gitleaks:allow
+		"08987058-cadc-4b81-b6e1-30de50dcbe96": "Windows Hello",           // gitleaks:allow
+	})
+
+	tests := []struct {
+		name     string
+		aaguid   []byte
+		expected string
+	}{
+		{
+			name:     "Bitwarden canonical",
+			aaguid:   parseUUIDBytes("d548826e-79b4-db40-a3d8-11116f7e8349"),
+			expected: "Bitwarden",
+		},
+		{
+			name:     "1Password",
+			aaguid:   parseUUIDBytes("b87b7a24-9407-4e38-9cfd-d5588cf3b1b6"),
+			expected: "1Password",
+		},
+		{
+			name:     "Google Password Manager",
+			aaguid:   parseUUIDBytes("ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4"),
+			expected: "Google Password Manager",
+		},
+		{
+			name:     "iCloud Keychain",
+			aaguid:   parseUUIDBytes("fbfc3007-154e-4ecc-8c0b-6e020557d7bd"),
+			expected: "iCloud Keychain",
+		},
+		{
+			name:     "Windows Hello",
+			aaguid:   parseUUIDBytes("08987058-cadc-4b81-b6e1-30de50dcbe96"),
+			expected: "Windows Hello",
+		},
+		{
+			name:     "All zeros AAGUID",
+			aaguid:   make([]byte, 16),
+			expected: "Passkey",
+		},
+		{
+			name:     "Invalid length AAGUID",
+			aaguid:   []byte("too-short"),
+			expected: "Passkey",
+		},
+		{
+			name:     "Unknown AAGUID",
+			aaguid:   parseUUIDBytes("12345678-1234-1234-1234-123456789abc"),
+			expected: "Passkey",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := AuthenticatorNameFromAAGUID(tt.aaguid)
+			if got != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, got)
+			}
+		})
+	}
+}
+
+func TestNewWebAuthnCredential_DefaultNameFallback(t *testing.T) {
+	RegisterAAGUID("d548826e-79b4-db40-a3d8-11116f7e8349", "Bitwarden")
+
+	bwAAGUID := parseUUIDBytes("d548826e-79b4-db40-a3d8-11116f7e8349")
+	cred := &webauthn.Credential{
+		ID:        []byte("cred-bw"),
+		PublicKey: []byte("key-bw"),
+		Authenticator: webauthn.Authenticator{
+			AAGUID: bwAAGUID,
+		},
+	}
+
+	// Case 1: Empty friendlyName -> should fallback to "Bitwarden"
+	recDefault := NewWebAuthnCredential(1, cred, "")
+	if recDefault.FriendlyName != "Bitwarden" {
+		t.Errorf("expected 'Bitwarden', got %q", recDefault.FriendlyName)
+	}
+
+	// Case 2: Whitespace friendlyName -> should fallback to "Bitwarden"
+	recWhitespace := NewWebAuthnCredential(1, cred, "   ")
+	if recWhitespace.FriendlyName != "Bitwarden" {
+		t.Errorf("expected 'Bitwarden', got %q", recWhitespace.FriendlyName)
+	}
+
+	// Case 3: User custom friendlyName -> should retain user set name
+	recCustom := NewWebAuthnCredential(1, cred, "My Work Bitwarden")
+	if recCustom.FriendlyName != "My Work Bitwarden" {
+		t.Errorf("expected 'My Work Bitwarden', got %q", recCustom.FriendlyName)
+	}
+}
+
+func TestDynamicAAGUIDRegistry(t *testing.T) {
+	customAAGUIDStr := "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	customAAGUID := parseUUIDBytes(customAAGUIDStr)
+
+	// Register single
+	RegisterAAGUID(customAAGUIDStr, "Custom Security Key")
+	if name := AuthenticatorNameFromAAGUID(customAAGUID); name != "Custom Security Key" {
+		t.Errorf("expected 'Custom Security Key', got %q", name)
+	}
+
+	// Batch register
+	RegisterAAGUIDs(map[string]string{
+		"11111111-2222-3333-4444-555555555555": "Titan Key",
+	})
+	titanAAGUID := parseUUIDBytes("11111111-2222-3333-4444-555555555555")
+	if name := AuthenticatorNameFromAAGUID(titanAAGUID); name != "Titan Key" {
+		t.Errorf("expected 'Titan Key', got %q", name)
+	}
+
+	// GetKnownAAGUIDs
+	known := GetKnownAAGUIDs()
+	if known["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"] != "Custom Security Key" {
+		t.Errorf("expected known AAGUID to contain custom key")
+	}
+	if known["11111111-2222-3333-4444-555555555555"] != "Titan Key" {
+		t.Errorf("expected known AAGUID to contain titan key")
+	}
+}
+
 func TestUser_WebAuthnMethods(t *testing.T) {
 	u := User{
 		ID:       10,
@@ -225,5 +380,70 @@ func TestHolidayDTOs(t *testing.T) {
 	kResp := KemendesaHolidayResponse{Data: []KemendesaHolidayItem{kItem}}
 	if len(kResp.Data) != 1 {
 		t.Errorf("KemendesaHolidayResponse mismatch: %+v", kResp)
+	}
+}
+
+func TestWebAuthnCredential_AuthenticatorRelation(t *testing.T) {
+	// Register a known authenticator
+	knownUUID := "12345678-1234-1234-1234-123456789abc"
+	RegisterAuthenticator(knownUUID, "Relational Test Key", "data:image/svg+xml;light", "data:image/svg+xml;dark")
+
+	// 1. Valid known AAGUID
+	knownBytes := parseUUIDBytes(knownUUID)
+	credKnown := webauthn.Credential{
+		ID:        []byte("id-known"),
+		PublicKey: []byte("pk-known"),
+		Authenticator: webauthn.Authenticator{
+			AAGUID: knownBytes,
+		},
+	}
+	modelKnown := NewWebAuthnCredential(1, &credKnown, "")
+	if modelKnown.AuthenticatorAAGUID == nil {
+		t.Fatalf("expected AuthenticatorAAGUID to be populated, got nil")
+	}
+	if *modelKnown.AuthenticatorAAGUID != knownUUID {
+		t.Errorf("expected AuthenticatorAAGUID %s, got %s", knownUUID, *modelKnown.AuthenticatorAAGUID)
+	}
+	if modelKnown.FriendlyName != "Relational Test Key" {
+		t.Errorf("expected FriendlyName 'Relational Test Key', got %s", modelKnown.FriendlyName)
+	}
+
+	// 2. Unknown AAGUID
+	unknownUUID := "99999999-9999-9999-9999-999999999999"
+	unknownBytes := parseUUIDBytes(unknownUUID)
+	credUnknown := webauthn.Credential{
+		ID:        []byte("id-unknown"),
+		PublicKey: []byte("pk-unknown"),
+		Authenticator: webauthn.Authenticator{
+			AAGUID: unknownBytes,
+		},
+	}
+	modelUnknown := NewWebAuthnCredential(1, &credUnknown, "My Custom Key")
+	if modelUnknown.AuthenticatorAAGUID != nil {
+		t.Errorf("expected AuthenticatorAAGUID to be nil for unknown authenticator, got %v", *modelUnknown.AuthenticatorAAGUID)
+	}
+	if modelUnknown.FriendlyName != "My Custom Key" {
+		t.Errorf("expected FriendlyName 'My Custom Key', got %s", modelUnknown.FriendlyName)
+	}
+
+	// 3. FormatAAGUID edge cases
+	if _, ok := FormatAAGUID([]byte{1, 2, 3}); ok {
+		t.Error("expected FormatAAGUID to return false for non-16-byte slice")
+	}
+	if _, ok := FormatAAGUID(make([]byte, 16)); ok {
+		t.Error("expected FormatAAGUID to return false for all-zero slice")
+	}
+
+	// 4. JSON Serialization omits redundant user_id and nested authenticator object
+	jsonBytes, err := json.Marshal(modelKnown)
+	if err != nil {
+		t.Fatalf("failed to marshal WebAuthnCredential: %v", err)
+	}
+	jsonStr := string(jsonBytes)
+	if strings.Contains(jsonStr, `"user_id"`) {
+		t.Errorf("expected json to not contain redundant 'user_id', got: %s", jsonStr)
+	}
+	if strings.Contains(jsonStr, `"authenticator":`) {
+		t.Errorf("expected json to not contain redundant nested 'authenticator' object, got: %s", jsonStr)
 	}
 }

@@ -104,6 +104,10 @@ func (m *mockUserRepo) DeletePasskey(ctx context.Context, id uint, userID *uint)
 	return true, nil
 }
 
+func (m *mockUserRepo) UpdatePasskeyName(ctx context.Context, id uint, userID *uint, name string) (bool, error) {
+	return true, nil
+}
+
 func TestUserService_ApplyApprovedProfileChange(t *testing.T) {
 	repo := newMockUserRepo()
 	svc := NewUserService(repo, auth.DefaultHasher, nil)

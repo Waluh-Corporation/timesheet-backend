@@ -78,6 +78,11 @@ func TestResponseDTOs(t *testing.T) {
 		t.Errorf("AdminPasskeyResponse mismatch: %+v", adminPkResp)
 	}
 
+	verifyResp := VerifyResetTokenResponse{Valid: true, Status: "valid", Message: "token valid", Email: "j***@example.com", Username: "john"}
+	if !verifyResp.Valid || verifyResp.Status != "valid" || verifyResp.Email != "j***@example.com" {
+		t.Errorf("VerifyResetTokenResponse mismatch: %+v", verifyResp)
+	}
+
 	pagResp := PaginatedResponse{
 		Code:       200,
 		Status:     "success",
