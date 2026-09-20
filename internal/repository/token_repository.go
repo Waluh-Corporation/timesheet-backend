@@ -22,8 +22,10 @@ type TokenRepository interface {
 
 	// Password reset token operations
 	CreateResetToken(ctx context.Context, token *models.PasswordResetToken) error
+	CreateResetTokenWithInvalidation(ctx context.Context, token *models.PasswordResetToken, at time.Time) error
 	FindValidResetTokenByHash(ctx context.Context, hash string) (*models.PasswordResetToken, error)
 	FindResetTokenByHash(ctx context.Context, hash string) (*models.PasswordResetToken, error)
+	GetLatestResetTokenByUserID(ctx context.Context, userID uint) (*models.PasswordResetToken, error)
 	InvalidateResetTokensByUserID(ctx context.Context, userID uint, at time.Time) error
 	ConsumeResetToken(ctx context.Context, tokenID uint, usedAt time.Time, usedIP string) error
 	DeleteExpiredResetTokens(ctx context.Context, olderThan time.Time, usedOlderThan time.Time) (int64, error)
@@ -80,6 +82,17 @@ func (r *tokenRepository) CreateResetToken(ctx context.Context, token *models.Pa
 	return r.db.WithContext(ctx).Create(token).Error
 }
 
+func (r *tokenRepository) CreateResetTokenWithInvalidation(ctx context.Context, token *models.PasswordResetToken, at time.Time) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.PasswordResetToken{}).
+			Where("user_id = ? AND used_at IS NULL", token.UserID).
+			Update("used_at", at).Error; err != nil {
+			return err
+		}
+		return tx.Create(token).Error
+	})
+}
+
 func (r *tokenRepository) FindValidResetTokenByHash(ctx context.Context, hash string) (*models.PasswordResetToken, error) {
 	var token models.PasswordResetToken
 	if err := r.db.WithContext(ctx).
@@ -94,6 +107,17 @@ func (r *tokenRepository) FindResetTokenByHash(ctx context.Context, hash string)
 	var token models.PasswordResetToken
 	if err := r.db.WithContext(ctx).
 		Where("token_hash = ?", hash).
+		First(&token).Error; err != nil {
+		return nil, err
+	}
+	return &token, nil
+}
+
+func (r *tokenRepository) GetLatestResetTokenByUserID(ctx context.Context, userID uint) (*models.PasswordResetToken, error) {
+	var token models.PasswordResetToken
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("created_at DESC, id DESC").
 		First(&token).Error; err != nil {
 		return nil, err
 	}

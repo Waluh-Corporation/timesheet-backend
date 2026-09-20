@@ -17,9 +17,10 @@ type Config struct {
 	Port        string
 	DatabaseURL string
 
-	JWTSecret     string
-	JWTExpiry     time.Duration
-	ResetTokenTTL time.Duration
+	JWTSecret             string
+	JWTExpiry             time.Duration
+	ResetTokenTTL         time.Duration
+	ResetPasswordCooldown time.Duration
 
 	// Database connection pool configuration.
 	DBMaxOpenConns    int
@@ -200,9 +201,10 @@ func Load() *Config {
 		Port:        getEnv("PORT", "8080"),
 		DatabaseURL: getEnv("DATABASE_URL", defaultDBURL),
 
-		JWTSecret:     getEnv("JWT_SECRET", ""),
-		JWTExpiry:     time.Duration(getEnvInt("JWT_EXPIRY_HOURS", 24)) * time.Hour,
-		ResetTokenTTL: time.Duration(getEnvInt("RESET_TOKEN_TTL_MINUTES", 60)) * time.Minute,
+		JWTSecret:             getEnv("JWT_SECRET", ""),
+		JWTExpiry:             time.Duration(getEnvInt("JWT_EXPIRY_HOURS", 24)) * time.Hour,
+		ResetTokenTTL:         time.Duration(getEnvInt("RESET_TOKEN_TTL_MINUTES", 60)) * time.Minute,
+		ResetPasswordCooldown: time.Duration(getEnvInt("RESET_PASSWORD_COOLDOWN_SECONDS", 60)) * time.Second,
 
 		DBMaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 100),
 		DBMaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 25),

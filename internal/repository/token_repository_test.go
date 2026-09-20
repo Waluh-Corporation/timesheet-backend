@@ -206,6 +206,51 @@ func TestTokenRepository_ResetTokenFlow(t *testing.T) {
 		t.Fatalf("failed to invalidate reset tokens by user ID: %v", err)
 	}
 
+	// Test CreateResetTokenWithInvalidation and GetLatestResetTokenByUserID
+	_, hash3, _ := auth.GenerateResetToken()
+	tok3 := &models.PasswordResetToken{
+		UserID:    user.ID,
+		TokenType: "password_reset",
+		TokenHash: hash3,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}
+	if err := tokenRepo.CreateResetTokenWithInvalidation(ctx, tok3, time.Now()); err != nil {
+		t.Fatalf("failed to create reset token with invalidation: %v", err)
+	}
+
+	latest, err := tokenRepo.GetLatestResetTokenByUserID(ctx, user.ID)
+	if err != nil || latest == nil {
+		t.Fatalf("failed to get latest reset token: %v", err)
+	}
+	if latest.TokenHash != hash3 {
+		t.Errorf("expected latest token hash to be %s, got %s", hash3, latest.TokenHash)
+	}
+
+	// Another token with invalidation should invalidate tok3
+	_, hash4, _ := auth.GenerateResetToken()
+	tok4 := &models.PasswordResetToken{
+		UserID:    user.ID,
+		TokenType: "password_reset",
+		TokenHash: hash4,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}
+	invalidationTime := time.Now()
+	if err := tokenRepo.CreateResetTokenWithInvalidation(ctx, tok4, invalidationTime); err != nil {
+		t.Fatalf("failed to create reset token with invalidation: %v", err)
+	}
+
+	// tok3 should now be invalidated
+	tok3Check, err := tokenRepo.FindResetTokenByHash(ctx, hash3)
+	if err != nil || tok3Check.UsedAt == nil {
+		t.Errorf("expected tok3 to be invalidated (UsedAt != nil)")
+	}
+
+	// tok4 should be valid
+	tok4Check, err := tokenRepo.FindValidResetTokenByHash(ctx, hash4)
+	if err != nil || tok4Check == nil {
+		t.Errorf("expected tok4 to be valid, got err: %v", err)
+	}
+
 	// Test DeleteExpiredResetTokens
 	deletedResetTokens, err := tokenRepo.DeleteExpiredResetTokens(ctx, time.Now().Add(2*time.Hour), time.Now().Add(2*time.Hour))
 	if err != nil || deletedResetTokens == 0 {

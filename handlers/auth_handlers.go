@@ -309,30 +309,60 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 		return
 	}
 
+	normEmail := strings.ToLower(strings.TrimSpace(req.Email))
+	clientIP := c.ClientIP()
+
+	cooldown := 60 * time.Second
+	if s.Cfg != nil && s.Cfg.ResetPasswordCooldown > 0 {
+		cooldown = s.Cfg.ResetPasswordCooldown
+	}
+
+	// 1. Fast in-memory cooldown check per email and per IP to prevent email bombing,
+	// spamming, and resource exhaustion (applies uniformly to existing and non-existing accounts).
+	if !s.checkAndRecordResetCooldown(normEmail, clientIP, cooldown) {
+		slog.Warn("password reset throttled by cooldown", "email", maskEmail(normEmail), "ip", clientIP)
+		RespondMessage(c, http.StatusOK, "if the email exists, a reset link has been sent")
+		return
+	}
+
 	userRepo := s.getUserRepository()
 	tokenRepo := s.getTokenRepository()
 	if userRepo != nil && tokenRepo != nil {
-		if user, err := userRepo.FindByEmail(c.Request.Context(), req.Email); err == nil && user != nil {
+		if user, err := userRepo.FindByEmail(c.Request.Context(), normEmail); err == nil && user != nil && user.IsActive {
+			now := time.Now()
+
+			// 2. Secondary database-backed check to preserve cooldown across server restarts or multi-pod replicas
+			if latest, err := tokenRepo.GetLatestResetTokenByUserID(c.Request.Context(), user.ID); err == nil && latest != nil {
+				if now.Sub(latest.CreatedAt) < cooldown {
+					slog.Warn("password reset throttled by DB token cooldown", "user_id", user.ID, "ip", clientIP)
+					RespondMessage(c, http.StatusOK, "if the email exists, a reset link has been sent")
+					return
+				}
+			}
+
 			raw, hash, err := auth.GenerateResetToken()
 			if err == nil {
-				now := time.Now()
-				_ = tokenRepo.InvalidateResetTokensByUserID(c.Request.Context(), user.ID, now)
-				_ = tokenRepo.CreateResetToken(c.Request.Context(), &models.PasswordResetToken{
+				ttl := 60 * time.Minute
+				if s.Cfg != nil && s.Cfg.ResetTokenTTL > 0 {
+					ttl = s.Cfg.ResetTokenTTL
+				}
+
+				resetToken := &models.PasswordResetToken{
 					UserID:    user.ID,
 					TokenType: "password_reset",
 					TokenHash: hash,
-					ExpiresAt: now.Add(s.Cfg.ResetTokenTTL),
-					CreatedIP: c.ClientIP(),
-				})
-				link := s.publicBaseURL(c) + "/reset-password?token=" + raw
-				if s.Mailer != nil {
-					go func(toEmail, username, resetLink string) {
-						if err := s.Mailer.SendResetEmailWithUser(toEmail, username, resetLink); err != nil {
-							slog.Error("failed to send password reset email", "error", err, "email", toEmail)
-						}
-					}(user.Email, user.Username, link)
+					ExpiresAt: now.Add(ttl),
+					CreatedIP: clientIP,
 				}
-				slog.Info("password reset link issued", "user_id", user.ID, "ip", c.ClientIP())
+
+				// 3. Atomically invalidate previous active reset tokens and save the new active token
+				if err := tokenRepo.CreateResetTokenWithInvalidation(c.Request.Context(), resetToken, now); err == nil {
+					link := s.publicBaseURL(c) + "/reset-password?token=" + raw
+					s.dispatchResetEmail(user.Email, user.Username, link)
+					slog.Info("password reset link issued", "user_id", user.ID, "ip", clientIP)
+				} else {
+					slog.Error("failed to create reset token with invalidation", "error", err, "user_id", user.ID)
+				}
 			}
 		}
 	}
