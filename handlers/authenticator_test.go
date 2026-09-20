@@ -88,6 +88,19 @@ func TestAdminAuthenticators_Endpoints(t *testing.T) {
 		if len(noMatchEnv.Data.Authenticators) != 0 {
 			t.Errorf("expected 0 results, got %d", len(noMatchEnv.Data.Authenticators))
 		}
+
+		// 4. Edge cases for page and limit bounds
+		wBounds := httptest.NewRecorder()
+		cBounds, _ := gin.CreateTestContext(wBounds)
+		cBounds.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/authenticators?page=-5&limit=-10", nil)
+		srv.AdminListAuthenticators(cBounds)
+		assertResponseCode(t, wBounds, http.StatusOK)
+
+		wLimitMax := httptest.NewRecorder()
+		cLimitMax, _ := gin.CreateTestContext(wLimitMax)
+		cLimitMax.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/authenticators?limit=999", nil)
+		srv.AdminListAuthenticators(cLimitMax)
+		assertResponseCode(t, wLimitMax, http.StatusOK)
 	})
 
 	t.Run("SyncCommunityAuthenticators success with mock server", func(t *testing.T) {

@@ -123,4 +123,23 @@ func TestCommunityAAGUID_ErrorHandling(t *testing.T) {
 	if err == nil {
 		t.Error("expected error when server returns malformed JSON")
 	}
+
+	// 4. Empty catalog in SyncCommunityAAGUIDsToDB
+	srvEmpty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]CommunityAAGUIDEntry{})
+	}))
+	defer srvEmpty.Close()
+
+	CommunityAAGUIDURL = srvEmpty.URL
+	cfg := config.Load()
+	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
+	if err == nil {
+		tx := db.Begin()
+		defer tx.Rollback()
+		_, errSync := SyncCommunityAAGUIDsToDB(context.Background(), tx)
+		if errSync == nil {
+			t.Error("expected error when catalog is empty")
+		}
+	}
 }

@@ -505,6 +505,37 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		srv.AdminListPasskeys(cAdminList)
 		assertResponseCode(t, wAdminList, http.StatusOK)
 
+		// FinishPasskeyRegistration error branches
+		wFinishNoSess := httptest.NewRecorder()
+		cFinishNoSess, _ := gin.CreateTestContext(wFinishNoSess)
+		cFinishNoSess.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish", nil)
+		cFinishNoSess.Set(ctxUserID, testUser.ID)
+		srv.FinishPasskeyRegistration(cFinishNoSess)
+		assertResponseCode(t, wFinishNoSess, http.StatusBadRequest)
+
+		wFinishExp := httptest.NewRecorder()
+		cFinishExp, _ := gin.CreateTestContext(wFinishExp)
+		cFinishExp.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=expired-id", nil)
+		cFinishExp.Set(ctxUserID, testUser.ID)
+		srv.FinishPasskeyRegistration(cFinishExp)
+		assertResponseCode(t, wFinishExp, http.StatusBadRequest)
+
+		srv.putSession("test-session-user-missing", &webauthn.SessionData{})
+		wFinishNoUser := httptest.NewRecorder()
+		cFinishNoUser, _ := gin.CreateTestContext(wFinishNoUser)
+		cFinishNoUser.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=test-session-user-missing", nil)
+		cFinishNoUser.Set(ctxUserID, uint(9999999))
+		srv.FinishPasskeyRegistration(cFinishNoUser)
+		assertResponseCode(t, wFinishNoUser, http.StatusNotFound)
+
+		srv.putSession("test-session-bad-body", &webauthn.SessionData{})
+		wFinishBadBody := httptest.NewRecorder()
+		cFinishBadBody, _ := gin.CreateTestContext(wFinishBadBody)
+		cFinishBadBody.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=test-session-bad-body", strings.NewReader(`{}`))
+		cFinishBadBody.Set(ctxUserID, testUser.ID)
+		srv.FinishPasskeyRegistration(cFinishBadBody)
+		assertResponseCode(t, wFinishBadBody, http.StatusBadRequest)
+
 		// UpdatePasskey (invalid ID)
 		wUpdBad := httptest.NewRecorder()
 		cUpdBad, _ := gin.CreateTestContext(wUpdBad)
@@ -513,6 +544,25 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		cUpdBad.Set(ctxUserID, testUser.ID)
 		srv.UpdatePasskey(cUpdBad)
 		assertResponseCode(t, wUpdBad, http.StatusBadRequest)
+
+		// UpdatePasskey (invalid JSON body)
+		wUpdBadJSON := httptest.NewRecorder()
+		cUpdBadJSON, _ := gin.CreateTestContext(wUpdBadJSON)
+		cUpdBadJSON.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/passkeys/%d", cred.ID), strings.NewReader(`{invalid`))
+		cUpdBadJSON.Params = gin.Params{{Key: "id", Value: fmt.Sprint(cred.ID)}}
+		cUpdBadJSON.Set(ctxUserID, testUser.ID)
+		srv.UpdatePasskey(cUpdBadJSON)
+		assertResponseCode(t, wUpdBadJSON, http.StatusBadRequest)
+
+		// UpdatePasskey (nil repo)
+		nilRepoSrv := &Server{}
+		wUpdNilRepo := httptest.NewRecorder()
+		cUpdNilRepo, _ := gin.CreateTestContext(wUpdNilRepo)
+		cUpdNilRepo.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/passkeys/%d", cred.ID), strings.NewReader(`{"name":"key"}`))
+		cUpdNilRepo.Params = gin.Params{{Key: "id", Value: fmt.Sprint(cred.ID)}}
+		cUpdNilRepo.Set(ctxUserID, testUser.ID)
+		nilRepoSrv.UpdatePasskey(cUpdNilRepo)
+		assertResponseCode(t, wUpdNilRepo, http.StatusInternalServerError)
 
 		// UpdatePasskey (empty name)
 		wUpdEmpty := httptest.NewRecorder()
