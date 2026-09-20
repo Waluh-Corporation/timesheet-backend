@@ -80,7 +80,7 @@ jobs:
 
       - name: Vulnerability Check (govulncheck)
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@709015412431dd2b5b28a53c06c70bc02d49074c
           VULN_OUT=$(govulncheck ./... 2>&1) || EXIT_CODE=$?
           echo "$VULN_OUT"
           if [ "${EXIT_CODE:-0}" -ne 0 ]; then
