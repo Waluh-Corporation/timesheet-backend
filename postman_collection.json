@@ -292,6 +292,24 @@
           ]
         },
         {
+          "name": "Verify Reset Password Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/reset-password/verify?token=sample-token"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200, 400 or 429\", () => pm.expect([200, 400, 429]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Begin Passkey Login",
           "request": {
             "method": "POST",
@@ -895,6 +913,37 @@
           ]
         },
         {
+          "name": "Update Passkey",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Updated Work Passkey\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/passkeys/999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Delete Passkey",
           "request": {
             "method": "DELETE",
@@ -914,6 +963,57 @@
                   "pm.test(\"Status 404 or 200\", () => {",
                   "  pm.expect([200, 404]).to.include(pm.response.code);",
                   "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Authenticators (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/authenticators?limit=50"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Data contains authenticators list\", () => {",
+                  "  const res = pm.response.json();",
+                  "  pm.expect(res.data).to.have.property(\"authenticators\");",
+                  "  pm.expect(res.data.authenticators).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sync Community Authenticators (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/authenticators/sync"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200 or 502\", () => pm.expect([200, 502]).to.include(pm.response.code));"
                 ]
               }
             }
@@ -2145,6 +2245,37 @@
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
                   "pm.test(\"Data is array\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Update User Passkey",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Admin Renamed Passkey\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/admin/users/{{adminUserId}}/passkeys/999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200, 403, or 404\", () => pm.expect([200, 403, 404]).to.include(pm.response.code));"
                 ]
               }
             }

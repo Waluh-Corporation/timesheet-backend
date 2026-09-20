@@ -520,6 +520,118 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/admin/authenticators": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves all known AAGUID authenticators stored in the database with pagination and search.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List registered authenticators (Admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search query by name or AAGUID",
+                        "name": "search",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (defaults to 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (defaults to 50, max 200)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.AuthenticatorListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/authenticators/sync": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Fetches the latest AAGUID and icon definitions from passkeydeveloper/passkey-authenticator-aaguids, upserts them into the database, and refreshes the in-memory cache.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Synchronize authenticators from community registry (Admin)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.AuthenticatorSyncResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Admin only",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad gateway / failed to fetch external registry",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/companies": {
             "get": {
                 "security": [
@@ -1926,14 +2038,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Removes a specified passkey belonging to a user (admin only).",
+                "description": "Passkeys are strictly user-managed credentials; admins cannot delete user passkeys.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Admin"
                 ],
-                "summary": "Delete a passkey for a user (Admin)",
+                "summary": "Delete a passkey for a user (Forbidden)",
                 "parameters": [
                     {
                         "type": "integer",
@@ -1951,38 +2063,59 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/response.MessageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid passkey ID",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
                     "403": {
-                        "description": "Admin only",
+                        "description": "Admin cannot delete user passkeys",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Passkeys are strictly user-managed credentials; admins cannot modify user passkeys.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Update a passkey name for a user (Forbidden)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
                     },
-                    "404": {
-                        "description": "Passkey not found",
+                    {
+                        "type": "integer",
+                        "description": "Passkey ID",
+                        "name": "pid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated passkey name",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
                         "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
+                            "$ref": "#/definitions/request.UpdatePasskeyRequest"
                         }
-                    },
-                    "500": {
-                        "description": "Internal server error",
+                    }
+                ],
+                "responses": {
+                    "403": {
+                        "description": "Admin cannot modify user passkeys",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -2357,6 +2490,106 @@ const docTemplate = `{
                         "description": "Invalid or expired token, or weak password",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/reset-password/verify": {
+            "get": {
+                "description": "Checks if a password reset token is valid, expired, or already used before displaying the reset password form.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Verify password reset token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reset token (query parameter)",
+                        "name": "token",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Reset token (JSON body)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.VerifyResetTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Token is valid",
+                        "schema": {
+                            "$ref": "#/definitions/response.VerifyResetTokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Token is invalid, expired, or already used",
+                        "schema": {
+                            "$ref": "#/definitions/response.VerifyResetTokenResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Checks if a password reset token is valid, expired, or already used before displaying the reset password form.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Verify password reset token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reset token (query parameter)",
+                        "name": "token",
+                        "in": "query"
+                    },
+                    {
+                        "description": "Reset token (JSON body)",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/request.VerifyResetTokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Token is valid",
+                        "schema": {
+                            "$ref": "#/definitions/response.VerifyResetTokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Token is invalid, expired, or already used",
+                        "schema": {
+                            "$ref": "#/definitions/response.VerifyResetTokenResponse"
                         }
                     },
                     "500": {
@@ -2972,6 +3205,76 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/passkeys/{id}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates the friendly name of a registered passkey owned by the authenticated user (accessible to all roles; users can only rename their own passkeys).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Passkey"
+                ],
+                "summary": "Update passkey name",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Passkey credential ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Updated passkey name",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.UpdatePasskeyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid passkey ID or payload",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Passkey not found",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -4388,16 +4691,22 @@ const docTemplate = `{
         "models.WebAuthnCredential": {
             "type": "object",
             "properties": {
+                "authenticator_aaguid": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
                 "friendly_name": {
                     "type": "string"
                 },
-                "id": {
-                    "type": "integer"
+                "icon_dark": {
+                    "type": "string"
                 },
-                "user_id": {
+                "icon_light": {
+                    "type": "string"
+                },
+                "id": {
                     "type": "integer"
                 }
             }
@@ -4725,6 +5034,19 @@ const docTemplate = `{
                 }
             }
         },
+        "request.UpdatePasskeyRequest": {
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "example": "MacBook Pro Touch ID"
+                }
+            }
+        },
         "request.UpdateUserRequest": {
             "type": "object",
             "properties": {
@@ -4786,13 +5108,34 @@ const docTemplate = `{
                 }
             }
         },
+        "request.VerifyResetTokenRequest": {
+            "type": "object",
+            "required": [
+                "token"
+            ],
+            "properties": {
+                "token": {
+                    "type": "string",
+                    "example": "a8f9c0e2b1d3..."
+                }
+            }
+        },
         "response.AdminPasskeyResponse": {
             "type": "object",
             "properties": {
+                "authenticator_aaguid": {
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
                 "friendly_name": {
+                    "type": "string"
+                },
+                "icon_dark": {
+                    "type": "string"
+                },
+                "icon_light": {
                     "type": "string"
                 },
                 "id": {
@@ -4912,6 +5255,64 @@ const docTemplate = `{
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "response.AuthenticatorItemResponse": {
+            "type": "object",
+            "properties": {
+                "aaguid": {
+                    "type": "string",
+                    "example": "42a048a9-4b68-45a8-aa5a-cfb3d4a462ec"
+                },
+                "icon_dark": {
+                    "type": "string"
+                },
+                "icon_light": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Bitwarden"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.AuthenticatorListResponse": {
+            "type": "object",
+            "properties": {
+                "authenticators": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.AuthenticatorItemResponse"
+                    }
+                },
+                "limit": {
+                    "type": "integer",
+                    "example": 50
+                },
+                "page": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 56
+                }
+            }
+        },
+        "response.AuthenticatorSyncResponse": {
+            "type": "object",
+            "properties": {
+                "synced_at": {
+                    "type": "string",
+                    "example": "2026-09-20T10:30:00Z"
+                },
+                "total_synced": {
+                    "type": "integer",
+                    "example": 56
                 }
             }
         },
@@ -5362,6 +5763,31 @@ const docTemplate = `{
                 "public_key": {
                     "type": "string",
                     "example": "BEl62iUYgUivxIkv..."
+                }
+            }
+        },
+        "response.VerifyResetTokenResponse": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "j***@example.com"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "token valid"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "valid"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "john_doe"
+                },
+                "valid": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         }
