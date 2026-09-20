@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -592,11 +595,19 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 		return
 	}
 
-	credential, err := s.WebAuthn.FinishRegistration(*user, *sessionData, c.Request)
+	var bodyBytes []byte
+	if c.Request.Body != nil {
+		bodyBytes, _ = io.ReadAll(c.Request.Body)
+		c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	}
+
+	credential, err := s.finishRegistration(*user, *sessionData, c.Request)
 	if err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
+
+	resolvePasskeyTransports(credential, bodyBytes)
 
 	passkeyName := strings.TrimSpace(c.Query("name"))
 	if passkeyName == "" {
@@ -626,6 +637,47 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 			"created_at":           record.CreatedAt,
 		},
 	})
+}
+
+func (s *Server) finishRegistration(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
+	if s.finishRegistrationFunc != nil {
+		return s.finishRegistrationFunc(user, session, r)
+	}
+	return s.WebAuthn.FinishRegistration(user, session, r)
+}
+
+func resolvePasskeyTransports(cred *webauthn.Credential, bodyBytes []byte) {
+	if cred == nil {
+		return
+	}
+	if len(cred.Transport) == 0 && len(bodyBytes) > 0 {
+		var rawPayload struct {
+			Transports              []string `json:"transports"`
+			AuthenticatorAttachment string   `json:"authenticatorAttachment"`
+			Response                struct {
+				Transports []string `json:"transports"`
+			} `json:"response"`
+		}
+		if err := json.Unmarshal(bodyBytes, &rawPayload); err == nil {
+			var parsedTransports []string
+			if len(rawPayload.Response.Transports) > 0 {
+				parsedTransports = rawPayload.Response.Transports
+			} else if len(rawPayload.Transports) > 0 {
+				parsedTransports = rawPayload.Transports
+			}
+			for _, t := range parsedTransports {
+				if trimmed := strings.TrimSpace(t); trimmed != "" {
+					cred.Transport = append(cred.Transport, protocol.AuthenticatorTransport(trimmed))
+				}
+			}
+			if rawPayload.AuthenticatorAttachment == "platform" && cred.Authenticator.Attachment == "" {
+				cred.Authenticator.Attachment = protocol.Platform
+			}
+			if len(cred.Transport) == 0 && (rawPayload.AuthenticatorAttachment == "platform" || cred.Authenticator.Attachment == protocol.Platform) {
+				cred.Transport = append(cred.Transport, protocol.Internal)
+			}
+		}
+	}
 }
 
 // --- WebAuthn: passwordless login ---

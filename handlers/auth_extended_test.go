@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/google/uuid"
 
@@ -1460,6 +1461,13 @@ func (r *testErrUserRepo) ListPasskeysByUserID(ctx context.Context, userID uint)
 	return r.UserRepository.ListPasskeysByUserID(ctx, userID)
 }
 
+func (r *testErrUserRepo) CreatePasskeyCredential(ctx context.Context, cred *models.WebAuthnCredential) error {
+	if r.err != nil {
+		return r.err
+	}
+	return r.UserRepository.CreatePasskeyCredential(ctx, cred)
+}
+
 func (r *testErrUserRepo) DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error) {
 	if r.err != nil {
 		return false, r.err
@@ -1498,4 +1506,135 @@ func (r *testErrTokenRepo) ConsumeResetToken(ctx context.Context, tokenID uint, 
 		return r.err
 	}
 	return r.TokenRepository.ConsumeResetToken(ctx, tokenID, usedAt, usedIP)
+}
+
+func TestFinishPasskeyRegistration_FullCoverage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, _ := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	userRepo := repository.NewUserRepository(tx)
+	testUser := &models.User{
+		Username:     "test-passkey-user",
+		Email:        "passkey-user@example.com",
+		PasswordHash: "dummy-hash",
+		Role:         models.RoleUser,
+		IsActive:     true,
+	}
+	if err := tx.Create(testUser).Error; err != nil {
+		t.Fatalf("failed to create test user: %v", err)
+	}
+
+	srv := &Server{
+		DB:       tx,
+		UserRepo: userRepo,
+	}
+
+	// 1. Success with response.transports
+	srv.putSession("session-1", &webauthn.SessionData{})
+	srv.finishRegistrationFunc = func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
+		return &webauthn.Credential{
+			ID:        []byte("cred-id-1"),
+			PublicKey: []byte("pubkey-1"),
+			Authenticator: webauthn.Authenticator{
+				AAGUID: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16},
+			},
+		}, nil
+	}
+
+	body1 := `{"id":"cred-id-1","response":{"transports":["usb","nfc"]}}`
+	w1 := httptest.NewRecorder()
+	c1, _ := gin.CreateTestContext(w1)
+	c1.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=session-1&name=My%20Key", strings.NewReader(body1))
+	c1.Set(ctxUserID, testUser.ID)
+	srv.FinishPasskeyRegistration(c1)
+	assertResponseCode(t, w1, http.StatusOK)
+
+	// 2. Success with root transports & X-Passkey-Name header
+	srv.putSession("session-2", &webauthn.SessionData{})
+	srv.finishRegistrationFunc = func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
+		return &webauthn.Credential{
+			ID:        []byte("cred-id-2"),
+			PublicKey: []byte("pubkey-2"),
+		}, nil
+	}
+	body2 := `{"id":"cred-id-2","transports":["internal"],"authenticatorAttachment":"platform","response":{}}`
+	w2 := httptest.NewRecorder()
+	c2, _ := gin.CreateTestContext(w2)
+	c2.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=session-2", strings.NewReader(body2))
+	c2.Request.Header.Set("X-Passkey-Name", "My Header Name")
+	c2.Set(ctxUserID, testUser.ID)
+	srv.FinishPasskeyRegistration(c2)
+	assertResponseCode(t, w2, http.StatusOK)
+
+	// 3. Success with platform attachment fallback
+	srv.putSession("session-3", &webauthn.SessionData{})
+	srv.finishRegistrationFunc = func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
+		return &webauthn.Credential{
+			ID:        []byte("cred-id-3"),
+			PublicKey: []byte("pubkey-3"),
+			Authenticator: webauthn.Authenticator{
+				Attachment: protocol.Platform,
+			},
+		}, nil
+	}
+	body3 := `{"id":"cred-id-3","response":{}}`
+	w3 := httptest.NewRecorder()
+	c3, _ := gin.CreateTestContext(w3)
+	c3.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=session-3", strings.NewReader(body3))
+	c3.Set(ctxUserID, testUser.ID)
+	srv.FinishPasskeyRegistration(c3)
+	assertResponseCode(t, w3, http.StatusOK)
+
+	// 4. Failure saving credential (DB error)
+	errRepo := &testErrUserRepo{
+		UserRepository: userRepo,
+		err:            errors.New("db save error"),
+	}
+	srvErr := &Server{
+		DB:       tx,
+		UserRepo: errRepo,
+		finishRegistrationFunc: func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
+			return &webauthn.Credential{
+				ID:        []byte("cred-id-4"),
+				PublicKey: []byte("pubkey-4"),
+			}, nil
+		},
+	}
+	srvErr.putSession("session-4", &webauthn.SessionData{})
+	w4 := httptest.NewRecorder()
+	c4, _ := gin.CreateTestContext(w4)
+	c4.Request = httptest.NewRequest(http.MethodPost, "/api/v1/passkey/register/finish?session_id=session-4", strings.NewReader(`{}`))
+	c4.Set(ctxUserID, testUser.ID)
+	srvErr.FinishPasskeyRegistration(c4)
+	assertResponseCode(t, w4, http.StatusInternalServerError)
+}
+
+func TestResolvePasskeyTransports_EdgeCases(t *testing.T) {
+	// nil credential
+	resolvePasskeyTransports(nil, []byte(`{"transports":["usb"]}`))
+
+	// empty body
+	cred := &webauthn.Credential{}
+	resolvePasskeyTransports(cred, nil)
+	if len(cred.Transport) != 0 {
+		t.Errorf("expected 0 transports, got %d", len(cred.Transport))
+	}
+
+	// invalid JSON
+	resolvePasskeyTransports(cred, []byte(`{invalid-json`))
+	if len(cred.Transport) != 0 {
+		t.Errorf("expected 0 transports, got %d", len(cred.Transport))
+	}
+
+	// already populated transports
+	credWithTransports := &webauthn.Credential{
+		Transport: []protocol.AuthenticatorTransport{protocol.USB},
+	}
+	resolvePasskeyTransports(credWithTransports, []byte(`{"transports":["nfc"]}`))
+	if len(credWithTransports.Transport) != 1 || credWithTransports.Transport[0] != protocol.USB {
+		t.Errorf("expected transports to remain unchanged, got %v", credWithTransports.Transport)
+	}
 }

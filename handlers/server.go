@@ -52,6 +52,8 @@ type Server struct {
 	// handed to the client for the duration of a single begin/finish exchange.
 	webAuthnSessions map[string]*webAuthnSessionEntry
 	sessionsMu       sync.Mutex
+
+	finishRegistrationFunc func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error)
 }
 
 // NewServer wires up a Server and its WebAuthn relying party.
