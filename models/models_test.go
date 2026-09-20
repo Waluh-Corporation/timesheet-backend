@@ -161,11 +161,11 @@ func parseUUIDBytes(s string) []byte {
 
 func TestAuthenticatorNameFromAAGUID(t *testing.T) {
 	RegisterAAGUIDs(map[string]string{
-		"d548826e-79b4-db40-a3d8-11116f7e8349": "Bitwarden",
-		"b87b7a24-9407-4e38-9cfd-d5588cf3b1b6": "1Password",
-		"ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4": "Google Password Manager",
-		"fbfc3007-154e-4ecc-8c0b-6e020557d7bd": "iCloud Keychain",
-		"08987058-cadc-4b81-b6e1-30de50dcbe96": "Windows Hello",
+		"d548826e-79b4-db40-a3d8-11116f7e8349": "Bitwarden",               // gitleaks:allow
+		"b87b7a24-9407-4e38-9cfd-d5588cf3b1b6": "1Password",               // gitleaks:allow
+		"ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4": "Google Password Manager", // gitleaks:allow
+		"fbfc3007-154e-4ecc-8c0b-6e020557d7bd": "iCloud Keychain",         // gitleaks:allow
+		"08987058-cadc-4b81-b6e1-30de50dcbe96": "Windows Hello",           // gitleaks:allow
 	})
 
 	tests := []struct {

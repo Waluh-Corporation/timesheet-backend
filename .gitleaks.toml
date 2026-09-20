@@ -2,7 +2,9 @@
 useDefault = true
 
 [allowlist]
-description = "Ignore mock JWT tokens in postman_collection.json"
+description = "Ignore mock JWT tokens, test fixtures, and AAGUID maps"
 paths = [
     '''postman_collection\.json''',
+    '''models/models_test\.go''',
+    '''services/aaguid_test\.go''',
 ]
