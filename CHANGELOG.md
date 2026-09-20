@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [1.10.0] - 2026-09-20
+
 ### Added
 - **Password Reset Rate Limiting & Cooldown**: Implemented a defense-in-depth throttling mechanism (configurable via `RESET_PASSWORD_COOLDOWN_SECONDS`, default 60 seconds) per email and IP address on the password reset endpoint to prevent email bombing, spamming, and resource exhaustion.
 
@@ -192,7 +196,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Daily browser push notifications at 17:00 WIB to remind staff to fill out missing timesheet entries.
   - Email delivery for generated timesheet reports and account setup links.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.1...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.1...v1.8.0
