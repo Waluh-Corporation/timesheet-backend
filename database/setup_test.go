@@ -158,25 +158,20 @@ func TestSetup_SeedFunctions(t *testing.T) {
 	})
 
 	t.Run("Setup", func(t *testing.T) {
-		txSetup := db.Begin()
-		defer txSetup.Rollback()
 		cfg := config.Load()
-		if err := Setup(txSetup, cfg); err != nil {
+		if err := Setup(tx, cfg); err != nil {
 			t.Fatalf("Setup failed: %v", err)
 		}
 	})
 
 	t.Run("SyncAuthenticatorAAGUIDs", func(t *testing.T) {
-		txSync := db.Begin()
-		defer txSync.Rollback()
 		aaguid := "fa264024-4a24-4e2b-a489-3224b1263d91" // gitleaks:allow
-		_ = txSync.Create(&models.AuthenticatorAAGUID{
-			AAGUID:    aaguid,
-			Name:      "Sync Test Authenticator",
-			IconLight: "data:image/svg+xml;base64,bGlnaHQ=",
-			IconDark:  "data:image/svg+xml;base64,ZGFyaw==",
+		_ = tx.Create(&models.AuthenticatorAAGUID{
+			AAGUID: aaguid,
+			Name:   "Sync Test Authenticator",
+			Icon:   "data:image/svg+xml;base64,bGlnaHQ=",
 		}).Error
-		if err := SyncAuthenticatorAAGUIDs(txSync); err != nil {
+		if err := SyncAuthenticatorAAGUIDs(tx); err != nil {
 			t.Fatalf("SyncAuthenticatorAAGUIDs failed: %v", err)
 		}
 	})

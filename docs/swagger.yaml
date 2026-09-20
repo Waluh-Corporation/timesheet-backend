@@ -599,9 +599,7 @@ definitions:
         type: string
       friendly_name:
         type: string
-      icon_dark:
-        type: string
-      icon_light:
+      icon:
         type: string
       id:
         type: integer
@@ -905,9 +903,7 @@ definitions:
         type: string
       friendly_name:
         type: string
-      icon_dark:
-        type: string
-      icon_light:
+      icon:
         type: string
       id:
         type: integer
@@ -993,9 +989,7 @@ definitions:
       aaguid:
         example: 42a048a9-4b68-45a8-aa5a-cfb3d4a462ec
         type: string
-      icon_dark:
-        type: string
-      icon_light:
+      icon:
         type: string
       name:
         example: Bitwarden

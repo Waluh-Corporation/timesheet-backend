@@ -19,14 +19,12 @@ func TestCommunityAAGUID_FetchAndSync(t *testing.T) {
 	// 1. Setup mock HTTP server for community registry
 	mockData := map[string]CommunityAAGUIDEntry{
 		"ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4": {
-			Name:      "Google Password Manager",
-			IconLight: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
-			IconDark:  "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+			Name: "Google Password Manager",
+			Icon: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
 		},
 		"42a048a9-4b68-45a8-aa5a-cfb3d4a462ec": {
-			Name:      "Bitwarden",
-			IconLight: "data:image/svg+xml;base64,Yml0d2FyZGVu",
-			IconDark:  "data:image/svg+xml;base64,Yml0d2FyZGVu",
+			Name: "Bitwarden",
+			Icon: "data:image/svg+xml;base64,Yml0d2FyZGVu",
 		},
 		"invalid-uuid": {
 			Name: "Should Be Skipped",

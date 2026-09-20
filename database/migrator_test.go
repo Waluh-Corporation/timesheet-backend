@@ -273,4 +273,19 @@ func TestRunMigrationsOnDB(t *testing.T) {
 	if !hasProjectsActiveIndex {
 		t.Errorf("index idx_projects_active_lookup should exist on projects")
 	}
+
+	// 17. Verify authenticator_aaguids has single icon column and no icon_light or icon_dark
+	var hasIconCol, hasIconLightCol, hasIconDarkCol bool
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'authenticator_aaguids' AND column_name = 'icon')`).Scan(&hasIconCol)
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'authenticator_aaguids' AND column_name = 'icon_light')`).Scan(&hasIconLightCol)
+	_ = db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'authenticator_aaguids' AND column_name = 'icon_dark')`).Scan(&hasIconDarkCol)
+	if !hasIconCol {
+		t.Errorf("table authenticator_aaguids must have column 'icon'")
+	}
+	if hasIconLightCol {
+		t.Errorf("table authenticator_aaguids should NOT have column 'icon_light'")
+	}
+	if hasIconDarkCol {
+		t.Errorf("table authenticator_aaguids should NOT have column 'icon_dark'")
+	}
 }

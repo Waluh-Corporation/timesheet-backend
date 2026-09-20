@@ -113,8 +113,7 @@ func (s *Server) AdminListAuthenticators(c *gin.Context) {
 		items[i] = response.AuthenticatorItemResponse{
 			AAGUID:    r.AAGUID,
 			Name:      r.Name,
-			IconLight: r.IconLight,
-			IconDark:  r.IconDark,
+			Icon:      r.Icon,
 			UpdatedAt: r.UpdatedAt,
 		}
 	}

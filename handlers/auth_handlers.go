@@ -611,8 +611,7 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 	}
 
 	info := models.GetAuthenticatorInfo(record.AAGUID)
-	record.IconLight = info.IconLight
-	record.IconDark = info.IconDark
+	record.Icon = info.Icon
 
 	slog.Info("passkey registered successfully", "user_id", user.ID, "name", record.FriendlyName, "ip", c.ClientIP())
 	c.JSON(http.StatusOK, gin.H{
@@ -623,8 +622,7 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 			"id":                   record.ID,
 			"friendly_name":        record.FriendlyName,
 			"authenticator_aaguid": record.AuthenticatorAAGUID,
-			"icon_light":           record.IconLight,
-			"icon_dark":            record.IconDark,
+			"icon":                 record.Icon,
 			"created_at":           record.CreatedAt,
 		},
 	})
@@ -926,8 +924,7 @@ func (s *Server) AdminListPasskeys(c *gin.Context) {
 			ID:                  cr.ID,
 			FriendlyName:        cr.FriendlyName,
 			AuthenticatorAAGUID: cr.AuthenticatorAAGUID,
-			IconLight:           cr.IconLight,
-			IconDark:            cr.IconDark,
+			Icon:                cr.Icon,
 			CreatedAt:           cr.CreatedAt,
 		}
 	}

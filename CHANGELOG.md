@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.0] - 2026-09-20
+
+### Added
+- **Official Yubico Hardware Authenticator Support**: Integrated official hardware AAGUID specifications covering 70 production models across the YubiKey 5 Series (NFC, USB-A, USB-C, Nano, Lightning / 5Ci), YubiKey 5 FIPS Series, YubiKey Bio Series (FIDO and Multi-protocol Editions), and Security Key by Yubico. Models are clearly distinguished by edition and profile (Consumer vs Enterprise Profile).
+
+### Improved
+- **Streamlined Passkey Brand Icons**: Simplified passkey icon delivery to a single, unified `icon` field across all credential and authenticator endpoints, reducing API response payload size and eliminating redundant theme-specific duplicates.
+- **Production Hardware Whitelisting**: Strictly filtered out non-production hardware, pre-release identifiers, and preview test keys to ensure only official production hardware keys appear in the authenticator directory.
+- **Updated API Specifications**: Updated Swagger/OpenAPI documentation and client contracts to reflect the unified `icon` property.
+
+---
+
 ## [1.8.0] - 2026-09-20
 
 ### Added
@@ -163,7 +175,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Daily browser push notifications at 17:00 WIB to remind staff to fill out missing timesheet entries.
   - Email delivery for generated timesheet reports and account setup links.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.6.0...v1.7.0

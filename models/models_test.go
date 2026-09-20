@@ -386,7 +386,7 @@ func TestHolidayDTOs(t *testing.T) {
 func TestWebAuthnCredential_AuthenticatorRelation(t *testing.T) {
 	// Register a known authenticator
 	knownUUID := "12345678-1234-1234-1234-123456789abc"
-	RegisterAuthenticator(knownUUID, "Relational Test Key", "data:image/svg+xml;light", "data:image/svg+xml;dark")
+	RegisterAuthenticator(knownUUID, "Relational Test Key", "data:image/svg+xml;icon")
 
 	// 1. Valid known AAGUID
 	knownBytes := parseUUIDBytes(knownUUID)
@@ -406,6 +406,9 @@ func TestWebAuthnCredential_AuthenticatorRelation(t *testing.T) {
 	}
 	if modelKnown.FriendlyName != "Relational Test Key" {
 		t.Errorf("expected FriendlyName 'Relational Test Key', got %s", modelKnown.FriendlyName)
+	}
+	if modelKnown.Icon != "data:image/svg+xml;icon" {
+		t.Errorf("expected Icon 'data:image/svg+xml;icon', got %s", modelKnown.Icon)
 	}
 
 	// 2. Unknown AAGUID

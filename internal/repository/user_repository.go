@@ -128,11 +128,9 @@ func (r *userRepository) ListPasskeysByUserID(ctx context.Context, userID uint) 
 	}
 	for i := range creds {
 		if creds[i].Authenticator != nil {
-			creds[i].IconLight = creds[i].Authenticator.IconLight
-			creds[i].IconDark = creds[i].Authenticator.IconDark
-		} else if info := models.GetAuthenticatorInfo(creds[i].AAGUID); info.IconLight != "" || info.IconDark != "" {
-			creds[i].IconLight = info.IconLight
-			creds[i].IconDark = info.IconDark
+			creds[i].Icon = creds[i].Authenticator.Icon
+		} else if info := models.GetAuthenticatorInfo(creds[i].AAGUID); info.Icon != "" {
+			creds[i].Icon = info.Icon
 		}
 	}
 	return creds, nil
