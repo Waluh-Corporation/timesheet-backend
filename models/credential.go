@@ -130,7 +130,7 @@ func GetAuthenticatorInfo(aaguid []byte) AuthenticatorInfo {
 }
 
 // AuthenticatorNameFromAAGUID returns the friendly name of the authenticator
-// based on its 16-byte AAGUID. If unrecognised or zeroed, defaults to "Passkey".
+// based on its 16-byte AAGUID. If unrecognized or zeroed, defaults to "Passkey".
 func AuthenticatorNameFromAAGUID(aaguid []byte) string {
 	return GetAuthenticatorInfo(aaguid).Name
 }
