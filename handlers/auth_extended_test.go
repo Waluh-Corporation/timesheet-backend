@@ -19,6 +19,7 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/request"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
@@ -338,6 +339,124 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		assertResponseCode(t, wWeak, http.StatusBadRequest)
 	})
 
+	t.Run("VerifyResetPasswordToken full lifecycle", func(t *testing.T) {
+		// 1. Missing token
+		wMissing := httptest.NewRecorder()
+		cMissing, _ := gin.CreateTestContext(wMissing)
+		cMissing.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/reset-password/verify", nil)
+		srv.VerifyResetPasswordToken(cMissing)
+		assertResponseCode(t, wMissing, http.StatusBadRequest)
+
+		// 2. Invalid / nonexistent token
+		wInvalid := httptest.NewRecorder()
+		cInvalid, _ := gin.CreateTestContext(wInvalid)
+		cInvalid.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/reset-password/verify?token=nonexistent-token-12345", nil)
+		srv.VerifyResetPasswordToken(cInvalid)
+		assertResponseCode(t, wInvalid, http.StatusBadRequest)
+
+		var respInvalid response.VerifyResetTokenResponse
+		_ = json.Unmarshal(wInvalid.Body.Bytes(), &respInvalid)
+		if respInvalid.Valid || respInvalid.Status != "invalid" {
+			t.Errorf("expected invalid status, got %+v", respInvalid)
+		}
+
+		// 3. Valid token (GET)
+		rawTok, hashTok, _ := auth.GenerateResetToken()
+		validTok := models.PasswordResetToken{
+			UserID:    testUser.ID,
+			TokenType: "password_reset",
+			TokenHash: hashTok,
+			ExpiresAt: time.Now().Add(1 * time.Hour),
+		}
+		if err := tx.Create(&validTok).Error; err != nil {
+			t.Fatalf("failed to create reset token: %v", err)
+		}
+
+		wGetValid := httptest.NewRecorder()
+		cGetValid, _ := gin.CreateTestContext(wGetValid)
+		cGetValid.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/reset-password/verify?token="+rawTok, nil)
+		srv.VerifyResetPasswordToken(cGetValid)
+		assertResponseCode(t, wGetValid, http.StatusOK)
+
+		var respGetValid response.VerifyResetTokenResponse
+		_ = json.Unmarshal(wGetValid.Body.Bytes(), &respGetValid)
+		if !respGetValid.Valid || respGetValid.Status != "valid" || respGetValid.Username != testUser.Username {
+			t.Errorf("expected valid token response, got %+v", respGetValid)
+		}
+
+		// 4. Valid token (POST body)
+		postPayload, _ := json.Marshal(request.VerifyResetTokenRequest{Token: rawTok})
+		wPostValid := httptest.NewRecorder()
+		cPostValid, _ := gin.CreateTestContext(wPostValid)
+		cPostValid.Request = httptest.NewRequest(http.MethodPost, "/api/v1/auth/reset-password/verify", bytes.NewReader(postPayload))
+		cPostValid.Request.Header.Set("Content-Type", "application/json")
+		srv.VerifyResetPasswordToken(cPostValid)
+		assertResponseCode(t, wPostValid, http.StatusOK)
+
+		// 5. Consumed / Already used token
+		now := time.Now()
+		validTok.UsedAt = &now
+		validTok.UsedIP = "127.0.0.1"
+		_ = tx.Save(&validTok)
+
+		wUsed := httptest.NewRecorder()
+		cUsed, _ := gin.CreateTestContext(wUsed)
+		cUsed.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/reset-password/verify?token="+rawTok, nil)
+		srv.VerifyResetPasswordToken(cUsed)
+		assertResponseCode(t, wUsed, http.StatusBadRequest)
+
+		var respUsed response.VerifyResetTokenResponse
+		_ = json.Unmarshal(wUsed.Body.Bytes(), &respUsed)
+		if respUsed.Valid || respUsed.Status != "already_used" {
+			t.Errorf("expected already_used status, got %+v", respUsed)
+		}
+
+		// 6. Expired token
+		rawExp, hashExp, _ := auth.GenerateResetToken()
+		expTok := models.PasswordResetToken{
+			UserID:    testUser.ID,
+			TokenType: "password_reset",
+			TokenHash: hashExp,
+			ExpiresAt: time.Now().Add(-10 * time.Minute),
+		}
+		_ = tx.Create(&expTok)
+
+		wExp := httptest.NewRecorder()
+		cExp, _ := gin.CreateTestContext(wExp)
+		cExp.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/reset-password/verify?token="+rawExp, nil)
+		srv.VerifyResetPasswordToken(cExp)
+		assertResponseCode(t, wExp, http.StatusBadRequest)
+
+		var respExp response.VerifyResetTokenResponse
+		_ = json.Unmarshal(wExp.Body.Bytes(), &respExp)
+		if respExp.Valid || respExp.Status != "expired" {
+			t.Errorf("expected expired status, got %+v", respExp)
+		}
+
+		// 7. Token for inactive user
+		rawInactive, hashInactive, _ := auth.GenerateResetToken()
+		disUser := models.User{
+			Username: fmt.Sprintf("inact_%d", time.Now().UnixNano()),
+			Email:    fmt.Sprintf("inact_%d@example.com", time.Now().UnixNano()),
+			IsActive: false,
+		}
+		_ = tx.Create(&disUser)
+		_ = tx.Model(&disUser).Update("is_active", false)
+		tokInactive := models.PasswordResetToken{
+			UserID:    disUser.ID,
+			TokenType: "password_reset",
+			TokenHash: hashInactive,
+			ExpiresAt: time.Now().Add(1 * time.Hour),
+		}
+		_ = tx.Create(&tokInactive)
+
+		wInactive := httptest.NewRecorder()
+		cInactive, _ := gin.CreateTestContext(wInactive)
+		cInactive.Request = httptest.NewRequest(http.MethodGet, "/api/v1/auth/reset-password/verify?token="+rawInactive, nil)
+		srv.VerifyResetPasswordToken(cInactive)
+		assertResponseCode(t, wInactive, http.StatusBadRequest)
+	})
+
 	t.Run("Passkey endpoints and decodeUserHandle", func(t *testing.T) {
 		// Test decodeUserHandle
 		h1 := decodeUserHandle([]byte{42, 0, 0, 0, 0, 0, 0, 0})
@@ -386,6 +505,42 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 		srv.AdminListPasskeys(cAdminList)
 		assertResponseCode(t, wAdminList, http.StatusOK)
 
+		// UpdatePasskey (invalid ID)
+		wUpdBad := httptest.NewRecorder()
+		cUpdBad, _ := gin.CreateTestContext(wUpdBad)
+		cUpdBad.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/passkeys/not-an-id", strings.NewReader(`{"name":"test"}`))
+		cUpdBad.Params = gin.Params{{Key: "id", Value: "not-an-id"}}
+		cUpdBad.Set(ctxUserID, testUser.ID)
+		srv.UpdatePasskey(cUpdBad)
+		assertResponseCode(t, wUpdBad, http.StatusBadRequest)
+
+		// UpdatePasskey (empty name)
+		wUpdEmpty := httptest.NewRecorder()
+		cUpdEmpty, _ := gin.CreateTestContext(wUpdEmpty)
+		cUpdEmpty.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/passkeys/%d", cred.ID), strings.NewReader(`{"name":"   "}`))
+		cUpdEmpty.Params = gin.Params{{Key: "id", Value: fmt.Sprint(cred.ID)}}
+		cUpdEmpty.Set(ctxUserID, testUser.ID)
+		srv.UpdatePasskey(cUpdEmpty)
+		assertResponseCode(t, wUpdEmpty, http.StatusBadRequest)
+
+		// UpdatePasskey (success)
+		wUpd := httptest.NewRecorder()
+		cUpd, _ := gin.CreateTestContext(wUpd)
+		cUpd.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/passkeys/%d", cred.ID), strings.NewReader(`{"name":"Updated Self Key"}`))
+		cUpd.Params = gin.Params{{Key: "id", Value: fmt.Sprint(cred.ID)}}
+		cUpd.Set(ctxUserID, testUser.ID)
+		srv.UpdatePasskey(cUpd)
+		assertResponseCode(t, wUpd, http.StatusOK)
+
+		// UpdatePasskey with other user (IDOR protection -> 404)
+		wUpdIDOR := httptest.NewRecorder()
+		cUpdIDOR, _ := gin.CreateTestContext(wUpdIDOR)
+		cUpdIDOR.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/passkeys/%d", cred.ID), strings.NewReader(`{"name":"Hacked Key"}`))
+		cUpdIDOR.Params = gin.Params{{Key: "id", Value: fmt.Sprint(cred.ID)}}
+		cUpdIDOR.Set(ctxUserID, testUser.ID+999)
+		srv.UpdatePasskey(cUpdIDOR)
+		assertResponseCode(t, wUpdIDOR, http.StatusNotFound)
+
 		// DeletePasskey (self-service)
 		wDel := httptest.NewRecorder()
 		cDel, _ := gin.CreateTestContext(wDel)
@@ -415,6 +570,15 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 			t.Fatalf("failed to create credential: %v", err)
 		}
 
+		// AdminUpdatePasskey (strictly forbidden: passkeys are user-managed)
+		wAdminUpd := httptest.NewRecorder()
+		cAdminUpd, _ := gin.CreateTestContext(wAdminUpd)
+		cAdminUpd.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/admin/users/%d/passkeys/%d", testUser.ID, cred2.ID), strings.NewReader(`{"name":"Admin Renamed Key"}`))
+		cAdminUpd.Params = gin.Params{{Key: "id", Value: fmt.Sprint(testUser.ID)}, {Key: "pid", Value: fmt.Sprint(cred2.ID)}}
+		srv.AdminUpdatePasskey(cAdminUpd)
+		assertResponseCode(t, wAdminUpd, http.StatusForbidden)
+
+		// AdminDeletePasskey (strictly forbidden: passkeys are user-managed)
 		wAdminDel := httptest.NewRecorder()
 		cAdminDel, _ := gin.CreateTestContext(wAdminDel)
 		cAdminDel.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%d/passkeys/%d", testUser.ID, cred2.ID), nil)
@@ -423,18 +587,66 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 			{Key: "pid", Value: fmt.Sprint(cred2.ID)},
 		}
 		srv.AdminDeletePasskey(cAdminDel)
-		assertResponseCode(t, wAdminDel, http.StatusOK)
+		assertResponseCode(t, wAdminDel, http.StatusForbidden)
 
-		// AdminDeletePasskey 404
-		wAdminDel404 := httptest.NewRecorder()
-		cAdminDel404, _ := gin.CreateTestContext(wAdminDel404)
-		cAdminDel404.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%d/passkeys/%d", testUser.ID, cred2.ID), nil)
-		cAdminDel404.Params = gin.Params{
-			{Key: "id", Value: fmt.Sprint(testUser.ID)},
-			{Key: "pid", Value: fmt.Sprint(cred2.ID)},
+		// Admin user self-service update their OWN passkey via /passkeys/:id -> OK
+		adminUser := models.User{
+			Username:     "admin_self",
+			Email:        "admin_self@example.com",
+			Role:         models.RoleAdmin,
+			IsActive:     true,
+			PasswordHash: "dummy",
 		}
-		srv.AdminDeletePasskey(cAdminDel404)
-		assertResponseCode(t, wAdminDel404, http.StatusNotFound)
+		if err := tx.Create(&adminUser).Error; err != nil {
+			t.Fatalf("failed to create adminUser: %v", err)
+		}
+		adminCred := models.WebAuthnCredential{
+			UserID:       adminUser.ID,
+			CredentialID: []byte("admin-cred-id"),
+			PublicKey:    []byte("admin-public-key"),
+			FriendlyName: "Admin Key",
+		}
+		if err := tx.Create(&adminCred).Error; err != nil {
+			t.Fatalf("failed to create adminCred: %v", err)
+		}
+
+		wAdminSelfUpd := httptest.NewRecorder()
+		cAdminSelfUpd, _ := gin.CreateTestContext(wAdminSelfUpd)
+		cAdminSelfUpd.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/passkeys/%d", adminCred.ID), strings.NewReader(`{"name":"Admin Renamed Self Key"}`))
+		cAdminSelfUpd.Params = gin.Params{{Key: "id", Value: fmt.Sprint(adminCred.ID)}}
+		cAdminSelfUpd.Set(ctxUserID, adminUser.ID)
+		cAdminSelfUpd.Set(ctxRole, models.RoleAdmin)
+		srv.UpdatePasskey(cAdminSelfUpd)
+		assertResponseCode(t, wAdminSelfUpd, http.StatusOK)
+
+		// Admin user trying to update a regular user's passkey via /passkeys/:id -> 404 (IDOR protected)
+		wAdminTamperUpd := httptest.NewRecorder()
+		cAdminTamperUpd, _ := gin.CreateTestContext(wAdminTamperUpd)
+		cAdminTamperUpd.Request = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/v1/passkeys/%d", cred2.ID), strings.NewReader(`{"name":"Admin Tampered Key"}`))
+		cAdminTamperUpd.Params = gin.Params{{Key: "id", Value: fmt.Sprint(cred2.ID)}}
+		cAdminTamperUpd.Set(ctxUserID, adminUser.ID)
+		cAdminTamperUpd.Set(ctxRole, models.RoleAdmin)
+		srv.UpdatePasskey(cAdminTamperUpd)
+		assertResponseCode(t, wAdminTamperUpd, http.StatusNotFound)
+
+		// Admin user trying to delete a regular user's passkey via /passkeys/:id -> 404 (IDOR protected)
+		wAdminTamperDel := httptest.NewRecorder()
+		cAdminTamperDel, _ := gin.CreateTestContext(wAdminTamperDel)
+		cAdminTamperDel.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/passkeys/%d", cred2.ID), nil)
+		cAdminTamperDel.Params = gin.Params{{Key: "id", Value: fmt.Sprint(cred2.ID)}}
+		cAdminTamperDel.Set(ctxUserID, adminUser.ID)
+		cAdminTamperDel.Set(ctxRole, models.RoleAdmin)
+		srv.DeletePasskey(cAdminTamperDel)
+		assertResponseCode(t, wAdminTamperDel, http.StatusNotFound)
+
+		// Delete cred2 using self-service DeletePasskey by owner (testUser) -> OK
+		wDelCred2 := httptest.NewRecorder()
+		cDelCred2, _ := gin.CreateTestContext(wDelCred2)
+		cDelCred2.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/passkeys/%d", cred2.ID), nil)
+		cDelCred2.Params = gin.Params{{Key: "id", Value: fmt.Sprint(cred2.ID)}}
+		cDelCred2.Set(ctxUserID, testUser.ID)
+		srv.DeletePasskey(cDelCred2)
+		assertResponseCode(t, wDelCred2, http.StatusOK)
 
 		// BeginPasskeyRegistration
 		wRegBegin := httptest.NewRecorder()
@@ -961,6 +1173,7 @@ func TestPasskeyManagement_FullFlow(t *testing.T) {
 	}
 	_ = tx.Create(&credAdmin)
 
+	// Admin cannot delete user passkeys by policy (403 Forbidden)
 	wAdminDel := httptest.NewRecorder()
 	cAdminDel, _ := gin.CreateTestContext(wAdminDel)
 	cAdminDel.Params = gin.Params{
@@ -969,18 +1182,7 @@ func TestPasskeyManagement_FullFlow(t *testing.T) {
 	}
 	cAdminDel.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%d/passkeys/%d", user.ID, credAdmin.ID), nil)
 	srv.AdminDeletePasskey(cAdminDel)
-	assertResponseCode(t, wAdminDel, http.StatusOK)
-
-	// AdminDeletePasskey not found
-	wAdminDel404 := httptest.NewRecorder()
-	cAdminDel404, _ := gin.CreateTestContext(wAdminDel404)
-	cAdminDel404.Params = gin.Params{
-		{Key: "id", Value: fmt.Sprintf("%d", user.ID)},
-		{Key: "pid", Value: "999999"},
-	}
-	cAdminDel404.Request = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%d/passkeys/999999", user.ID), nil)
-	srv.AdminDeletePasskey(cAdminDel404)
-	assertResponseCode(t, wAdminDel404, http.StatusNotFound)
+	assertResponseCode(t, wAdminDel, http.StatusForbidden)
 
 	// 8. BeginPasskeyRegistration for authenticated user
 	wReg := httptest.NewRecorder()
@@ -1127,13 +1329,13 @@ func TestAuthHandlers_RepoErrors(t *testing.T) {
 		srv.AdminListPasskeys(cAL)
 		assertResponseCode(t, wAL, http.StatusInternalServerError)
 
-		// AdminDeletePasskey error
+		// AdminDeletePasskey is rejected by policy before repo is called (403 Forbidden)
 		wAD := httptest.NewRecorder()
 		cAD, _ := gin.CreateTestContext(wAD)
 		cAD.Params = []gin.Param{{Key: "id", Value: "123"}, {Key: "pid", Value: "456"}}
 		cAD.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/123/passkeys/456", nil)
 		srv.AdminDeletePasskey(cAD)
-		assertResponseCode(t, wAD, http.StatusInternalServerError)
+		assertResponseCode(t, wAD, http.StatusForbidden)
 	})
 
 	t.Run("Token repository error branches", func(t *testing.T) {

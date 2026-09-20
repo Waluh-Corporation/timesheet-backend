@@ -61,6 +61,11 @@ func setupDatabase(cfg *config.Config, logger *slog.Logger, migrateFlag, migrate
 			logger.Error("database setup failed", slog.Any("error", err))
 			os.Exit(1)
 		}
+	} else {
+		// Always sync AAGUID authenticator registry into memory on server boot
+		if err := database.SyncAuthenticatorAAGUIDs(db); err != nil {
+			logger.Warn("failed to sync authenticator aaguids into in-memory registry", slog.Any("error", err))
+		}
 	}
 
 	if migrateOnlyFlag {
@@ -252,6 +257,8 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authGroup.POST("/logout", s.Logout)
 		authGroup.POST("/forgot-password", s.ForgotPassword)
 		authGroup.POST("/reset-password", s.ResetPassword)
+		authGroup.GET("/reset-password/verify", s.VerifyResetPasswordToken)
+		authGroup.POST("/reset-password/verify", s.VerifyResetPasswordToken)
 		authGroup.POST("/passkey/login/begin", s.BeginPasskeyLogin)
 		authGroup.POST("/passkey/login/finish", s.FinishPasskeyLogin)
 	}
@@ -277,6 +284,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.POST("/passkey/register/begin", s.BeginPasskeyRegistration)
 		authed.POST("/passkey/register/finish", s.FinishPasskeyRegistration)
 		authed.GET("/passkeys", s.ListPasskeys)
+		authed.PATCH("/passkeys/:id", s.UpdatePasskey)
 		authed.DELETE("/passkeys/:id", s.DeletePasskey)
 
 		// Daily activity entry + list + detail + generation.
@@ -315,7 +323,10 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.PATCH("/users/:id", s.UpdateUser)
 		admin.DELETE("/users/:id", s.DeleteUser)
 		admin.GET("/users/:id/passkeys", s.AdminListPasskeys)
+		admin.PATCH("/users/:id/passkeys/:pid", s.AdminUpdatePasskey)
 		admin.DELETE("/users/:id/passkeys/:pid", s.AdminDeletePasskey)
+		admin.GET("/authenticators", s.AdminListAuthenticators)
+		admin.POST("/authenticators/sync", s.SyncCommunityAuthenticators)
 
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)

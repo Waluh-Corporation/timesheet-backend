@@ -336,6 +336,104 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 	RespondMessage(c, http.StatusOK, "if the email exists, a reset link has been sent")
 }
 
+func maskEmail(email string) string {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return email
+	}
+	name, domain := parts[0], parts[1]
+	if len(name) <= 2 {
+		return name[:1] + "***@" + domain
+	}
+	return string(name[0]) + "***" + string(name[len(name)-1]) + "@" + domain
+}
+
+// VerifyResetPasswordToken godoc
+// @Summary Verify password reset token
+// @Description Checks if a password reset token is valid, expired, or already used before displaying the reset password form.
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param token query string false "Reset token (query parameter)"
+// @Param request body request.VerifyResetTokenRequest false "Reset token (JSON body)"
+// @Success 200 {object} response.VerifyResetTokenResponse "Token is valid"
+// @Failure 400 {object} response.VerifyResetTokenResponse "Token is invalid, expired, or already used"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/auth/reset-password/verify [get]
+// @Router /api/v1/auth/reset-password/verify [post]
+func (s *Server) VerifyResetPasswordToken(c *gin.Context) {
+	rawToken := strings.TrimSpace(c.Query("token"))
+	if rawToken == "" && c.Request.Method == http.MethodPost {
+		var req request.VerifyResetTokenRequest
+		if err := c.ShouldBindJSON(&req); err == nil {
+			rawToken = strings.TrimSpace(req.Token)
+		}
+	}
+
+	if rawToken == "" {
+		c.JSON(http.StatusBadRequest, response.VerifyResetTokenResponse{
+			Valid:   false,
+			Status:  "invalid",
+			Message: "token is required",
+		})
+		return
+	}
+
+	tokenRepo := s.getTokenRepository()
+	userRepo := s.getUserRepository()
+	if tokenRepo == nil || userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+
+	tokenHash := auth.HashToken(rawToken)
+	token, err := tokenRepo.FindResetTokenByHash(c.Request.Context(), tokenHash)
+	if err != nil || token == nil {
+		c.JSON(http.StatusBadRequest, response.VerifyResetTokenResponse{
+			Valid:   false,
+			Status:  "invalid",
+			Message: "invalid reset token",
+		})
+		return
+	}
+
+	if token.UsedAt != nil {
+		c.JSON(http.StatusBadRequest, response.VerifyResetTokenResponse{
+			Valid:   false,
+			Status:  "already_used",
+			Message: "reset token has already been used",
+		})
+		return
+	}
+
+	if time.Now().After(token.ExpiresAt) {
+		c.JSON(http.StatusBadRequest, response.VerifyResetTokenResponse{
+			Valid:   false,
+			Status:  "expired",
+			Message: "reset token has expired",
+		})
+		return
+	}
+
+	user, err := userRepo.FindByID(c.Request.Context(), token.UserID)
+	if err != nil || user == nil || !user.IsActive {
+		c.JSON(http.StatusBadRequest, response.VerifyResetTokenResponse{
+			Valid:   false,
+			Status:  "invalid",
+			Message: "user not found or inactive",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, response.VerifyResetTokenResponse{
+		Valid:    true,
+		Status:   "valid",
+		Message:  "token valid",
+		Email:    maskEmail(user.Email),
+		Username: user.Username,
+	})
+}
+
 // ResetPassword godoc
 // @Summary Complete password reset
 // @Description Validates a reset token and sets a new password adhering to NIST guidelines.
@@ -362,9 +460,19 @@ func (s *Server) ResetPassword(c *gin.Context) {
 	}
 
 	tokenHash := auth.HashToken(req.Token)
-	token, err := tokenRepo.FindValidResetTokenByHash(c.Request.Context(), tokenHash)
+	token, err := tokenRepo.FindResetTokenByHash(c.Request.Context(), tokenHash)
 	if err != nil || token == nil {
-		RespondError(c, http.StatusBadRequest, "invalid or expired token")
+		RespondError(c, http.StatusBadRequest, "invalid reset token")
+		return
+	}
+
+	if token.UsedAt != nil {
+		RespondError(c, http.StatusBadRequest, "reset token has already been used")
+		return
+	}
+
+	if time.Now().After(token.ExpiresAt) {
+		RespondError(c, http.StatusBadRequest, "reset token has expired")
 		return
 	}
 
@@ -490,13 +598,72 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 		return
 	}
 
-	record := models.NewWebAuthnCredential(user.ID, credential, c.Query("name"))
+	passkeyName := strings.TrimSpace(c.Query("name"))
+	if passkeyName == "" {
+		passkeyName = strings.TrimSpace(c.GetHeader("X-Passkey-Name"))
+	}
+
+	record := models.NewWebAuthnCredential(user.ID, credential, passkeyName)
+
+	// Fallback guarantee: if AuthenticatorAAGUID or icons are missing, query DB directly
+	if (record.AuthenticatorAAGUID == nil || record.IconLight == "") && len(credential.Authenticator.AAGUID) == 16 && s.DB != nil {
+		if formatted, ok := models.FormatAAGUID(credential.Authenticator.AAGUID); ok {
+			var auth models.AuthenticatorAAGUID
+			if err := s.DB.WithContext(c.Request.Context()).Where("LOWER(aaguid) = LOWER(?)", formatted).First(&auth).Error; err == nil {
+				record.AuthenticatorAAGUID = &auth.AAGUID
+				if record.IconLight == "" {
+					record.IconLight = auth.IconLight
+				}
+				if record.IconDark == "" {
+					record.IconDark = auth.IconDark
+				}
+				if passkeyName == "" || record.FriendlyName == "Passkey" {
+					record.FriendlyName = auth.Name
+				}
+				models.RegisterAuthenticator(auth.AAGUID, auth.Name, auth.IconLight, auth.IconDark)
+			}
+		}
+	}
+
 	if err := userRepo.CreatePasskeyCredential(c.Request.Context(), &record); err != nil {
 		RespondError(c, http.StatusInternalServerError, "could not save credential")
 		return
 	}
-	slog.Info("passkey registered successfully", "user_id", user.ID, "name", c.Query("name"), "ip", c.ClientIP())
-	RespondMessage(c, http.StatusOK, "passkey registered")
+
+	// Post-registration double-check: ensure database record has AAGUID linked
+	if record.ID > 0 && s.DB != nil && len(record.AAGUID) == 16 {
+		if formatted, ok := models.FormatAAGUID(record.AAGUID); ok {
+			var auth models.AuthenticatorAAGUID
+			if err := s.DB.WithContext(c.Request.Context()).Where("LOWER(aaguid) = LOWER(?)", formatted).First(&auth).Error; err == nil {
+				if record.IconLight == "" {
+					record.IconLight = auth.IconLight
+				}
+				if record.IconDark == "" {
+					record.IconDark = auth.IconDark
+				}
+				if record.AuthenticatorAAGUID == nil {
+					record.AuthenticatorAAGUID = &auth.AAGUID
+					_ = s.DB.WithContext(c.Request.Context()).Model(&models.WebAuthnCredential{}).
+						Where("id = ?", record.ID).Update("authenticator_aaguid", auth.AAGUID).Error
+				}
+			}
+		}
+	}
+
+	slog.Info("passkey registered successfully", "user_id", user.ID, "name", record.FriendlyName, "ip", c.ClientIP())
+	c.JSON(http.StatusOK, gin.H{
+		"code":    http.StatusOK,
+		"status":  "success",
+		"message": "passkey registered",
+		"data": gin.H{
+			"id":                   record.ID,
+			"friendly_name":        record.FriendlyName,
+			"authenticator_aaguid": record.AuthenticatorAAGUID,
+			"icon_light":           record.IconLight,
+			"icon_dark":            record.IconDark,
+			"created_at":           record.CreatedAt,
+		},
+	})
 }
 
 // --- WebAuthn: passwordless login ---
@@ -707,6 +874,57 @@ func (s *Server) DeletePasskey(c *gin.Context) {
 	RespondMessage(c, http.StatusOK, "passkey removed")
 }
 
+// UpdatePasskey godoc
+// @Summary Update passkey name
+// @Description Updates the friendly name of a registered passkey owned by the authenticated user (accessible to all roles; users can only rename their own passkeys).
+// @Tags Passkey
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "Passkey credential ID"
+// @Param request body request.UpdatePasskeyRequest true "Updated passkey name"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid passkey ID or payload"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 404 {object} response.ErrorResponse "Passkey not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/passkeys/{id} [patch]
+func (s *Server) UpdatePasskey(c *gin.Context) {
+	id64, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid passkey ID")
+		return
+	}
+	var req request.UpdatePasskeyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, errInvalidPayload)
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		RespondError(c, http.StatusBadRequest, "passkey name cannot be empty")
+		return
+	}
+
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
+		return
+	}
+	uid := currentUserID(c)
+	updated, err := userRepo.UpdatePasskeyName(c.Request.Context(), uint(id64), &uid, name)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !updated {
+		RespondError(c, http.StatusNotFound, "passkey not found")
+		return
+	}
+	slog.Info("passkey updated", "user_id", uid, "passkey_id", id64, "name", name, "ip", c.ClientIP())
+	RespondMessage(c, http.StatusOK, "passkey updated")
+}
+
 // --- Passkey management (admin, for any user) ---
 
 // AdminListPasskeys godoc
@@ -741,51 +959,45 @@ func (s *Server) AdminListPasskeys(c *gin.Context) {
 	resp := make([]response.AdminPasskeyResponse, len(creds))
 	for i, cr := range creds {
 		resp[i] = response.AdminPasskeyResponse{
-			ID:           cr.ID,
-			FriendlyName: cr.FriendlyName,
-			CreatedAt:    cr.CreatedAt,
+			ID:                  cr.ID,
+			FriendlyName:        cr.FriendlyName,
+			AuthenticatorAAGUID: cr.AuthenticatorAAGUID,
+			IconLight:           cr.IconLight,
+			IconDark:            cr.IconDark,
+			CreatedAt:           cr.CreatedAt,
 		}
 	}
 	RespondSuccess(c, http.StatusOK, resp)
 }
 
 // AdminDeletePasskey godoc
-// @Summary Delete a passkey for a user (Admin)
-// @Description Removes a specified passkey belonging to a user (admin only).
+// @Summary Delete a passkey for a user (Forbidden)
+// @Description Passkeys are strictly user-managed credentials; admins cannot delete user passkeys.
 // @Tags Admin
 // @Security BearerAuth
 // @Produce json
 // @Param id path int true "User ID"
 // @Param pid path int true "Passkey ID"
-// @Success 200 {object} response.MessageResponse
-// @Failure 400 {object} response.ErrorResponse "Invalid passkey ID"
-// @Failure 401 {object} response.ErrorResponse "Unauthorized"
-// @Failure 403 {object} response.ErrorResponse "Admin only"
-// @Failure 404 {object} response.ErrorResponse "Passkey not found"
-// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Failure 403 {object} response.ErrorResponse "Admin cannot delete user passkeys"
 // @Router /api/v1/admin/users/{id}/passkeys/{pid} [delete]
 func (s *Server) AdminDeletePasskey(c *gin.Context) {
-	pid64, err := strconv.ParseUint(c.Param("pid"), 10, 32)
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid passkey ID")
-		return
-	}
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
-		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
-		return
-	}
-	deleted, err := userRepo.DeletePasskey(c.Request.Context(), uint(pid64), nil)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if !deleted {
-		RespondError(c, http.StatusNotFound, "passkey not found")
-		return
-	}
-	slog.Info("admin deleted passkey", "admin_id", currentUserID(c), "passkey_id", pid64, "ip", c.ClientIP())
-	RespondMessage(c, http.StatusOK, "passkey removed")
+	RespondError(c, http.StatusForbidden, "admin cannot delete user passkeys; passkeys are strictly user-managed credentials")
+}
+
+// AdminUpdatePasskey godoc
+// @Summary Update a passkey name for a user (Forbidden)
+// @Description Passkeys are strictly user-managed credentials; admins cannot modify user passkeys.
+// @Tags Admin
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "User ID"
+// @Param pid path int true "Passkey ID"
+// @Param request body request.UpdatePasskeyRequest true "Updated passkey name"
+// @Failure 403 {object} response.ErrorResponse "Admin cannot modify user passkeys"
+// @Router /api/v1/admin/users/{id}/passkeys/{pid} [patch]
+func (s *Server) AdminUpdatePasskey(c *gin.Context) {
+	RespondError(c, http.StatusForbidden, "admin cannot modify user passkeys; passkeys are strictly user-managed credentials")
 }
 
 // decodeUserHandle reverses User.WebAuthnID (little-endian uint64 -> id).
