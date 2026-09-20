@@ -141,6 +141,9 @@ func NewWebAuthnCredential(userID uint, cred *webauthn.Credential, friendlyName 
 	for _, t := range cred.Transport {
 		transports = append(transports, string(t))
 	}
+	if len(transports) == 0 && cred.Authenticator.Attachment == protocol.Platform {
+		transports = append(transports, string(protocol.Internal))
+	}
 	raw, _ := json.Marshal(transports)
 
 	info := GetAuthenticatorInfo(cred.Authenticator.AAGUID)

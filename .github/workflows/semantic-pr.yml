@@ -7,9 +7,6 @@ on:
       - edited
       - synchronize
       - reopened
-    branches:
-      - main
-      - development
 
 permissions:
   pull-requests: read

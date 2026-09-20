@@ -130,6 +130,23 @@ func TestWebAuthnCredential_ToLibraryAndNew(t *testing.T) {
 	if len(emptyLibCred.Transport) != 0 {
 		t.Errorf("expected 0 transports, got %d", len(emptyLibCred.Transport))
 	}
+
+	// Test NewWebAuthnCredential with Platform attachment and empty transport fallback
+	platformCred := &webauthn.Credential{
+		ID:        []byte("platform-cred-id"),
+		PublicKey: []byte("platform-pub-key"),
+		Authenticator: webauthn.Authenticator{
+			Attachment: protocol.Platform,
+		},
+	}
+	platformRecord := NewWebAuthnCredential(1, platformCred, "Touch ID")
+	libPlatform, err := platformRecord.ToLibrary()
+	if err != nil {
+		t.Fatalf("ToLibrary on platform record failed: %v", err)
+	}
+	if len(libPlatform.Transport) != 1 || libPlatform.Transport[0] != protocol.Internal {
+		t.Errorf("expected [internal] transport for platform attachment, got %v", libPlatform.Transport)
+	}
 }
 
 func parseUUIDBytes(s string) []byte {
