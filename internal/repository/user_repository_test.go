@@ -178,6 +178,18 @@ func TestUserRepository(t *testing.T) {
 		t.Fatalf("expected 1 passkey with sign count 5, got %v", keys)
 	}
 
+	// UpdatePasskeyName tests
+	updated, err := repo.UpdatePasskeyName(ctx, cred.ID, &user.ID, "Renamed Key")
+	if err != nil || !updated {
+		t.Fatalf("repo.UpdatePasskeyName failed: updated=%v, err=%v", updated, err)
+	}
+
+	wrongUID := user.ID + 999
+	updatedWrong, err := repo.UpdatePasskeyName(ctx, cred.ID, &wrongUID, "Should Not Work")
+	if err != nil || updatedWrong {
+		t.Fatalf("expected update to fail for wrong user ID: updated=%v, err=%v", updatedWrong, err)
+	}
+
 	// DeletePasskey with matching userID
 	deleted, err := repo.DeletePasskey(ctx, cred.ID, &user.ID)
 	if err != nil || !deleted {
@@ -195,6 +207,13 @@ func TestUserRepository(t *testing.T) {
 		FriendlyName:    "Admin Deleted Key",
 	}
 	_ = repo.CreatePasskeyCredential(ctx, cred2)
+
+	// Admin update (nil userID)
+	updatedAdmin, err := repo.UpdatePasskeyName(ctx, cred2.ID, nil, "Admin Renamed Key")
+	if err != nil || !updatedAdmin {
+		t.Fatalf("repo.UpdatePasskeyName(admin) failed: updated=%v, err=%v", updatedAdmin, err)
+	}
+
 	deleted2, err := repo.DeletePasskey(ctx, cred2.ID, nil)
 	if err != nil || !deleted2 {
 		t.Fatalf("repo.DeletePasskey(admin) failed: deleted=%v, err=%v", deleted2, err)

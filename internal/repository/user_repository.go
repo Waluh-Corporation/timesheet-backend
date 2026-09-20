@@ -26,6 +26,7 @@ type UserRepository interface {
 	UpdatePasskeySignCount(ctx context.Context, credID []byte, signCount uint32, backupState bool) error
 	ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error)
 	DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error)
+	UpdatePasskeyName(ctx context.Context, id uint, userID *uint, name string) (bool, error)
 }
 
 type userRepository struct {
@@ -121,9 +122,18 @@ func (r *userRepository) UpdatePasskeySignCount(ctx context.Context, credID []by
 
 func (r *userRepository) ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error) {
 	var creds []models.WebAuthnCredential
-	if err := r.db.WithContext(ctx).Where("user_id = ?", userID).
+	if err := r.db.WithContext(ctx).Preload("Authenticator").Where("user_id = ?", userID).
 		Order("created_at desc").Find(&creds).Error; err != nil {
 		return nil, err
+	}
+	for i := range creds {
+		if creds[i].Authenticator != nil {
+			creds[i].IconLight = creds[i].Authenticator.IconLight
+			creds[i].IconDark = creds[i].Authenticator.IconDark
+		} else if info := models.GetAuthenticatorInfo(creds[i].AAGUID); info.IconLight != "" || info.IconDark != "" {
+			creds[i].IconLight = info.IconLight
+			creds[i].IconDark = info.IconDark
+		}
 	}
 	return creds, nil
 }
@@ -134,6 +144,18 @@ func (r *userRepository) DeletePasskey(ctx context.Context, id uint, userID *uin
 		query = query.Where("user_id = ?", *userID)
 	}
 	res := query.Delete(&models.WebAuthnCredential{})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+func (r *userRepository) UpdatePasskeyName(ctx context.Context, id uint, userID *uint, name string) (bool, error) {
+	query := r.db.WithContext(ctx).Model(&models.WebAuthnCredential{}).Where("id = ?", id)
+	if userID != nil {
+		query = query.Where("user_id = ?", *userID)
+	}
+	res := query.Update("friendly_name", name)
 	if res.Error != nil {
 		return false, res.Error
 	}
