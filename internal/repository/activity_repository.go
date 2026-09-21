@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"timesheet-backend/models"
 )
@@ -63,11 +64,11 @@ func (r *activityRepository) FindActiveByUserAndDate(ctx context.Context, userID
 }
 
 func (r *activityRepository) Create(ctx context.Context, activity *models.DailyActivity) error {
-	return r.db.WithContext(ctx).Create(activity).Error
+	return r.db.WithContext(ctx).Omit(clause.Associations).Create(activity).Error
 }
 
 func (r *activityRepository) Update(ctx context.Context, activity *models.DailyActivity) error {
-	return r.db.WithContext(ctx).Save(activity).Error
+	return r.db.WithContext(ctx).Omit(clause.Associations).Save(activity).Error
 }
 
 func jakartaLocation() *time.Location {

@@ -494,6 +494,43 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("Update existing activity to a different project", func(t *testing.T) {
+		testProjBeta := models.Project{
+			Code:        "P99002",
+			Name:        "Master Project Beta",
+			AppImpacted: "Beta Impacted App",
+			IsActive:    true,
+		}
+		if err := tx.Create(&testProjBeta).Error; err != nil {
+			t.Fatalf("failed to create test project beta: %v", err)
+		}
+
+		reqBodyUpdate := `{"date":"2026-09-20","project_ref_id":` + itoa(testProjBeta.ID) + `,"activity":"Switching to Beta","status":"P","start_time":"08:30","end_time":"17:30"}`
+		wUpdate := httptest.NewRecorder()
+		cUpdate, _ := gin.CreateTestContext(wUpdate)
+		cUpdate.Request = httptest.NewRequest("POST", "/api/v1/activities", strings.NewReader(reqBodyUpdate))
+		cUpdate.Request.Header.Set("Content-Type", "application/json")
+		cUpdate.Set(ctxUserID, user1.ID)
+		cUpdate.Set(ctxRole, models.RoleUser)
+
+		srv.UpsertDailyActivity(cUpdate)
+		assertFatalCode(t, wUpdate, http.StatusOK)
+
+		var reloaded models.DailyActivity
+		if err := srv.DB.Preload("ProjectRef").Preload("StatusRef").Where("id = ?", saved.ID).First(&reloaded).Error; err != nil {
+			t.Fatalf("failed to reload activity: %v", err)
+		}
+		if reloaded.ProjectRefID == nil || *reloaded.ProjectRefID != testProjBeta.ID {
+			t.Fatalf("expected ProjectRefID %d (Beta), got %v", testProjBeta.ID, reloaded.ProjectRefID)
+		}
+		if reloaded.GetProjectName() != "Master Project Beta" {
+			t.Fatalf("expected project name 'Master Project Beta', got %q", reloaded.GetProjectName())
+		}
+		if reloaded.GetAppImpacted() != "Beta Impacted App" {
+			t.Fatalf("expected app impacted 'Beta Impacted App', got %q", reloaded.GetAppImpacted())
+		}
+	})
+
 	t.Run("UpsertDailyActivity bad JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
