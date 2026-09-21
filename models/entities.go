@@ -328,6 +328,8 @@ type ProfileChangeRequest struct {
 	SiteRel       *Site       `gorm:"foreignKey:SiteID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"site_rel,omitempty"`
 	CompanyID     *uint       `gorm:"index" json:"company_id"`
 	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
+	Email         string      `gorm:"size:255" json:"email,omitempty"`
+	Notes         string      `gorm:"column:notes;type:text" json:"notes,omitempty"`
 
 	ReviewedBy *uint      `gorm:"index:idx_profile_change_requests_reviewed_by" json:"reviewed_by"`
 	ReviewedAt *time.Time `json:"reviewed_at"`

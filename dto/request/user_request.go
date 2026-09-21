@@ -43,11 +43,13 @@ type UpdateUserRequest struct {
 	SiteID       *uint        `json:"site_id" example:"1"`
 	Company      *string      `json:"company" example:"MII"`
 	CompanyID    *uint        `json:"company_id" example:"1"`
+	Email        *string      `json:"email" binding:"omitempty,email" example:"john.doe@example.com"`
 }
 
 // ProfileChangeRequestDTO represents a user's self-service profile change submission.
 type ProfileChangeRequestDTO struct {
 	Name         string `json:"name" example:"John Doe"`
+	Email        string `json:"email" binding:"omitempty,email" example:"john.doe@example.com"`
 	BniID        string `json:"bni_id" example:"12345678"`
 	EmployeeID   string `json:"employee_id" example:"EMP-001"`
 	Division     string `json:"division" example:"Application Development Division"`
@@ -57,4 +59,5 @@ type ProfileChangeRequestDTO struct {
 	Site         string `json:"site" example:"Jakarta"`
 	SiteID       *uint  `json:"site_id" example:"1"`
 	CompanyID    *uint  `json:"company_id" example:"1"`
+	Notes        string `json:"notes" example:"Moved to new site"`
 }
