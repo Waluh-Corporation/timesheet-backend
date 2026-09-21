@@ -1074,6 +1074,8 @@ definitions:
     properties:
       activity:
         type: string
+      app_impacted:
+        type: string
       date:
         type: string
       end_time:
@@ -1084,10 +1086,16 @@ definitions:
         type: string
       project_name:
         type: string
+      project_ref:
+        $ref: '#/definitions/models.Project'
+      project_ref_id:
+        type: integer
       start_time:
         type: string
       status:
         type: string
+      status_ref:
+        $ref: '#/definitions/models.ActivityStatus'
     type: object
   response.DeleteResponse:
     properties:

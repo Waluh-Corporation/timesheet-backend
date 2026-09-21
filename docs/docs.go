@@ -5382,6 +5382,9 @@ const docTemplate = `{
                 "activity": {
                     "type": "string"
                 },
+                "app_impacted": {
+                    "type": "string"
+                },
                 "date": {
                     "type": "string"
                 },
@@ -5397,11 +5400,20 @@ const docTemplate = `{
                 "project_name": {
                     "type": "string"
                 },
+                "project_ref": {
+                    "$ref": "#/definitions/models.Project"
+                },
+                "project_ref_id": {
+                    "type": "integer"
+                },
                 "start_time": {
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
+                },
+                "status_ref": {
+                    "$ref": "#/definitions/models.ActivityStatus"
                 }
             }
         },

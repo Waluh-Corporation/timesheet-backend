@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **App Impacted & Project Sync in Daily Activities**:
+  - Ensured `app_impacted`, `project_ref_id`, `project_ref`, and `status_ref` are returned in `DailyActivityResponse` for both `GET /api/v1/activities` (list) and `GET /api/v1/activities/:id` (detail), preventing UI fallback misattributions.
+  - Hardened project resolution by requiring matching code and name (`AND` condition) when both are supplied, avoiding false-positive collisions for shared project IDs (e.g., `P24015`).
+
 ---
 
 ## [1.11.0] - 2026-09-21

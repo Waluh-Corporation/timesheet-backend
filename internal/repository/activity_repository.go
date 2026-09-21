@@ -170,17 +170,20 @@ func (r *activityRepository) FindActiveProjectByRefID(ctx context.Context, refID
 
 func (r *activityRepository) FindActiveProjectByCodeOrName(ctx context.Context, projectID, projectName string) (*models.Project, error) {
 	query := r.db.WithContext(ctx).Model(&models.Project{}).Scopes(models.ActiveOnly)
-	if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
-		query = query.Where("id = ? OR code = ?", idNum, projectID)
-	} else if projectID != "" {
-		query = query.Where("code = ?", projectID)
-	}
-	if projectName != "" {
-		if projectID != "" {
-			query = r.db.WithContext(ctx).Model(&models.Project{}).Scopes(models.ActiveOnly).Where("(code = ? OR LOWER(name) = LOWER(?))", projectID, projectName)
+	if projectID != "" && projectName != "" {
+		if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
+			query = query.Where("(id = ? OR code = ?) AND LOWER(name) = LOWER(?)", idNum, projectID, projectName)
 		} else {
-			query = query.Where("LOWER(name) = LOWER(?)", projectName)
+			query = query.Where("code = ? AND LOWER(name) = LOWER(?)", projectID, projectName)
 		}
+	} else if projectID != "" {
+		if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
+			query = query.Where("id = ? OR code = ?", idNum, projectID)
+		} else {
+			query = query.Where("code = ?", projectID)
+		}
+	} else if projectName != "" {
+		query = query.Where("LOWER(name) = LOWER(?)", projectName)
 	}
 
 	var proj models.Project
