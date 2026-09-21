@@ -4482,6 +4482,9 @@
                 "division_rel": {
                     "$ref": "#/definitions/models.Division"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "employee_id": {
                     "type": "string"
                 },
@@ -4492,6 +4495,9 @@
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "notes": {
                     "type": "string"
                 },
                 "position": {
@@ -4934,6 +4940,10 @@
                     "type": "integer",
                     "example": 1
                 },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
                 "employee_id": {
                     "type": "string",
                     "example": "EMP-001"
@@ -4941,6 +4951,10 @@
                 "name": {
                     "type": "string",
                     "example": "John Doe"
+                },
+                "notes": {
+                    "type": "string",
+                    "example": "Moved to new site"
                 },
                 "site": {
                     "type": "string",
@@ -5068,6 +5082,10 @@
                     "type": "integer",
                     "example": 1
                 },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
                 "employee_id": {
                     "type": "string",
                     "example": "EMP-001"
@@ -5154,6 +5172,9 @@
                 "division_id": {
                     "type": "integer"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "employee_id": {
                     "type": "string"
                 },
@@ -5161,6 +5182,9 @@
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "notes": {
                     "type": "string"
                 },
                 "reviewed_at": {
@@ -5566,6 +5590,9 @@
                 "division": {
                     "type": "string"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "employee_id": {
                     "type": "string"
                 },
@@ -5576,6 +5603,9 @@
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "notes": {
                     "type": "string"
                 },
                 "position": {

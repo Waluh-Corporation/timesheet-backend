@@ -145,6 +145,70 @@ func TestUserService_ApplyApprovedProfileChange(t *testing.T) {
 	}
 }
 
+func TestUserService_ApplyApprovedProfileChange_WithEmail(t *testing.T) {
+	repo := newMockUserRepo()
+	svc := NewUserService(repo, auth.DefaultHasher, nil)
+
+	user := &models.User{
+		ID:       10,
+		Username: "alice",
+		Email:    "alice.old@example.com",
+		Role:     models.RoleUser,
+		Name:     "Alice",
+	}
+	repo.users[10] = user
+
+	change := &models.ProfileChangeRequest{
+		UserID: 10,
+		Name:   "Alice",
+		Email:  "alice.new@example.com",
+		Notes:  "Update email to new domain",
+	}
+
+	err := svc.ApplyApprovedProfileChange(context.Background(), change)
+	if err != nil {
+		t.Fatalf("ApplyApprovedProfileChange failed: %v", err)
+	}
+
+	if repo.users[10].Email != "alice.new@example.com" {
+		t.Errorf("expected email 'alice.new@example.com', got %s", repo.users[10].Email)
+	}
+}
+
+func TestUserService_ApplyApprovedProfileChange_EmailConflict(t *testing.T) {
+	repo := newMockUserRepo()
+	svc := NewUserService(repo, auth.DefaultHasher, nil)
+
+	user1 := &models.User{
+		ID:       10,
+		Username: "alice",
+		Email:    "alice@example.com",
+		Role:     models.RoleUser,
+	}
+	user2 := &models.User{
+		ID:       20,
+		Username: "bob",
+		Email:    "bob@example.com",
+		Role:     models.RoleUser,
+	}
+	repo.users[10] = user1
+	repo.users[20] = user2
+
+	change := &models.ProfileChangeRequest{
+		UserID: 10,
+		Email:  "bob@example.com", // existing email of user 20
+		Notes:  "Change email",
+	}
+
+	err := svc.ApplyApprovedProfileChange(context.Background(), change)
+	if err == nil {
+		t.Fatalf("expected error on email conflict, got nil")
+	}
+	if !errors.Is(err, domain.ErrEmailConflict) {
+		t.Errorf("expected ErrEmailConflict, got %v", err)
+	}
+}
+
 func TestUserService_CreateUserByAdmin(t *testing.T) {
 	repo := newMockUserRepo()
 	svc := NewUserService(repo, auth.DefaultHasher, nil)
