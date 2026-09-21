@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Accurate App Impacted & Project Selection**: Fixed an issue where daily activities could display the wrong impacted application or project variant (such as showing Overseas or Bisnis instead of Cash) in the historical activity table and edit activity modal. Project selections and impacted applications are now consistently preserved and displayed accurately across all screens.
+
 ---
 
 ## [1.11.0] - 2026-09-21

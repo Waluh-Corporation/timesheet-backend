@@ -440,6 +440,60 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 
 	assertProjectSyncFields(t, saved, testProj)
 
+	t.Run("GetDailyActivity and ListActivities response includes AppImpacted and ProjectRefID", func(t *testing.T) {
+		wGet := httptest.NewRecorder()
+		cGet, _ := gin.CreateTestContext(wGet)
+		cGet.Request = httptest.NewRequest("GET", "/api/v1/activities/"+itoa(saved.ID), nil)
+		cGet.Params = gin.Params{{Key: "id", Value: itoa(saved.ID)}}
+		cGet.Set(ctxUserID, user1.ID)
+		cGet.Set(ctxRole, models.RoleUser)
+
+		srv.GetDailyActivity(cGet)
+		assertFatalCode(t, wGet, http.StatusOK)
+
+		var getResp struct {
+			Code   int                            `json:"code"`
+			Status string                         `json:"status"`
+			Data   response.DailyActivityResponse `json:"data"`
+		}
+		if err := json.Unmarshal(wGet.Body.Bytes(), &getResp); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if getResp.Data.AppImpacted != testProj.AppImpacted {
+			t.Errorf("expected AppImpacted %q, got %q", testProj.AppImpacted, getResp.Data.AppImpacted)
+		}
+		if getResp.Data.ProjectRefID == nil || *getResp.Data.ProjectRefID != testProj.ID {
+			t.Errorf("expected ProjectRefID %d, got %v", testProj.ID, getResp.Data.ProjectRefID)
+		}
+
+		wList := httptest.NewRecorder()
+		cList, _ := gin.CreateTestContext(wList)
+		cList.Request = httptest.NewRequest("GET", "/api/v1/activities?start_date=2026-09-20&end_date=2026-09-20", nil)
+		cList.Set(ctxUserID, user1.ID)
+		cList.Set(ctxRole, models.RoleUser)
+
+		srv.ListActivities(cList)
+		assertFatalCode(t, wList, http.StatusOK)
+
+		var listResp struct {
+			Code   int                              `json:"code"`
+			Status string                           `json:"status"`
+			Data   []response.DailyActivityResponse `json:"data"`
+		}
+		if err := json.Unmarshal(wList.Body.Bytes(), &listResp); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if len(listResp.Data) == 0 {
+			t.Fatalf("expected at least 1 activity in list, got 0")
+		}
+		if listResp.Data[0].AppImpacted != testProj.AppImpacted {
+			t.Errorf("expected list AppImpacted %q, got %q", testProj.AppImpacted, listResp.Data[0].AppImpacted)
+		}
+		if listResp.Data[0].ProjectRefID == nil || *listResp.Data[0].ProjectRefID != testProj.ID {
+			t.Errorf("expected list ProjectRefID %d, got %v", testProj.ID, listResp.Data[0].ProjectRefID)
+		}
+	})
+
 	t.Run("UpsertDailyActivity bad JSON", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
