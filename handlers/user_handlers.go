@@ -46,10 +46,19 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
+	uid := currentUserID(c)
+	if req.Email != "" {
+		var existing models.User
+		if err := s.DB.Where("email = ? AND id != ?", req.Email, uid).First(&existing).Error; err == nil {
+			RespondError(c, http.StatusBadRequest, "email is already registered by another user")
+			return
+		}
+	}
 	change := models.ProfileChangeRequest{
-		UserID:       currentUserID(c),
+		UserID:       uid,
 		Status:       models.ProfilePending,
 		Name:         req.Name,
+		Email:        req.Email,
 		BniID:        req.BniID,
 		EmployeeID:   req.EmployeeID,
 		Division:     req.Division,
@@ -59,6 +68,7 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 		Site:         req.Site,
 		SiteID:       req.SiteID,
 		CompanyID:    req.CompanyID,
+		Notes:        req.Notes,
 	}
 	if err := s.DB.Create(&change).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
@@ -105,6 +115,8 @@ func (s *Server) MyProfileChanges(c *gin.Context) {
 			Site:          ch.Site,
 			CompanyID:     ch.CompanyID,
 			CompanyRel:    ch.CompanyRel,
+			Email:         ch.Email,
+			Notes:         ch.Notes,
 			ReviewedBy:    ch.ReviewedBy,
 			ReviewedAt:    ch.ReviewedAt,
 		}

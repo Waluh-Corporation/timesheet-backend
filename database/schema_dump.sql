@@ -309,6 +309,8 @@ CREATE TABLE public.profile_change_requests (
     reviewed_at timestamp with time zone,
     company_id bigint,
     department_id bigint,
+    email character varying(255),
+    notes text,
     CONSTRAINT chk_profile_change_requests_status CHECK (((status)::text = ANY ((ARRAY['pending'::character varying, 'approved'::character varying, 'rejected'::character varying])::text[])))
 );
 

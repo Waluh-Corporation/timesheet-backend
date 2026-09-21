@@ -68,8 +68,8 @@ func TestResponseDTOs(t *testing.T) {
 		t.Errorf("AdminUserResponse mismatch: %+v", adminUserResp)
 	}
 
-	adminProfResp := AdminProfileChangeResponse{ID: 1, UserName: "user1", Status: models.ProfilePending}
-	if adminProfResp.UserName != "user1" || adminProfResp.Status != models.ProfilePending {
+	adminProfResp := AdminProfileChangeResponse{ID: 1, UserName: "user1", Status: models.ProfilePending, Email: "new@example.com", Notes: "Notes 1"}
+	if adminProfResp.UserName != "user1" || adminProfResp.Status != models.ProfilePending || adminProfResp.Email != "new@example.com" || adminProfResp.Notes != "Notes 1" {
 		t.Errorf("AdminProfileChangeResponse mismatch: %+v", adminProfResp)
 	}
 
@@ -149,9 +149,9 @@ func TestUserResponseDTOs(t *testing.T) {
 		Code:    201,
 		Status:  "success",
 		Message: "profile change request submitted",
-		Data:    &ProfileChangeResponse{ID: 10, UserID: 42, Status: models.ProfilePending},
+		Data:    &ProfileChangeResponse{ID: 10, UserID: 42, Status: models.ProfilePending, Email: "change@example.com", Notes: "Notes detail"},
 	}
-	if submitResp.Code != 201 || submitResp.Data == nil || submitResp.Data.ID != 10 {
+	if submitResp.Code != 201 || submitResp.Data == nil || submitResp.Data.ID != 10 || submitResp.Data.Email != "change@example.com" || submitResp.Data.Notes != "Notes detail" {
 		t.Errorf("SubmitProfileChangeResponse mismatch: %+v", submitResp)
 	}
 
