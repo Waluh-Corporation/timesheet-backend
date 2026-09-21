@@ -385,6 +385,16 @@ func applyUserUpdates(db *gorm.DB, user *models.User, req *request.UpdateUserReq
 	if req.Role != nil {
 		user.Role = *req.Role
 	}
+	if req.Email != nil {
+		newEmail := strings.TrimSpace(*req.Email)
+		if newEmail != "" && newEmail != user.Email {
+			var existing models.User
+			if err := db.Where("email = ? AND id != ?", newEmail, user.ID).First(&existing).Error; err == nil {
+				return "email is already registered", http.StatusBadRequest
+			}
+			user.Email = newEmail
+		}
+	}
 	if req.IsActive != nil {
 		user.IsActive = *req.IsActive
 	}
@@ -629,6 +639,8 @@ func (s *Server) ListProfileChanges(c *gin.Context) {
 			Site:         ch.Site,
 			SiteID:       ch.SiteID,
 			CompanyID:    ch.CompanyID,
+			Email:        ch.Email,
+			Notes:        ch.Notes,
 			ReviewedBy:   ch.ReviewedBy,
 			ReviewerName: revName,
 			ReviewedAt:   ch.ReviewedAt,

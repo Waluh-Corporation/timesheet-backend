@@ -4489,6 +4489,9 @@ const docTemplate = `{
                 "division_rel": {
                     "$ref": "#/definitions/models.Division"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "employee_id": {
                     "type": "string"
                 },
@@ -4499,6 +4502,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "notes": {
                     "type": "string"
                 },
                 "position": {
@@ -4941,6 +4947,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 1
                 },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
                 "employee_id": {
                     "type": "string",
                     "example": "EMP-001"
@@ -4948,6 +4958,10 @@ const docTemplate = `{
                 "name": {
                     "type": "string",
                     "example": "John Doe"
+                },
+                "notes": {
+                    "type": "string",
+                    "example": "Moved to new site"
                 },
                 "site": {
                     "type": "string",
@@ -5075,6 +5089,10 @@ const docTemplate = `{
                     "type": "integer",
                     "example": 1
                 },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
                 "employee_id": {
                     "type": "string",
                     "example": "EMP-001"
@@ -5161,6 +5179,9 @@ const docTemplate = `{
                 "division_id": {
                     "type": "integer"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "employee_id": {
                     "type": "string"
                 },
@@ -5168,6 +5189,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "notes": {
                     "type": "string"
                 },
                 "reviewed_at": {
@@ -5573,6 +5597,9 @@ const docTemplate = `{
                 "division": {
                     "type": "string"
                 },
+                "email": {
+                    "type": "string"
+                },
                 "employee_id": {
                     "type": "string"
                 },
@@ -5583,6 +5610,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "notes": {
                     "type": "string"
                 },
                 "position": {
