@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Notes on Profile Change Requests**: Users can now provide a helpful note or explanation (such as moving to a new office site or department transfer) when requesting profile updates. This gives administrators clear context when reviewing submissions.
+- **Email Address Updates**:
+  - **For Administrators**: Administrators can now directly update any user's email address from the user management panel to keep account contact details up to date.
+  - **For Users**: Users can now request an email address change through the profile update request form, which takes effect once reviewed and approved by an administrator.
+
 ---
 
 ## [1.10.0] - 2026-09-20
