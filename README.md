@@ -64,7 +64,7 @@ Timesheet Backend automates monthly corporate timesheet generation across multi-
 ├── config/                 # Environment variables and application runtime configuration
 ├── database/               # Database connection setup, migrator, and seeds
 │   └── migrations/         # Versioned up/down SQL migration scripts
-├── docs/                   # Swagger specs, database guides, and architecture artifacts
+├── docs/                   # Swagger specs, database guides, architecture, & Git workflow (docs/GIT_WORKFLOW.md)
 ├── handlers/               # Gin route controllers, middleware, and request/response DTOs
 ├── mailer/                 # Transactional SMTP email delivery engine
 ├── models/                 # GORM database entities and data transfer objects
