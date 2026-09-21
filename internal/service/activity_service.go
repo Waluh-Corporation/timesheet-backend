@@ -130,6 +130,7 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 		existing.Status = req.Status
 		existing.Activity = req.Activity
 		existing.ProjectRefID = activity.ProjectRefID
+		existing.ProjectRef = activity.ProjectRef
 		existing.UpdatedAt = time.Now()
 		return s.repo.Update(ctx, existing)
 	}
