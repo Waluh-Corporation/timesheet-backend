@@ -10,9 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **App Impacted & Project Sync in Daily Activities**:
-  - Ensured `app_impacted`, `project_ref_id`, `project_ref`, and `status_ref` are returned in `DailyActivityResponse` for both `GET /api/v1/activities` (list) and `GET /api/v1/activities/:id` (detail), preventing UI fallback misattributions.
-  - Hardened project resolution by requiring matching code and name (`AND` condition) when both are supplied, avoiding false-positive collisions for shared project IDs (e.g., `P24015`).
+- **Accurate App Impacted & Project Selection**: Fixed an issue where daily activities could display the wrong impacted application or project variant (such as showing Overseas or Bisnis instead of Cash) in the historical activity table and edit activity modal. Project selections and impacted applications are now consistently preserved and displayed accurately across all screens.
 
 ---
 
