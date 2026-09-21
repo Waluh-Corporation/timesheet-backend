@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +82,9 @@ func (m *mockActivityRepo) ListActiveByUser(ctx context.Context, userID uint, fi
 			res = append(res, *act)
 		}
 	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].ID < res[j].ID
+	})
 	return res, int64(len(res)), nil
 }
 
