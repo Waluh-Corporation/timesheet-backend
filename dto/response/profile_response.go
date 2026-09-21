@@ -25,6 +25,8 @@ type ProfileChangeResponse struct {
 	Site          string               `json:"site,omitempty"`
 	CompanyID     *uint                `json:"company_id,omitempty"`
 	CompanyRel    *models.Company      `json:"company_rel,omitempty"`
+	Email         string               `json:"email,omitempty"`
+	Notes         string               `json:"notes,omitempty"`
 	ReviewedBy    *uint                `json:"reviewed_by,omitempty"`
 	ReviewedAt    *time.Time           `json:"reviewed_at,omitempty"`
 }

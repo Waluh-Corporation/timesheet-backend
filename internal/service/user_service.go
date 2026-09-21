@@ -142,6 +142,13 @@ func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *mo
 	}
 
 	user.Name = change.Name
+	if change.Email != "" && change.Email != user.Email {
+		existing, err := s.repo.FindByEmail(ctx, change.Email)
+		if err == nil && existing != nil && existing.ID != user.ID {
+			return domain.NewUserError(domain.ErrEmailConflict, "email already in use")
+		}
+		user.Email = change.Email
+	}
 	user.BniID = change.BniID
 	if change.EmployeeID != "" {
 		user.EmployeeID = change.EmployeeID

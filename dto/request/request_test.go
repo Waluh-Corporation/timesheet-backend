@@ -33,13 +33,14 @@ func TestRequestDTOs(t *testing.T) {
 		t.Errorf("CreateUserRequest mismatch: %+v", userReq)
 	}
 
-	updateReq := UpdateUserRequest{}
-	if updateReq.Role != nil {
+	email := "test@example.com"
+	updateReq := UpdateUserRequest{Email: &email}
+	if updateReq.Email == nil || *updateReq.Email != email {
 		t.Errorf("UpdateUserRequest mismatch: %+v", updateReq)
 	}
 
-	profileReq := ProfileChangeRequestDTO{Name: "Name", EmployeeID: "EMP01"}
-	if profileReq.EmployeeID != "EMP01" {
+	profileReq := ProfileChangeRequestDTO{Name: "Name", EmployeeID: "EMP01", Email: "req@example.com", Notes: "Catatan perubahan"}
+	if profileReq.EmployeeID != "EMP01" || profileReq.Email != "req@example.com" || profileReq.Notes != "Catatan perubahan" {
 		t.Errorf("ProfileChangeRequestDTO mismatch: %+v", profileReq)
 	}
 

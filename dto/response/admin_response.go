@@ -44,6 +44,8 @@ type AdminProfileChangeResponse struct {
 	Site         string               `json:"site"`
 	SiteID       *uint                `json:"site_id,omitempty"`
 	CompanyID    *uint                `json:"company_id,omitempty"`
+	Email        string               `json:"email,omitempty"`
+	Notes        string               `json:"notes,omitempty"`
 	ReviewedBy   *uint                `json:"reviewed_by,omitempty"`
 	ReviewerName string               `json:"reviewer_name,omitempty"`
 	ReviewedAt   *time.Time           `json:"reviewed_at,omitempty"`
