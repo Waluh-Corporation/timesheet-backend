@@ -40,83 +40,95 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 	}
 
 	empID := ResolveEmployeeID(in.User)
-	div := in.User.Division
+	div := ""
+	pos := "Junior Programmer"
+	if in.User != nil {
+		div = in.User.Division
+		if in.User.Position != "" {
+			pos = in.User.Position
+		}
+	}
 	if div == "" {
-		div = "BDD / WDL"
+		div = "Wholesale Digital Delivery"
 	}
 	periodStr := fmt.Sprintf("%s %d", MonthNameIndonesian(in.Month), in.Year)
 
-	// In Adidata master template, labels are B2:B6 and values are D2:D6.
-	// We also write C1:C5 for compatibility with tests that check standard metadata positions.
+	// In Adidata master template, labels are B2:C2, B3:C3, B4, B5:C5, B6:C6 and values are D2, D3, D4, D5, D6.
 	_ = f.SetCellValue(sheetTS, "D2", ": PT BANK NEGARA INDONESIA (PERSERO) Tbk")
 	_ = f.SetCellValue(sheetTS, "D3", ": "+div)
 	_ = f.SetCellValue(sheetTS, "D4", ": "+userName)
 	_ = f.SetCellValue(sheetTS, "D5", ": "+empID)
 	_ = f.SetCellValue(sheetTS, "D6", ": "+periodStr)
 
-	_ = f.SetCellValue(sheetTS, "C1", ": PT BANK NEGARA INDONESIA (PERSERO) Tbk")
-	_ = f.SetCellValue(sheetTS, "C2", ": "+div)
-	_ = f.SetCellValue(sheetTS, "C3", ": "+userName)
-	_ = f.SetCellValue(sheetTS, "C4", ": "+empID)
-	_ = f.SetCellValue(sheetTS, "C5", ": "+periodStr)
-
 	byDay := BuildByDayMap(in.Activities)
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
-	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"}
+	allCols := []string{"B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
+	wrapCols := []string{"L", "O", "Q", "R"}
 
 	for day := 1; day <= 31; day++ {
-		row := 8 + day
+		row := 9 + day // Row 10 is Day 1; Row 40 is Day 31
 		rs := fmt.Sprintf("%d", row)
+
+		// Merge Activity/Remark columns (L:N) for this row to match header L8:N9
+		_ = f.MergeCell(sheetTS, "L"+rs, "N"+rs)
 
 		if day > daysInMonth {
 			for _, col := range allCols {
 				_ = f.SetCellValue(sheetTS, col+rs, "")
 			}
-			ApplyBlankPaddingRow(f, sheetTS, row, allCols, []string{"K"}, st)
+			ApplyBlankPaddingRow(f, sheetTS, row, allCols, wrapCols, st)
 			continue
 		}
 
 		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheetTS, "A", rs, allCols, []string{"K"}, dsc)
-		_ = f.SetCellValue(sheetTS, "A"+rs, dsc.Date)
+		ApplyDayRowStyles(f, sheetTS, "B", rs, allCols, wrapCols, dsc)
+		_ = f.SetCellValue(sheetTS, "B"+rs, dsc.Date)
 
-		WriteWorkingHoursRow(f, sheetTS, "B", "C", "D", rs, "(C%s-B%s)*24", true, dsc)
+		WriteWorkingHoursRow(f, sheetTS, "C", "D", "E", rs, "(D%s-C%s)*24", true, dsc)
 
 		status := ""
 		if dsc.HasActivity {
 			status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
-			WriteActivityProjectCells(f, sheetTS, rs, row, dsc.Activity.Activity, dsc.Activity.GetProjectName(), dsc.Activity.GetProjectCode(), dsc.Activity.GetAppImpacted())
+			_ = f.SetCellValue(sheetTS, "L"+rs, dsc.Activity.Activity)
+			projName := dsc.Activity.GetProjectName()
+			if projName == "" {
+				projName = "BNI Direct"
+			}
+			_ = f.SetCellValue(sheetTS, "O"+rs, projName)
+			_ = f.SetCellValue(sheetTS, "P"+rs, dsc.Activity.GetProjectCode())
+			_ = f.SetCellValue(sheetTS, "Q"+rs, dsc.Activity.GetAppImpacted())
+			_ = f.SetCellValue(sheetTS, "R"+rs, "")
+			h := calculateRowHeight(dsc.Activity.Activity, projName, dsc.Activity.GetProjectCode(), dsc.Activity.GetAppImpacted(), "", "")
+			_ = f.SetRowHeight(sheetTS, row, h)
 		} else if dsc.IsHolidayOrWeekend {
-			WriteHolidayRemarkRow(f, sheetTS, "K", rs, row, dsc.Holiday)
+			WriteHolidayRemarkRow(f, sheetTS, "L", rs, row, dsc.Holiday)
 		}
 
-		WriteAttendanceMatrixStatus(f, sheetTS, rs, status)
+		writeAdidataAttendanceMatrixStatus(f, sheetTS, rs, status)
 	}
 
 	formulas := map[string]string{
-		"E": `COUNTIF(E9:E39,"P")`,
-		"F": `COUNTIF(F9:F39,"S")`,
-		"G": `COUNTIF(G9:G39,"BT")`,
-		"H": `COUNTIF(H9:H39,"PM")`,
-		"I": `COUNTIF(I9:I39,"V")`,
-		"J": `COUNTIF(J9:J39,"x")`,
+		"F": `COUNTIF(F10:F40,"P")`,
+		"G": `COUNTIF(G10:G40,"S")`,
+		"H": `COUNTIF(H10:H40,"BT")`,
+		"I": `COUNTIF(I10:I40,"PM")`,
+		"J": `COUNTIF(J10:J40,"V")`,
+		"K": `COUNTIF(K10:K40,"x")`,
 	}
-	WriteColumnFormulas(f, sheetTS, "40", formulas, st.BoldCenterStyle)
+	WriteColumnFormulas(f, sheetTS, "41", formulas, st.BoldCenterStyle)
 
-	// Signatures
+	// Signatures (merged cells B44:D48, E44:H48, I44:M48, B49:D49, B50:D50, E50:H50, I50:M50)
 	tlName, dhName := ResolveApprovers(in)
 	if userName != "" {
-		_ = f.SetCellValue(sheetTS, "A48", userName)
-		_ = f.SetCellValue(sheetTS, "B48", userName)
+		_ = f.SetCellValue(sheetTS, "B44", userName)
 	}
 	if tlName != "" {
-		_ = f.SetCellValue(sheetTS, "D48", tlName)
-		_ = f.SetCellValue(sheetTS, "E48", tlName)
+		_ = f.SetCellValue(sheetTS, "E44", tlName)
 	}
 	if dhName != "" {
-		_ = f.SetCellValue(sheetTS, "G48", dhName)
-		_ = f.SetCellValue(sheetTS, "I48", dhName)
+		_ = f.SetCellValue(sheetTS, "I44", dhName)
 	}
+	_ = f.SetCellValue(sheetTS, "B49", "( "+pos+" )")
 
 	dateStr := "DATE : " + CurrentDateFormatted()
 	_ = f.SetCellValue(sheetTS, "B50", dateStr)
@@ -274,5 +286,33 @@ func writeAdidataSPLSignatures(f *excelize.File, splSheet string, in GenerationI
 		_ = f.SetCellValue(splSheet, p.StartCol+"21", nameVal)
 		styleMergedRange(f, splSheet, p.StartCol+"22", p.EndCol+"22", st.DataCenterStyle)
 		_ = f.SetCellValue(splSheet, p.StartCol+"22", p.Position)
+	}
+}
+
+// writeAdidataAttendanceMatrixStatus writes the 6-column matrix attendance status ("F" through "K") for Adidata.
+func writeAdidataAttendanceMatrixStatus(f *excelize.File, sheet, rs, status string) {
+	statusCol := map[string]string{
+		"P":  "F",
+		"S":  "G",
+		"BT": "H",
+		"PM": "I",
+		"V":  "J",
+		"X":  "K",
+	}
+	statusMark := map[string]string{
+		"P":  "P",
+		"S":  "S",
+		"BT": "BT",
+		"PM": "PM",
+		"V":  "V",
+		"X":  "x",
+	}
+	matrixCols := []string{"F", "G", "H", "I", "J", "K"}
+
+	for _, col := range matrixCols {
+		_ = f.SetCellValue(sheet, col+rs, "")
+	}
+	if col, ok := statusCol[status]; ok {
+		_ = f.SetCellValue(sheet, col+rs, statusMark[status])
 	}
 }

@@ -228,31 +228,31 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 
 	// 1. Check TIMESHEET sheet
 	const sheetTS = "TIMESHEET"
-	valC3, _ := f.GetCellValue(sheetTS, "C3")
-	if valC3 != ": John Doe" {
-		t.Errorf("C3 = %q, want ': John Doe'", valC3)
+	valD4, _ := f.GetCellValue(sheetTS, "D4")
+	if valD4 != ": John Doe" {
+		t.Errorf("D4 = %q, want ': John Doe'", valD4)
 	}
-	valC4, _ := f.GetCellValue(sheetTS, "C4")
-	if valC4 != ": EMP-0001" {
-		t.Errorf("C4 = %q, want ': EMP-0001'", valC4)
-	}
-
-	// Day 4 -> Row 12
-	valE12, _ := f.GetCellValue(sheetTS, "E12")
-	if valE12 != "P" {
-		t.Errorf("E12 = %q, want 'P'", valE12)
+	valD5, _ := f.GetCellValue(sheetTS, "D5")
+	if valD5 != ": EMP-0001" {
+		t.Errorf("D5 = %q, want ': EMP-0001'", valD5)
 	}
 
-	// Formula Adidata: =(C12-B12)*24
-	formulaD12, _ := f.GetCellFormula(sheetTS, "D12")
-	if formulaD12 != "(C12-B12)*24" {
-		t.Errorf("D12 formula = %q, want '(C12-B12)*24'", formulaD12)
+	// Day 4 -> Row 13
+	valF13, _ := f.GetCellValue(sheetTS, "F13")
+	if valF13 != "P" {
+		t.Errorf("F13 = %q, want 'P'", valF13)
 	}
 
-	// Formula COUNTIF row 40
-	formulaE40, _ := f.GetCellFormula(sheetTS, "E40")
-	if formulaE40 != `COUNTIF(E9:E39,"P")` {
-		t.Errorf("E40 formula = %q, want 'COUNTIF(E9:E39,\"P\")'", formulaE40)
+	// Formula Adidata: =(D13-C13)*24
+	formulaE13, _ := f.GetCellFormula(sheetTS, "E13")
+	if formulaE13 != "(D13-C13)*24" {
+		t.Errorf("E13 formula = %q, want '(D13-C13)*24'", formulaE13)
+	}
+
+	// Formula COUNTIF row 41
+	formulaF41, _ := f.GetCellFormula(sheetTS, "F41")
+	if formulaF41 != `COUNTIF(F10:F40,"P")` {
+		t.Errorf("F41 formula = %q, want 'COUNTIF(F10:F40,\"P\")'", formulaF41)
 	}
 
 	// 2. Check SPL sheet created for overtime
@@ -375,7 +375,7 @@ func TestTemplateBuilders_MasterApproversSignaturesWithoutOvertime(t *testing.T)
 	}{
 		{company: "mii", sheetName: "Sheet1", tlCell: "D46", dhCell: "G46", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
 		{company: "sdd", sheetName: "Juni", tlCell: "H52", dhCell: "L52", wantTL: "Nama : Budi TeamLeader", wantDH: "Nama : Dewi DeptHead"},
-		{company: "adidata", sheetName: "TIMESHEET", tlCell: "D48", dhCell: "G48", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
+		{company: "adidata", sheetName: "TIMESHEET", tlCell: "E44", dhCell: "I44", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
 		{company: "ntt", sheetName: "Timesheet", tlCell: "F55", dhCell: "J55", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
 	}
 
@@ -448,7 +448,7 @@ func TestTemplateBuilders_WorkingHoursAndTotalHourFormatting(t *testing.T) {
 	}{
 		{code: "mii", sheetName: "Sheet1", startRow: 9, startCol: "B", endCol: "C", totalCol: "D", isDecimal: false},
 		{code: "sdd", sheetName: "September", startRow: 12, startCol: "C", endCol: "D", totalCol: "E", isDecimal: false},
-		{code: "adidata", sheetName: "TIMESHEET", startRow: 9, startCol: "B", endCol: "C", totalCol: "D", isDecimal: true},
+		{code: "adidata", sheetName: "TIMESHEET", startRow: 10, startCol: "C", endCol: "D", totalCol: "E", isDecimal: true},
 		{code: "ntt", sheetName: "Timesheet", startRow: 11, startCol: "B", endCol: "C", totalCol: "D", isDecimal: false},
 	}
 
