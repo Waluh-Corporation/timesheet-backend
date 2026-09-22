@@ -1,7 +1,11 @@
 package services
 
 import (
+	"archive/zip"
+	"bytes"
 	"fmt"
+	"io"
+	"regexp"
 	"strings"
 	"time"
 
@@ -9,6 +13,144 @@ import (
 
 	"timesheet-backend/models"
 )
+
+// Default working hours constants.
+const (
+	DefaultStartTime = "08:00"
+	DefaultEndTime   = "17:00"
+)
+
+var (
+	defaultStartFrac, _ = parseTimeToExcelFraction(DefaultStartTime)
+	defaultEndFrac, _   = parseTimeToExcelFraction(DefaultEndTime)
+	defaultTotalFrac    = defaultEndFrac - defaultStartFrac // 9 hours fraction: 0.375
+)
+
+// CalculateTimeDurationFrac calculates duration in fraction of a 24-hour day.
+func CalculateTimeDurationFrac(startStr, endStr string) float64 {
+	startFrac, errStart := parseTimeToExcelFraction(startStr)
+	endFrac, errEnd := parseTimeToExcelFraction(endStr)
+	if errStart != nil || errEnd != nil {
+		return defaultTotalFrac
+	}
+	dur := endFrac - startFrac
+	if dur < 0 {
+		dur += 1.0
+	}
+	return dur
+}
+
+// WriteWorkingHoursRow writes Start, End, and Total Hour cells according to activity or standard defaults.
+// - If has activity: writes activity Start, End, calculated total duration, formula, and timeStyle.
+// - If holiday/weekend without activity: clears Start, End, Total Hour cells and applies timeStyle.
+// - If working day without activity: writes default 08:00, 17:00, 09:00 duration, formula, and timeStyle.
+func WriteWorkingHoursRow(
+	f *excelize.File,
+	sheet string,
+	startCol, endCol, totalCol, rs string,
+	formulaFmt string,
+	isDecimalTotal bool,
+	dsc DayStyleContext,
+) {
+	startCell := startCol + rs
+	endCell := endCol + rs
+	totalCell := totalCol + rs
+
+	totalStyle := dsc.TimeStyle
+	if isDecimalTotal {
+		totalStyle = dsc.DecimalStyle
+	}
+
+	if dsc.HasActivity {
+		start := strings.TrimSpace(dsc.Activity.StartTime)
+		end := strings.TrimSpace(dsc.Activity.EndTime)
+		if start == "" {
+			start = DefaultStartTime
+		}
+		if end == "" {
+			end = DefaultEndTime
+		}
+		WriteTimeCells(f, sheet, startCell, endCell, start, end, dsc.TimeStyle)
+		dur := CalculateTimeDurationFrac(start, end)
+		if isDecimalTotal {
+			_ = f.SetCellValue(sheet, totalCell, dur*24.0)
+		} else {
+			_ = f.SetCellValue(sheet, totalCell, dur)
+		}
+		if formulaFmt != "" {
+			form := strings.ReplaceAll(formulaFmt, "{row}", rs)
+			if strings.Contains(form, "%s") {
+				form = fmt.Sprintf(form, rs, rs)
+			}
+			_ = f.SetCellFormula(sheet, totalCell, form)
+		}
+		_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+	} else if dsc.IsHolidayOrWeekend {
+		_ = f.SetCellValue(sheet, startCell, "")
+		_ = f.SetCellValue(sheet, endCell, "")
+		_ = f.SetCellValue(sheet, totalCell, "")
+		_ = f.SetCellStyle(sheet, startCell, startCell, dsc.TimeStyle)
+		_ = f.SetCellStyle(sheet, endCell, endCell, dsc.TimeStyle)
+		_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+	} else {
+		// Working day without activity: default 08:00 and 17:00
+		_ = f.SetCellValue(sheet, startCell, defaultStartFrac)
+		_ = f.SetCellValue(sheet, endCell, defaultEndFrac)
+		_ = f.SetCellStyle(sheet, startCell, startCell, dsc.TimeStyle)
+		_ = f.SetCellStyle(sheet, endCell, endCell, dsc.TimeStyle)
+
+		if isDecimalTotal {
+			_ = f.SetCellValue(sheet, totalCell, defaultTotalFrac*24.0)
+		} else {
+			_ = f.SetCellValue(sheet, totalCell, defaultTotalFrac)
+		}
+		if formulaFmt != "" {
+			form := strings.ReplaceAll(formulaFmt, "{row}", rs)
+			if strings.Contains(form, "%s") {
+				form = fmt.Sprintf(form, rs, rs)
+			}
+			_ = f.SetCellFormula(sheet, totalCell, form)
+		}
+		_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+	}
+}
+
+// CleanWorkbookBuffer strips erroneous t="str" attributes from formula cells across all worksheet XMLs,
+// ensuring Excel treats formula results as numbers/times instead of string literals.
+func CleanWorkbookBuffer(in []byte) []byte {
+	zr, err := zip.NewReader(bytes.NewReader(in), int64(len(in)))
+	if err != nil {
+		return in
+	}
+	var out bytes.Buffer
+	zw := zip.NewWriter(&out)
+
+	reFormulaStr := regexp.MustCompile(`(<c\s+r="[A-Z0-9]+"[^>]*?)\s+t="str"([^>]*?>\s*<f[^>]*>.*?</f>)`)
+	sheetXmlRe := regexp.MustCompile(`^xl/worksheets/sheet\d+\.xml$`)
+
+	for _, zf := range zr.File {
+		w, err := zw.CreateHeader(&zf.FileHeader)
+		if err != nil {
+			continue
+		}
+		rc, err := zf.Open()
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			continue
+		}
+
+		if sheetXmlRe.MatchString(zf.Name) {
+			data = reFormulaStr.ReplaceAll(data, []byte(`$1$2`))
+		}
+		_, _ = w.Write(data)
+	}
+	_ = zw.Close()
+	return out.Bytes()
+}
 
 // HeaderColumn defines a merged header cell range and its text label.
 type HeaderColumn struct {
