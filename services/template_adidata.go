@@ -118,6 +118,11 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellValue(sheetTS, "I48", dhName)
 	}
 
+	dateStr := "DATE : " + CurrentDateFormatted()
+	_ = f.SetCellValue(sheetTS, "B50", dateStr)
+	_ = f.SetCellValue(sheetTS, "E50", dateStr)
+	_ = f.SetCellValue(sheetTS, "I50", dateStr)
+
 	// Dynamic Overtime SPL Sheets
 	if len(in.Overtimes) > 0 {
 		pos := in.User.Position

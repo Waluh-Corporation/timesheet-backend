@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Improved
 - **Official Timesheet Formats Across All Companies**: Exported monthly timesheets now faithfully match the official spreadsheet layouts, colors, and branding for all partner companies (MII, SDD, Adidata, and NTT). Each generated file seamlessly incorporates authentic company headers, logos, and signature blocks without manual adjustments.
+- **Automatic Generation Date in Signatures**: The signature section across timesheets now automatically fills the exact generation date (e.g., `DATE : 22-Sep-2026`), ensuring date fields are consistently complete without requiring manual typing.
 
 ### Fixed
 - **Accurate Working Hours and Total Hours Display**: Fixed an issue where regular working days without logged activities displayed confusing decimal fractions instead of default standard office hours (`08:00` and `17:00`). Daily and total working hours now consistently format as standard times (such as `09:00` or `11:00`), and weekends or holidays remain cleanly blank.

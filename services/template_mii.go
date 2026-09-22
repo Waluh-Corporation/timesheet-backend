@@ -108,6 +108,11 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellValue(sheet, "G46", dhName)
 	}
 
+	dateStr := "DATE : " + CurrentDateFormatted()
+	_ = f.SetCellValue(sheet, "A47", dateStr)
+	_ = f.SetCellValue(sheet, "D47", dateStr)
+	_ = f.SetCellValue(sheet, "G47", dateStr)
+
 	buf, err := f.WriteToBuffer()
 	if err != nil {
 		return nil, fmt.Errorf("write mii buffer: %w", err)

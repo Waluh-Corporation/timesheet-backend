@@ -96,6 +96,11 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 		_ = f.SetCellValue(sheet, "J57", dhName)
 	}
 
+	dateStr := "DATE: " + CurrentDateFormatted()
+	_ = f.SetCellValue(sheet, "B58", dateStr)
+	_ = f.SetCellValue(sheet, "F58", dateStr)
+	_ = f.SetCellValue(sheet, "J58", dateStr)
+
 	buf, err := f.WriteToBuffer()
 	if err != nil {
 		return nil, fmt.Errorf("write ntt buffer: %w", err)

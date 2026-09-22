@@ -492,15 +492,25 @@ func WriteBuilderDailyRows(
 	}
 }
 
+// CurrentDateFormatted returns the current date in Asia/Jakarta timezone formatted as "02-Jan-2006".
+func CurrentDateFormatted() string {
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		loc = time.FixedZone("WIB", 7*3600)
+	}
+	return time.Now().In(loc).Format("02-Jan-2006")
+}
+
 // DatePrefixUpper is the standard uppercase prefix used in timesheet signature blocks.
 const DatePrefixUpper = "DATE : "
 
 // WriteSignaturesBlock renders the 3-party signature section (Employee, Team Leader, Dept Head).
 func WriteSignaturesBlock(f *excelize.File, sheet string, startRow int, userName, tlName, dhName string, st *BuilderStyles) {
+	dateStr := DatePrefixUpper + CurrentDateFormatted()
 	WriteSignaturesLayout(f, sheet, startRow, 3, []SignatureParty{
-		{StartCol: "A", EndCol: "C", Title: "Prepared by :", Name: userName, DatePrefix: DatePrefixUpper},
-		{StartCol: "D", EndCol: "F", Title: "Approved by :", Name: tlName, DatePrefix: DatePrefixUpper},
-		{StartCol: "G", EndCol: "J", Title: "Approved by :", Name: dhName, DatePrefix: DatePrefixUpper},
+		{StartCol: "A", EndCol: "C", Title: "Prepared by :", Name: userName, DatePrefix: dateStr},
+		{StartCol: "D", EndCol: "F", Title: "Approved by :", Name: tlName, DatePrefix: dateStr},
+		{StartCol: "G", EndCol: "J", Title: "Approved by :", Name: dhName, DatePrefix: dateStr},
 	}, st)
 
 	_ = f.SetRowHeight(sheet, startRow, 20)
