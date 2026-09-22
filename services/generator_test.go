@@ -71,10 +71,10 @@ func TestGenerateExcel_MasterTemplate(t *testing.T) {
 		}
 	}()
 
-	// If running from services package directory, template is at ../templates/master_template.xlsx
-	tmplPath := "templates/master_template.xlsx"
+	// If running from services package directory, template is at ../assets/templates/MII_master_template.xlsx
+	tmplPath := filepath.Join("assets", "templates", "MII_master_template.xlsx")
 	if _, err := os.Stat(tmplPath); os.IsNotExist(err) {
-		tmplPath = filepath.Join("..", "templates", "master_template.xlsx")
+		tmplPath = filepath.Join("..", "assets", "templates", "MII_master_template.xlsx")
 	}
 	_ = os.Setenv("TEMPLATE_PATH", tmplPath)
 

@@ -1,7 +1,11 @@
 package services
 
 import (
+	"archive/zip"
 	"bytes"
+	"fmt"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -401,6 +405,130 @@ func TestTemplateBuilders_MasterApproversSignaturesWithoutOvertime(t *testing.T)
 			dhVal, _ := f.GetCellValue(tc.sheetName, tc.dhCell)
 			if dhVal != tc.wantDH {
 				t.Errorf("[%s] DH signature at %s = %q, want %q", tc.company, tc.dhCell, dhVal, tc.wantDH)
+			}
+		})
+	}
+}
+
+func TestTemplateBuilders_WorkingHoursAndTotalHourFormatting(t *testing.T) {
+	user := &models.User{
+		Name:       "Test User",
+		Division:   "WDL",
+		EmployeeID: "EMP-001",
+	}
+
+	// September 2026:
+	// Day 17 (Thu): Working day without activity -> default 08:00 and 17:00
+	// Day 19 (Sat): Weekend -> blank ""
+	// Day 21 (Mon): Working day with activity 07:00 - 18:00 -> 11:00 total
+	acts := []models.DailyActivity{
+		{
+			Date:      time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC),
+			StartTime: "07:00",
+			EndTime:   "18:00",
+			Status:    "P",
+			Activity:  "Sprint planning",
+		},
+	}
+
+	companies := []struct {
+		code      string
+		sheetName string
+		startRow  int
+		startCol  string
+		endCol    string
+		totalCol  string
+		isDecimal bool
+	}{
+		{code: "mii", sheetName: "Sheet1", startRow: 9, startCol: "B", endCol: "C", totalCol: "D", isDecimal: false},
+		{code: "sdd", sheetName: "September", startRow: 12, startCol: "C", endCol: "D", totalCol: "E", isDecimal: false},
+		{code: "adidata", sheetName: "TIMESHEET", startRow: 9, startCol: "B", endCol: "C", totalCol: "D", isDecimal: true},
+		{code: "ntt", sheetName: "Timesheet", startRow: 11, startCol: "B", endCol: "C", totalCol: "D", isDecimal: false},
+	}
+
+	for _, c := range companies {
+		t.Run(c.code, func(t *testing.T) {
+			in := GenerationInput{
+				CompanyCode: c.code,
+				User:        user,
+				Month:       9,
+				Year:        2026,
+				Activities:  acts,
+				Holidays:    map[int]string{},
+			}
+
+			out, err := GenerateFromTemplate(in)
+			if err != nil {
+				t.Fatalf("GenerateFromTemplate(%s): %v", c.code, err)
+			}
+
+			// Ensure no erroneous t="str" on formula cells in XML
+			zr, err := zip.NewReader(bytes.NewReader(out), int64(len(out)))
+			if err != nil {
+				t.Fatalf("[%s] open zip error: %v", c.code, err)
+			}
+			for _, zf := range zr.File {
+				if strings.HasPrefix(zf.Name, "xl/worksheets/sheet") {
+					rc, _ := zf.Open()
+					data, _ := io.ReadAll(rc)
+					_ = rc.Close()
+					if strings.Contains(string(data), `t="str"><f`) {
+						t.Errorf("[%s] found t=\"str\" on formula cell in %s", c.code, zf.Name)
+					}
+				}
+			}
+
+			f, err := excelize.OpenReader(bytes.NewReader(out))
+			if err != nil {
+				t.Fatalf("[%s] open excel error: %v", c.code, err)
+			}
+			defer f.Close()
+
+			// 1. Day 17: Working day without activity -> default 08:00, 17:00, total 09:00 (or 9.00)
+			r17 := c.startRow + 16
+			s17, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.startCol, r17))
+			e17, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.endCol, r17))
+			tot17, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.totalCol, r17))
+			if s17 != "08:00" {
+				t.Errorf("[%s] Day 17 start = %q, want '08:00'", c.code, s17)
+			}
+			if e17 != "17:00" {
+				t.Errorf("[%s] Day 17 end = %q, want '17:00'", c.code, e17)
+			}
+			wantTot17 := "09:00"
+			if c.isDecimal {
+				wantTot17 = "9.00"
+			}
+			if tot17 != wantTot17 {
+				t.Errorf("[%s] Day 17 total = %q, want %q", c.code, tot17, wantTot17)
+			}
+
+			// 2. Day 19: Weekend -> blank
+			r19 := c.startRow + 18
+			s19, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.startCol, r19))
+			e19, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.endCol, r19))
+			tot19, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.totalCol, r19))
+			if s19 != "" || e19 != "" || tot19 != "" {
+				t.Errorf("[%s] Weekend Day 19 should be blank, got start=%q, end=%q, total=%q", c.code, s19, e19, tot19)
+			}
+
+			// 3. Day 21: Working day with 07:00 - 18:00 activity -> total 11:00 (or 11.00)
+			r21 := c.startRow + 20
+			s21, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.startCol, r21))
+			e21, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.endCol, r21))
+			tot21, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.totalCol, r21))
+			if s21 != "07:00" {
+				t.Errorf("[%s] Day 21 start = %q, want '07:00'", c.code, s21)
+			}
+			if e21 != "18:00" {
+				t.Errorf("[%s] Day 21 end = %q, want '18:00'", c.code, e21)
+			}
+			wantTot21 := "11:00"
+			if c.isDecimal {
+				wantTot21 = "11.00"
+			}
+			if tot21 != wantTot21 {
+				t.Errorf("[%s] Day 21 total = %q, want %q", c.code, tot21, wantTot21)
 			}
 		})
 	}
