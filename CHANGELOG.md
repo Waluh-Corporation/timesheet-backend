@@ -9,7 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Improved
+- **Template-Driven Timesheet Generator**: Replaced pure imperative code builders with an embedded template-driven Excel generation engine utilizing master templates (`assets/templates/*.xlsx`) for MII, SDD, Adidata, and NTT. This cleanly decouples visual presentation, formatting, and formulas from data logic, improving system maintainability and drastically simplifying template modifications and onboarding of new company layouts.
+
+### Removed
+- **Legacy Image Assets**: Removed standalone logo image files (`assets/images/`) and programmatic image injection helpers, as logos and branding are now permanently integrated into the master `.xlsx` templates.
+
 ### Fixed
+- **Working Hours & Total Hours Formatting Across Templates**: Fixed an issue where empty working days displayed raw decimal time values (`0,3333333333` and `0,7083333333`) instead of the default `08:00` and `17:00`, and resolved a bug where Total Hours displayed uncalculated floating-point literals (e.g. `0.37500000000000006`) due to formula string type tagging. Working hours (Start/End) and Total Hours across MII, SDD, Adidata, and NTT now consistently use Excel Time formatting (`hh:mm`, 13:30 type) with proper calculated values and clean formulas.
 - **Accurate App Impacted & Project Selection**: Fixed an issue where daily activities could display the wrong impacted application or project variant (such as showing Overseas or Bisnis instead of Cash) in the historical activity table and edit activity modal. Project selections and impacted applications are now consistently preserved and displayed accurately across all screens.
 
 ---
