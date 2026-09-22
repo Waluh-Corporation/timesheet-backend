@@ -87,19 +87,19 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 
 	tlName, dhName := ResolveApprovers(in)
 	if userName != "" {
-		_ = f.SetCellValue(sheet, "B57", userName)
+		_ = f.SetCellValue(sheet, "B55", userName)
 	}
 	if tlName != "" {
-		_ = f.SetCellValue(sheet, "F57", tlName)
+		_ = f.SetCellValue(sheet, "F55", tlName)
 	}
 	if dhName != "" {
-		_ = f.SetCellValue(sheet, "J57", dhName)
+		_ = f.SetCellValue(sheet, "J55", dhName)
 	}
 
 	dateStr := "DATE: " + CurrentDateFormatted()
-	_ = f.SetCellValue(sheet, "B58", dateStr)
-	_ = f.SetCellValue(sheet, "F58", dateStr)
-	_ = f.SetCellValue(sheet, "J58", dateStr)
+	_ = f.SetCellValue(sheet, "B56", dateStr)
+	_ = f.SetCellValue(sheet, "F56", dateStr)
+	_ = f.SetCellValue(sheet, "J56", dateStr)
 
 	buf, err := f.WriteToBuffer()
 	if err != nil {

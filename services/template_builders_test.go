@@ -346,6 +346,12 @@ func TestBuildNTTWorkbook(t *testing.T) {
 	if formulaE42 != `COUNTA(E11:E41)` {
 		t.Errorf("E42 formula = %q, want 'COUNTA(E11:E41)'", formulaE42)
 	}
+
+	// Validate Signature Date in Row 56
+	valB56, _ := f.GetCellValue(sheet, "B56")
+	if !strings.HasPrefix(valB56, "DATE: ") {
+		t.Errorf("B56 = %q, want prefix 'DATE: '", valB56)
+	}
 }
 
 func TestTemplateBuilders_MasterApproversSignaturesWithoutOvertime(t *testing.T) {
@@ -370,7 +376,7 @@ func TestTemplateBuilders_MasterApproversSignaturesWithoutOvertime(t *testing.T)
 		{company: "mii", sheetName: "Sheet1", tlCell: "D46", dhCell: "G46", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
 		{company: "sdd", sheetName: "Juni", tlCell: "H52", dhCell: "L52", wantTL: "Nama : Budi TeamLeader", wantDH: "Nama : Dewi DeptHead"},
 		{company: "adidata", sheetName: "TIMESHEET", tlCell: "D48", dhCell: "G48", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
-		{company: "ntt", sheetName: "Timesheet", tlCell: "F57", dhCell: "J57", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
+		{company: "ntt", sheetName: "Timesheet", tlCell: "F55", dhCell: "J55", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
 	}
 
 	for _, tc := range testCases {
