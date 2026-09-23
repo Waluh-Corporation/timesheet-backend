@@ -3,6 +3,7 @@ services:
   # Go Backend API Service
   # ============================================================================
   backend:
+    build: .
     image: ghcr.io/waluh-corporation/timesheet-backend:latest
     container_name: timesheet_backend
     ports:
