@@ -68,19 +68,15 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 	}
 
 	companyCode := ""
-	companyName := ""
 	if user.CompanyRel != nil {
 		companyCode = user.CompanyRel.Code
-		companyName = user.CompanyRel.Name
 	} else if user.CompanyID != nil && *user.CompanyID != 0 && s.masterRepo != nil {
 		if comp, cerr := s.masterRepo.FindCompanyByID(ctx, *user.CompanyID); cerr == nil && comp != nil {
 			companyCode = comp.Code
-			companyName = comp.Name
 		}
 	}
 	if companyCode == "" && user.Company != "" {
 		companyCode = user.Company
-		companyName = user.Company
 	}
 	if companyCode == "" {
 		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "User has no company assigned")
@@ -138,15 +134,6 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 	}
 
 	filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitizeFilename(user.Username), month, year)
-	period := mailer.FormatMonthYearIndonesian(month, year)
-
-	// Asynchronous notification email if mailer is configured
-	if s.mailer != nil {
-		go func(to, uname, comp, per, fn string, data []byte) {
-			_ = s.mailer.SendTimesheetEmailWithDetails(to, uname, comp, per, fn, data)
-		}(user.Email, user.Username, companyName, period, filename, out)
-	}
-
 	return out, filename, nil
 }
 
