@@ -3709,17 +3709,17 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Renders monthly activities and overtimes into an Excel (.xlsx) workbook, initiates download, and dispatches an email copy.",
+                "description": "Enqueues a monthly timesheet generation task. Returns a 202 Accepted response with the job details. Once generated, the file is saved to S3 (7-day presigned URL) and notifications are dispatched via Web Push and email.",
                 "consumes": [
                     "application/json"
                 ],
                 "produces": [
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    "application/json"
                 ],
                 "tags": [
                     "Timesheet"
                 ],
-                "summary": "Generate timesheet spreadsheet",
+                "summary": "Generate timesheet spreadsheet asynchronously",
                 "parameters": [
                     {
                         "description": "Generation parameters",
@@ -3732,10 +3732,10 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Generated Excel workbook (.xlsx)",
+                    "202": {
+                        "description": "Generation task accepted",
                         "schema": {
-                            "type": "file"
+                            "$ref": "#/definitions/response.TimesheetJobResponse"
                         }
                     },
                     "400": {
@@ -3758,6 +3758,91 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Generation failed",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/timesheet/jobs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns recent timesheet generation jobs for the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Timesheet"
+                ],
+                "summary": "List user's timesheet generation jobs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 10)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.PaginatedResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/timesheet/jobs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Checks status and download URL of an asynchronous timesheet generation job.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Timesheet"
+                ],
+                "summary": "Get timesheet generation job status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Job ID (UUID)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.TimesheetJobResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Job not found",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -4612,6 +4697,21 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "models.TimesheetJobStatus": {
+            "type": "string",
+            "enum": [
+                "queued",
+                "processing",
+                "completed",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "JobStatusQueued",
+                "JobStatusProcessing",
+                "JobStatusCompleted",
+                "JobStatusFailed"
+            ]
         },
         "models.User": {
             "type": "object",
@@ -5680,6 +5780,51 @@ const docTemplate = `{
                 "status": {
                     "type": "string",
                     "example": "success"
+                }
+            }
+        },
+        "response.TimesheetJobResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "download_url": {
+                    "type": "string",
+                    "example": "https://s3.example.com/..."
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                },
+                "month": {
+                    "type": "integer",
+                    "example": 7
+                },
+                "status": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TimesheetJobStatus"
+                        }
+                    ],
+                    "example": "queued"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "year": {
+                    "type": "integer",
+                    "example": 2026
                 }
             }
         },

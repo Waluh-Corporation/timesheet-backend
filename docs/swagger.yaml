@@ -540,6 +540,18 @@ definitions:
       updated_at:
         type: string
     type: object
+  models.TimesheetJobStatus:
+    enum:
+    - queued
+    - processing
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - JobStatusQueued
+    - JobStatusProcessing
+    - JobStatusCompleted
+    - JobStatusFailed
   models.User:
     properties:
       bni_id:
@@ -1278,6 +1290,36 @@ definitions:
       status:
         example: success
         type: string
+    type: object
+  response.TimesheetJobResponse:
+    properties:
+      created_at:
+        type: string
+      download_url:
+        example: https://s3.example.com/...
+        type: string
+      error_message:
+        type: string
+      expires_at:
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      month:
+        example: 7
+        type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/models.TimesheetJobStatus'
+        example: queued
+      updated_at:
+        type: string
+      user_id:
+        example: 1
+        type: integer
+      year:
+        example: 2026
+        type: integer
     type: object
   response.UpdateUserResponse:
     properties:
@@ -3788,8 +3830,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Renders monthly activities and overtimes into an Excel (.xlsx)
-        workbook, initiates download, and dispatches an email copy.
+      description: Enqueues a monthly timesheet generation task. Returns a 202 Accepted
+        response with the job details. Once generated, the file is saved to S3 (7-day
+        presigned URL) and notifications are dispatched via Web Push and email.
       parameters:
       - description: Generation parameters
         in: body
@@ -3798,12 +3841,12 @@ paths:
         schema:
           $ref: '#/definitions/request.GenerateRequest'
       produces:
-      - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/json
       responses:
-        "200":
-          description: Generated Excel workbook (.xlsx)
+        "202":
+          description: Generation task accepted
           schema:
-            type: file
+            $ref: '#/definitions/response.TimesheetJobResponse'
         "400":
           description: Template or company mapping missing
           schema:
@@ -3822,7 +3865,62 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Generate timesheet spreadsheet
+      summary: Generate timesheet spreadsheet asynchronously
+      tags:
+      - Timesheet
+  /api/v1/timesheet/jobs:
+    get:
+      description: Returns recent timesheet generation jobs for the authenticated
+        user.
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PaginatedResponse'
+      security:
+      - BearerAuth: []
+      summary: List user's timesheet generation jobs
+      tags:
+      - Timesheet
+  /api/v1/timesheet/jobs/{id}:
+    get:
+      description: Checks status and download URL of an asynchronous timesheet generation
+        job.
+      parameters:
+      - description: Job ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TimesheetJobResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Job not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get timesheet generation job status
       tags:
       - Timesheet
   /api/v1/users/change-password:
