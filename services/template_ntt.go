@@ -87,12 +87,12 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 	}
 
 	nttSummary := map[string]SummaryFormulaItem{
-		"E": {Formula: `COUNTA(E11:E41)`, Value: statusCounts["P"]},
-		"F": {Formula: `COUNTA(F11:F41)`, Value: statusCounts["S"]},
-		"G": {Formula: `COUNTA(G11:G41)`, Value: statusCounts["BT"]},
-		"H": {Formula: `COUNTA(H11:H41)`, Value: statusCounts["PM"]},
-		"I": {Formula: `COUNTA(I11:I41)`, Value: statusCounts["V"]},
-		"J": {Formula: `COUNTA(J11:J41)`, Value: statusCounts["X"]},
+		"E": {Formula: `COUNTIF(E11:E41,"P")`, Value: statusCounts["P"]},
+		"F": {Formula: `COUNTIF(F11:F41,"S")`, Value: statusCounts["S"]},
+		"G": {Formula: `COUNTIF(G11:G41,"BT")`, Value: statusCounts["BT"]},
+		"H": {Formula: `COUNTIF(H11:H41,"PM")`, Value: statusCounts["PM"]},
+		"I": {Formula: `COUNTIF(I11:I41,"V")`, Value: statusCounts["V"]},
+		"J": {Formula: `COUNTIF(J11:J41,"X")`, Value: statusCounts["X"]},
 	}
 	WriteSummaryRowWithValues(f, sheet, "42", nttSummary, st.BoldCenterStyle)
 

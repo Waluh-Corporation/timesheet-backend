@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 - **Official Timesheet Formats Across All Companies**: Exported monthly timesheets now faithfully match the official spreadsheet layouts, colors, and branding for all partner companies (MII, SDD, Adidata, and NTT). Each generated file seamlessly incorporates authentic company headers, logos, and signature blocks without manual adjustments.
 - **Automatic Generation Date in Signatures**: The signature section across timesheets now automatically fills the exact generation date (e.g., `DATE : 22-Sep-2026`), ensuring date fields are consistently complete without requiring manual typing.
+- **Standardized Attendance Markers & Formulas**: Standardized attendance status markers for SDD timesheets to use standard status codes (`H`, `C`, `I`, `S`, `L`) instead of checkmarks (`v`), and aligned NTT summary row formulas to use `COUNTIF` matching other partner companies.
 
 ### Fixed
 - **Total Attendance Calculation in Exported Timesheets**: Fixed an issue where the "Total Kehadiran" summary row remained 0 in generated Excel files even when attendance entries existed. The export engine now populates pre-calculated attendance totals alongside dynamic formulas and activates calculation properties upon opening.

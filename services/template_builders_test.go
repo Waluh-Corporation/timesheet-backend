@@ -161,8 +161,8 @@ func TestBuildSDDWorkbook(t *testing.T) {
 
 	// Validate worked day (Day 3 -> Row 14)
 	valF14, _ := f.GetCellValue(sheet, "F14")
-	if valF14 != "v" {
-		t.Errorf("F14 (Hadir mark) = %q, want 'v'", valF14)
+	if valF14 != "H" {
+		t.Errorf("F14 (Hadir mark) = %q, want 'H'", valF14)
 	}
 
 	// Validate Total Jam Kerja formula = D14-C14
@@ -173,8 +173,8 @@ func TestBuildSDDWorkbook(t *testing.T) {
 
 	// Validate COUNTIF formula and value in Row 43
 	formulaF43, _ := f.GetCellFormula(sheet, "F43")
-	if formulaF43 != `COUNTIF(F12:F42,"v")` {
-		t.Errorf("F43 formula = %q, want 'COUNTIF(F12:F42,\"v\")'", formulaF43)
+	if formulaF43 != `COUNTIF(F12:F42,"H")` {
+		t.Errorf("F43 formula = %q, want 'COUNTIF(F12:F42,\"H\")'", formulaF43)
 	}
 	valF43, _ := f.GetCellValue(sheet, "F43")
 	if valF43 != "1" {
@@ -353,10 +353,10 @@ func TestBuildNTTWorkbook(t *testing.T) {
 		t.Errorf("D11 formula = %q, want 'IF(C11>B11,(C11-B11),C11-B11+1)'", formulaD11)
 	}
 
-	// Validate COUNTA formula and value in Row 42
+	// Validate COUNTIF formula and value in Row 42
 	formulaE42, _ := f.GetCellFormula(sheet, "E42")
-	if formulaE42 != `COUNTA(E11:E41)` {
-		t.Errorf("E42 formula = %q, want 'COUNTA(E11:E41)'", formulaE42)
+	if formulaE42 != `COUNTIF(E11:E41,"P")` {
+		t.Errorf("E42 formula = %q, want 'COUNTIF(E11:E41,\"P\")'", formulaE42)
 	}
 	valE42, _ := f.GetCellValue(sheet, "E42")
 	if valE42 != "1" {
@@ -575,6 +575,7 @@ func TestTemplateBuilders_TotalAttendanceUpdates(t *testing.T) {
 		company   string
 		sheetName string
 		checks    map[string]string
+		formulas  map[string]string
 	}{
 		{
 			company:   "mii",
@@ -587,6 +588,10 @@ func TestTemplateBuilders_TotalAttendanceUpdates(t *testing.T) {
 				"G40": "0", // BT
 				"J40": "0", // X
 			},
+			formulas: map[string]string{
+				"E40": `COUNTIF(E9:E39,"P")`,
+				"F40": `COUNTIF(F9:F39,"S")`,
+			},
 		},
 		{
 			company:   "sdd",
@@ -597,6 +602,13 @@ func TestTemplateBuilders_TotalAttendanceUpdates(t *testing.T) {
 				"H43": "1", // Izin (PM)
 				"G43": "1", // Cuti (V)
 				"J43": "0", // Lembur
+			},
+			formulas: map[string]string{
+				"F43": `COUNTIF(F12:F42,"H")`,
+				"G43": `COUNTIF(G12:G42,"C")`,
+				"H43": `COUNTIF(H12:H42,"I")`,
+				"I43": `COUNTIF(I12:I42,"S")`,
+				"J43": `COUNTIF(J12:J42,"L")`,
 			},
 		},
 		{
@@ -610,6 +622,10 @@ func TestTemplateBuilders_TotalAttendanceUpdates(t *testing.T) {
 				"H41": "0", // BT
 				"K41": "0", // X
 			},
+			formulas: map[string]string{
+				"F41": `COUNTIF(F10:F40,"P")`,
+				"G41": `COUNTIF(G10:G40,"S")`,
+			},
 		},
 		{
 			company:   "ntt",
@@ -621,6 +637,14 @@ func TestTemplateBuilders_TotalAttendanceUpdates(t *testing.T) {
 				"I42": "1", // V
 				"G42": "0", // BT
 				"J42": "0", // X
+			},
+			formulas: map[string]string{
+				"E42": `COUNTIF(E11:E41,"P")`,
+				"F42": `COUNTIF(F11:F41,"S")`,
+				"G42": `COUNTIF(G11:G41,"BT")`,
+				"H42": `COUNTIF(H11:H41,"PM")`,
+				"I42": `COUNTIF(I11:I41,"V")`,
+				"J42": `COUNTIF(J11:J41,"X")`,
 			},
 		},
 	}
@@ -654,6 +678,16 @@ func TestTemplateBuilders_TotalAttendanceUpdates(t *testing.T) {
 				}
 				if gotVal != wantVal {
 					t.Errorf("[%s] Cell %s value = %q, want %q", tc.company, cell, gotVal, wantVal)
+				}
+			}
+
+			for cell, wantFormula := range tc.formulas {
+				gotFormula, err := f.GetCellFormula(tc.sheetName, cell)
+				if err != nil {
+					t.Errorf("[%s] GetCellFormula(%s) error: %v", tc.company, cell, err)
+				}
+				if gotFormula != wantFormula {
+					t.Errorf("[%s] Cell %s formula = %q, want %q", tc.company, cell, gotFormula, wantFormula)
 				}
 			}
 		})

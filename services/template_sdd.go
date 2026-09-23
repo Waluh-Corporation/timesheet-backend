@@ -86,21 +86,21 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 		WriteWorkingHoursRow(f, sheet, "C", "D", "E", rs, "D%s-C%s", false, dsc)
 
 		if dsc.HasActivity {
-			var col string
+			var col, mark string
 			switch strings.ToUpper(strings.TrimSpace(dsc.Activity.Status)) {
 			case "H", "P", "HADIR", "PRESENT":
-				col = "F"
+				col, mark = "F", "H"
 			case "C", "CUTI", "V", "VACATION":
-				col = "G"
+				col, mark = "G", "C"
 			case "I", "IZIN", "PM", "PERMIT":
-				col = "H"
+				col, mark = "H", "I"
 			case "S", "SAKIT", "SICK":
-				col = "I"
+				col, mark = "I", "S"
 			case "L", "LEMBUR":
-				col = "J"
+				col, mark = "J", "L"
 			}
 			if col != "" {
-				_ = f.SetCellValue(sheet, col+rs, "v")
+				_ = f.SetCellValue(sheet, col+rs, mark)
 				statusCounts[col]++
 			}
 
@@ -116,11 +116,11 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 	}
 
 	sddSummary := map[string]SummaryFormulaItem{
-		"F": {Formula: `COUNTIF(F12:F42,"v")`, Value: statusCounts["F"]},
-		"G": {Formula: `COUNTIF(G12:G42,"v")`, Value: statusCounts["G"]},
-		"H": {Formula: `COUNTIF(H12:H42,"v")`, Value: statusCounts["H"]},
-		"I": {Formula: `COUNTIF(I12:I42,"v")`, Value: statusCounts["I"]},
-		"J": {Formula: `COUNTIF(J12:J42,"v")`, Value: statusCounts["J"]},
+		"F": {Formula: `COUNTIF(F12:F42,"H")`, Value: statusCounts["F"]},
+		"G": {Formula: `COUNTIF(G12:G42,"C")`, Value: statusCounts["G"]},
+		"H": {Formula: `COUNTIF(H12:H42,"I")`, Value: statusCounts["H"]},
+		"I": {Formula: `COUNTIF(I12:I42,"S")`, Value: statusCounts["I"]},
+		"J": {Formula: `COUNTIF(J12:J42,"L")`, Value: statusCounts["J"]},
 	}
 	WriteSummaryRowWithValues(f, sheet, "43", sddSummary, st.BoldCenterStyle)
 
