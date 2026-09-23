@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -890,6 +891,39 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		cCompID.Set(ctxUserID, user.ID)
 		srv.GenerateTimesheet(cCompID)
 		assertFatalCode(t, wCompID, http.StatusOK)
+
+		// 7. Async generation with QueueClient attached -> 202 Accepted
+		mockQ := &testActivityMockQueueClient{}
+		srv.QueueClient = mockQ
+		wAsync := httptest.NewRecorder()
+		cAsync, _ := gin.CreateTestContext(wAsync)
+		cAsync.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cAsync.Request.Header.Set("Content-Type", "application/json")
+		cAsync.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cAsync)
+		assertFatalCode(t, wAsync, http.StatusAccepted)
+		if mockQ.enqueuedJobID == "" {
+			t.Fatal("expected non-empty enqueuedJobID")
+		}
+
+		// 8. GetTimesheetJob -> 200 OK
+		wGetJob := httptest.NewRecorder()
+		cGetJob, _ := gin.CreateTestContext(wGetJob)
+		cGetJob.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/jobs/"+mockQ.enqueuedJobID, nil)
+		cGetJob.Params = gin.Params{{Key: "id", Value: mockQ.enqueuedJobID}}
+		cGetJob.Set(ctxUserID, user.ID)
+		srv.GetTimesheetJob(cGetJob)
+		assertFatalCode(t, wGetJob, http.StatusOK)
+
+		// 9. ListTimesheetJobs -> 200 OK
+		wListJobs := httptest.NewRecorder()
+		cListJobs, _ := gin.CreateTestContext(wListJobs)
+		cListJobs.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/jobs?page=1&limit=10", nil)
+		cListJobs.Set(ctxUserID, user.ID)
+		srv.ListTimesheetJobs(cListJobs)
+		assertFatalCode(t, wListJobs, http.StatusOK)
+
+		srv.QueueClient = nil
 	})
 
 	t.Run("sanitize helper", func(t *testing.T) {
@@ -898,4 +932,17 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 			t.Errorf("unexpected sanitized string: %q", s)
 		}
 	})
+}
+
+type testActivityMockQueueClient struct {
+	enqueuedJobID string
+}
+
+func (m *testActivityMockQueueClient) EnqueueTimesheetJob(ctx context.Context, jobID string, userID uint, month, year int) error {
+	m.enqueuedJobID = jobID
+	return nil
+}
+
+func (m *testActivityMockQueueClient) Close() error {
+	return nil
 }

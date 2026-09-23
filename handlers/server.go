@@ -23,6 +23,8 @@ import (
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/push"
+	"timesheet-backend/queue"
+	"timesheet-backend/storage"
 )
 
 type webAuthnSessionEntry struct {
@@ -53,6 +55,9 @@ type Server struct {
 	TimesheetSvc service.TimesheetService
 	MasterRepo   repository.MasterRepository
 	MasterSvc    service.MasterDataService
+	JobRepo      repository.JobRepository
+	QueueClient  queue.QueueClient
+	Storage      storage.StorageService
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
@@ -121,6 +126,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		TimesheetSvc:     timesheetSvc,
 		MasterRepo:       masterRepo,
 		MasterSvc:        masterSvc,
+		JobRepo:          repository.NewJobRepository(db),
 		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
 		resetCooldowns:   make(map[string]time.Time),
 		ipCooldowns:      make(map[string]*clientCooldownRecord),
@@ -290,6 +296,21 @@ func (s *Server) getTimesheetService() service.TimesheetService {
 	return nil
 }
 
+func (s *Server) getJobRepo() repository.JobRepository {
+	if s.JobRepo != nil {
+		return s.JobRepo
+	}
+	if s.DB != nil {
+		s.JobRepo = repository.NewJobRepository(s.DB)
+		return s.JobRepo
+	}
+	return nil
+}
+
+func (s *Server) getQueueClient() queue.QueueClient {
+	return s.QueueClient
+}
+
 func (s *Server) getUserRepository() repository.UserRepository {
 	if s.UserRepo != nil {
 		return s.UserRepo
@@ -297,6 +318,17 @@ func (s *Server) getUserRepository() repository.UserRepository {
 	if s.DB != nil {
 		s.UserRepo = repository.NewUserRepository(s.DB)
 		return s.UserRepo
+	}
+	return nil
+}
+
+func (s *Server) getActivityRepository() repository.ActivityRepository {
+	if s.ActivityRepo != nil {
+		return s.ActivityRepo
+	}
+	if s.DB != nil {
+		s.ActivityRepo = repository.NewActivityRepository(s.DB)
+		return s.ActivityRepo
 	}
 	return nil
 }

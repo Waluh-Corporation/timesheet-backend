@@ -10,11 +10,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"timesheet-backend/dto/request"
-	_ "timesheet-backend/dto/response"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
@@ -278,14 +279,14 @@ func (s *Server) ListMonthlyActivities(c *gin.Context) {
 }
 
 // GenerateTimesheet godoc
-// @Summary Generate timesheet spreadsheet
-// @Description Renders monthly activities and overtimes into an Excel (.xlsx) workbook, initiates download, and dispatches an email copy.
+// @Summary Generate timesheet spreadsheet asynchronously
+// @Description Enqueues a monthly timesheet generation task. Returns a 202 Accepted response with the job details. Once generated, the file is saved to S3 (7-day presigned URL) and notifications are dispatched via Web Push and email.
 // @Tags Timesheet
 // @Security BearerAuth
 // @Accept json
-// @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+// @Produce json
 // @Param request body request.GenerateRequest true "Generation parameters"
-// @Success 200 {file} binary "Generated Excel workbook (.xlsx)"
+// @Success 202 {object} response.TimesheetJobResponse "Generation task accepted"
 // @Failure 400 {object} response.ErrorResponse "Template or company mapping missing"
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 404 {object} response.ErrorResponse "User not found"
@@ -298,13 +299,100 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		return
 	}
 
+	if req.Month < 1 || req.Month > 12 || req.Year < 2000 || req.Year > 2100 {
+		RespondError(c, http.StatusBadRequest, "Invalid month or year")
+		return
+	}
+
+	uid := currentUserID(c)
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "user repository not initialized")
+		return
+	}
+
+	user, err := userRepo.FindByIDWithDetails(reqContext(c), uid)
+	if err != nil || user == nil {
+		RespondError(c, http.StatusNotFound, "user not found")
+		return
+	}
+
+	hasCompany := false
+	if user.CompanyRel != nil && user.CompanyRel.Code != "" {
+		hasCompany = true
+	} else if user.CompanyID != nil && *user.CompanyID != 0 {
+		hasCompany = true
+	} else if strings.TrimSpace(user.Company) != "" {
+		hasCompany = true
+	}
+	if !hasCompany {
+		RespondError(c, http.StatusBadRequest, "User has no company assigned")
+		return
+	}
+
+	actRepo := s.getActivityRepository()
+	if actRepo != nil {
+		m := req.Month
+		y := req.Year
+		filter := repository.ActivityFilter{
+			Month: &m,
+			Year:  &y,
+			IsAll: true,
+		}
+		activities, _, aerr := actRepo.ListActiveByUser(reqContext(c), uid, filter)
+		if aerr != nil {
+			RespondError(c, http.StatusInternalServerError, "failed to check activities: "+aerr.Error())
+			return
+		}
+		if len(activities) == 0 {
+			RespondError(c, http.StatusBadRequest, "No activities recorded for this period")
+			return
+		}
+	}
+
+	jobRepo := s.getJobRepo()
+	queueClient := s.getQueueClient()
+
+	if queueClient != nil && jobRepo != nil {
+		jobID := uuid.New().String()
+		job := &models.TimesheetJob{
+			ID:        jobID,
+			UserID:    uid,
+			Month:     req.Month,
+			Year:      req.Year,
+			Status:    models.JobStatusQueued,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+
+		if err := jobRepo.Create(reqContext(c), job); err != nil {
+			RespondError(c, http.StatusInternalServerError, "failed to create generation job: "+err.Error())
+			return
+		}
+
+		if err := queueClient.EnqueueTimesheetJob(reqContext(c), jobID, uid, req.Month, req.Year); err != nil {
+			_ = jobRepo.UpdateStatus(reqContext(c), jobID, models.JobStatusFailed, "", "", "failed to enqueue task: "+err.Error(), nil)
+			RespondError(c, http.StatusInternalServerError, "failed to enqueue generation task: "+err.Error())
+			return
+		}
+
+		c.JSON(http.StatusAccepted, gin.H{
+			"code":    http.StatusAccepted,
+			"status":  "success",
+			"message": "Timesheet generation job queued successfully",
+			"data":    response.ToTimesheetJobResponse(job),
+		})
+		return
+	}
+
+	// Fallback when queue is not configured
 	tsSvc := s.getTimesheetService()
 	if tsSvc == nil {
 		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")
 		return
 	}
 
-	out, filename, err := tsSvc.GenerateWorkbook(reqContext(c), currentUserID(c), req.Month, req.Year)
+	out, filename, err := tsSvc.GenerateWorkbook(reqContext(c), uid, req.Month, req.Year)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			RespondError(c, http.StatusNotFound, "user not found")
@@ -320,6 +408,84 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 
 	c.Header("Content-Disposition", "attachment; filename="+filename)
 	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
+}
+
+// GetTimesheetJob godoc
+// @Summary Get timesheet generation job status
+// @Description Checks status and download URL of an asynchronous timesheet generation job.
+// @Tags Timesheet
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "Job ID (UUID)"
+// @Success 200 {object} response.TimesheetJobResponse
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 404 {object} response.ErrorResponse "Job not found"
+// @Router /api/v1/timesheet/jobs/{id} [get]
+func (s *Server) GetTimesheetJob(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		RespondError(c, http.StatusBadRequest, "job id is required")
+		return
+	}
+
+	jobRepo := s.getJobRepo()
+	if jobRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "job repository not initialized")
+		return
+	}
+
+	job, err := jobRepo.FindActiveByIDAndUser(reqContext(c), id, currentUserID(c))
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to query job: "+err.Error())
+		return
+	}
+	if job == nil {
+		RespondError(c, http.StatusNotFound, "job not found")
+		return
+	}
+
+	RespondSuccess(c, http.StatusOK, response.ToTimesheetJobResponse(job))
+}
+
+// ListTimesheetJobs godoc
+// @Summary List user's timesheet generation jobs
+// @Description Returns recent timesheet generation jobs for the authenticated user.
+// @Tags Timesheet
+// @Security BearerAuth
+// @Produce json
+// @Param page query int false "Page number (default 1)"
+// @Param limit query int false "Page size (default 10)"
+// @Success 200 {object} response.PaginatedResponse
+// @Router /api/v1/timesheet/jobs [get]
+func (s *Server) ListTimesheetJobs(c *gin.Context) {
+	jobRepo := s.getJobRepo()
+	if jobRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "job repository not initialized")
+		return
+	}
+
+	page := queryIntDefault(c, "page", 1)
+	if page < 1 {
+		page = 1
+	}
+	limit := queryIntDefault(c, "limit", 10)
+	if limit < 1 {
+		limit = 10
+	}
+	offset := (page - 1) * limit
+
+	jobs, total, err := jobRepo.ListByUser(reqContext(c), currentUserID(c), limit, offset)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to list jobs: "+err.Error())
+		return
+	}
+
+	resps := make([]response.TimesheetJobResponse, 0, len(jobs))
+	for i := range jobs {
+		resps = append(resps, response.ToTimesheetJobResponse(&jobs[i]))
+	}
+
+	RespondPaginated(c, http.StatusOK, resps, page, limit, total)
 }
 
 func saveYearlyHolidays(db *gorm.DB, yearlyHolidays []models.HolidayDTO) int {

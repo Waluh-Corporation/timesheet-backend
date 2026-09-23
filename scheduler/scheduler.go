@@ -15,6 +15,7 @@ import (
 	"timesheet-backend/models"
 	"timesheet-backend/push"
 	"timesheet-backend/services"
+	"timesheet-backend/storage"
 )
 
 const (
@@ -99,10 +100,16 @@ func GetScheduleInfo(tz, cronExpr string) ScheduleInfo {
 type Scheduler struct {
 	db           *gorm.DB
 	push         *push.Service
+	storage      storage.StorageService
 	cron         *cron.Cron
 	loc          *time.Location
 	reminderCron string
 	cleanupCron  string
+}
+
+// SetStorage configures the object storage service for cleaning up expired artifacts.
+func (s *Scheduler) SetStorage(st storage.StorageService) {
+	s.storage = st
 }
 
 // IsJobDisabled checks if a cron expression explicitly disables the scheduled task.
@@ -265,5 +272,33 @@ func (s *Scheduler) cleanupExpiredTokens() {
 		log.Printf("[scheduler] refresh token housekeeping error: %v", err)
 	} else if purged > 0 {
 		log.Printf("[scheduler] refresh token housekeeping purged %d stale refresh tokens", purged)
+	}
+
+	s.cleanupExpiredTimesheets()
+}
+
+// cleanupExpiredTimesheets deletes expired timesheet files from S3 and marks them expired.
+func (s *Scheduler) cleanupExpiredTimesheets() {
+	if s.db == nil {
+		return
+	}
+	now := time.Now()
+	jobRepo := repository.NewJobRepository(s.db)
+	expiredJobs, err := jobRepo.FindExpiredJobs(context.Background(), now, 100)
+	if err != nil {
+		log.Printf("[scheduler] failed to find expired timesheet jobs: %v", err)
+		return
+	}
+
+	for _, job := range expiredJobs {
+		if s.storage != nil && job.FileKey != "" {
+			if err := s.storage.Delete(context.Background(), job.FileKey); err != nil {
+				log.Printf("[scheduler] failed to delete expired s3 object %s: %v", job.FileKey, err)
+			}
+		}
+		_ = jobRepo.UpdateStatus(context.Background(), job.ID, job.Status, "", "", "expired and purged from storage", nil)
+	}
+	if len(expiredJobs) > 0 {
+		log.Printf("[scheduler] purged %d expired timesheets from s3", len(expiredJobs))
 	}
 }

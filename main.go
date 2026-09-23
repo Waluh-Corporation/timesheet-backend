@@ -30,7 +30,9 @@ import (
 	"timesheet-backend/internal/observability"
 	"timesheet-backend/mailer"
 	"timesheet-backend/push"
+	"timesheet-backend/queue"
 	"timesheet-backend/scheduler"
+	"timesheet-backend/storage"
 )
 
 // @title Timesheet Automation Portal API
@@ -179,13 +181,39 @@ func main() {
 	mailSvc := mailer.New(cfg)
 	pushSvc := push.New(cfg, db)
 
+	storageSvc, err := storage.NewS3StorageService(cfg)
+	if err != nil {
+		logger.Warn("s3 storage service not configured or failed to initialize", slog.Any("error", err))
+	}
+
+	queueClient, err := queue.NewQueueClient(cfg)
+	if err != nil {
+		logger.Warn("redis queue client failed to initialize", slog.Any("error", err))
+	} else {
+		defer func() { _ = queueClient.Close() }()
+	}
+
 	srv, err := handlers.NewServer(db, cfg, authSvc, mailSvc, pushSvc)
 	if err != nil {
 		logger.Error("failed to init server", slog.Any("error", err))
 		os.Exit(1)
 	}
+	srv.Storage = storageSvc
+	srv.QueueClient = queueClient
+
+	if queueClient != nil && storageSvc != nil {
+		workerServer := queue.NewWorkerServer(cfg, srv.JobRepo, srv.UserRepo, srv.TimesheetSvc, storageSvc, mailSvc, pushSvc)
+		if werr := workerServer.Start(); werr != nil {
+			logger.Error("failed to start queue worker server", slog.Any("error", werr))
+		} else {
+			defer workerServer.Shutdown()
+		}
+	}
 
 	sched := scheduler.New(db, pushSvc, cfg.Timezone, cfg.ReminderCron, cfg.CleanupCron)
+	if storageSvc != nil {
+		sched.SetStorage(storageSvc)
+	}
 	sched.Start()
 	defer sched.Stop()
 
@@ -295,6 +323,8 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/overtimes", s.ListMonthlyOvertimes)
 		authed.DELETE("/overtimes/:id", s.DeleteOvertime)
 		authed.POST("/timesheet/generate", s.GenerateTimesheet)
+		authed.GET("/timesheet/jobs/:id", s.GetTimesheetJob)
+		authed.GET("/timesheet/jobs", s.ListTimesheetJobs)
 		authed.GET("/holidays", s.GetHolidays)
 		authed.GET("/holidays/all", s.ListHolidays)
 		authed.POST("/holidays/sync", s.SyncHolidays)
