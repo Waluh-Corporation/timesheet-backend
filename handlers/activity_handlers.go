@@ -280,7 +280,7 @@ func (s *Server) ListMonthlyActivities(c *gin.Context) {
 
 // GenerateTimesheet godoc
 // @Summary Generate timesheet spreadsheet asynchronously
-// @Description Enqueues a monthly timesheet generation task. Returns a 202 Accepted response with the job details. Once generated, the file is saved to S3 (7-day presigned URL) and notifications are dispatched via Web Push and email.
+// @Description Enqueues a monthly timesheet generation task. Returns a 202 Accepted response with the job details. Once generated, the file is saved to S3 and the download link is sent via email and Web Push.
 // @Tags Timesheet
 // @Security BearerAuth
 // @Accept json
@@ -379,7 +379,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		c.JSON(http.StatusAccepted, gin.H{
 			"code":    http.StatusAccepted,
 			"status":  "success",
-			"message": "Timesheet generation job queued successfully",
+			"message": "Timesheet generation job queued successfully. The download link will be sent to your email once ready.",
 			"data":    response.ToTimesheetJobResponse(job),
 		})
 		return
@@ -412,7 +412,7 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 
 // GetTimesheetJob godoc
 // @Summary Get timesheet generation job status
-// @Description Checks status and download URL of an asynchronous timesheet generation job.
+// @Description Checks status of an asynchronous timesheet generation job.
 // @Tags Timesheet
 // @Security BearerAuth
 // @Produce json

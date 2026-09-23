@@ -3709,7 +3709,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Enqueues a monthly timesheet generation task. Returns a 202 Accepted response with the job details. Once generated, the file is saved to S3 (7-day presigned URL) and notifications are dispatched via Web Push and email.",
+                "description": "Enqueues a monthly timesheet generation task. Returns a 202 Accepted response with the job details. Once generated, the file is saved to S3 and the download link is sent via email and Web Push.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3811,7 +3811,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Checks status and download URL of an asynchronous timesheet generation job.",
+                "description": "Checks status of an asynchronous timesheet generation job.",
                 "produces": [
                     "application/json"
                 ],
@@ -5788,10 +5788,6 @@ const docTemplate = `{
             "properties": {
                 "created_at": {
                     "type": "string"
-                },
-                "download_url": {
-                    "type": "string",
-                    "example": "https://s3.example.com/..."
                 },
                 "error_message": {
                     "type": "string"

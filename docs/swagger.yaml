@@ -1295,9 +1295,6 @@ definitions:
     properties:
       created_at:
         type: string
-      download_url:
-        example: https://s3.example.com/...
-        type: string
       error_message:
         type: string
       expires_at:
@@ -3831,8 +3828,8 @@ paths:
       consumes:
       - application/json
       description: Enqueues a monthly timesheet generation task. Returns a 202 Accepted
-        response with the job details. Once generated, the file is saved to S3 (7-day
-        presigned URL) and notifications are dispatched via Web Push and email.
+        response with the job details. Once generated, the file is saved to S3 and
+        the download link is sent via email and Web Push.
       parameters:
       - description: Generation parameters
         in: body
@@ -3895,8 +3892,7 @@ paths:
       - Timesheet
   /api/v1/timesheet/jobs/{id}:
     get:
-      description: Checks status and download URL of an asynchronous timesheet generation
-        job.
+      description: Checks status of an asynchronous timesheet generation job.
       parameters:
       - description: Job ID (UUID)
         in: path

@@ -23,7 +23,7 @@ type TimesheetJob struct {
 	Year         int                `gorm:"not null" json:"year"`
 	Status       TimesheetJobStatus `gorm:"size:30;not null;default:'queued';index" json:"status"`
 	FileKey      string             `gorm:"size:255" json:"file_key,omitempty"`
-	DownloadURL  string             `gorm:"type:text" json:"download_url,omitempty"`
+	DownloadURL  string             `gorm:"type:text" json:"-"`
 	ExpiresAt    *time.Time         `gorm:"index" json:"expires_at,omitempty"`
 	ErrorMessage string             `gorm:"type:text" json:"error_message,omitempty"`
 	CreatedAt    time.Time          `json:"created_at"`
