@@ -1,8 +1,6 @@
 package services
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"timesheet-backend/models"
@@ -61,23 +59,6 @@ func TestGeneratorHelpers(t *testing.T) {
 }
 
 func TestGenerateExcel_MasterTemplate(t *testing.T) {
-	// Locate template path relative to working directory or project root
-	origTmpl := os.Getenv("TEMPLATE_PATH")
-	defer func() {
-		if origTmpl != "" {
-			_ = os.Setenv("TEMPLATE_PATH", origTmpl)
-		} else {
-			_ = os.Unsetenv("TEMPLATE_PATH")
-		}
-	}()
-
-	// If running from services package directory, template is at ../assets/templates/MII_master_template.xlsx
-	tmplPath := filepath.Join("assets", "templates", "MII_master_template.xlsx")
-	if _, err := os.Stat(tmplPath); os.IsNotExist(err) {
-		tmplPath = filepath.Join("..", "assets", "templates", "MII_master_template.xlsx")
-	}
-	_ = os.Setenv("TEMPLATE_PATH", tmplPath)
-
 	req := &models.TimesheetRequest{
 		Month:             9,
 		Year:              2026,

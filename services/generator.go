@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -328,20 +326,7 @@ func writeMasterEntryDetails(f *excelize.File, sheet string, r int, entry *model
 
 // GenerateExcel processes the master template and returns the filled spreadsheet as a byte array
 func GenerateExcel(req *models.TimesheetRequest, holidayMap map[string]string) ([]byte, error) {
-	var f *excelize.File
-	var err error
-
-	templatePath := filepath.Clean(os.Getenv("TEMPLATE_PATH"))
-	if templatePath != "" && templatePath != "." {
-		// #nosec G703, G304 -- template path is configured via environment variable
-		if _, statErr := os.Stat(templatePath); statErr == nil {
-			// #nosec G703, G304 -- template path is configured via environment variable
-			f, err = excelize.OpenFile(templatePath)
-		}
-	}
-	if f == nil {
-		f, err = excelize.OpenReader(bytes.NewReader(assets.MIITemplate))
-	}
+	f, err := excelize.OpenReader(bytes.NewReader(assets.MIITemplate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open Excel template: %w", err)
 	}
