@@ -126,7 +126,7 @@ func CleanWorkbookBuffer(in []byte) []byte {
 	zw := zip.NewWriter(&out)
 
 	reFormulaStr := regexp.MustCompile(`(<c\s+r="[A-Z0-9]+"[^>]*?)\s+t="str"([^>]*?>\s*<f[^>]*>.*?</f>)`)
-	sheetXmlRe := regexp.MustCompile(`^xl/worksheets/sheet\d+\.xml$`)
+	sheetXmlRe := regexp.MustCompile(`^xl/worksheets/.*\.xml$`)
 
 	for _, zf := range zr.File {
 		w, err := zw.CreateHeader(&zf.FileHeader)
@@ -536,6 +536,11 @@ func SetWorkbookProperties(f *excelize.File, title, lastModifiedBy string) {
 		LastModifiedBy: modifiedBy,
 		Category:       "Timesheet",
 	})
+	bTrue := true
+	_ = f.SetCalcProps(&excelize.CalcPropsOptions{
+		FullCalcOnLoad: &bTrue,
+		ForceFullCalc:  &bTrue,
+	})
 }
 
 // MonthNameIndonesian returns the full Indonesian month name for month 1-12.
@@ -580,11 +585,30 @@ func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, userCel
 	}
 }
 
-// WriteWorkbookToBuffer writes the workbook to a byte slice buffer or returns an error.
+// SummaryFormulaItem defines a column formula and pre-calculated value for summary rows.
+type SummaryFormulaItem struct {
+	Formula string
+	Value   int
+}
+
+// WriteSummaryRowWithValues writes both the pre-calculated integer value and Excel formula
+// into summary cells, ensuring the total displays immediately upon opening and recalculates on edit.
+func WriteSummaryRowWithValues(f *excelize.File, sheet, targetRow string, items map[string]SummaryFormulaItem, styleID int) {
+	for col, item := range items {
+		cell := col + targetRow
+		_ = f.SetCellValue(sheet, cell, item.Value)
+		_ = f.SetCellFormula(sheet, cell, item.Formula)
+		if styleID > 0 {
+			_ = f.SetCellStyle(sheet, cell, cell, styleID)
+		}
+	}
+}
+
+// WriteWorkbookToBuffer writes the workbook to a byte slice buffer, cleans formula attributes, or returns an error.
 func WriteWorkbookToBuffer(f *excelize.File, companyName string) ([]byte, error) {
 	buf, err := f.WriteToBuffer()
 	if err != nil {
 		return nil, fmt.Errorf("write %s buffer: %w", companyName, err)
 	}
-	return buf.Bytes(), nil
+	return CleanWorkbookBuffer(buf.Bytes()), nil
 }

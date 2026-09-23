@@ -83,10 +83,14 @@ func TestBuildMIIWorkbook(t *testing.T) {
 		t.Errorf("D10 formula = %q, want 'C10-B10'", formulaD10)
 	}
 
-	// Validate COUNTIF formula in Row 40
+	// Validate COUNTIF formula and value in Row 40
 	formulaE40, _ := f.GetCellFormula(sheet, "E40")
 	if formulaE40 != `COUNTIF(E9:E39,"P")` {
 		t.Errorf("E40 formula = %q, want 'COUNTIF(E9:E39,\"P\")'", formulaE40)
+	}
+	valE40, _ := f.GetCellValue(sheet, "E40")
+	if valE40 != "1" {
+		t.Errorf("E40 value = %q, want '1'", valE40)
 	}
 
 	// Validate that pictures were added to Sheet1
@@ -167,10 +171,14 @@ func TestBuildSDDWorkbook(t *testing.T) {
 		t.Errorf("E14 formula = %q, want 'D14-C14'", formulaE14)
 	}
 
-	// Validate COUNTIF formula in Row 43
+	// Validate COUNTIF formula and value in Row 43
 	formulaF43, _ := f.GetCellFormula(sheet, "F43")
 	if formulaF43 != `COUNTIF(F12:F42,"v")` {
 		t.Errorf("F43 formula = %q, want 'COUNTIF(F12:F42,\"v\")'", formulaF43)
+	}
+	valF43, _ := f.GetCellValue(sheet, "F43")
+	if valF43 != "1" {
+		t.Errorf("F43 value = %q, want '1'", valF43)
 	}
 }
 
@@ -253,6 +261,10 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 	formulaF41, _ := f.GetCellFormula(sheetTS, "F41")
 	if formulaF41 != `COUNTIF(F10:F40,"P")` {
 		t.Errorf("F41 formula = %q, want 'COUNTIF(F10:F40,\"P\")'", formulaF41)
+	}
+	valF41, _ := f.GetCellValue(sheetTS, "F41")
+	if valF41 != "1" {
+		t.Errorf("F41 value = %q, want '1'", valF41)
 	}
 
 	// 2. Check SPL sheet created for overtime
@@ -341,10 +353,14 @@ func TestBuildNTTWorkbook(t *testing.T) {
 		t.Errorf("D11 formula = %q, want 'IF(C11>B11,(C11-B11),C11-B11+1)'", formulaD11)
 	}
 
-	// Validate COUNTA formula in Row 42
+	// Validate COUNTA formula and value in Row 42
 	formulaE42, _ := f.GetCellFormula(sheet, "E42")
 	if formulaE42 != `COUNTA(E11:E41)` {
 		t.Errorf("E42 formula = %q, want 'COUNTA(E11:E41)'", formulaE42)
+	}
+	valE42, _ := f.GetCellValue(sheet, "E42")
+	if valE42 != "1" {
+		t.Errorf("E42 value = %q, want '1'", valE42)
 	}
 
 	// Validate Signature Date in Row 56
@@ -535,6 +551,110 @@ func TestTemplateBuilders_WorkingHoursAndTotalHourFormatting(t *testing.T) {
 			}
 			if tot21 != wantTot21 {
 				t.Errorf("[%s] Day 21 total = %q, want %q", c.code, tot21, wantTot21)
+			}
+		})
+	}
+}
+
+func TestTemplateBuilders_TotalAttendanceUpdates(t *testing.T) {
+	user := &models.User{
+		Name:       "Test User",
+		Division:   "Engineering",
+		EmployeeID: "EMP-999",
+	}
+
+	activities := []models.DailyActivity{
+		{Date: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), Status: "P", StartTime: "08:00", EndTime: "17:00"},
+		{Date: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC), Status: "P", StartTime: "08:00", EndTime: "17:00"},
+		{Date: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC), Status: "S", StartTime: "08:00", EndTime: "17:00"},
+		{Date: time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC), Status: "V", StartTime: "08:00", EndTime: "17:00"},
+		{Date: time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC), Status: "PM", StartTime: "08:00", EndTime: "17:00"},
+	}
+
+	testCases := []struct {
+		company   string
+		sheetName string
+		checks    map[string]string
+	}{
+		{
+			company:   "mii",
+			sheetName: "Sheet1",
+			checks: map[string]string{
+				"E40": "2", // P
+				"F40": "1", // S
+				"H40": "1", // PM
+				"I40": "1", // V
+				"G40": "0", // BT
+				"J40": "0", // X
+			},
+		},
+		{
+			company:   "sdd",
+			sheetName: "Juni",
+			checks: map[string]string{
+				"F43": "2", // Hadir
+				"I43": "1", // Sakit
+				"H43": "1", // Izin (PM)
+				"G43": "1", // Cuti (V)
+				"J43": "0", // Lembur
+			},
+		},
+		{
+			company:   "adidata",
+			sheetName: "TIMESHEET",
+			checks: map[string]string{
+				"F41": "2", // P
+				"G41": "1", // S
+				"I41": "1", // PM
+				"J41": "1", // V
+				"H41": "0", // BT
+				"K41": "0", // X
+			},
+		},
+		{
+			company:   "ntt",
+			sheetName: "Timesheet",
+			checks: map[string]string{
+				"E42": "2", // P
+				"F42": "1", // S
+				"H42": "1", // PM
+				"I42": "1", // V
+				"G42": "0", // BT
+				"J42": "0", // X
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.company, func(t *testing.T) {
+			in := GenerationInput{
+				CompanyCode: tc.company,
+				User:        user,
+				Month:       6,
+				Year:        2026,
+				Activities:  activities,
+				Holidays:    map[int]string{},
+			}
+
+			out, err := GenerateFromTemplate(in)
+			if err != nil {
+				t.Fatalf("[%s] GenerateFromTemplate failed: %v", tc.company, err)
+			}
+
+			f, err := excelize.OpenReader(bytes.NewReader(out))
+			if err != nil {
+				t.Fatalf("[%s] OpenReader failed: %v", tc.company, err)
+			}
+			defer func() { _ = f.Close() }()
+
+			for cell, wantVal := range tc.checks {
+				gotVal, err := f.GetCellValue(tc.sheetName, cell)
+				if err != nil {
+					t.Errorf("[%s] GetCellValue(%s) error: %v", tc.company, cell, err)
+				}
+				if gotVal != wantVal {
+					t.Errorf("[%s] Cell %s value = %q, want %q", tc.company, cell, gotVal, wantVal)
+				}
 			}
 		})
 	}

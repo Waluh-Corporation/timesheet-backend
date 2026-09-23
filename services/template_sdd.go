@@ -63,6 +63,7 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 	byDay := BuildByDayMap(in.Activities)
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
+	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {
 		row := 11 + day
@@ -85,17 +86,22 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 		WriteWorkingHoursRow(f, sheet, "C", "D", "E", rs, "D%s-C%s", false, dsc)
 
 		if dsc.HasActivity {
+			var col string
 			switch strings.ToUpper(strings.TrimSpace(dsc.Activity.Status)) {
 			case "H", "P", "HADIR", "PRESENT":
-				_ = f.SetCellValue(sheet, "F"+rs, "v")
+				col = "F"
 			case "C", "CUTI", "V", "VACATION":
-				_ = f.SetCellValue(sheet, "G"+rs, "v")
+				col = "G"
 			case "I", "IZIN", "PM", "PERMIT":
-				_ = f.SetCellValue(sheet, "H"+rs, "v")
+				col = "H"
 			case "S", "SAKIT", "SICK":
-				_ = f.SetCellValue(sheet, "I"+rs, "v")
+				col = "I"
 			case "L", "LEMBUR":
-				_ = f.SetCellValue(sheet, "J"+rs, "v")
+				col = "J"
+			}
+			if col != "" {
+				_ = f.SetCellValue(sheet, col+rs, "v")
+				statusCounts[col]++
 			}
 
 			_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.GetProjectName())
@@ -109,14 +115,14 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 		}
 	}
 
-	formulas := map[string]string{
-		"F": `COUNTIF(F12:F42,"v")`,
-		"G": `COUNTIF(G12:G42,"v")`,
-		"H": `COUNTIF(H12:H42,"v")`,
-		"I": `COUNTIF(I12:I42,"v")`,
-		"J": `COUNTIF(J12:J42,"v")`,
+	sddSummary := map[string]SummaryFormulaItem{
+		"F": {Formula: `COUNTIF(F12:F42,"v")`, Value: statusCounts["F"]},
+		"G": {Formula: `COUNTIF(G12:G42,"v")`, Value: statusCounts["G"]},
+		"H": {Formula: `COUNTIF(H12:H42,"v")`, Value: statusCounts["H"]},
+		"I": {Formula: `COUNTIF(I12:I42,"v")`, Value: statusCounts["I"]},
+		"J": {Formula: `COUNTIF(J12:J42,"v")`, Value: statusCounts["J"]},
 	}
-	WriteColumnFormulas(f, sheet, "43", formulas, st.BoldCenterStyle)
+	WriteSummaryRowWithValues(f, sheet, "43", sddSummary, st.BoldCenterStyle)
 
 	tlName, dhName := ResolveApprovers(in)
 	_ = f.SetCellValue(sheet, "C52", sddNamePrefix+userName)

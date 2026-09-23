@@ -64,6 +64,7 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	allCols := []string{"B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
 	wrapCols := []string{"L", "O", "Q", "R"}
+	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {
 		row := 9 + day // Row 10 is Day 1; Row 40 is Day 31
@@ -102,17 +103,20 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 		}
 
 		writeAdidataAttendanceMatrixStatus(f, sheetTS, rs, status)
+		if status != "" {
+			statusCounts[status]++
+		}
 	}
 
-	formulas := map[string]string{
-		"F": `COUNTIF(F10:F40,"P")`,
-		"G": `COUNTIF(G10:G40,"S")`,
-		"H": `COUNTIF(H10:H40,"BT")`,
-		"I": `COUNTIF(I10:I40,"PM")`,
-		"J": `COUNTIF(J10:J40,"V")`,
-		"K": `COUNTIF(K10:K40,"x")`,
+	adidataSummary := map[string]SummaryFormulaItem{
+		"F": {Formula: `COUNTIF(F10:F40,"P")`, Value: statusCounts["P"]},
+		"G": {Formula: `COUNTIF(G10:G40,"S")`, Value: statusCounts["S"]},
+		"H": {Formula: `COUNTIF(H10:H40,"BT")`, Value: statusCounts["BT"]},
+		"I": {Formula: `COUNTIF(I10:I40,"PM")`, Value: statusCounts["PM"]},
+		"J": {Formula: `COUNTIF(J10:J40,"V")`, Value: statusCounts["V"]},
+		"K": {Formula: `COUNTIF(K10:K40,"x")`, Value: statusCounts["X"]},
 	}
-	WriteColumnFormulas(f, sheetTS, "41", formulas, st.BoldCenterStyle)
+	WriteSummaryRowWithValues(f, sheetTS, "41", adidataSummary, st.BoldCenterStyle)
 
 	tlName, dhName := ResolveApprovers(in)
 	WriteSignatures(f, sheetTS, in, "B44", "E44", "I44", "B50", "E50", "I50", "DATE : ")

@@ -59,6 +59,7 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 	byDay := BuildByDayMap(in.Activities)
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
+	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {
 		row := 8 + day
@@ -92,7 +93,20 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		}
 
 		WriteAttendanceMatrixStatus(f, sheet, rs, status)
+		if status != "" {
+			statusCounts[status]++
+		}
 	}
+
+	miiSummary := map[string]SummaryFormulaItem{
+		"E": {Formula: `COUNTIF(E9:E39,"P")`, Value: statusCounts["P"]},
+		"F": {Formula: `COUNTIF(F9:F39,"S")`, Value: statusCounts["S"]},
+		"G": {Formula: `COUNTIF(G9:G39,"BT")`, Value: statusCounts["BT"]},
+		"H": {Formula: `COUNTIF(H9:H39,"PM")`, Value: statusCounts["PM"]},
+		"I": {Formula: `COUNTIF(I9:I39,"V")`, Value: statusCounts["V"]},
+		"J": {Formula: `COUNTIF(J9:J39,"X")`, Value: statusCounts["X"]},
+	}
+	WriteSummaryRowWithValues(f, sheet, "40", miiSummary, st.BoldCenterStyle)
 
 	WriteSignatures(f, sheet, in, "A46", "D46", "G46", "A47", "D47", "G47", "DATE : ")
 	return WriteWorkbookToBuffer(f, "mii")

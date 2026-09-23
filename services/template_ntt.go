@@ -47,6 +47,7 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 	byDay := BuildByDayMap(in.Activities)
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
+	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {
 		row := 10 + day
@@ -80,7 +81,20 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 		}
 
 		WriteAttendanceMatrixStatus(f, sheet, rs, status)
+		if status != "" {
+			statusCounts[status]++
+		}
 	}
+
+	nttSummary := map[string]SummaryFormulaItem{
+		"E": {Formula: `COUNTA(E11:E41)`, Value: statusCounts["P"]},
+		"F": {Formula: `COUNTA(F11:F41)`, Value: statusCounts["S"]},
+		"G": {Formula: `COUNTA(G11:G41)`, Value: statusCounts["BT"]},
+		"H": {Formula: `COUNTA(H11:H41)`, Value: statusCounts["PM"]},
+		"I": {Formula: `COUNTA(I11:I41)`, Value: statusCounts["V"]},
+		"J": {Formula: `COUNTA(J11:J41)`, Value: statusCounts["X"]},
+	}
+	WriteSummaryRowWithValues(f, sheet, "42", nttSummary, st.BoldCenterStyle)
 
 	WriteSignatures(f, sheet, in, "B55", "F55", "J55", "B56", "F56", "J56", "DATE: ")
 	return WriteWorkbookToBuffer(f, "ntt")
