@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -330,9 +331,11 @@ func GenerateExcel(req *models.TimesheetRequest, holidayMap map[string]string) (
 	var f *excelize.File
 	var err error
 
-	templatePath := os.Getenv("TEMPLATE_PATH")
-	if templatePath != "" {
+	templatePath := filepath.Clean(os.Getenv("TEMPLATE_PATH"))
+	if templatePath != "" && templatePath != "." {
+		// #nosec G703, G304 -- template path is configured via environment variable
 		if _, statErr := os.Stat(templatePath); statErr == nil {
+			// #nosec G703, G304 -- template path is configured via environment variable
 			f, err = excelize.OpenFile(templatePath)
 		}
 	}

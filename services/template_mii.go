@@ -65,9 +65,6 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			for _, col := range allCols {
-				_ = f.SetCellValue(sheet, col+rs, "")
-			}
 			ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"K", "Q"}, st)
 			continue
 		}
@@ -97,25 +94,6 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		WriteAttendanceMatrixStatus(f, sheet, rs, status)
 	}
 
-	tlName, dhName := ResolveApprovers(in)
-	if userName != "" {
-		_ = f.SetCellValue(sheet, "A46", userName)
-	}
-	if tlName != "" {
-		_ = f.SetCellValue(sheet, "D46", tlName)
-	}
-	if dhName != "" {
-		_ = f.SetCellValue(sheet, "G46", dhName)
-	}
-
-	dateStr := "DATE : " + CurrentDateFormatted()
-	_ = f.SetCellValue(sheet, "A47", dateStr)
-	_ = f.SetCellValue(sheet, "D47", dateStr)
-	_ = f.SetCellValue(sheet, "G47", dateStr)
-
-	buf, err := f.WriteToBuffer()
-	if err != nil {
-		return nil, fmt.Errorf("write mii buffer: %w", err)
-	}
-	return buf.Bytes(), nil
+	WriteSignatures(f, sheet, in, "A46", "D46", "G46", "A47", "D47", "G47", "DATE : ")
+	return WriteWorkbookToBuffer(f, "mii")
 }

@@ -321,10 +321,11 @@ func WriteTimeCells(f *excelize.File, sheet, startCell, endCell string, startStr
 	return hasStart, hasEnd
 }
 
-// ApplyBlankPaddingRow formats blank days beyond the current month's end.
+// ApplyBlankPaddingRow clears cell values and formats blank days beyond the current month's end.
 func ApplyBlankPaddingRow(f *excelize.File, sheet string, row int, cols []string, wrapCols []string, st *BuilderStyles) {
 	rs := fmt.Sprintf("%d", row)
 	for _, col := range cols {
+		_ = f.SetCellValue(sheet, col+rs, "")
 		_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
 	}
 	for _, col := range wrapCols {
@@ -547,4 +548,43 @@ func MonthNameIndonesian(month int) string {
 		return names[month-1]
 	}
 	return fmt.Sprintf("Bulan %d", month)
+}
+
+// WriteSignatures writes the user, team leader, department head names, and date stamp into signature cells.
+func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, userCell, tlCell, dhCell, userDateCell, tlDateCell, dhDateCell, datePrefix string) {
+	tlName, dhName := ResolveApprovers(in)
+	userName := ""
+	if in.User != nil {
+		userName = in.User.Name
+	}
+	if userName != "" && userCell != "" {
+		_ = f.SetCellValue(sheet, userCell, userName)
+	}
+	if tlName != "" && tlCell != "" {
+		_ = f.SetCellValue(sheet, tlCell, tlName)
+	}
+	if dhName != "" && dhCell != "" {
+		_ = f.SetCellValue(sheet, dhCell, dhName)
+	}
+	if datePrefix != "" {
+		dateStr := datePrefix + CurrentDateFormatted()
+		if userDateCell != "" {
+			_ = f.SetCellValue(sheet, userDateCell, dateStr)
+		}
+		if tlDateCell != "" {
+			_ = f.SetCellValue(sheet, tlDateCell, dateStr)
+		}
+		if dhDateCell != "" {
+			_ = f.SetCellValue(sheet, dhDateCell, dateStr)
+		}
+	}
+}
+
+// WriteWorkbookToBuffer writes the workbook to a byte slice buffer or returns an error.
+func WriteWorkbookToBuffer(f *excelize.File, companyName string) ([]byte, error) {
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, fmt.Errorf("write %s buffer: %w", companyName, err)
+	}
+	return buf.Bytes(), nil
 }

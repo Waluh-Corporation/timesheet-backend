@@ -69,9 +69,6 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			for _, col := range allCols {
-				_ = f.SetCellValue(sheet, col+rs, "")
-			}
 			ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"N"}, st)
 			continue
 		}
@@ -126,9 +123,5 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 	_ = f.SetCellValue(sheet, "H52", sddNamePrefix+tlName)
 	_ = f.SetCellValue(sheet, "L52", sddNamePrefix+dhName)
 
-	buf, err := f.WriteToBuffer()
-	if err != nil {
-		return nil, fmt.Errorf("write sdd buffer: %w", err)
-	}
-	return buf.Bytes(), nil
+	return WriteWorkbookToBuffer(f, "sdd")
 }

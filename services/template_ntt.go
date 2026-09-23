@@ -53,9 +53,6 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			for _, col := range allCols {
-				_ = f.SetCellValue(sheet, col+rs, "")
-			}
 			ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"K"}, st)
 			continue
 		}
@@ -85,25 +82,6 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 		WriteAttendanceMatrixStatus(f, sheet, rs, status)
 	}
 
-	tlName, dhName := ResolveApprovers(in)
-	if userName != "" {
-		_ = f.SetCellValue(sheet, "B55", userName)
-	}
-	if tlName != "" {
-		_ = f.SetCellValue(sheet, "F55", tlName)
-	}
-	if dhName != "" {
-		_ = f.SetCellValue(sheet, "J55", dhName)
-	}
-
-	dateStr := "DATE: " + CurrentDateFormatted()
-	_ = f.SetCellValue(sheet, "B56", dateStr)
-	_ = f.SetCellValue(sheet, "F56", dateStr)
-	_ = f.SetCellValue(sheet, "J56", dateStr)
-
-	buf, err := f.WriteToBuffer()
-	if err != nil {
-		return nil, fmt.Errorf("write ntt buffer: %w", err)
-	}
-	return buf.Bytes(), nil
+	WriteSignatures(f, sheet, in, "B55", "F55", "J55", "B56", "F56", "J56", "DATE: ")
+	return WriteWorkbookToBuffer(f, "ntt")
 }

@@ -73,9 +73,6 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 		_ = f.MergeCell(sheetTS, "L"+rs, "N"+rs)
 
 		if day > daysInMonth {
-			for _, col := range allCols {
-				_ = f.SetCellValue(sheetTS, col+rs, "")
-			}
 			ApplyBlankPaddingRow(f, sheetTS, row, allCols, wrapCols, st)
 			continue
 		}
@@ -117,23 +114,9 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 	}
 	WriteColumnFormulas(f, sheetTS, "41", formulas, st.BoldCenterStyle)
 
-	// Signatures (merged cells B44:D48, E44:H48, I44:M48, B49:D49, B50:D50, E50:H50, I50:M50)
 	tlName, dhName := ResolveApprovers(in)
-	if userName != "" {
-		_ = f.SetCellValue(sheetTS, "B44", userName)
-	}
-	if tlName != "" {
-		_ = f.SetCellValue(sheetTS, "E44", tlName)
-	}
-	if dhName != "" {
-		_ = f.SetCellValue(sheetTS, "I44", dhName)
-	}
+	WriteSignatures(f, sheetTS, in, "B44", "E44", "I44", "B50", "E50", "I50", "DATE : ")
 	_ = f.SetCellValue(sheetTS, "B49", "( "+pos+" )")
-
-	dateStr := "DATE : " + CurrentDateFormatted()
-	_ = f.SetCellValue(sheetTS, "B50", dateStr)
-	_ = f.SetCellValue(sheetTS, "E50", dateStr)
-	_ = f.SetCellValue(sheetTS, "I50", dateStr)
 
 	// Dynamic Overtime SPL Sheets
 	if len(in.Overtimes) > 0 {
@@ -193,11 +176,7 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 		_ = f.DeleteSheet("SPL_TEMPLATE")
 	}
 
-	buf, err := f.WriteToBuffer()
-	if err != nil {
-		return nil, fmt.Errorf("write adidata buffer: %w", err)
-	}
-	return buf.Bytes(), nil
+	return WriteWorkbookToBuffer(f, "adidata")
 }
 
 func writeAdidataSingleSPL(f *excelize.File, splSheet string, in GenerationInput, ot models.OvertimeEntry, empID string, st *BuilderStyles) {
