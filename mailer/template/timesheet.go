@@ -15,6 +15,8 @@ type TimesheetEmailData struct {
 	Filename     string
 	PortalURL    string
 	SupportEmail string
+	DownloadURL  string
+	ExpiresAt    string
 }
 
 //go:embed timesheet.html
@@ -49,11 +51,15 @@ func RenderTimesheetEmail(data TimesheetEmailData) (htmlBody string, textBody st
 		return "", "", fmt.Errorf("render timesheet template: %w", err)
 	}
 
+	downloadInfo := ""
+	if data.DownloadURL != "" {
+		downloadInfo = fmt.Sprintf("\nTautan Unduhan: %s\n(Tautan ini aktif dan aman digunakan selama 7 hari)\n", data.DownloadURL)
+	}
+
 	textBody = fmt.Sprintf(`Halo %s,
 
-Dokumen timesheet bulanan Anda telah berhasil dibuat dan dilampirkan pada email ini (format .xlsx).
-Salinan dokumen ini juga telah otomatis diunduh pada peramban web Anda.
-
+Dokumen timesheet bulanan Anda telah berhasil dibuat dalam format Microsoft Excel (.xlsx).
+%s
 Detail Timesheet:
 - Perusahaan: %s
 - Periode: %s
@@ -65,7 +71,7 @@ Silakan periksa kembali rincian jam kerja dan kegiatan sebelum menyerahkan dokum
 --
 %s
 %s
-`, data.Username, data.Company, data.Period, data.Filename, data.AppName, data.PortalURL)
+`, data.Username, downloadInfo, data.Company, data.Period, data.Filename, data.AppName, data.PortalURL)
 
 	return htmlBody, textBody, nil
 }
