@@ -36,6 +36,10 @@ func (m *mockStorageService) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+func (m *mockStorageService) FileExists(ctx context.Context, key string) (bool, error) {
+	return true, nil
+}
+
 type mockJobRepository struct {
 	createdJob *models.TimesheetJob
 	lastStatus models.TimesheetJobStatus
@@ -79,6 +83,57 @@ func (m *mockJobRepository) UpdateStatus(ctx context.Context, id string, status 
 		m.createdJob.ExpiresAt = expiresAt
 	}
 	return nil
+}
+
+func (m *mockJobRepository) UpdateStatusWithToken(ctx context.Context, id string, status models.TimesheetJobStatus, fileKey, downloadURL, errMsg string, expiresAt *time.Time, downloadToken string, maxDownloads int, tokenExpiresAt *time.Time) error {
+	m.lastStatus = status
+	m.lastURL = downloadURL
+	if m.createdJob != nil {
+		m.createdJob.Status = status
+		m.createdJob.DownloadURL = downloadURL
+		m.createdJob.FileKey = fileKey
+		m.createdJob.ErrorMessage = errMsg
+		m.createdJob.ExpiresAt = expiresAt
+		m.createdJob.DownloadToken = &downloadToken
+		m.createdJob.MaxDownloads = maxDownloads
+		m.createdJob.TokenExpiresAt = tokenExpiresAt
+	}
+	return nil
+}
+
+func (m *mockJobRepository) FindByDownloadToken(ctx context.Context, token string) (*models.TimesheetJob, error) {
+	if m.createdJob != nil && m.createdJob.DownloadToken != nil && *m.createdJob.DownloadToken == token {
+		return m.createdJob, nil
+	}
+	return nil, nil
+}
+
+func (m *mockJobRepository) IncrementDownloadCount(ctx context.Context, id string) error {
+	if m.createdJob != nil {
+		m.createdJob.DownloadCount++
+	}
+	return nil
+}
+
+func (m *mockJobRepository) RenewDownloadToken(ctx context.Context, id string, newToken string, maxDownloads int, expiresAt time.Time) error {
+	if m.createdJob != nil {
+		m.createdJob.DownloadToken = &newToken
+		m.createdJob.DownloadCount = 0
+		m.createdJob.MaxDownloads = maxDownloads
+		m.createdJob.TokenExpiresAt = &expiresAt
+	}
+	return nil
+}
+
+func (m *mockJobRepository) FindActiveCompletedJob(ctx context.Context, userID uint, month, year int) (*models.TimesheetJob, error) {
+	if m.createdJob != nil && m.createdJob.UserID == userID && m.createdJob.Month == month && m.createdJob.Year == year && m.createdJob.Status == models.JobStatusCompleted {
+		return m.createdJob, nil
+	}
+	return nil, nil
+}
+
+func (m *mockJobRepository) HasInFlightJob(ctx context.Context, userID uint, month, year int) (bool, error) {
+	return false, nil
 }
 
 func (m *mockJobRepository) FindExpiredJobs(ctx context.Context, now time.Time, limit int) ([]models.TimesheetJob, error) {
@@ -155,6 +210,8 @@ func TestWorkerServer_ProcessTaskDirect(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, models.JobStatusCompleted, jobRepo.lastStatus)
-	assert.Contains(t, jobRepo.lastURL, "https://s3.example.com/timesheets/")
+	assert.Contains(t, jobRepo.lastURL, "/api/v1/timesheet/downloads/")
+	assert.NotNil(t, jobRepo.createdJob.DownloadToken)
+	assert.Equal(t, 3, jobRepo.createdJob.MaxDownloads)
 	assert.Equal(t, []byte("PK-mock-excel-binary"), storageSvc.uploadedBytes)
 }

@@ -36,6 +36,7 @@ type ActivityRepository interface {
 	ValidateStatus(ctx context.Context, status string) (bool, error)
 	FindActiveProjectByRefID(ctx context.Context, refID uint) (*models.Project, error)
 	FindActiveProjectByCodeOrName(ctx context.Context, projectID, projectName string) (*models.Project, error)
+	GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error)
 }
 
 type activityRepository struct {
@@ -195,4 +196,21 @@ func (r *activityRepository) FindActiveProjectByCodeOrName(ctx context.Context, 
 		return nil, errors.New("project not found")
 	}
 	return &proj, nil
+}
+
+func (r *activityRepository) GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error) {
+	startDate := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	endDate := startDate.AddDate(0, 1, 0)
+	var latest *time.Time
+	err := r.db.WithContext(ctx).Model(&models.DailyActivity{}).
+		Where("user_id = ? AND date >= ? AND date < ? AND is_active = true", userID, startDate, endDate).
+		Select("MAX(updated_at)").
+		Scan(&latest).Error
+	if err != nil {
+		return time.Time{}, err
+	}
+	if latest == nil {
+		return time.Time{}, nil
+	}
+	return *latest, nil
 }

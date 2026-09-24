@@ -3823,13 +3823,47 @@ paths:
       summary: List all sites
       tags:
       - Master Data
+  /api/v1/timesheet/downloads/{token}:
+    get:
+      description: Validates the magic download token, enforces download quota (maximum
+        3 downloads), and redirects (302 Found) to a temporary presigned S3 URL.
+      parameters:
+      - description: Magic download token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Redirects to temporary presigned S3 download URL
+        "400":
+          description: Invalid token format
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Token not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "410":
+          description: Download quota exceeded or token expired
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Failed to process download
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Download generated timesheet spreadsheet using a secure magic token
+      tags:
+      - Timesheet
   /api/v1/timesheet/generate:
     post:
       consumes:
       - application/json
-      description: Enqueues a monthly timesheet generation task. Returns a 202 Accepted
-        response with the job details. Once generated, the file is saved to S3 and
-        the download link is sent via email and Web Push.
+      description: Evaluates cache for valid active timesheet and re-issues a download
+        token, or enqueues a new generation task. Returns 200 OK on cache hit, or
+        202 Accepted when queued.
       parameters:
       - description: Generation parameters
         in: body
@@ -3840,6 +3874,10 @@ paths:
       produces:
       - application/json
       responses:
+        "200":
+          description: Timesheet retrieved from cache and download link re-issued
+          schema:
+            $ref: '#/definitions/response.TimesheetJobResponse'
         "202":
           description: Generation task accepted
           schema:
@@ -3854,6 +3892,10 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
         "404":
           description: User not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Generation request in-flight or debounce active
           schema:
             $ref: '#/definitions/response.ErrorResponse'
         "500":

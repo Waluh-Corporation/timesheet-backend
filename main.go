@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	swaggerFiles "github.com/swaggo/files"
@@ -186,6 +187,28 @@ func main() {
 		logger.Warn("s3 storage service not configured or failed to initialize", slog.Any("error", err))
 	}
 
+	var redisClient *redis.Client
+	if cfg.RedisAddr != "" {
+		redisClient = redis.NewClient(&redis.Options{
+			Addr:         cfg.RedisAddr,
+			Password:     cfg.RedisPassword,
+			DB:           cfg.RedisDB,
+			DialTimeout:  2 * time.Second,
+			ReadTimeout:  1 * time.Second,
+			WriteTimeout: 1 * time.Second,
+			PoolSize:     20,
+			MinIdleConns: 5,
+		})
+		pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := redisClient.Ping(pingCtx).Err(); err != nil {
+			logger.Warn("redis client failed to ping, continuing with graceful degradation", slog.Any("error", err))
+		} else {
+			logger.Info("connected to redis successfully", slog.String("addr", cfg.RedisAddr))
+		}
+		pingCancel()
+		defer func() { _ = redisClient.Close() }()
+	}
+
 	queueClient, err := queue.NewQueueClient(cfg)
 	if err != nil {
 		logger.Warn("redis queue client failed to initialize", slog.Any("error", err))
@@ -200,9 +223,13 @@ func main() {
 	}
 	srv.Storage = storageSvc
 	srv.QueueClient = queueClient
+	srv.RedisClient = redisClient
 
 	if queueClient != nil && storageSvc != nil {
 		workerServer := queue.NewWorkerServer(cfg, srv.JobRepo, srv.UserRepo, srv.TimesheetSvc, storageSvc, mailSvc, pushSvc)
+		if redisClient != nil {
+			workerServer.SetRedisClient(redisClient)
+		}
 		if werr := workerServer.Start(); werr != nil {
 			logger.Error("failed to start queue worker server", slog.Any("error", werr))
 		} else {
@@ -293,6 +320,9 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 
 	// Public VAPID key (needed before the user is subscribed).
 	api.GET("/push/vapid-public-key", s.GetVAPIDKey)
+
+	// Public magic download token endpoint (quota-enforced, 302 redirect to temporary S3 URL)
+	api.GET("/timesheet/downloads/:token", s.DownloadTimesheetByToken)
 
 	// WebAuthn Related Origin Requests document, served at the well-known path
 	// so passkeys registered under one relying party can be used across the

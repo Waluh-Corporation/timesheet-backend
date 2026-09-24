@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	"timesheet-backend/config"
 )
@@ -20,6 +22,7 @@ type StorageService interface {
 	Upload(ctx context.Context, key string, body io.Reader, contentType string) error
 	GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error)
 	Delete(ctx context.Context, key string) error
+	FileExists(ctx context.Context, key string) (bool, error)
 }
 
 // S3StorageService implements StorageService backed by AWS SDK for Go v2.
@@ -128,4 +131,25 @@ func (s *S3StorageService) Delete(ctx context.Context, key string) error {
 		return fmt.Errorf("failed to delete object %s from bucket %s: %w", key, s.bucket, err)
 	}
 	return nil
+}
+
+// FileExists checks whether an object exists in S3 using HeadObject.
+func (s *S3StorageService) FileExists(ctx context.Context, key string) (bool, error) {
+	if strings.TrimSpace(key) == "" {
+		return false, fmt.Errorf("object key cannot be empty")
+	}
+	input := &s3.HeadObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	}
+	_, err := s.client.HeadObject(ctx, input)
+	if err != nil {
+		var notFound *types.NotFound
+		var noSuchKey *types.NoSuchKey
+		if errors.As(err, &notFound) || errors.As(err, &noSuchKey) || strings.Contains(err.Error(), "NotFound") || strings.Contains(err.Error(), "404") {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check existence for object %s: %w", key, err)
+	}
+	return true, nil
 }

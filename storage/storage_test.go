@@ -63,4 +63,11 @@ func TestS3StorageService_Validation(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "object key cannot be empty")
 	})
+
+	t.Run("empty key for FileExists returns error", func(t *testing.T) {
+		exists, err := svc.FileExists(ctx, "")
+		assert.Error(t, err)
+		assert.False(t, exists)
+		assert.Contains(t, err.Error(), "object key cannot be empty")
+	})
 }

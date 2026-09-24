@@ -53,6 +53,9 @@ type Config struct {
 	// FrontendURL is used to build links inside emails (setup / reset).
 	FrontendURL string
 
+	// AppBaseURL is used to build backend API links (magic download tokens).
+	AppBaseURL string
+
 	// Timezone used for the daily reminder scheduler and configurable cron expressions.
 	Timezone     string
 	ReminderCron string
@@ -261,6 +264,7 @@ func Load() *Config {
 		VAPIDSubject:    getEnv("VAPID_SUBJECT", "mailto:admin@timesheet.local"),
 
 		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:3000"),
+		AppBaseURL:   strings.TrimRight(getEnv("APP_BASE_URL", getEnv("API_BASE_URL", "http://localhost:"+getEnv("PORT", "8080"))), "/"),
 		Timezone:     getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
 		ReminderCron: getEnv("SCHEDULER_REMINDER_CRON", getEnv("SCHEDULER_CRON", "0 17 * * *")),
 		CleanupCron:  getEnv("SCHEDULER_CLEANUP_CRON", "0 2 * * *"),

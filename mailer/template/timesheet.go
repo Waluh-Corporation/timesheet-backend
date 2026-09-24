@@ -53,7 +53,7 @@ func RenderTimesheetEmail(data TimesheetEmailData) (htmlBody string, textBody st
 
 	downloadInfo := ""
 	if data.DownloadURL != "" {
-		downloadInfo = fmt.Sprintf("\nTautan Unduhan: %s\n(Tautan ini aktif dan aman digunakan selama 7 hari)\n", data.DownloadURL)
+		downloadInfo = fmt.Sprintf("\nTautan Unduhan: %s\n(*Tautan unduhan ini privat, dapat digunakan maksimal 3 kali unduhan, dan aktif selama 7 hari.)\n", data.DownloadURL)
 	}
 
 	textBody = fmt.Sprintf(`Halo %s,

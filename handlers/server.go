@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"timesheet-backend/auth"
@@ -58,6 +59,7 @@ type Server struct {
 	JobRepo      repository.JobRepository
 	QueueClient  queue.QueueClient
 	Storage      storage.StorageService
+	RedisClient  *redis.Client
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
@@ -309,6 +311,14 @@ func (s *Server) getJobRepo() repository.JobRepository {
 
 func (s *Server) getQueueClient() queue.QueueClient {
 	return s.QueueClient
+}
+
+func (s *Server) getStorage() storage.StorageService {
+	return s.Storage
+}
+
+func (s *Server) getRedisClient() *redis.Client {
+	return s.RedisClient
 }
 
 func (s *Server) getUserRepository() repository.UserRepository {

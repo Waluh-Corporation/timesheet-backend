@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -923,7 +924,103 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		srv.ListTimesheetJobs(cListJobs)
 		assertFatalCode(t, wListJobs, http.StatusOK)
 
+		// 10. In-flight check: duplicate request while job is queued returns 409 Conflict
+		wInFlight := httptest.NewRecorder()
+		cInFlight, _ := gin.CreateTestContext(wInFlight)
+		cInFlight.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cInFlight.Request.Header.Set("Content-Type", "application/json")
+		cInFlight.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cInFlight)
+		assertFatalCode(t, wInFlight, http.StatusConflict)
+
+		// 11. Autonomous Re-issue (Cache Hit): Complete the job and request again -> 200 OK with fresh token
+		now := time.Now()
+		future := now.Add(7 * 24 * time.Hour)
+		initialToken := "initial-token-12345"
+		srv.Storage = &testActivityMockStorage{}
+		_ = tx.Model(&models.TimesheetJob{}).Where("id = ?", mockQ.enqueuedJobID).Updates(map[string]interface{}{
+			"status":           models.JobStatusCompleted,
+			"file_key":         "timesheets/1/job.xlsx",
+			"download_url":     "http://localhost:8080/api/v1/timesheet/downloads/" + initialToken,
+			"download_token":   initialToken,
+			"download_count":   3,
+			"max_downloads":    3,
+			"expires_at":       future,
+			"token_expires_at": future,
+		})
+
+		wCacheHit := httptest.NewRecorder()
+		cCacheHit, _ := gin.CreateTestContext(wCacheHit)
+		cCacheHit.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cCacheHit.Request.Header.Set("Content-Type", "application/json")
+		cCacheHit.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cCacheHit)
+		assertFatalCode(t, wCacheHit, http.StatusOK)
+
+		updatedJob, err := srv.JobRepo.FindByID(context.Background(), mockQ.enqueuedJobID)
+		if err != nil || updatedJob == nil {
+			t.Fatalf("failed to fetch updated job from db: %v", err)
+		}
+		if updatedJob.DownloadToken == nil || *updatedJob.DownloadToken == "" || *updatedJob.DownloadToken == initialToken {
+			t.Fatalf("expected fresh download token in db, got: %v", updatedJob.DownloadToken)
+		}
+		reissuedToken := *updatedJob.DownloadToken
+
+		// 12. Test DownloadTimesheetByToken
+		// a. Invalid token format (< 10 chars)
+		wBadToken := httptest.NewRecorder()
+		cBadToken, _ := gin.CreateTestContext(wBadToken)
+		cBadToken.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/short", nil)
+		cBadToken.Params = gin.Params{{Key: "token", Value: "short"}}
+		srv.DownloadTimesheetByToken(cBadToken)
+		assertFatalCode(t, wBadToken, http.StatusBadRequest)
+
+		// b. Token not found
+		wTokenNotFound := httptest.NewRecorder()
+		cTokenNotFound, _ := gin.CreateTestContext(wTokenNotFound)
+		cTokenNotFound.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/non-existent-token-12345", nil)
+		cTokenNotFound.Params = gin.Params{{Key: "token", Value: "non-existent-token-12345"}}
+		srv.DownloadTimesheetByToken(cTokenNotFound)
+		assertFatalCode(t, wTokenNotFound, http.StatusNotFound)
+
+		// c. Valid re-issued token: 3 downloads allowed with 302 Found redirect
+		for i := 1; i <= 3; i++ {
+			wDL := httptest.NewRecorder()
+			cDL, _ := gin.CreateTestContext(wDL)
+			cDL.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/"+reissuedToken, nil)
+			cDL.Params = gin.Params{{Key: "token", Value: reissuedToken}}
+			srv.DownloadTimesheetByToken(cDL)
+			assertFatalCode(t, wDL, http.StatusFound)
+			if loc := wDL.Header().Get("Location"); !strings.Contains(loc, "https://s3.example.com/timesheets/") {
+				t.Fatalf("download %d: expected redirect to S3 URL, got %s", i, loc)
+			}
+		}
+
+		// 4th download: quota exceeded -> 410 Gone
+		wQuotaExceeded := httptest.NewRecorder()
+		cQuotaExceeded, _ := gin.CreateTestContext(wQuotaExceeded)
+		cQuotaExceeded.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/"+reissuedToken, nil)
+		cQuotaExceeded.Params = gin.Params{{Key: "token", Value: reissuedToken}}
+		srv.DownloadTimesheetByToken(cQuotaExceeded)
+		assertFatalCode(t, wQuotaExceeded, http.StatusGone)
+
+		// d. Expired token -> 410 Gone
+		expiredToken := "expired-token-12345678"
+		past := now.Add(-1 * time.Hour)
+		_ = tx.Model(&models.TimesheetJob{}).Where("id = ?", mockQ.enqueuedJobID).Updates(map[string]interface{}{
+			"download_token":   expiredToken,
+			"download_count":   0,
+			"token_expires_at": past,
+		})
+		wExpired := httptest.NewRecorder()
+		cExpired, _ := gin.CreateTestContext(wExpired)
+		cExpired.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/"+expiredToken, nil)
+		cExpired.Params = gin.Params{{Key: "token", Value: expiredToken}}
+		srv.DownloadTimesheetByToken(cExpired)
+		assertFatalCode(t, wExpired, http.StatusGone)
+
 		srv.QueueClient = nil
+		srv.Storage = nil
 	})
 
 	t.Run("sanitize helper", func(t *testing.T) {
@@ -945,4 +1042,22 @@ func (m *testActivityMockQueueClient) EnqueueTimesheetJob(ctx context.Context, j
 
 func (m *testActivityMockQueueClient) Close() error {
 	return nil
+}
+
+type testActivityMockStorage struct{}
+
+func (s *testActivityMockStorage) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
+	return nil
+}
+
+func (s *testActivityMockStorage) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	return "https://s3.example.com/timesheets/" + key, nil
+}
+
+func (s *testActivityMockStorage) Delete(ctx context.Context, key string) error {
+	return nil
+}
+
+func (s *testActivityMockStorage) FileExists(ctx context.Context, key string) (bool, error) {
+	return true, nil
 }

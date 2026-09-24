@@ -8,7 +8,9 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/redis/go-redis/v9"
 
 	"timesheet-backend/config"
 	"timesheet-backend/internal/repository"
@@ -21,16 +23,17 @@ import (
 
 // WorkerServer processes asynchronous timesheet generation jobs from the Redis task queue.
 type WorkerServer struct {
-	server   *asynq.Server
-	mux      *asynq.ServeMux
-	cfg      *config.Config
-	jobRepo  repository.JobRepository
-	userRepo repository.UserRepository
-	tsSvc    service.TimesheetService
-	storage  storage.StorageService
-	mailer   *mailer.Mailer
-	pushSvc  *push.Service
-	sem      chan struct{}
+	server      *asynq.Server
+	mux         *asynq.ServeMux
+	cfg         *config.Config
+	jobRepo     repository.JobRepository
+	userRepo    repository.UserRepository
+	tsSvc       service.TimesheetService
+	storage     storage.StorageService
+	mailer      *mailer.Mailer
+	pushSvc     *push.Service
+	redisClient *redis.Client
+	sem         chan struct{}
 }
 
 // NewWorkerServer constructs a WorkerServer with configured concurrency and resource limiters.
@@ -101,6 +104,11 @@ func (w *WorkerServer) Shutdown() {
 	w.server.Shutdown()
 }
 
+// SetRedisClient attaches a redis.Client for managing fast-path counters and locks.
+func (w *WorkerServer) SetRedisClient(client *redis.Client) {
+	w.redisClient = client
+}
+
 // ProcessTaskDirect directly handles a task payload synchronously (useful for isolated unit testing).
 func (w *WorkerServer) ProcessTaskDirect(ctx context.Context, payload GenerateTimesheetPayload) error {
 	body, err := json.Marshal(payload)
@@ -147,7 +155,9 @@ func (w *WorkerServer) handleTimesheetGenerate(ctx context.Context, t *asynq.Tas
 		return err
 	}
 
-	// 5. Generate presigned download URL with 7 days expiration
+	// 5. Generate magic download token with retention period expiration and max 3 downloads
+	downloadToken := uuid.New().String()
+	maxDownloads := 3
 	retentionDays := w.cfg.S3RetentionDays
 	if retentionDays <= 0 {
 		retentionDays = 7
@@ -155,15 +165,20 @@ func (w *WorkerServer) handleTimesheetGenerate(ctx context.Context, t *asynq.Tas
 	expiryDuration := time.Duration(retentionDays) * 24 * time.Hour
 	expiresAt := time.Now().Add(expiryDuration)
 
-	downloadURL, err := w.storage.GetPresignedDownloadURL(ctx, fileKey, expiryDuration)
-	if err != nil {
-		errMsg := fmt.Sprintf("presign error: %v", err)
-		_ = w.jobRepo.UpdateStatus(ctx, p.JobID, models.JobStatusFailed, "", "", errMsg, nil)
-		return err
+	baseURL := "http://localhost:8080"
+	if w.cfg != nil && w.cfg.AppBaseURL != "" {
+		baseURL = w.cfg.AppBaseURL
+	}
+	downloadURL := fmt.Sprintf("%s/api/v1/timesheet/downloads/%s", baseURL, downloadToken)
+
+	// Initialize fast-path counter in Redis
+	if w.redisClient != nil {
+		tokenKey := fmt.Sprintf("timesheet:token:%s:count", downloadToken)
+		_ = w.redisClient.Set(ctx, tokenKey, 0, expiryDuration).Err()
 	}
 
-	// 6. Update job status to completed
-	if err := w.jobRepo.UpdateStatus(ctx, p.JobID, models.JobStatusCompleted, fileKey, downloadURL, "", &expiresAt); err != nil {
+	// 6. Update job status to completed with magic download token
+	if err := w.jobRepo.UpdateStatusWithToken(ctx, p.JobID, models.JobStatusCompleted, fileKey, downloadURL, "", &expiresAt, downloadToken, maxDownloads, &expiresAt); err != nil {
 		log.Printf("[worker] failed to update job %s to completed: %v", p.JobID, err)
 	}
 
