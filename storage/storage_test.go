@@ -58,6 +58,13 @@ func TestS3StorageService_Validation(t *testing.T) {
 		assert.Contains(t, err.Error(), "object key cannot be empty")
 	})
 
+	t.Run("empty key for GetPresignedDownloadURLWithFilename returns error", func(t *testing.T) {
+		url, err := svc.GetPresignedDownloadURLWithFilename(ctx, "", "file.xlsx", 1*time.Hour)
+		assert.Error(t, err)
+		assert.Empty(t, url)
+		assert.Contains(t, err.Error(), "object key cannot be empty")
+	})
+
 	t.Run("empty key for Delete returns error", func(t *testing.T) {
 		err := svc.Delete(ctx, "")
 		assert.Error(t, err)

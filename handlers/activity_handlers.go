@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -409,6 +410,9 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 				// Autonomous Re-issue without regenerating XLSX or duplicating in S3
 				newToken := uuid.New().String()
 				maxDownloads := 3
+				if s.Cfg != nil && s.Cfg.TimesheetDownloadMaxQuota > 0 {
+					maxDownloads = s.Cfg.TimesheetDownloadMaxQuota
+				}
 				retentionDays := 7
 				if s.Cfg != nil && s.Cfg.S3RetentionDays > 0 {
 					retentionDays = s.Cfg.S3RetentionDays
@@ -964,16 +968,17 @@ func (s *Server) ListApprovers(c *gin.Context) {
 }
 
 // DownloadTimesheetByToken godoc
-// @Summary Download generated timesheet spreadsheet using a secure magic token
-// @Description Validates the magic download token, enforces download quota (maximum 3 downloads), and redirects (302 Found) to a temporary presigned S3 URL.
+// @Summary Download generated timesheet via secure token
+// @Description Validates magic download token, enforces download limits, and redirects directly to S3 storage. Supports HEAD for link verifiers.
 // @Tags Timesheet
-// @Produce json
-// @Param token path string true "Magic download token"
-// @Success 302 "Redirects to temporary presigned S3 download URL"
-// @Failure 400 {object} response.ErrorResponse "Invalid token format"
-// @Failure 404 {object} response.ErrorResponse "Token not found"
-// @Failure 410 {object} response.ErrorResponse "Download quota exceeded or token expired"
-// @Failure 500 {object} response.ErrorResponse "Failed to process download"
+// @Produce octet-stream
+// @Param token path string true "Magic Download Token"
+// @Success 200 "Link verified successfully (HEAD request)"
+// @Success 302 {string} string "Redirects directly to S3 Presigned URL"
+// @Failure 400 {object} response.ErrorResponse "Invalid download token"
+// @Failure 404 {object} response.ErrorResponse "Download token not found"
+// @Failure 410 {object} response.ErrorResponse "Download token expired or quota exceeded"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/timesheet/downloads/{token} [get]
 func (s *Server) DownloadTimesheetByToken(c *gin.Context) {
 	token := strings.TrimSpace(c.Param("token"))
@@ -984,16 +989,6 @@ func (s *Server) DownloadTimesheetByToken(c *gin.Context) {
 
 	ctx := reqContext(c)
 	rdb := s.getRedisClient()
-	urlKey := fmt.Sprintf("timesheet:url:%s", token)
-
-	// Step 1: Check temporary Presigned URL cache in Redis (TTL 60s)
-	// Allows network retry / reconnect without consuming additional download quota
-	if rdb != nil {
-		if cachedURL, err := rdb.Get(ctx, urlKey).Result(); err == nil && cachedURL != "" {
-			c.Redirect(http.StatusFound, cachedURL)
-			return
-		}
-	}
 
 	jobRepo := s.getJobRepo()
 	if jobRepo == nil {
@@ -1001,26 +996,38 @@ func (s *Server) DownloadTimesheetByToken(c *gin.Context) {
 		return
 	}
 
-	// Step 2: Query job by download token
+	// Step 1: Query job by download token
 	job, err := jobRepo.FindByDownloadToken(ctx, token)
 	if err != nil || job == nil {
 		RespondError(c, http.StatusNotFound, "Download token not found or invalid")
 		return
 	}
 
-	// Step 3: Check token expiration
+	// Step 2: Check token expiration
 	if job.TokenExpiresAt != nil && job.TokenExpiresAt.Before(time.Now()) {
 		RespondError(c, http.StatusGone, "Download token has expired. Please generate a new timesheet to get an updated link.")
 		return
 	}
 
-	// Step 4: Check download quota (max downloads)
+	// Step 3: Check download quota (max downloads)
 	maxDownloads := job.MaxDownloads
 	if maxDownloads <= 0 {
-		maxDownloads = 3
+		if s.Cfg != nil && s.Cfg.TimesheetDownloadMaxQuota > 0 {
+			maxDownloads = s.Cfg.TimesheetDownloadMaxQuota
+		} else {
+			maxDownloads = 3
+		}
 	}
 	if job.DownloadCount >= maxDownloads {
 		RespondError(c, http.StatusGone, "Download quota exceeded. Please generate a new timesheet to get an updated link.")
+		return
+	}
+
+	// Step 4: Handle HEAD request from link scanners (SES tracking, email clients)
+	// Return 200 OK without incrementing counter or consuming download quota
+	if c.Request.Method == http.MethodHead {
+		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		c.Status(http.StatusOK)
 		return
 	}
 
@@ -1049,24 +1056,27 @@ func (s *Server) DownloadTimesheetByToken(c *gin.Context) {
 		slog.Error("failed to increment download count in db", "error", err, "job_id", job.ID)
 	}
 
-	// Step 7: Generate temporary Presigned S3 URL valid for 60 seconds
+	// Step 7: Generate temporary Presigned S3 URL valid for 15 minutes with attachment filename
 	storageSvc := s.getStorage()
 	if storageSvc == nil {
 		RespondError(c, http.StatusInternalServerError, "Storage service not initialized")
 		return
 	}
 
-	presignedURL, err := storageSvc.GetPresignedDownloadURL(ctx, job.FileKey, 60*time.Second)
+	filename := path.Base(job.FileKey)
+	if idx := strings.Index(filename, "_"); idx != -1 && idx+1 < len(filename) {
+		filename = filename[idx+1:]
+	}
+	if filename == "" || filename == "." {
+		filename = "timesheet.xlsx"
+	}
+
+	presignedURL, err := storageSvc.GetPresignedDownloadURLWithFilename(ctx, job.FileKey, filename, 15*time.Minute)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "Failed to generate download link: "+err.Error())
 		return
 	}
 
-	// Step 8: Cache Presigned URL in Redis for 60s
-	if rdb != nil {
-		_ = rdb.Set(ctx, urlKey, presignedURL, 60*time.Second).Err()
-	}
-
-	// Step 9: 302 Found Redirect to S3 (0 MB server bandwidth)
+	// Step 8: 302 Found Redirect to S3
 	c.Redirect(http.StatusFound, presignedURL)
 }

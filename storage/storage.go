@@ -21,6 +21,7 @@ import (
 type StorageService interface {
 	Upload(ctx context.Context, key string, body io.Reader, contentType string) error
 	GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error)
+	GetPresignedDownloadURLWithFilename(ctx context.Context, key string, filename string, expiry time.Duration) (string, error)
 	Delete(ctx context.Context, key string) error
 	FileExists(ctx context.Context, key string) (bool, error)
 }
@@ -99,6 +100,12 @@ func (s *S3StorageService) Upload(ctx context.Context, key string, body io.Reade
 
 // GetPresignedDownloadURL generates a presigned GET URL valid for the given duration.
 func (s *S3StorageService) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	return s.GetPresignedDownloadURLWithFilename(ctx, key, "", expiry)
+}
+
+// GetPresignedDownloadURLWithFilename generates a presigned GET URL valid for the given duration,
+// with an optional Content-Disposition attachment filename header.
+func (s *S3StorageService) GetPresignedDownloadURLWithFilename(ctx context.Context, key string, filename string, expiry time.Duration) (string, error) {
 	if strings.TrimSpace(key) == "" {
 		return "", fmt.Errorf("object key cannot be empty")
 	}
@@ -106,10 +113,15 @@ func (s *S3StorageService) GetPresignedDownloadURL(ctx context.Context, key stri
 		expiry = 7 * 24 * time.Hour
 	}
 
-	req, err := s.presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+	input := &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
-	}, s3.WithPresignExpires(expiry))
+	}
+	if trimmedFilename := strings.TrimSpace(filename); trimmedFilename != "" {
+		input.ResponseContentDisposition = aws.String(fmt.Sprintf("attachment; filename=\"%s\"", trimmedFilename))
+	}
+
+	req, err := s.presignClient.PresignGetObject(ctx, input, s3.WithPresignExpires(expiry))
 	if err != nil {
 		return "", fmt.Errorf("failed to presign get object %s: %w", key, err)
 	}

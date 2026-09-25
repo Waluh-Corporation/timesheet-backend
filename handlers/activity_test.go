@@ -983,7 +983,24 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		srv.DownloadTimesheetByToken(cTokenNotFound)
 		assertFatalCode(t, wTokenNotFound, http.StatusNotFound)
 
-		// c. Valid re-issued token: 3 downloads allowed with 302 Found redirect
+		// c. Test HEAD request from email scanners (e.g. AWS SES link tracking, Gmail preview)
+		// Should return 200 OK without incrementing download_count
+		wHead := httptest.NewRecorder()
+		cHead, _ := gin.CreateTestContext(wHead)
+		cHead.Request = httptest.NewRequest(http.MethodHead, "/api/v1/timesheet/downloads/"+reissuedToken, nil)
+		cHead.Params = gin.Params{{Key: "token", Value: reissuedToken}}
+		srv.DownloadTimesheetByToken(cHead)
+		assertFatalCode(t, wHead, http.StatusOK)
+
+		var jobBefore models.TimesheetJob
+		if err := tx.Where("download_token = ?", reissuedToken).First(&jobBefore).Error; err != nil {
+			t.Fatalf("failed to query job after HEAD: %v", err)
+		}
+		if jobBefore.DownloadCount != 0 {
+			t.Fatalf("expected download_count to remain 0 after HEAD, got %d", jobBefore.DownloadCount)
+		}
+
+		// d. Valid re-issued token: 3 downloads allowed with 302 Found redirect, counter increments each time
 		for i := 1; i <= 3; i++ {
 			wDL := httptest.NewRecorder()
 			cDL, _ := gin.CreateTestContext(wDL)
@@ -993,6 +1010,14 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 			assertFatalCode(t, wDL, http.StatusFound)
 			if loc := wDL.Header().Get("Location"); !strings.Contains(loc, "https://s3.example.com/timesheets/") {
 				t.Fatalf("download %d: expected redirect to S3 URL, got %s", i, loc)
+			}
+
+			var j models.TimesheetJob
+			if err := tx.Where("download_token = ?", reissuedToken).First(&j).Error; err != nil {
+				t.Fatalf("download %d: failed to query job: %v", i, err)
+			}
+			if j.DownloadCount != i {
+				t.Fatalf("download %d: expected download_count to be %d, got %d", i, i, j.DownloadCount)
 			}
 		}
 
@@ -1051,6 +1076,10 @@ func (s *testActivityMockStorage) Upload(ctx context.Context, key string, body i
 }
 
 func (s *testActivityMockStorage) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	return "https://s3.example.com/timesheets/" + key, nil
+}
+
+func (s *testActivityMockStorage) GetPresignedDownloadURLWithFilename(ctx context.Context, key string, filename string, expiry time.Duration) (string, error) {
 	return "https://s3.example.com/timesheets/" + key, nil
 }
 

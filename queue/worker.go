@@ -155,12 +155,15 @@ func (w *WorkerServer) handleTimesheetGenerate(ctx context.Context, t *asynq.Tas
 		return err
 	}
 
-	// 5. Generate magic download token with retention period expiration and max 3 downloads
+	// 5. Generate magic download token with retention period expiration and configurable max downloads
 	downloadToken := uuid.New().String()
 	maxDownloads := 3
-	retentionDays := w.cfg.S3RetentionDays
-	if retentionDays <= 0 {
-		retentionDays = 7
+	if w.cfg != nil && w.cfg.TimesheetDownloadMaxQuota > 0 {
+		maxDownloads = w.cfg.TimesheetDownloadMaxQuota
+	}
+	retentionDays := 7
+	if w.cfg != nil && w.cfg.S3RetentionDays > 0 {
+		retentionDays = w.cfg.S3RetentionDays
 	}
 	expiryDuration := time.Duration(retentionDays) * 24 * time.Hour
 	expiresAt := time.Now().Add(expiryDuration)

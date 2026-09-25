@@ -32,6 +32,10 @@ func (m *mockStorageService) GetPresignedDownloadURL(ctx context.Context, key st
 	return "https://s3.example.com/timesheets/" + key, nil
 }
 
+func (m *mockStorageService) GetPresignedDownloadURLWithFilename(ctx context.Context, key string, filename string, expiry time.Duration) (string, error) {
+	return "https://s3.example.com/timesheets/" + key, nil
+}
+
 func (m *mockStorageService) Delete(ctx context.Context, key string) error {
 	return nil
 }

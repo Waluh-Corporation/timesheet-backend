@@ -99,6 +99,9 @@ type Config struct {
 
 	// Excel generation concurrency limiter.
 	ExcelMaxConcurrentJobs int
+
+	// Timesheet download token max quota.
+	TimesheetDownloadMaxQuota int
 }
 
 func getEnv(key, fallback string) string {
@@ -229,6 +232,11 @@ func Load() *Config {
 		rateLimitEnabled = false
 	}
 
+	maxDownloadQuota := getEnvInt("TIMESHEET_DOWNLOAD_MAX_QUOTA", 3)
+	if maxDownloadQuota <= 0 {
+		maxDownloadQuota = 3
+	}
+
 	cfg := &Config{
 		AppName:     appName,
 		Port:        getEnv("PORT", "8080"),
@@ -296,7 +304,8 @@ func Load() *Config {
 		MailerRateLimit:   getEnvFloat("MAILER_RATE_LIMIT", 10.0),
 		MailerWorkerCount: getEnvInt("MAILER_WORKER_COUNT", 5),
 
-		ExcelMaxConcurrentJobs: getEnvInt("EXCEL_MAX_CONCURRENT_JOBS", 10),
+		ExcelMaxConcurrentJobs:    getEnvInt("EXCEL_MAX_CONCURRENT_JOBS", 10),
+		TimesheetDownloadMaxQuota: maxDownloadQuota,
 	}
 
 	if cfg.RateLimitEnabled {

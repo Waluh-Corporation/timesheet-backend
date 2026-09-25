@@ -321,8 +321,8 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	// Public VAPID key (needed before the user is subscribed).
 	api.GET("/push/vapid-public-key", s.GetVAPIDKey)
 
-	// Public magic download token endpoint (quota-enforced, 302 redirect to temporary S3 URL)
-	api.GET("/timesheet/downloads/:token", s.DownloadTimesheetByToken)
+	// Public magic download token endpoint (quota-enforced, 302 redirect to temporary S3 URL, supports HEAD for link verifiers)
+	api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", s.DownloadTimesheetByToken)
 
 	// WebAuthn Related Origin Requests document, served at the well-known path
 	// so passkeys registered under one relying party can be used across the

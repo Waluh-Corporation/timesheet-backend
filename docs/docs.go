@@ -3704,47 +3704,53 @@ const docTemplate = `{
         },
         "/api/v1/timesheet/downloads/{token}": {
             "get": {
-                "description": "Validates the magic download token, enforces download quota (maximum 3 downloads), and redirects (302 Found) to a temporary presigned S3 URL.",
+                "description": "Validates magic download token, enforces download limits, and redirects directly to S3 storage. Supports HEAD for link verifiers.",
                 "produces": [
-                    "application/json"
+                    "application/octet-stream"
                 ],
                 "tags": [
                     "Timesheet"
                 ],
-                "summary": "Download generated timesheet spreadsheet using a secure magic token",
+                "summary": "Download generated timesheet via secure token",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Magic download token",
+                        "description": "Magic Download Token",
                         "name": "token",
                         "in": "path",
                         "required": true
                     }
                 ],
                 "responses": {
+                    "200": {
+                        "description": "Link verified successfully (HEAD request)"
+                    },
                     "302": {
-                        "description": "Redirects to temporary presigned S3 download URL"
+                        "description": "Redirects directly to S3 Presigned URL",
+                        "schema": {
+                            "type": "string"
+                        }
                     },
                     "400": {
-                        "description": "Invalid token format",
+                        "description": "Invalid download token",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Token not found",
+                        "description": "Download token not found",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "410": {
-                        "description": "Download quota exceeded or token expired",
+                        "description": "Download token expired or quota exceeded",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Failed to process download",
+                        "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
