@@ -285,6 +285,57 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 	}
 }
 
+func TestWriteAdidataSingleSPL(t *testing.T) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	st, err := NewBuilderStyles(f)
+	if err != nil {
+		t.Fatalf("NewBuilderStyles: %v", err)
+	}
+
+	user := &models.User{
+		Name:       "Adidata Employee",
+		Division:   "WDL",
+		Department: "WCH",
+		Position:   "Lead Engineer",
+		EmployeeID: "ADI-777",
+	}
+	tl := models.Approver{Name: "TL Person"}
+	dh := models.Approver{Name: "DH Person"}
+	ot := models.OvertimeEntry{
+		Date:            time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+		StartTime:       "18:00",
+		EndTime:         "21:00",
+		TaskDescription: "Emergency bugfix deployment",
+		TeamLeader:      &tl,
+		DepartmentHead:  &dh,
+	}
+	in := GenerationInput{
+		User: user,
+	}
+
+	splSheet := "SPL-Direct"
+	_, _ = f.NewSheet(splSheet)
+	writeAdidataSingleSPL(f, splSheet, in, ot, "ADI-777", st)
+
+	valTitle, _ := f.GetCellValue(splSheet, "B2")
+	if valTitle != "SURAT PERINTAH LEMBUR" {
+		t.Errorf("B2 = %q, want 'SURAT PERINTAH LEMBUR'", valTitle)
+	}
+	valNPP, _ := f.GetCellValue(splSheet, "E4")
+	if valNPP != ": ADI-777" {
+		t.Errorf("E4 = %q, want ': ADI-777'", valNPP)
+	}
+	valName, _ := f.GetCellValue(splSheet, "E5")
+	if valName != ": Adidata Employee" {
+		t.Errorf("E5 = %q, want ': Adidata Employee'", valName)
+	}
+	valSign, _ := f.GetCellValue(splSheet, "C21")
+	if valSign != "( Adidata Employee )" {
+		t.Errorf("C21 = %q, want '( Adidata Employee )'", valSign)
+	}
+}
+
 func TestBuildNTTWorkbook(t *testing.T) {
 	user := &models.User{
 		Name:       "Dewi Lestari",

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -127,6 +128,42 @@ func TestPushHandlers_Extended(t *testing.T) {
 		c.Set(ctxUserID, uid)
 
 		srv.Unsubscribe(c)
+		assertResponseCode(t, w, http.StatusOK)
+	})
+}
+
+func TestPushHandlers_NilService(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	srvNil := &Server{} // Push == nil
+
+	t.Run("GetVAPIDKey returns 500 when nil", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srvNil.GetVAPIDKey(c)
+		assertResponseCode(t, w, http.StatusInternalServerError)
+	})
+
+	t.Run("Subscribe returns 500 when nil", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		payload := `{"endpoint":"https://fcm.example.com","keys":{"p256dh":"k","auth":"a"}}`
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/push/subscribe", strings.NewReader(payload))
+		c.Request.Header.Set("Content-Type", "application/json")
+		srvNil.Subscribe(c)
+		assertResponseCode(t, w, http.StatusInternalServerError)
+	})
+
+	t.Run("Unsubscribe returns 500 when nil", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srvNil.Unsubscribe(c)
+		assertResponseCode(t, w, http.StatusInternalServerError)
+	})
+
+	t.Run("SendTestPush returns 200 when nil", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srvNil.SendTestPush(c)
 		assertResponseCode(t, w, http.StatusOK)
 	})
 }
