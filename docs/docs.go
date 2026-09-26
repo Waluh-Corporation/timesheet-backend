@@ -1370,14 +1370,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves submitted profile change requests with optional status filtering (admin only).",
+                "description": "Returns all submitted profile change requests with optional status filter (admin only).",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "Admin"
                 ],
-                "summary": "List all profile change requests (Admin)",
+                "summary": "List profile change requests (Admin)",
                 "parameters": [
                     {
                         "type": "string",
@@ -3585,7 +3585,7 @@ const docTemplate = `{
         },
         "/api/v1/setup/init": {
             "post": {
-                "description": "Performs initial system configuration: provisions companies, departments, approvers, and super admin account.",
+                "description": "One-time setup endpoint to create the primary Super Administrator, initial companies, approvers, and departments. Automatically seeds ActivityStatus and sets is_new = N. Fails with 403 if system is already initialized.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3595,7 +3595,7 @@ const docTemplate = `{
                 "tags": [
                     "Setup"
                 ],
-                "summary": "Initialize system setup",
+                "summary": "Perform initial system onboarding setup",
                 "parameters": [
                     {
                         "description": "Initialization payload",
@@ -3603,7 +3603,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.InitSetupRequest"
+                            "$ref": "#/definitions/request.InitSetupRequest"
                         }
                     }
                 ],
@@ -3650,7 +3650,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/handlers.SetupStatusResponse"
+                            "$ref": "#/definitions/response.SetupStatusResponse"
                         }
                     },
                     "500": {
@@ -3765,17 +3765,18 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Evaluates cache for valid active timesheet and re-issues a download token, or enqueues a new generation task. Returns 200 OK on cache hit, or 202 Accepted when queued.",
+                "description": "Generates monthly timesheet Excel file. If background worker and queue are configured, enqueues an asynchronous generation job and sends download link to email upon completion. Otherwise, generates synchronously and streams the file.",
                 "consumes": [
                     "application/json"
                 ],
                 "produces": [
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     "application/json"
                 ],
                 "tags": [
                     "Timesheet"
                 ],
-                "summary": "Generate timesheet spreadsheet asynchronously",
+                "summary": "Generate timesheet",
                 "parameters": [
                     {
                         "description": "Generation parameters",
@@ -3789,13 +3790,13 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Timesheet retrieved from cache and download link re-issued",
+                        "description": "Excel timesheet (.xlsx) (synchronous mode)",
                         "schema": {
-                            "$ref": "#/definitions/response.TimesheetJobResponse"
+                            "type": "file"
                         }
                     },
                     "202": {
-                        "description": "Generation task accepted",
+                        "description": "Job enqueued asynchronously",
                         "schema": {
                             "$ref": "#/definitions/response.TimesheetJobResponse"
                         }
@@ -4126,140 +4127,6 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.InitSetupAdminRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "name",
-                "password",
-                "username"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string",
-                    "example": "admin@example.com"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "Super Administrator"
-                },
-                "password": {
-                    "type": "string",
-                    "minLength": 8,
-                    "example": "SuperSecretPass2026!"
-                },
-                "username": {
-                    "type": "string",
-                    "maxLength": 64,
-                    "minLength": 3,
-                    "example": "admin"
-                }
-            }
-        },
-        "handlers.InitSetupApproverRequest": {
-            "type": "object",
-            "required": [
-                "name",
-                "role_type"
-            ],
-            "properties": {
-                "company_code": {
-                    "type": "string",
-                    "example": "mii"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "Supervisor Name"
-                },
-                "role_type": {
-                    "enum": [
-                        "team_leader",
-                        "department_head"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.ApproverRoleType"
-                        }
-                    ],
-                    "example": "team_leader"
-                },
-                "title": {
-                    "type": "string",
-                    "example": "Team Leader"
-                }
-            }
-        },
-        "handlers.InitSetupCompanyRequest": {
-            "type": "object",
-            "required": [
-                "code",
-                "name"
-            ],
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "example": "mii"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "PT Mitra Integrasi Informatika"
-                }
-            }
-        },
-        "handlers.InitSetupDepartmentRequest": {
-            "type": "object",
-            "required": [
-                "code",
-                "name"
-            ],
-            "properties": {
-                "code": {
-                    "type": "string",
-                    "example": "WCSD"
-                },
-                "company_code": {
-                    "type": "string",
-                    "example": "mii"
-                },
-                "division": {
-                    "type": "string",
-                    "example": "Wholesale Digital Delivery"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "Wholesale Channel and Service Delivery"
-                }
-            }
-        },
-        "handlers.InitSetupRequest": {
-            "type": "object",
-            "required": [
-                "admin"
-            ],
-            "properties": {
-                "admin": {
-                    "$ref": "#/definitions/handlers.InitSetupAdminRequest"
-                },
-                "approvers": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/handlers.InitSetupApproverRequest"
-                    }
-                },
-                "companies": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/handlers.InitSetupCompanyRequest"
-                    }
-                },
-                "departments": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/handlers.InitSetupDepartmentRequest"
-                    }
-                }
-            }
-        },
         "handlers.OvertimeRequest": {
             "type": "object",
             "required": [
@@ -4297,24 +4164,6 @@ const docTemplate = `{
                 "team_leader_id": {
                     "type": "integer",
                     "example": 2
-                }
-            }
-        },
-        "handlers.SetupStatusResponse": {
-            "type": "object",
-            "properties": {
-                "admin_count": {
-                    "type": "integer"
-                },
-                "is_initialized": {
-                    "type": "boolean"
-                },
-                "is_new": {
-                    "type": "string",
-                    "example": "Y"
-                },
-                "requires_setup": {
-                    "type": "boolean"
                 }
             }
         },
@@ -5059,6 +4908,140 @@ const docTemplate = `{
                     "maximum": 9999,
                     "minimum": 2000,
                     "example": 2026
+                }
+            }
+        },
+        "request.InitSetupAdminRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "name",
+                "password",
+                "username"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string",
+                    "example": "admin@example.com"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Super Administrator"
+                },
+                "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "example": "SuperSecretPass2026!"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 3,
+                    "example": "admin"
+                }
+            }
+        },
+        "request.InitSetupApproverRequest": {
+            "type": "object",
+            "required": [
+                "name",
+                "role_type"
+            ],
+            "properties": {
+                "company_code": {
+                    "type": "string",
+                    "example": "mii"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Supervisor Name"
+                },
+                "role_type": {
+                    "enum": [
+                        "team_leader",
+                        "department_head"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ApproverRoleType"
+                        }
+                    ],
+                    "example": "team_leader"
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Team Leader"
+                }
+            }
+        },
+        "request.InitSetupCompanyRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "mii"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "PT Mitra Integrasi Informatika"
+                }
+            }
+        },
+        "request.InitSetupDepartmentRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "name"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "WCSD"
+                },
+                "company_code": {
+                    "type": "string",
+                    "example": "mii"
+                },
+                "division": {
+                    "type": "string",
+                    "example": "Wholesale Digital Delivery"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Wholesale Channel and Service Delivery"
+                }
+            }
+        },
+        "request.InitSetupRequest": {
+            "type": "object",
+            "required": [
+                "admin"
+            ],
+            "properties": {
+                "admin": {
+                    "$ref": "#/definitions/request.InitSetupAdminRequest"
+                },
+                "approvers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/request.InitSetupApproverRequest"
+                    }
+                },
+                "companies": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/request.InitSetupCompanyRequest"
+                    }
+                },
+                "departments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/request.InitSetupDepartmentRequest"
+                    }
                 }
             }
         },
@@ -5828,6 +5811,24 @@ const docTemplate = `{
                 "token": {
                     "type": "string",
                     "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                }
+            }
+        },
+        "response.SetupStatusResponse": {
+            "type": "object",
+            "properties": {
+                "admin_count": {
+                    "type": "integer"
+                },
+                "is_initialized": {
+                    "type": "boolean"
+                },
+                "is_new": {
+                    "type": "string",
+                    "example": "Y"
+                },
+                "requires_setup": {
+                    "type": "boolean"
                 }
             }
         },
