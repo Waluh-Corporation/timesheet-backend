@@ -13,6 +13,8 @@ import (
 	"timesheet-backend/models"
 )
 
+const errUserServiceUnavailable = "user service unavailable"
+
 // ListUsers godoc
 // @Summary List all users (Admin)
 // @Description Retrieves all registered user accounts (admin only).
@@ -27,7 +29,7 @@ import (
 func (s *Server) ListUsers(c *gin.Context) {
 	svc := s.GetUserService()
 	if svc == nil {
-		RespondError(c, http.StatusInternalServerError, "user service unavailable")
+		RespondError(c, http.StatusInternalServerError, errUserServiceUnavailable)
 		return
 	}
 
@@ -93,7 +95,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 
 	svc := s.GetUserService()
 	if svc == nil {
-		RespondError(c, http.StatusInternalServerError, "user service unavailable")
+		RespondError(c, http.StatusInternalServerError, errUserServiceUnavailable)
 		return
 	}
 
@@ -152,7 +154,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 
 	svc := s.GetUserService()
 	if svc == nil {
-		RespondError(c, http.StatusInternalServerError, "user service unavailable")
+		RespondError(c, http.StatusInternalServerError, errUserServiceUnavailable)
 		return
 	}
 
@@ -201,7 +203,7 @@ func (s *Server) DeleteUser(c *gin.Context) {
 	}
 	svc := s.GetUserService()
 	if svc == nil {
-		RespondError(c, http.StatusInternalServerError, "user service unavailable")
+		RespondError(c, http.StatusInternalServerError, errUserServiceUnavailable)
 		return
 	}
 
