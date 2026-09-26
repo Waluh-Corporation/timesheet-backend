@@ -37,8 +37,10 @@ func TestNewS3StorageService(t *testing.T) {
 
 func TestS3StorageService_Validation(t *testing.T) {
 	cfg := &config.Config{
-		S3Region: "us-east-1",
-		S3Bucket: "test-bucket",
+		S3Region:    "us-east-1",
+		S3Bucket:    "test-bucket",
+		S3AccessKey: "AKIAIOSFODNN7EXAMPLE",
+		S3SecretKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 	}
 	svc, err := NewS3StorageService(cfg)
 	require.NoError(t, err)
