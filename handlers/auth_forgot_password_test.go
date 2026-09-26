@@ -34,8 +34,8 @@ func TestForgotPassword_CooldownAndInvalidationLifecycle(t *testing.T) {
 	srv, err := NewServer(tx, cfg, authSvc, m, nil)
 	require.NoError(t, err)
 
-	// Configure a short cooldown for testing (80ms)
-	srv.Cfg.ResetPasswordCooldown = 80 * time.Millisecond
+	// Configure a short cooldown for testing (800ms)
+	srv.Cfg.ResetPasswordCooldown = 800 * time.Millisecond
 	srv.Cfg.ResetTokenTTL = 15 * time.Minute
 
 	// Setup spy email sender to monitor email dispatches
@@ -137,7 +137,7 @@ func TestForgotPassword_CooldownAndInvalidationLifecycle(t *testing.T) {
 	// =========================================================================
 	// 3. Request 3: After cooldown expires -> Should generate Token 2 and invalidate Token 1
 	// =========================================================================
-	time.Sleep(100 * time.Millisecond) // Wait past the 80ms cooldown
+	time.Sleep(900 * time.Millisecond) // Wait past the 800ms cooldown
 
 	reqBody3, _ := json.Marshal(request.ForgotRequest{Email: testUser.Email})
 	w3 := httptest.NewRecorder()

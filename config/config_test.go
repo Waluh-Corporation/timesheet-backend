@@ -345,3 +345,43 @@ func TestLoad_CORSAllowedOriginsConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestLoad_TimesheetDownloadMaxQuotaConfig(t *testing.T) {
+	t.Run("default quota when unset", func(t *testing.T) {
+		t.Setenv("TIMESHEET_DOWNLOAD_MAX_QUOTA", "")
+		cfg := Load()
+		if cfg.TimesheetDownloadMaxQuota != 3 {
+			t.Errorf("expected TimesheetDownloadMaxQuota default to be 3, got %d", cfg.TimesheetDownloadMaxQuota)
+		}
+	})
+
+	t.Run("custom valid quota", func(t *testing.T) {
+		t.Setenv("TIMESHEET_DOWNLOAD_MAX_QUOTA", "5")
+		cfg := Load()
+		if cfg.TimesheetDownloadMaxQuota != 5 {
+			t.Errorf("expected TimesheetDownloadMaxQuota to be 5, got %d", cfg.TimesheetDownloadMaxQuota)
+		}
+	})
+
+	t.Run("fallback to 3 if zero or negative", func(t *testing.T) {
+		t.Setenv("TIMESHEET_DOWNLOAD_MAX_QUOTA", "0")
+		cfg := Load()
+		if cfg.TimesheetDownloadMaxQuota != 3 {
+			t.Errorf("expected fallback 3 when quota is 0, got %d", cfg.TimesheetDownloadMaxQuota)
+		}
+
+		t.Setenv("TIMESHEET_DOWNLOAD_MAX_QUOTA", "-1")
+		cfg = Load()
+		if cfg.TimesheetDownloadMaxQuota != 3 {
+			t.Errorf("expected fallback 3 when quota is negative, got %d", cfg.TimesheetDownloadMaxQuota)
+		}
+	})
+
+	t.Run("fallback to 3 if invalid integer", func(t *testing.T) {
+		t.Setenv("TIMESHEET_DOWNLOAD_MAX_QUOTA", "abc")
+		cfg := Load()
+		if cfg.TimesheetDownloadMaxQuota != 3 {
+			t.Errorf("expected fallback 3 when quota is invalid, got %d", cfg.TimesheetDownloadMaxQuota)
+		}
+	})
+}

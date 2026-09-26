@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-09-26
+
+### Added
+- **Asynchronous Timesheet Generation Engine**: High-throughput background generation pipeline powered by Redis (`hibiken/asynq`) with worker concurrency limiting (`EXCEL_MAX_CONCURRENT_JOBS`). Generation requests now return `202 Accepted` with a tracking Job ID, preventing HTTP timeouts and CPU starvation during peak generation windows.
+- **Magic Download Tokens & Single-User Quota Enforcement**: Single-user secure download links using Magic Download Tokens with automated quota enforcement (maximum 3 downloads per generation result) and 7-day expiration, eliminating link leakage and unauthorized sharing.
+- **Autonomous Cache Evaluation & Re-issue**: Intelligent idempotency check on `POST /api/v1/timesheet/generate` that automatically inspects activity updates (`MAX(updated_at)`), profile modifications, and physical S3 file availability. Re-issues fresh download links in under 5ms without redundant Excel regeneration or S3 file duplication.
+- **Fast-Path Redis Counters, Debounce Lock & URL Caching**: Redis-backed atomic quota counters, 10-second distributed debounce locking, and temporary S3 Presigned URL handling to manage network reconnects with 0 MB server file bandwidth.
+- **Dedicated Secure Download Endpoint**: Added public `GET /api/v1/timesheet/downloads/:token` endpoint that validates token quota, increments access counts, and issues `302 Found` redirects directly to temporary S3 Presigned URLs.
+- **Configurable Download Token Quota**: Added `TIMESHEET_DOWNLOAD_MAX_QUOTA` configuration to `.env` (default 3) allowing administrators to tune maximum downloads permitted per generation link.
+- **HTTP HEAD Support on Magic Download Endpoint**: Added `HEAD` method support on `/api/v1/timesheet/downloads/:token` that returns `200 OK` for email security scanners and link preview bots without consuming user download quota.
+- **S3-Compatible Object Storage & 7-Day Retention**: Automated storage integration using the official AWS SDK Go v2 supporting AWS S3, MinIO, Cloudflare R2, and Wasabi with automated daily cleanup of expired files and database records.
+- **SES-Ready Rate-Limited Transactional Mailer**: Throttled outbound email delivery using token-bucket rate limiting, safeguarding SMTP servers from connection spikes and rate limit penalties.
+- **Real-Time Job Notifications & Status APIs**: Web Push notifications and email alerts with direct download buttons when timesheets are ready, alongside `GET /api/v1/timesheet/jobs/:id` and `GET /api/v1/timesheet/jobs` endpoints.
+
+### Changed
+- **Asynchronous Generation Contract**: `POST /api/v1/timesheet/generate` now delegates to the background queue returning `202 Accepted` with job metadata (`TimesheetJobResponse`), while retaining backward-compatible synchronous generation if the queue is unconfigured.
+- **Clean Architecture & Handler Decoupling**: Refactored HTTP handlers to adhere to Clean Architecture principles by eliminating direct database coupling from `handlers.Server` and all route handlers. Introduced pure domain entities, repository interfaces, and encapsulated business logic within dedicated domain services.
+- **Official Timesheet Formats Across All Companies**: Exported monthly timesheets now faithfully match official spreadsheet layouts, colors, and branding for all partner companies (MII, SDD, Adidata, and NTT).
+- **Automatic Generation Date in Signatures**: The signature section across timesheets now automatically fills the exact generation date (e.g., `DATE : 26-Sep-2026`).
+- **Standardized Attendance Markers & Formulas**: Standardized attendance status markers for SDD timesheets (`H`, `C`, `I`, `S`, `L`) and aligned NTT summary row formulas to use `COUNTIF`.
+
+### Fixed
+- **Timesheet Download Counter & Browser Attachment**: Fixed download counter increment issues and added RFC 6266 `Content-Disposition: attachment` headers for immediate browser file downloads.
+- **Total Attendance Calculation in Exported Timesheets**: Fixed an issue where the "Total Kehadiran" summary row remained 0 in generated Excel files.
+- **Adidata Timesheet Template Alignment**: Aligned cell coordinates, formulas, and headers to match the official Adidata master template.
+- **Accurate Working Hours and Total Hours Display**: Formatted daily and total working hours as standard time values (`08:00`, `17:00`) instead of decimal numbers.
+- **Accurate App Impacted & Project Selection**: Fixed synchronization issues where project selections and impacted applications were reset upon updates.
+
 ---
 
 ## [1.11.0] - 2026-09-21
@@ -206,7 +234,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Daily browser push notifications at 17:00 WIB to remind staff to fill out missing timesheet entries.
   - Email delivery for generated timesheet reports and account setup links.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.0...v1.9.1

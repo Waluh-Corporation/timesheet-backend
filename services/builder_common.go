@@ -1,7 +1,11 @@
 package services
 
 import (
+	"archive/zip"
+	"bytes"
 	"fmt"
+	"io"
+	"regexp"
 	"strings"
 	"time"
 
@@ -9,6 +13,144 @@ import (
 
 	"timesheet-backend/models"
 )
+
+// Default working hours constants.
+const (
+	DefaultStartTime = "08:00"
+	DefaultEndTime   = "17:00"
+)
+
+var (
+	defaultStartFrac, _ = parseTimeToExcelFraction(DefaultStartTime)
+	defaultEndFrac, _   = parseTimeToExcelFraction(DefaultEndTime)
+	defaultTotalFrac    = defaultEndFrac - defaultStartFrac // 9 hours fraction: 0.375
+)
+
+// CalculateTimeDurationFrac calculates duration in fraction of a 24-hour day.
+func CalculateTimeDurationFrac(startStr, endStr string) float64 {
+	startFrac, errStart := parseTimeToExcelFraction(startStr)
+	endFrac, errEnd := parseTimeToExcelFraction(endStr)
+	if errStart != nil || errEnd != nil {
+		return defaultTotalFrac
+	}
+	dur := endFrac - startFrac
+	if dur < 0 {
+		dur += 1.0
+	}
+	return dur
+}
+
+// WriteWorkingHoursRow writes Start, End, and Total Hour cells according to activity or standard defaults.
+// - If has activity: writes activity Start, End, calculated total duration, formula, and timeStyle.
+// - If holiday/weekend without activity: clears Start, End, Total Hour cells and applies timeStyle.
+// - If working day without activity: writes default 08:00, 17:00, 09:00 duration, formula, and timeStyle.
+func WriteWorkingHoursRow(
+	f *excelize.File,
+	sheet string,
+	startCol, endCol, totalCol, rs string,
+	formulaFmt string,
+	isDecimalTotal bool,
+	dsc DayStyleContext,
+) {
+	startCell := startCol + rs
+	endCell := endCol + rs
+	totalCell := totalCol + rs
+
+	totalStyle := dsc.TimeStyle
+	if isDecimalTotal {
+		totalStyle = dsc.DecimalStyle
+	}
+
+	if dsc.HasActivity {
+		start := strings.TrimSpace(dsc.Activity.StartTime)
+		end := strings.TrimSpace(dsc.Activity.EndTime)
+		if start == "" {
+			start = DefaultStartTime
+		}
+		if end == "" {
+			end = DefaultEndTime
+		}
+		WriteTimeCells(f, sheet, startCell, endCell, start, end, dsc.TimeStyle)
+		dur := CalculateTimeDurationFrac(start, end)
+		if isDecimalTotal {
+			_ = f.SetCellValue(sheet, totalCell, dur*24.0)
+		} else {
+			_ = f.SetCellValue(sheet, totalCell, dur)
+		}
+		if formulaFmt != "" {
+			form := strings.ReplaceAll(formulaFmt, "{row}", rs)
+			if strings.Contains(form, "%s") {
+				form = fmt.Sprintf(form, rs, rs)
+			}
+			_ = f.SetCellFormula(sheet, totalCell, form)
+		}
+		_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+	} else if dsc.IsHolidayOrWeekend {
+		_ = f.SetCellValue(sheet, startCell, "")
+		_ = f.SetCellValue(sheet, endCell, "")
+		_ = f.SetCellValue(sheet, totalCell, "")
+		_ = f.SetCellStyle(sheet, startCell, startCell, dsc.TimeStyle)
+		_ = f.SetCellStyle(sheet, endCell, endCell, dsc.TimeStyle)
+		_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+	} else {
+		// Working day without activity: default 08:00 and 17:00
+		_ = f.SetCellValue(sheet, startCell, defaultStartFrac)
+		_ = f.SetCellValue(sheet, endCell, defaultEndFrac)
+		_ = f.SetCellStyle(sheet, startCell, startCell, dsc.TimeStyle)
+		_ = f.SetCellStyle(sheet, endCell, endCell, dsc.TimeStyle)
+
+		if isDecimalTotal {
+			_ = f.SetCellValue(sheet, totalCell, defaultTotalFrac*24.0)
+		} else {
+			_ = f.SetCellValue(sheet, totalCell, defaultTotalFrac)
+		}
+		if formulaFmt != "" {
+			form := strings.ReplaceAll(formulaFmt, "{row}", rs)
+			if strings.Contains(form, "%s") {
+				form = fmt.Sprintf(form, rs, rs)
+			}
+			_ = f.SetCellFormula(sheet, totalCell, form)
+		}
+		_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+	}
+}
+
+// CleanWorkbookBuffer strips erroneous t="str" attributes from formula cells across all worksheet XMLs,
+// ensuring Excel treats formula results as numbers/times instead of string literals.
+func CleanWorkbookBuffer(in []byte) []byte {
+	zr, err := zip.NewReader(bytes.NewReader(in), int64(len(in)))
+	if err != nil {
+		return in
+	}
+	var out bytes.Buffer
+	zw := zip.NewWriter(&out)
+
+	reFormulaStr := regexp.MustCompile(`(<c\s+r="[A-Z0-9]+"[^>]*?)\s+t="str"([^>]*?>\s*<f[^>]*>.*?</f>)`)
+	sheetXmlRe := regexp.MustCompile(`^xl/worksheets/.*\.xml$`)
+
+	for _, zf := range zr.File {
+		w, err := zw.CreateHeader(&zf.FileHeader)
+		if err != nil {
+			continue
+		}
+		rc, err := zf.Open()
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			continue
+		}
+
+		if sheetXmlRe.MatchString(zf.Name) {
+			data = reFormulaStr.ReplaceAll(data, []byte(`$1$2`))
+		}
+		_, _ = w.Write(data)
+	}
+	_ = zw.Close()
+	return out.Bytes()
+}
 
 // HeaderColumn defines a merged header cell range and its text label.
 type HeaderColumn struct {
@@ -179,10 +321,11 @@ func WriteTimeCells(f *excelize.File, sheet, startCell, endCell string, startStr
 	return hasStart, hasEnd
 }
 
-// ApplyBlankPaddingRow formats blank days beyond the current month's end.
+// ApplyBlankPaddingRow clears cell values and formats blank days beyond the current month's end.
 func ApplyBlankPaddingRow(f *excelize.File, sheet string, row int, cols []string, wrapCols []string, st *BuilderStyles) {
 	rs := fmt.Sprintf("%d", row)
 	for _, col := range cols {
+		_ = f.SetCellValue(sheet, col+rs, "")
 		_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterStyle)
 	}
 	for _, col := range wrapCols {
@@ -350,15 +493,25 @@ func WriteBuilderDailyRows(
 	}
 }
 
+// CurrentDateFormatted returns the current date in Asia/Jakarta timezone formatted as "02-Jan-2006".
+func CurrentDateFormatted() string {
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		loc = time.FixedZone("WIB", 7*3600)
+	}
+	return time.Now().In(loc).Format("02-Jan-2006")
+}
+
 // DatePrefixUpper is the standard uppercase prefix used in timesheet signature blocks.
 const DatePrefixUpper = "DATE : "
 
 // WriteSignaturesBlock renders the 3-party signature section (Employee, Team Leader, Dept Head).
 func WriteSignaturesBlock(f *excelize.File, sheet string, startRow int, userName, tlName, dhName string, st *BuilderStyles) {
+	dateStr := DatePrefixUpper + CurrentDateFormatted()
 	WriteSignaturesLayout(f, sheet, startRow, 3, []SignatureParty{
-		{StartCol: "A", EndCol: "C", Title: "Prepared by :", Name: userName, DatePrefix: DatePrefixUpper},
-		{StartCol: "D", EndCol: "F", Title: "Approved by :", Name: tlName, DatePrefix: DatePrefixUpper},
-		{StartCol: "G", EndCol: "J", Title: "Approved by :", Name: dhName, DatePrefix: DatePrefixUpper},
+		{StartCol: "A", EndCol: "C", Title: "Prepared by :", Name: userName, DatePrefix: dateStr},
+		{StartCol: "D", EndCol: "F", Title: "Approved by :", Name: tlName, DatePrefix: dateStr},
+		{StartCol: "G", EndCol: "J", Title: "Approved by :", Name: dhName, DatePrefix: dateStr},
 	}, st)
 
 	_ = f.SetRowHeight(sheet, startRow, 20)
@@ -383,6 +536,11 @@ func SetWorkbookProperties(f *excelize.File, title, lastModifiedBy string) {
 		LastModifiedBy: modifiedBy,
 		Category:       "Timesheet",
 	})
+	bTrue := true
+	_ = f.SetCalcProps(&excelize.CalcPropsOptions{
+		FullCalcOnLoad: &bTrue,
+		ForceFullCalc:  &bTrue,
+	})
 }
 
 // MonthNameIndonesian returns the full Indonesian month name for month 1-12.
@@ -395,4 +553,62 @@ func MonthNameIndonesian(month int) string {
 		return names[month-1]
 	}
 	return fmt.Sprintf("Bulan %d", month)
+}
+
+// WriteSignatures writes the user, team leader, department head names, and date stamp into signature cells.
+func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, userCell, tlCell, dhCell, userDateCell, tlDateCell, dhDateCell, datePrefix string) {
+	tlName, dhName := ResolveApprovers(in)
+	userName := ""
+	if in.User != nil {
+		userName = in.User.Name
+	}
+	if userName != "" && userCell != "" {
+		_ = f.SetCellValue(sheet, userCell, userName)
+	}
+	if tlName != "" && tlCell != "" {
+		_ = f.SetCellValue(sheet, tlCell, tlName)
+	}
+	if dhName != "" && dhCell != "" {
+		_ = f.SetCellValue(sheet, dhCell, dhName)
+	}
+	if datePrefix != "" {
+		dateStr := datePrefix + CurrentDateFormatted()
+		if userDateCell != "" {
+			_ = f.SetCellValue(sheet, userDateCell, dateStr)
+		}
+		if tlDateCell != "" {
+			_ = f.SetCellValue(sheet, tlDateCell, dateStr)
+		}
+		if dhDateCell != "" {
+			_ = f.SetCellValue(sheet, dhDateCell, dateStr)
+		}
+	}
+}
+
+// SummaryFormulaItem defines a column formula and pre-calculated value for summary rows.
+type SummaryFormulaItem struct {
+	Formula string
+	Value   int
+}
+
+// WriteSummaryRowWithValues writes both the pre-calculated integer value and Excel formula
+// into summary cells, ensuring the total displays immediately upon opening and recalculates on edit.
+func WriteSummaryRowWithValues(f *excelize.File, sheet, targetRow string, items map[string]SummaryFormulaItem, styleID int) {
+	for col, item := range items {
+		cell := col + targetRow
+		_ = f.SetCellValue(sheet, cell, item.Value)
+		_ = f.SetCellFormula(sheet, cell, item.Formula)
+		if styleID > 0 {
+			_ = f.SetCellStyle(sheet, cell, cell, styleID)
+		}
+	}
+}
+
+// WriteWorkbookToBuffer writes the workbook to a byte slice buffer, cleans formula attributes, or returns an error.
+func WriteWorkbookToBuffer(f *excelize.File, companyName string) ([]byte, error) {
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		return nil, fmt.Errorf("write %s buffer: %w", companyName, err)
+	}
+	return CleanWorkbookBuffer(buf.Bytes()), nil
 }

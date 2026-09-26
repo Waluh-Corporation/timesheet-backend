@@ -53,6 +53,15 @@ func (s *activityService) resolveProject(ctx context.Context, req *request.Daily
 		return nil
 	}
 
+	if req.ProjectID != "" || req.ProjectName != "" {
+		proj, err := s.repo.FindActiveProjectByCodeOrName(ctx, req.ProjectID, req.ProjectName)
+		if err == nil && proj != nil && proj.ID != 0 {
+			activity.ProjectRefID = &proj.ID
+			activity.ProjectRef = proj
+			return nil
+		}
+	}
+
 	activity.ProjectRefID = nil
 	activity.ProjectRef = nil
 	return nil
@@ -121,6 +130,7 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 		existing.Status = req.Status
 		existing.Activity = req.Activity
 		existing.ProjectRefID = activity.ProjectRefID
+		existing.ProjectRef = activity.ProjectRef
 		existing.UpdatedAt = time.Now()
 		return s.repo.Update(ctx, existing)
 	}
@@ -141,14 +151,18 @@ func (s *activityService) GetDailyActivity(ctx context.Context, userID uint, id 
 	}
 
 	return &response.DailyActivityResponse{
-		ID:          activity.ID,
-		Date:        activity.Date,
-		StartTime:   activity.StartTime,
-		EndTime:     activity.EndTime,
-		Activity:    activity.Activity,
-		ProjectName: activity.GetProjectName(),
-		ProjectID:   activity.GetProjectCode(),
-		Status:      activity.Status,
+		ID:           activity.ID,
+		Date:         activity.Date,
+		StartTime:    activity.StartTime,
+		EndTime:      activity.EndTime,
+		Activity:     activity.Activity,
+		ProjectName:  activity.GetProjectName(),
+		ProjectID:    activity.GetProjectCode(),
+		Status:       activity.Status,
+		AppImpacted:  activity.GetAppImpacted(),
+		ProjectRefID: activity.ProjectRefID,
+		ProjectRef:   activity.ProjectRef,
+		StatusRef:    activity.StatusRef,
 	}, nil
 }
 
@@ -161,14 +175,18 @@ func (s *activityService) ListActivities(ctx context.Context, userID uint, filte
 	respList := make([]response.DailyActivityResponse, len(activities))
 	for i, a := range activities {
 		respList[i] = response.DailyActivityResponse{
-			ID:          a.ID,
-			Date:        a.Date,
-			StartTime:   a.StartTime,
-			EndTime:     a.EndTime,
-			Activity:    a.Activity,
-			ProjectName: a.GetProjectName(),
-			ProjectID:   a.GetProjectCode(),
-			Status:      a.Status,
+			ID:           a.ID,
+			Date:         a.Date,
+			StartTime:    a.StartTime,
+			EndTime:      a.EndTime,
+			Activity:     a.Activity,
+			ProjectName:  a.GetProjectName(),
+			ProjectID:    a.GetProjectCode(),
+			Status:       a.Status,
+			AppImpacted:  a.GetAppImpacted(),
+			ProjectRefID: a.ProjectRefID,
+			ProjectRef:   a.ProjectRef,
+			StatusRef:    a.StatusRef,
 		}
 	}
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -81,7 +82,22 @@ func (m *mockActivityRepo) ListActiveByUser(ctx context.Context, userID uint, fi
 			res = append(res, *act)
 		}
 	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].ID < res[j].ID
+	})
 	return res, int64(len(res)), nil
+}
+
+func (m *mockActivityRepo) GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error) {
+	var latest time.Time
+	for _, act := range m.activities {
+		if act.UserID == userID && int(act.Date.Month()) == month && act.Date.Year() == year && act.IsActive {
+			if act.UpdatedAt.After(latest) {
+				latest = act.UpdatedAt
+			}
+		}
+	}
+	return latest, nil
 }
 
 func (m *mockActivityRepo) ValidateStatus(ctx context.Context, status string) (bool, error) {
@@ -101,7 +117,13 @@ func (m *mockActivityRepo) FindActiveProjectByCodeOrName(ctx context.Context, pr
 		if !p.IsActive {
 			continue
 		}
-		if (projectID != "" && p.Code == projectID) || (projectName != "" && strings.EqualFold(p.Name, projectName)) {
+		if projectID != "" && projectName != "" {
+			if p.Code == projectID && strings.EqualFold(p.Name, projectName) {
+				return p, nil
+			}
+		} else if projectID != "" && p.Code == projectID {
+			return p, nil
+		} else if projectName != "" && strings.EqualFold(p.Name, projectName) {
 			return p, nil
 		}
 	}
@@ -203,15 +225,20 @@ func TestActivityService_GetDailyActivity(t *testing.T) {
 	ctx := context.Background()
 
 	parsedDate, _ := time.Parse("2006-01-02", "2026-09-20")
+	proj55 := &models.Project{ID: 55, Code: "PRJ-55", Name: "Project Beta", AppImpacted: "Beta App", IsActive: true}
+	repo.projects[55] = proj55
+	projRefID := uint(55)
 	repo.activities[1] = &models.DailyActivity{
-		ID:        1,
-		UserID:    100,
-		Date:      parsedDate,
-		StartTime: "08:30",
-		EndTime:   "17:30",
-		Status:    "P",
-		Activity:  "Test task",
-		IsActive:  true,
+		ID:           1,
+		UserID:       100,
+		Date:         parsedDate,
+		StartTime:    "08:30",
+		EndTime:      "17:30",
+		Status:       "P",
+		Activity:     "Test task",
+		ProjectRefID: &projRefID,
+		ProjectRef:   proj55,
+		IsActive:     true,
 	}
 
 	// 1. Not found
@@ -234,6 +261,15 @@ func TestActivityService_GetDailyActivity(t *testing.T) {
 	if resp.ID != 1 || resp.Activity != "Test task" {
 		t.Errorf("unexpected response: %+v", resp)
 	}
+	if resp.AppImpacted != "Beta App" {
+		t.Errorf("expected AppImpacted 'Beta App', got %q", resp.AppImpacted)
+	}
+	if resp.ProjectRefID == nil || *resp.ProjectRefID != 55 {
+		t.Errorf("expected ProjectRefID 55, got %v", resp.ProjectRefID)
+	}
+	if resp.ProjectRef == nil || resp.ProjectRef.Name != "Project Beta" {
+		t.Errorf("expected ProjectRef to be populated, got %+v", resp.ProjectRef)
+	}
 }
 
 func TestActivityService_ListActivities(t *testing.T) {
@@ -242,15 +278,19 @@ func TestActivityService_ListActivities(t *testing.T) {
 	ctx := context.Background()
 
 	parsedDate, _ := time.Parse("2006-01-02", "2026-09-20")
+	proj55 := &models.Project{ID: 55, Code: "PRJ-55", Name: "Project Beta", AppImpacted: "Beta App", IsActive: true}
+	projRefID := uint(55)
 	repo.activities[1] = &models.DailyActivity{
-		ID:        1,
-		UserID:    100,
-		Date:      parsedDate,
-		StartTime: "08:30",
-		EndTime:   "17:30",
-		Status:    "P",
-		Activity:  "Task 1",
-		IsActive:  true,
+		ID:           1,
+		UserID:       100,
+		Date:         parsedDate,
+		StartTime:    "08:30",
+		EndTime:      "17:30",
+		Status:       "P",
+		Activity:     "Task 1",
+		ProjectRefID: &projRefID,
+		ProjectRef:   proj55,
+		IsActive:     true,
 	}
 	repo.activities[2] = &models.DailyActivity{
 		ID:        2,
@@ -277,6 +317,12 @@ func TestActivityService_ListActivities(t *testing.T) {
 	}
 	if meta.TotalRows != 2 || meta.TotalPages != 1 || meta.Page != 1 {
 		t.Errorf("pagination meta mismatch: %+v", meta)
+	}
+	if list[0].AppImpacted != "Beta App" {
+		t.Errorf("expected list[0].AppImpacted 'Beta App', got %q", list[0].AppImpacted)
+	}
+	if list[0].ProjectRefID == nil || *list[0].ProjectRefID != 55 {
+		t.Errorf("expected list[0].ProjectRefID 55, got %v", list[0].ProjectRefID)
 	}
 
 	// 2. IsAll = true with totalRows > 0
@@ -317,10 +363,11 @@ func TestActivityService_UpsertProjectResolution(t *testing.T) {
 	ctx := context.Background()
 
 	proj := &models.Project{
-		ID:       55,
-		Code:     "PRJ-55",
-		Name:     "Project Beta",
-		IsActive: true,
+		ID:          55,
+		Code:        "PRJ-55",
+		Name:        "Project Beta",
+		AppImpacted: "Beta App",
+		IsActive:    true,
 	}
 	repo.projects[proj.ID] = proj
 
@@ -360,6 +407,26 @@ func TestActivityService_UpsertProjectResolution(t *testing.T) {
 	}
 	if savedEmpty.GetProjectCode() != "" || savedEmpty.GetProjectName() != "" {
 		t.Errorf("expected empty project code/name, got %s / %s", savedEmpty.GetProjectCode(), savedEmpty.GetProjectName())
+	}
+
+	// Project resolved by Code and Name fallback when ProjectRefID is nil
+	reqCodeName := &request.DailyActivityRequest{
+		Date:        "2026-09-23",
+		StartTime:   "08:00",
+		EndTime:     "17:00",
+		ProjectID:   "PRJ-55",
+		ProjectName: "Project Beta",
+		Activity:    "Fallback resolution",
+	}
+	if err := svc.UpsertDailyActivity(ctx, 10, reqCodeName); err != nil {
+		t.Fatalf("unexpected error on fallback resolution: %v", err)
+	}
+	savedFallback := repo.activities[3]
+	if savedFallback.ProjectRefID == nil || *savedFallback.ProjectRefID != 55 {
+		t.Errorf("expected ProjectRefID 55 from fallback, got: %v", savedFallback.ProjectRefID)
+	}
+	if savedFallback.GetAppImpacted() != "Beta App" {
+		t.Errorf("expected AppImpacted 'Beta App' from fallback, got %q", savedFallback.GetAppImpacted())
 	}
 }
 

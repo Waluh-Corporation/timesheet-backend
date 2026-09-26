@@ -10,9 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"timesheet-backend/auth"
 	"timesheet-backend/dto/response"
-	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 )
 
@@ -126,12 +124,7 @@ func TestUserHandlers_UserCRUDIntegration(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	targetUser := models.User{
 		Username: "target_user_test",
@@ -374,12 +367,7 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	targetUser := models.User{
 		Username: "profile_change_user",
@@ -419,7 +407,7 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	assertFatalCode(t, w, http.StatusCreated)
 
 	var lastReq models.ProfileChangeRequest
-	if err := srv.DB.Where("user_id = ?", targetUser.ID).Order("id desc").First(&lastReq).Error; err != nil {
+	if err := tx.Where("user_id = ?", targetUser.ID).Order("id desc").First(&lastReq).Error; err != nil {
 		t.Fatalf("failed to find created profile change request: %v", err)
 	}
 	reqIDStr := fmt.Sprintf("%d", lastReq.ID)
@@ -454,7 +442,7 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	assertFatalCode(t, w, http.StatusOK)
 
 	var updatedTarget models.User
-	srv.DB.First(&updatedTarget, targetUser.ID)
+	tx.First(&updatedTarget, targetUser.ID)
 	if updatedTarget.EmployeeID != "EMP-9999" {
 		t.Errorf("expected employee_id 'EMP-9999', got %s", updatedTarget.EmployeeID)
 	}
@@ -474,7 +462,7 @@ func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {
 	c.Request.Header.Set("Content-Type", "application/json")
 	srv.SubmitProfileChange(c)
 	var lastReq2 models.ProfileChangeRequest
-	if err := srv.DB.Where("user_id = ?", targetUser.ID).Order("id desc").First(&lastReq2).Error; err != nil {
+	if err := tx.Where("user_id = ?", targetUser.ID).Order("id desc").First(&lastReq2).Error; err != nil {
 		t.Fatalf("failed to find created profile change request: %v", err)
 	}
 	req2IDStr := fmt.Sprintf("%d", lastReq2.ID)
@@ -502,13 +490,7 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:     tx,
-		Cfg:    cfg,
-		Auth:   authSvc,
-		Mailer: mailer.New(cfg),
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	comp := models.Company{Code: "user_test_comp", Name: "User Test Company"}
 	_ = tx.Create(&comp)
@@ -547,7 +529,7 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 		assertFatalCode(t, w, http.StatusCreated)
 
 		var createdUser models.User
-		if err := srv.DB.Where("username = ?", "new_created_user").First(&createdUser).Error; err != nil {
+		if err := tx.Where("username = ?", "new_created_user").First(&createdUser).Error; err != nil {
 			t.Fatalf("failed to query created user: %v", err)
 		}
 		newUserID = createdUser.ID
@@ -597,7 +579,7 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 		assertFatalCode(t, w, http.StatusCreated)
 
 		var saved models.User
-		if err := srv.DB.Where("username = ?", "user_with_employee_id").First(&saved).Error; err != nil {
+		if err := tx.Where("username = ?", "user_with_employee_id").First(&saved).Error; err != nil {
 			t.Fatalf("failed to query created user: %v", err)
 		}
 		if saved.EmployeeID != "000001" {
@@ -704,7 +686,7 @@ func TestUserHandlers_CreateUpdateDeleteList(t *testing.T) {
 		assertFatalCode(t, w, http.StatusOK)
 
 		var updatedUser models.User
-		if err := srv.DB.Where("id = ?", resp.Data.User.ID).First(&updatedUser).Error; err != nil {
+		if err := tx.Where("id = ?", resp.Data.User.ID).First(&updatedUser).Error; err != nil {
 			t.Fatalf("failed to query updated user: %v", err)
 		}
 		if updatedUser.Site != "Bandung Hub" {
@@ -801,7 +783,7 @@ func TestUserHandlers_MasterDataResolutionAndEdgeCases(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{DB: tx, Cfg: cfg}
+	srv := newTestServer(t, tx, cfg)
 
 	// 1. CreateUser error cases
 	t.Run("CreateUser rejects invalid site_id or division_id", func(t *testing.T) {

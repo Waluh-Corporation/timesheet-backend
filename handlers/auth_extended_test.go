@@ -1528,7 +1528,6 @@ func TestFinishPasskeyRegistration_FullCoverage(t *testing.T) {
 	}
 
 	srv := &Server{
-		DB:       tx,
 		UserRepo: userRepo,
 	}
 
@@ -1594,7 +1593,6 @@ func TestFinishPasskeyRegistration_FullCoverage(t *testing.T) {
 		err:            errors.New("db save error"),
 	}
 	srvErr := &Server{
-		DB:       tx,
 		UserRepo: errRepo,
 		finishRegistrationFunc: func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
 			return &webauthn.Credential{

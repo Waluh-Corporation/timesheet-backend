@@ -16,9 +16,9 @@ import (
 
 func TestProfileChange_NotesAndEmailFlow(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db, _ := setupTestDB(t)
+	db, cfg := setupTestDB(t)
 
-	srv := &Server{DB: db}
+	srv := newTestServer(t, db, cfg)
 
 	// Clean up any test records
 	db.Exec("DELETE FROM profile_change_requests WHERE notes LIKE '%TestNotesEmail%'")

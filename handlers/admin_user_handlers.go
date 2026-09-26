@@ -1,22 +1,19 @@
 package handlers
 
 import (
-	"log/slog"
+	"errors"
 	"net/http"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
-	"timesheet-backend/auth"
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
-	"timesheet-backend/internal/repository"
-	"timesheet-backend/internal/service"
+	"timesheet-backend/internal/domain"
 	"timesheet-backend/models"
 )
+
+const errUserServiceUnavailable = "user service unavailable"
 
 // ListUsers godoc
 // @Summary List all users (Admin)
@@ -30,16 +27,23 @@ import (
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users [get]
 func (s *Server) ListUsers(c *gin.Context) {
-	var users []models.User
-	query := s.DB.Order(orderCreatedAtDesc)
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errUserServiceUnavailable)
+		return
+	}
+
+	var isActive *bool
 	if isActiveStr := c.Query("is_active"); isActiveStr != "" {
-		if isActive, err := strconv.ParseBool(isActiveStr); err == nil {
-			query = query.Where("is_active = ?", isActive)
+		if b, err := strconv.ParseBool(isActiveStr); err == nil {
+			isActive = &b
 		}
 	} else if c.Query("include_inactive") == "false" {
-		query = query.Where("is_active = ?", true)
+		t := true
+		isActive = &t
 	}
-	if err := query.Find(&users).Error; err != nil {
+	users, err := svc.ListUsers(c.Request.Context(), isActive)
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -49,7 +53,7 @@ func (s *Server) ListUsers(c *gin.Context) {
 			ID:           u.ID,
 			Username:     u.Username,
 			Email:        u.Email,
-			Role:         u.Role,
+			Role:         models.Role(u.Role),
 			Name:         u.Name,
 			BniID:        u.BniID,
 			EmployeeID:   u.EmployeeID,
@@ -65,167 +69,6 @@ func (s *Server) ListUsers(c *gin.Context) {
 		}
 	}
 	RespondSuccess(c, http.StatusOK, resp)
-}
-
-func (s *Server) resolveUserCompany(req *request.CreateUserRequest, user *models.User) (string, int) {
-	if user.Role == models.RoleAdmin {
-		user.CompanyID = nil
-		user.Company = ""
-		return "", 0
-	}
-	if req.CompanyID != nil && *req.CompanyID != 0 {
-		var comp models.Company
-		if err := s.DB.Where(queryIDAndIsActive, *req.CompanyID).First(&comp).Error; err != nil {
-			return errCompanyDeptNotFound, http.StatusBadRequest
-		}
-		user.CompanyID = &comp.ID
-		user.Company = comp.Name
-	} else if req.Company != "" {
-		var comp models.Company
-		if err := s.DB.Where(queryCodeOrNameLikeIsActive, req.Company, "%"+req.Company+"%").First(&comp).Error; err == nil {
-			user.CompanyID = &comp.ID
-			user.Company = comp.Name
-		} else {
-			return errCompanyDeptNotFound, http.StatusBadRequest
-		}
-	} else {
-		user.CompanyID = nil
-		user.Company = ""
-	}
-	return "", 0
-}
-
-func (s *Server) resolveUserDepartment(req *request.CreateUserRequest, user *models.User) (string, int) {
-	if req.DepartmentID != nil && *req.DepartmentID != 0 {
-		var dept models.Department
-		if err := s.DB.Where(queryIDAndIsActive, *req.DepartmentID).First(&dept).Error; err != nil {
-			return errCompanyDeptNotFound, http.StatusBadRequest
-		}
-		user.DepartmentID = &dept.ID
-		user.Department = dept.Name
-		if user.Division == "" {
-			user.Division = dept.Division
-			user.DivisionID = dept.DivisionID
-		}
-	} else if req.Department != "" {
-		var dept models.Department
-		if err := s.DB.Where(queryCodeOrNameLikeIsActive, req.Department, "%"+req.Department+"%").First(&dept).Error; err == nil {
-			user.DepartmentID = &dept.ID
-			user.Department = dept.Name
-			if user.Division == "" {
-				user.Division = dept.Division
-				user.DivisionID = dept.DivisionID
-			}
-		}
-	}
-	return "", 0
-}
-
-func (s *Server) resolveUserSite(req *request.CreateUserRequest, user *models.User) (string, int) {
-	if req.SiteID != nil && *req.SiteID != 0 {
-		var site models.Site
-		if err := s.DB.Where(queryIDAndIsActive, *req.SiteID).First(&site).Error; err != nil {
-			return "Site not found or inactive", http.StatusBadRequest
-		}
-		user.SiteID = &site.ID
-		user.Site = site.Name
-	} else if req.Site != "" {
-		var site models.Site
-		if err := s.DB.Where(queryCodeOrNameLikeIsActive, req.Site, "%"+req.Site+"%").First(&site).Error; err == nil {
-			user.SiteID = &site.ID
-			user.Site = site.Name
-		} else {
-			user.SiteID = nil
-			user.Site = req.Site
-		}
-	} else {
-		user.SiteID = nil
-		user.Site = ""
-	}
-	return "", 0
-}
-
-func (s *Server) resolveUserDivision(req *request.CreateUserRequest, user *models.User) (string, int) {
-	if req.DivisionID != nil && *req.DivisionID != 0 {
-		var div models.Division
-		if err := s.DB.Where(queryIDAndIsActive, *req.DivisionID).First(&div).Error; err != nil {
-			return "Division not found or inactive", http.StatusBadRequest
-		}
-		user.DivisionID = &div.ID
-		user.Division = div.Name
-	} else if req.Division != "" {
-		var div models.Division
-		if err := s.DB.Where(queryCodeOrNameLikeIsActive, req.Division, "%"+req.Division+"%").First(&div).Error; err == nil {
-			user.DivisionID = &div.ID
-			user.Division = div.Name
-		} else {
-			user.DivisionID = nil
-			user.Division = req.Division
-		}
-	} else if user.DivisionID == nil && user.Division != "" {
-		var div models.Division
-		if err := s.DB.Where(queryCodeOrNameLikeIsActive, user.Division, "%"+user.Division+"%").First(&div).Error; err == nil {
-			user.DivisionID = &div.ID
-			user.Division = div.Name
-		}
-	}
-	return "", 0
-}
-
-func (s *Server) resolveUserMasterData(req *request.CreateUserRequest, user *models.User) (string, int) {
-	if errMsg, code := s.resolveUserCompany(req, user); code != 0 {
-		return errMsg, code
-	}
-	if errMsg, code := s.resolveUserDepartment(req, user); code != 0 {
-		return errMsg, code
-	}
-	if errMsg, code := s.resolveUserDivision(req, user); code != 0 {
-		return errMsg, code
-	}
-	return s.resolveUserSite(req, user)
-}
-
-func (s *Server) handleInitialPassword(user *models.User) (string, string, int) {
-	plain, err := auth.GenerateSecurePassword(auth.GeneratedPasswordLength)
-	if err != nil {
-		return "", "failed to generate initial password", http.StatusInternalServerError
-	}
-
-	hasher := s.Hasher
-	if hasher == nil {
-		hasher = auth.DefaultHasher
-	}
-	hash, err := hasher.Hash(plain)
-	if err != nil {
-		return "", "could not hash password", http.StatusInternalServerError
-	}
-	user.PasswordHash = hash
-	return plain, "", 0
-}
-
-func (s *Server) checkUserExistence(username, email string) (string, int) {
-	var existing models.User
-	if err := s.DB.Where("LOWER(username) = LOWER(?)", username).First(&existing).Error; err == nil {
-		return "username already exists", http.StatusConflict
-	}
-	if err := s.DB.Where("LOWER(email) = LOWER(?)", email).First(&existing).Error; err == nil {
-		return "email already exists", http.StatusConflict
-	}
-	return "", 0
-}
-
-func handleCreateUserDBError(err error) (string, int) {
-	if strings.Contains(err.Error(), "23503") || strings.Contains(err.Error(), "foreign key") {
-		return errCompanyDeptNotFound, http.StatusBadRequest
-	}
-	errLower := strings.ToLower(err.Error())
-	if strings.Contains(errLower, "username") {
-		return "username already exists", http.StatusConflict
-	}
-	if strings.Contains(errLower, "email") {
-		return "email already exists", http.StatusConflict
-	}
-	return "username or email already exists", http.StatusConflict
 }
 
 // CreateUser godoc
@@ -250,248 +93,30 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	user := models.User{
-		Username:     req.Username,
-		Email:        req.Email,
-		Role:         req.Role,
-		Name:         req.Name,
-		BniID:        req.BniID,
-		EmployeeID:   req.EmployeeID,
-		Division:     req.Division,
-		DivisionID:   req.DivisionID,
-		Department:   req.Department,
-		DepartmentID: req.DepartmentID,
-		Site:         req.Site,
-		SiteID:       req.SiteID,
-		Company:      req.Company,
-		CompanyID:    req.CompanyID,
-		IsActive:     true,
-	}
-
-	if user.Role == models.RoleAdmin {
-		user.Company = ""
-		user.CompanyID = nil
-	}
-
-	if errMsg, code := s.resolveUserMasterData(&req, &user); code != 0 {
-		RespondError(c, code, errMsg)
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errUserServiceUnavailable)
 		return
 	}
 
-	plainPass, errMsg, code := s.handleInitialPassword(&user)
-	if code != 0 {
-		RespondError(c, code, errMsg)
+	user, _, err := svc.AdminCreateUser(c.Request.Context(), &req, s.publicBaseURL(c))
+	if err != nil {
+		if errors.Is(err, domain.ErrUsernameConflict) || errors.Is(err, domain.ErrEmailConflict) {
+			RespondError(c, http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
-	}
-
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database connection unavailable")
-		return
-	}
-
-	if errMsg, code := s.checkUserExistence(req.Username, req.Email); code != 0 {
-		RespondError(c, code, errMsg)
-		return
-	}
-
-	if err := s.DB.Create(&user).Error; err != nil {
-		errMsg, code := handleCreateUserDBError(err)
-		RespondError(c, code, errMsg)
-		return
-	}
-
-	// Send account creation / welcome notification email completely separate from password reset flow.
-	if s.Mailer != nil && user.Email != "" {
-		loginLink := s.publicBaseURL(c) + "/login"
-		go func(toEmail, username, pass, link string) {
-			if err := s.Mailer.SendAccountWelcomeEmail(toEmail, username, pass, link); err != nil {
-				slog.Error("failed to send account welcome email", "error", err, "email", toEmail)
-			}
-		}(user.Email, user.Username, plainPass, loginLink)
 	}
 
 	RespondSuccess(c, http.StatusCreated, response.CreateUserData{
 		Message: "user created successfully",
-		User:    response.ToUserResponse(&user),
+		User:    response.ToUserResponse(user),
 	})
-}
-
-func validateSelfUpdate(c *gin.Context, id uint, req *request.UpdateUserRequest) (string, int) {
-	if !isSelf(c, id) {
-		return "", 0
-	}
-	if req.IsActive != nil && !*req.IsActive {
-		return "you cannot deactivate your own account", http.StatusForbidden
-	}
-	if req.Role != nil && *req.Role != models.RoleAdmin {
-		return "you cannot remove your own admin role", http.StatusForbidden
-	}
-	return "", 0
-}
-
-func updateUserDepartment(db *gorm.DB, user *models.User, req *request.UpdateUserRequest) (string, int) {
-	if req.Department != nil {
-		user.Department = *req.Department
-	}
-	if req.DepartmentID != nil {
-		if *req.DepartmentID != 0 {
-			var dept models.Department
-			if err := db.Where(queryIDAndIsActive, *req.DepartmentID).First(&dept).Error; err != nil {
-				return errCompanyDeptNotFound, http.StatusBadRequest
-			}
-			user.DepartmentID = &dept.ID
-			user.Department = dept.Name
-			if user.Division == "" {
-				user.Division = dept.Division
-			}
-		} else {
-			user.DepartmentID = nil
-		}
-	}
-	return "", 0
-}
-
-func updateUserCompany(db *gorm.DB, user *models.User, req *request.UpdateUserRequest) (string, int) {
-	if req.CompanyID != nil {
-		if *req.CompanyID != 0 {
-			var comp models.Company
-			if err := db.Where(queryIDAndIsActive, *req.CompanyID).First(&comp).Error; err != nil {
-				return errCompanyDeptNotFound, http.StatusBadRequest
-			}
-			user.CompanyID = &comp.ID
-			user.Company = comp.Name
-		} else {
-			user.CompanyID = nil
-			user.Company = ""
-		}
-	} else if req.Company != nil {
-		if *req.Company != "" {
-			var comp models.Company
-			if err := db.Where(queryCodeOrNameLikeIsActive, *req.Company, "%"+*req.Company+"%").First(&comp).Error; err == nil {
-				user.CompanyID = &comp.ID
-				user.Company = comp.Name
-			} else {
-				return errCompanyDeptNotFound, http.StatusBadRequest
-			}
-		} else {
-			user.CompanyID = nil
-			user.Company = ""
-		}
-	}
-	return "", 0
-}
-
-func applyUserUpdates(db *gorm.DB, user *models.User, req *request.UpdateUserRequest) (string, int) {
-	if req.Role != nil {
-		user.Role = *req.Role
-	}
-	if req.Email != nil {
-		newEmail := strings.TrimSpace(*req.Email)
-		if newEmail != "" && newEmail != user.Email {
-			var existing models.User
-			if err := db.Where("email = ? AND id != ?", newEmail, user.ID).First(&existing).Error; err == nil {
-				return "email is already registered", http.StatusBadRequest
-			}
-			user.Email = newEmail
-		}
-	}
-	if req.IsActive != nil {
-		user.IsActive = *req.IsActive
-	}
-	if req.Name != nil {
-		user.Name = *req.Name
-	}
-	if req.BniID != nil {
-		user.BniID = *req.BniID
-	}
-	if req.EmployeeID != nil {
-		user.EmployeeID = *req.EmployeeID
-	}
-	if req.Division != nil {
-		user.Division = *req.Division
-	}
-	if req.Site != nil {
-		user.Site = *req.Site
-	}
-
-	if msg, code := updateUserDepartment(db, user, req); code != 0 {
-		return msg, code
-	}
-	if msg, code := updateUserCompany(db, user, req); code != 0 {
-		return msg, code
-	}
-	if msg, code := updateUserDivision(db, user, req); code != 0 {
-		return msg, code
-	}
-	if msg, code := updateUserSite(db, user, req); code != 0 {
-		return msg, code
-	}
-
-	if user.Role == models.RoleAdmin {
-		user.Company = ""
-		user.CompanyID = nil
-	}
-	return "", 0
-}
-
-func updateUserSite(db *gorm.DB, user *models.User, req *request.UpdateUserRequest) (string, int) {
-	if req.SiteID != nil {
-		if *req.SiteID != 0 {
-			var site models.Site
-			if err := db.Where(queryIDAndIsActive, *req.SiteID).First(&site).Error; err != nil {
-				return "Site not found or inactive", http.StatusBadRequest
-			}
-			user.SiteID = &site.ID
-			user.Site = site.Name
-		} else {
-			user.SiteID = nil
-			user.Site = ""
-		}
-	} else if req.Site != nil {
-		user.Site = *req.Site
-		if *req.Site != "" {
-			var site models.Site
-			if err := db.Where(queryCodeOrNameLikeIsActive, *req.Site, "%"+*req.Site+"%").First(&site).Error; err == nil {
-				user.SiteID = &site.ID
-				user.Site = site.Name
-			} else {
-				user.SiteID = nil
-			}
-		} else {
-			user.SiteID = nil
-		}
-	}
-	return "", 0
-}
-
-func updateUserDivision(db *gorm.DB, user *models.User, req *request.UpdateUserRequest) (string, int) {
-	if req.DivisionID != nil {
-		if *req.DivisionID != 0 {
-			var div models.Division
-			if err := db.Where(queryIDAndIsActive, *req.DivisionID).First(&div).Error; err != nil {
-				return "Division not found or inactive", http.StatusBadRequest
-			}
-			user.DivisionID = &div.ID
-			user.Division = div.Name
-		} else {
-			user.DivisionID = nil
-			user.Division = ""
-		}
-	} else if req.Division != nil {
-		user.Division = *req.Division
-		if *req.Division != "" {
-			var div models.Division
-			if err := db.Where(queryCodeOrNameLikeIsActive, *req.Division, "%"+*req.Division+"%").First(&div).Error; err == nil {
-				user.DivisionID = &div.ID
-				user.Division = div.Name
-			} else {
-				user.DivisionID = nil
-			}
-		} else {
-			user.DivisionID = nil
-		}
-	}
-	return "", 0
 }
 
 // UpdateUser godoc
@@ -522,27 +147,31 @@ func (s *Server) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if errMsg, code := validateSelfUpdate(c, uint(id), &req); code != 0 {
-		RespondError(c, code, errMsg)
+	if msg, code := validateSelfUpdate(c, uint(id), &req); code != 0 {
+		RespondError(c, code, msg)
 		return
 	}
 
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database not available")
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errUserServiceUnavailable)
 		return
 	}
 
-	var user models.User
-	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&user).Error; err != nil {
-		RespondError(c, http.StatusNotFound, errUserNotFound)
-		return
-	}
-
-	if errMsg, code := applyUserUpdates(s.DB, &user, &req); code != 0 {
-		RespondError(c, code, errMsg)
-		return
-	}
-	if err := s.DB.Save(&user).Error; err != nil {
+	callerID := currentUserID(c)
+	if err := svc.AdminUpdateUser(c.Request.Context(), uint(id), callerID, &req); err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			RespondError(c, http.StatusForbidden, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, errUserNotFound)
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to update user: "+err.Error())
 		return
 	}
@@ -568,154 +197,28 @@ func (s *Server) DeleteUser(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
 		return
 	}
-	// An admin may never deactivate/delete their own account — doing so could
-	// lock the last administrator out of the portal.
 	if isSelf(c, uint(id)) {
 		RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
 		return
 	}
-	var user models.User
-	if err := s.DB.Where(queryIDAndIsActive, id).First(&user).Error; err != nil {
-		RespondError(c, http.StatusNotFound, errUserNotFound)
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errUserServiceUnavailable)
 		return
 	}
-	if err := s.DB.Model(&user).Updates(map[string]interface{}{
-		"is_active":  false,
-		"updated_at": time.Now(),
-	}).Error; err != nil {
+
+	callerID := currentUserID(c)
+	if err := svc.AdminDeleteUser(c.Request.Context(), uint(id), callerID); err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			RespondError(c, http.StatusForbidden, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, errUserNotFound)
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	RespondMessage(c, http.StatusOK, "user deactivated successfully")
-}
-
-// --- Profile approval flow ---
-
-// ListProfileChanges godoc
-// @Summary List all profile change requests (Admin)
-// @Description Retrieves submitted profile change requests with optional status filtering (admin only).
-// @Tags Admin
-// @Security BearerAuth
-// @Produce json
-// @Param status query string false "Filter by review status (pending, approved, rejected)"
-// @Success 200 {array} response.AdminProfileChangeResponse
-// @Failure 401 {object} response.ErrorResponse "Unauthorized"
-// @Failure 403 {object} response.ErrorResponse "Admin only"
-// @Failure 500 {object} response.ErrorResponse "Internal server error"
-// @Router /api/v1/admin/profile-changes [get]
-func (s *Server) ListProfileChanges(c *gin.Context) {
-	var changes []models.ProfileChangeRequest
-	q := s.DB.Preload("User").Preload("Reviewer").Order(orderCreatedAtDesc)
-	if status := c.Query("status"); status != "" {
-		q = q.Where("status = ?", status)
-	}
-	if err := q.Find(&changes).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	resp := make([]response.AdminProfileChangeResponse, len(changes))
-	for i, ch := range changes {
-		var uName, uEmail, revName string
-		if ch.User.ID != 0 {
-			uName = ch.User.Name
-			uEmail = ch.User.Email
-		}
-		if ch.Reviewer != nil {
-			revName = ch.Reviewer.Name
-		}
-		resp[i] = response.AdminProfileChangeResponse{
-			ID:           ch.ID,
-			UserID:       ch.UserID,
-			UserName:     uName,
-			UserEmail:    uEmail,
-			Status:       ch.Status,
-			Name:         ch.Name,
-			BniID:        ch.BniID,
-			EmployeeID:   ch.EmployeeID,
-			Division:     ch.Division,
-			DivisionID:   ch.DivisionID,
-			Department:   ch.Department,
-			DepartmentID: ch.DepartmentID,
-			Site:         ch.Site,
-			SiteID:       ch.SiteID,
-			CompanyID:    ch.CompanyID,
-			Email:        ch.Email,
-			Notes:        ch.Notes,
-			ReviewedBy:   ch.ReviewedBy,
-			ReviewerName: revName,
-			ReviewedAt:   ch.ReviewedAt,
-			CreatedAt:    ch.CreatedAt,
-		}
-	}
-	RespondSuccess(c, http.StatusOK, resp)
-}
-
-// ReviewProfileChange godoc
-// @Summary Review profile change request (Admin)
-// @Description Approves or rejects a submitted profile change request (admin only).
-// @Tags Admin
-// @Security BearerAuth
-// @Produce json
-// @Param id path int true "Request ID"
-// @Param action query string true "Review action" Enums(approve, reject)
-// @Success 200 {object} response.MessageResponse
-// @Failure 400 {object} response.ErrorResponse "Invalid action"
-// @Failure 401 {object} response.ErrorResponse "Unauthorized"
-// @Failure 403 {object} response.ErrorResponse "Admin only"
-// @Failure 404 {object} response.ErrorResponse "Request not found"
-// @Failure 409 {object} response.ErrorResponse "Request already reviewed"
-// @Router /api/v1/admin/profile-changes/{id}/review [post]
-func (s *Server) ReviewProfileChange(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid profile change request ID, expected positive integer")
-		return
-	}
-	action := c.Query("action") // "approve" or "reject"
-
-	if action != "approve" && action != "reject" {
-		RespondError(c, http.StatusBadRequest, "invalid action: must be 'approve' or 'reject'")
-		return
-	}
-
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database not available")
-		return
-	}
-
-	var change models.ProfileChangeRequest
-	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&change).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "request not found")
-		return
-	}
-	if change.Status != models.ProfilePending {
-		RespondError(c, http.StatusConflict, "request already reviewed")
-		return
-	}
-
-	reviewer := currentUserID(c)
-	now := time.Now()
-
-	err = s.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if action == "approve" {
-			txUserRepo := repository.NewUserRepository(tx)
-			txMasterRepo := repository.NewMasterRepository(tx)
-			txUserSvc := service.NewUserService(txUserRepo, s.Hasher, s.Mailer, txMasterRepo)
-			if err := txUserSvc.ApplyApprovedProfileChange(c.Request.Context(), &change); err != nil {
-				return err
-			}
-			change.Status = models.ProfileApproved
-		} else {
-			change.Status = "rejected"
-		}
-		change.ReviewedBy = &reviewer
-		change.ReviewedAt = &now
-		return tx.Save(&change).Error
-	})
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "failed to process profile change review: "+err.Error())
-		return
-	}
-
-	RespondMessage(c, http.StatusOK, "profile change request "+action+"d")
 }

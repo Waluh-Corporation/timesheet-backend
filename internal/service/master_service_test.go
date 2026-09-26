@@ -253,6 +253,46 @@ func (m *mockMasterRepo) ListActivityStatuses(ctx context.Context) ([]models.Act
 	return m.statuses, nil
 }
 
+func (m *mockMasterRepo) FindActiveCompanyByCodeOrName(ctx context.Context, identifier string) (*models.Company, error) {
+	for _, c := range m.companies {
+		if (c.Code == identifier || c.Name == identifier) && c.IsActive {
+			return c, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (m *mockMasterRepo) FindActiveSiteByCodeOrName(ctx context.Context, identifier string) (*models.Site, error) {
+	for _, s := range m.sites {
+		if (s.Code == identifier || s.Name == identifier) && s.IsActive {
+			return s, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (m *mockMasterRepo) FindActiveDepartmentByCodeOrName(ctx context.Context, identifier string) (*models.Department, error) {
+	for _, d := range m.departments {
+		if (d.Code == identifier || d.Name == identifier) && d.IsActive {
+			return d, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (m *mockMasterRepo) FindProjectByID(ctx context.Context, id uint) (*models.Project, error) {
+	for _, p := range m.projects {
+		if p.ID == id {
+			return &p, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (m *mockMasterRepo) ListAllHolidays(ctx context.Context, year *int) ([]models.Holiday, error) {
+	return nil, nil
+}
+
 func (m *mockMasterRepo) ListHolidaysByMonth(ctx context.Context, year, month int) ([]models.Holiday, error) {
 	return nil, nil
 }

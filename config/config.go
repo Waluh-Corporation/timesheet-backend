@@ -53,6 +53,9 @@ type Config struct {
 	// FrontendURL is used to build links inside emails (setup / reset).
 	FrontendURL string
 
+	// AppBaseURL is used to build backend API links (magic download tokens).
+	AppBaseURL string
+
 	// Timezone used for the daily reminder scheduler and configurable cron expressions.
 	Timezone     string
 	ReminderCron string
@@ -75,6 +78,30 @@ type Config struct {
 	// CORSAllowedOrigins specifies origins allowed to make cross-origin requests.
 	// When empty, it falls back to FrontendURL, RPOrigins, and local dev origins.
 	CORSAllowedOrigins []string
+
+	// Redis task queue configuration.
+	RedisAddr     string
+	RedisPassword string
+	RedisDB       int
+
+	// S3-compatible object storage configuration.
+	S3Endpoint      string
+	S3Region        string
+	S3Bucket        string
+	S3AccessKey     string
+	S3SecretKey     string
+	S3UsePathStyle  bool
+	S3RetentionDays int
+
+	// Mailer worker pool and rate limit configuration (SES-ready).
+	MailerRateLimit   float64
+	MailerWorkerCount int
+
+	// Excel generation concurrency limiter.
+	ExcelMaxConcurrentJobs int
+
+	// Timesheet download token max quota.
+	TimesheetDownloadMaxQuota int
 }
 
 func getEnv(key, fallback string) string {
@@ -97,6 +124,15 @@ func getEnvBool(key string, fallback bool) bool {
 	if v := os.Getenv(key); v != "" {
 		if b, err := strconv.ParseBool(strings.TrimSpace(v)); err == nil {
 			return b
+		}
+	}
+	return fallback
+}
+
+func getEnvFloat(key string, fallback float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(strings.TrimSpace(v), 64); err == nil {
+			return f
 		}
 	}
 	return fallback
@@ -196,6 +232,11 @@ func Load() *Config {
 		rateLimitEnabled = false
 	}
 
+	maxDownloadQuota := getEnvInt("TIMESHEET_DOWNLOAD_MAX_QUOTA", 3)
+	if maxDownloadQuota <= 0 {
+		maxDownloadQuota = 3
+	}
+
 	cfg := &Config{
 		AppName:     appName,
 		Port:        getEnv("PORT", "8080"),
@@ -231,6 +272,7 @@ func Load() *Config {
 		VAPIDSubject:    getEnv("VAPID_SUBJECT", "mailto:admin@timesheet.local"),
 
 		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:3000"),
+		AppBaseURL:   strings.TrimRight(getEnv("APP_BASE_URL", getEnv("API_BASE_URL", "http://localhost:"+getEnv("PORT", "8080"))), "/"),
 		Timezone:     getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
 		ReminderCron: getEnv("SCHEDULER_REMINDER_CRON", getEnv("SCHEDULER_CRON", "0 17 * * *")),
 		CleanupCron:  getEnv("SCHEDULER_CLEANUP_CRON", "0 2 * * *"),
@@ -246,6 +288,24 @@ func Load() *Config {
 		RateLimitWindow:   time.Duration(rateLimitWindowSec) * time.Second,
 
 		CORSAllowedOrigins: parseOrigins(getEnv("CORS_ALLOWED_ORIGINS", "")),
+
+		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+		RedisDB:       getEnvInt("REDIS_DB", 0),
+
+		S3Endpoint:      getEnv("S3_ENDPOINT", ""),
+		S3Region:        getEnv("S3_REGION", "us-east-1"),
+		S3Bucket:        getEnv("S3_BUCKET", "timesheets"),
+		S3AccessKey:     getEnv("S3_ACCESS_KEY", ""),
+		S3SecretKey:     getEnv("S3_SECRET_KEY", ""),
+		S3UsePathStyle:  getEnvBool("S3_USE_PATH_STYLE", false),
+		S3RetentionDays: getEnvInt("S3_RETENTION_DAYS", 7),
+
+		MailerRateLimit:   getEnvFloat("MAILER_RATE_LIMIT", 10.0),
+		MailerWorkerCount: getEnvInt("MAILER_WORKER_COUNT", 5),
+
+		ExcelMaxConcurrentJobs:    getEnvInt("EXCEL_MAX_CONCURRENT_JOBS", 10),
+		TimesheetDownloadMaxQuota: maxDownloadQuota,
 	}
 
 	if cfg.RateLimitEnabled {

@@ -19,24 +19,6 @@ type GenerationInput struct {
 	Holidays map[int]string
 }
 
-// GenerateFromTemplate routes generation to the dedicated programmatic builder
-// based on the user's company code ("mii", "sdd", "adidata", "ntt").
-func GenerateFromTemplate(in GenerationInput) ([]byte, error) {
-	switch strings.ToLower(strings.TrimSpace(in.CompanyCode)) {
-	case "mii":
-		return buildMIIWorkbook(in)
-	case "sdd":
-		return buildSDDWorkbook(in)
-	case "adidata":
-		return buildAdidataWorkbook(in)
-	case "ntt":
-		return buildNTTWorkbook(in)
-	default:
-		// Default to MII layout if company not matched
-		return buildMIIWorkbook(in)
-	}
-}
-
 // MIIAppImpactedOptions lists the valid client options for MII's "Aplikasi
 // Terdampak" (application impacted) column.
 var MIIAppImpactedOptions = []string{"Bisnis", "Cash", "Overseas"}

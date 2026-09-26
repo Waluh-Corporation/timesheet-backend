@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	swaggerFiles "github.com/swaggo/files"
@@ -30,7 +31,9 @@ import (
 	"timesheet-backend/internal/observability"
 	"timesheet-backend/mailer"
 	"timesheet-backend/push"
+	"timesheet-backend/queue"
 	"timesheet-backend/scheduler"
+	"timesheet-backend/storage"
 )
 
 // @title Timesheet Automation Portal API
@@ -179,13 +182,65 @@ func main() {
 	mailSvc := mailer.New(cfg)
 	pushSvc := push.New(cfg, db)
 
+	storageSvc, err := storage.NewS3StorageService(cfg)
+	if err != nil {
+		logger.Warn("s3 storage service not configured or failed to initialize", slog.Any("error", err))
+	}
+
+	var redisClient *redis.Client
+	if cfg.RedisAddr != "" {
+		redisClient = redis.NewClient(&redis.Options{
+			Addr:         cfg.RedisAddr,
+			Password:     cfg.RedisPassword,
+			DB:           cfg.RedisDB,
+			DialTimeout:  2 * time.Second,
+			ReadTimeout:  1 * time.Second,
+			WriteTimeout: 1 * time.Second,
+			PoolSize:     20,
+			MinIdleConns: 5,
+		})
+		pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := redisClient.Ping(pingCtx).Err(); err != nil {
+			logger.Warn("redis client failed to ping, continuing with graceful degradation", slog.Any("error", err))
+		} else {
+			logger.Info("connected to redis successfully", slog.String("addr", cfg.RedisAddr))
+		}
+		pingCancel()
+		defer func() { _ = redisClient.Close() }()
+	}
+
+	queueClient, err := queue.NewQueueClient(cfg)
+	if err != nil {
+		logger.Warn("redis queue client failed to initialize", slog.Any("error", err))
+	} else {
+		defer func() { _ = queueClient.Close() }()
+	}
+
 	srv, err := handlers.NewServer(db, cfg, authSvc, mailSvc, pushSvc)
 	if err != nil {
 		logger.Error("failed to init server", slog.Any("error", err))
 		os.Exit(1)
 	}
+	srv.Storage = storageSvc
+	srv.QueueClient = queueClient
+	srv.RedisClient = redisClient
+
+	if queueClient != nil && storageSvc != nil {
+		workerServer := queue.NewWorkerServer(cfg, srv.JobRepo, srv.UserRepo, srv.TimesheetSvc, storageSvc, mailSvc, pushSvc)
+		if redisClient != nil {
+			workerServer.SetRedisClient(redisClient)
+		}
+		if werr := workerServer.Start(); werr != nil {
+			logger.Error("failed to start queue worker server", slog.Any("error", werr))
+		} else {
+			defer workerServer.Shutdown()
+		}
+	}
 
 	sched := scheduler.New(db, pushSvc, cfg.Timezone, cfg.ReminderCron, cfg.CleanupCron)
+	if storageSvc != nil {
+		sched.SetStorage(storageSvc)
+	}
 	sched.Start()
 	defer sched.Stop()
 
@@ -266,6 +321,9 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	// Public VAPID key (needed before the user is subscribed).
 	api.GET("/push/vapid-public-key", s.GetVAPIDKey)
 
+	// Public magic download token endpoint (quota-enforced, 302 redirect to temporary S3 URL, supports HEAD for link verifiers)
+	api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", s.DownloadTimesheetByToken)
+
 	// WebAuthn Related Origin Requests document, served at the well-known path
 	// so passkeys registered under one relying party can be used across the
 	// multiple domains listed in WEBAUTHN_RP_ORIGIN.
@@ -295,6 +353,8 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/overtimes", s.ListMonthlyOvertimes)
 		authed.DELETE("/overtimes/:id", s.DeleteOvertime)
 		authed.POST("/timesheet/generate", s.GenerateTimesheet)
+		authed.GET("/timesheet/jobs/:id", s.GetTimesheetJob)
+		authed.GET("/timesheet/jobs", s.ListTimesheetJobs)
 		authed.GET("/holidays", s.GetHolidays)
 		authed.GET("/holidays/all", s.ListHolidays)
 		authed.POST("/holidays/sync", s.SyncHolidays)

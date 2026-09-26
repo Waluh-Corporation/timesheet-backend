@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"timesheet-backend/models"
 )
@@ -35,6 +36,7 @@ type ActivityRepository interface {
 	ValidateStatus(ctx context.Context, status string) (bool, error)
 	FindActiveProjectByRefID(ctx context.Context, refID uint) (*models.Project, error)
 	FindActiveProjectByCodeOrName(ctx context.Context, projectID, projectName string) (*models.Project, error)
+	GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error)
 }
 
 type activityRepository struct {
@@ -63,11 +65,11 @@ func (r *activityRepository) FindActiveByUserAndDate(ctx context.Context, userID
 }
 
 func (r *activityRepository) Create(ctx context.Context, activity *models.DailyActivity) error {
-	return r.db.WithContext(ctx).Create(activity).Error
+	return r.db.WithContext(ctx).Omit(clause.Associations).Create(activity).Error
 }
 
 func (r *activityRepository) Update(ctx context.Context, activity *models.DailyActivity) error {
-	return r.db.WithContext(ctx).Save(activity).Error
+	return r.db.WithContext(ctx).Omit(clause.Associations).Save(activity).Error
 }
 
 func jakartaLocation() *time.Location {
@@ -170,17 +172,20 @@ func (r *activityRepository) FindActiveProjectByRefID(ctx context.Context, refID
 
 func (r *activityRepository) FindActiveProjectByCodeOrName(ctx context.Context, projectID, projectName string) (*models.Project, error) {
 	query := r.db.WithContext(ctx).Model(&models.Project{}).Scopes(models.ActiveOnly)
-	if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
-		query = query.Where("id = ? OR code = ?", idNum, projectID)
-	} else if projectID != "" {
-		query = query.Where("code = ?", projectID)
-	}
-	if projectName != "" {
-		if projectID != "" {
-			query = r.db.WithContext(ctx).Model(&models.Project{}).Scopes(models.ActiveOnly).Where("(code = ? OR LOWER(name) = LOWER(?))", projectID, projectName)
+	if projectID != "" && projectName != "" {
+		if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
+			query = query.Where("(id = ? OR code = ?) AND LOWER(name) = LOWER(?)", idNum, projectID, projectName)
 		} else {
-			query = query.Where("LOWER(name) = LOWER(?)", projectName)
+			query = query.Where("code = ? AND LOWER(name) = LOWER(?)", projectID, projectName)
 		}
+	} else if projectID != "" {
+		if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
+			query = query.Where("id = ? OR code = ?", idNum, projectID)
+		} else {
+			query = query.Where("code = ?", projectID)
+		}
+	} else if projectName != "" {
+		query = query.Where("LOWER(name) = LOWER(?)", projectName)
 	}
 
 	var proj models.Project
@@ -191,4 +196,21 @@ func (r *activityRepository) FindActiveProjectByCodeOrName(ctx context.Context, 
 		return nil, errors.New("project not found")
 	}
 	return &proj, nil
+}
+
+func (r *activityRepository) GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error) {
+	startDate := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	endDate := startDate.AddDate(0, 1, 0)
+	var latest *time.Time
+	err := r.db.WithContext(ctx).Model(&models.DailyActivity{}).
+		Where("user_id = ? AND date >= ? AND date < ? AND is_active = true", userID, startDate, endDate).
+		Select("MAX(updated_at)").
+		Scan(&latest).Error
+	if err != nil {
+		return time.Time{}, err
+	}
+	if latest == nil {
+		return time.Time{}, nil
+	}
+	return *latest, nil
 }
