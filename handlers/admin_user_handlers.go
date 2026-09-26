@@ -1,15 +1,15 @@
 package handlers
 
 import (
-	"log/slog"
+	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
+	"timesheet-backend/internal/domain"
 	"timesheet-backend/models"
 )
 
@@ -25,16 +25,23 @@ import (
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/users [get]
 func (s *Server) ListUsers(c *gin.Context) {
-	var users []models.User
-	query := s.DB.Order(orderCreatedAtDesc)
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "user service unavailable")
+		return
+	}
+
+	var isActive *bool
 	if isActiveStr := c.Query("is_active"); isActiveStr != "" {
-		if isActive, err := strconv.ParseBool(isActiveStr); err == nil {
-			query = query.Where("is_active = ?", isActive)
+		if b, err := strconv.ParseBool(isActiveStr); err == nil {
+			isActive = &b
 		}
 	} else if c.Query("include_inactive") == "false" {
-		query = query.Where("is_active = ?", true)
+		t := true
+		isActive = &t
 	}
-	if err := query.Find(&users).Error; err != nil {
+	users, err := svc.ListUsers(c.Request.Context(), isActive)
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -44,7 +51,7 @@ func (s *Server) ListUsers(c *gin.Context) {
 			ID:           u.ID,
 			Username:     u.Username,
 			Email:        u.Email,
-			Role:         u.Role,
+			Role:         models.Role(u.Role),
 			Name:         u.Name,
 			BniID:        u.BniID,
 			EmployeeID:   u.EmployeeID,
@@ -84,69 +91,29 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
-	user := models.User{
-		Username:     req.Username,
-		Email:        req.Email,
-		Role:         req.Role,
-		Name:         req.Name,
-		BniID:        req.BniID,
-		EmployeeID:   req.EmployeeID,
-		Division:     req.Division,
-		DivisionID:   req.DivisionID,
-		Department:   req.Department,
-		DepartmentID: req.DepartmentID,
-		Site:         req.Site,
-		SiteID:       req.SiteID,
-		Company:      req.Company,
-		CompanyID:    req.CompanyID,
-		IsActive:     true,
-	}
-
-	if user.Role == models.RoleAdmin {
-		user.Company = ""
-		user.CompanyID = nil
-	}
-
-	if errMsg, code := s.resolveUserMasterData(&req, &user); code != 0 {
-		RespondError(c, code, errMsg)
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "user service unavailable")
 		return
 	}
 
-	plainPass, errMsg, code := s.handleInitialPassword(&user)
-	if code != 0 {
-		RespondError(c, code, errMsg)
+	user, _, err := svc.AdminCreateUser(c.Request.Context(), &req, s.publicBaseURL(c))
+	if err != nil {
+		if errors.Is(err, domain.ErrUsernameConflict) || errors.Is(err, domain.ErrEmailConflict) {
+			RespondError(c, http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
-	}
-
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database connection unavailable")
-		return
-	}
-
-	if errMsg, code := s.checkUserExistence(req.Username, req.Email); code != 0 {
-		RespondError(c, code, errMsg)
-		return
-	}
-
-	if err := s.DB.Create(&user).Error; err != nil {
-		errMsg, code := handleCreateUserDBError(err)
-		RespondError(c, code, errMsg)
-		return
-	}
-
-	// Send account creation / welcome notification email completely separate from password reset flow.
-	if s.Mailer != nil && user.Email != "" {
-		loginLink := s.publicBaseURL(c) + "/login"
-		go func(toEmail, username, pass, link string) {
-			if err := s.Mailer.SendAccountWelcomeEmail(toEmail, username, pass, link); err != nil {
-				slog.Error("failed to send account welcome email", "error", err, "email", toEmail)
-			}
-		}(user.Email, user.Username, plainPass, loginLink)
 	}
 
 	RespondSuccess(c, http.StatusCreated, response.CreateUserData{
 		Message: "user created successfully",
-		User:    response.ToUserResponse(&user),
+		User:    response.ToUserResponse(user),
 	})
 }
 
@@ -178,27 +145,37 @@ func (s *Server) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if errMsg, code := validateSelfUpdate(c, uint(id), &req); code != 0 {
-		RespondError(c, code, errMsg)
+	if isSelf(c, uint(id)) {
+		if req.IsActive != nil && !*req.IsActive {
+			RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
+			return
+		}
+		if req.Role != nil && *req.Role != models.RoleAdmin {
+			RespondError(c, http.StatusForbidden, "you cannot remove your own admin role")
+			return
+		}
+	}
+
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "user service unavailable")
 		return
 	}
 
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database not available")
-		return
-	}
-
-	var user models.User
-	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&user).Error; err != nil {
-		RespondError(c, http.StatusNotFound, errUserNotFound)
-		return
-	}
-
-	if errMsg, code := applyUserUpdates(s.DB, &user, &req); code != 0 {
-		RespondError(c, code, errMsg)
-		return
-	}
-	if err := s.DB.Save(&user).Error; err != nil {
+	callerID := currentUserID(c)
+	if err := svc.AdminUpdateUser(c.Request.Context(), uint(id), callerID, &req); err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			RespondError(c, http.StatusForbidden, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, errUserNotFound)
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to update user: "+err.Error())
 		return
 	}
@@ -224,21 +201,26 @@ func (s *Server) DeleteUser(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
 		return
 	}
-	// An admin may never deactivate/delete their own account — doing so could
-	// lock the last administrator out of the portal.
 	if isSelf(c, uint(id)) {
 		RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
 		return
 	}
-	var user models.User
-	if err := s.DB.Where(queryIDAndIsActive, id).First(&user).Error; err != nil {
-		RespondError(c, http.StatusNotFound, errUserNotFound)
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "user service unavailable")
 		return
 	}
-	if err := s.DB.Model(&user).Updates(map[string]interface{}{
-		"is_active":  false,
-		"updated_at": time.Now(),
-	}).Error; err != nil {
+
+	callerID := currentUserID(c)
+	if err := svc.AdminDeleteUser(c.Request.Context(), uint(id), callerID); err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			RespondError(c, http.StatusForbidden, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, errUserNotFound)
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}

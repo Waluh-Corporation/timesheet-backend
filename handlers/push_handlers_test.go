@@ -63,12 +63,7 @@ func TestPushHandlers_Extended(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	pushSvc := push.New(cfg, tx)
-	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Push: pushSvc,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	testUser := models.User{
 		Username: "pushtestuser",

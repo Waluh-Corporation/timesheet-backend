@@ -4,12 +4,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm/clause"
 
 	"timesheet-backend/dto/request"
 	_ "timesheet-backend/dto/response"
-	"timesheet-backend/models"
-	"timesheet-backend/push"
 )
 
 // GetVAPIDKey godoc
@@ -20,7 +17,12 @@ import (
 // @Success 200 {object} response.VAPIDKeyResponse
 // @Router /api/v1/push/vapid-public-key [get]
 func (s *Server) GetVAPIDKey(c *gin.Context) {
-	RespondSuccess(c, http.StatusOK, gin.H{"public_key": s.Push.PublicKey()})
+	svc := s.getPushService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "push service unavailable")
+		return
+	}
+	RespondSuccess(c, http.StatusOK, gin.H{"public_key": svc.GetPublicKey()})
 }
 
 // Subscribe godoc
@@ -42,18 +44,12 @@ func (s *Server) Subscribe(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	sub := models.PushSubscription{
-		UserID:   currentUserID(c),
-		Endpoint: req.Endpoint,
-		P256dh:   req.Keys.P256dh,
-		Auth:     req.Keys.Auth,
+	svc := s.getPushService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "push service unavailable")
+		return
 	}
-	// Idempotent on endpoint: re-subscribing updates the owning user + keys.
-	err := s.DB.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "endpoint"}},
-		DoUpdates: clause.AssignmentColumns([]string{"user_id", "p256dh", "auth"}),
-	}).Create(&sub).Error
-	if err != nil {
+	if err := svc.Subscribe(c.Request.Context(), currentUserID(c), req.Endpoint, req.Keys.P256dh, req.Keys.Auth); err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -75,11 +71,12 @@ func (s *Server) Subscribe(c *gin.Context) {
 func (s *Server) Unsubscribe(c *gin.Context) {
 	var req request.UnsubscribeRequest
 	_ = c.ShouldBindJSON(&req)
-	q := s.DB.Where("user_id = ?", currentUserID(c))
-	if req.Endpoint != "" {
-		q = q.Where("endpoint = ?", req.Endpoint)
+	svc := s.getPushService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "push service unavailable")
+		return
 	}
-	if err := q.Delete(&models.PushSubscription{}).Error; err != nil {
+	if err := svc.Unsubscribe(c.Request.Context(), currentUserID(c), req.Endpoint); err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -96,10 +93,9 @@ func (s *Server) Unsubscribe(c *gin.Context) {
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Router /api/v1/push/test [post]
 func (s *Server) SendTestPush(c *gin.Context) {
-	s.Push.SendToUser(currentUserID(c), push.Payload{
-		Title: "Timesheet Portal",
-		Body:  "Waktunya isi timesheet hari ini!",
-		URL:   "/activity",
-	})
+	svc := s.getPushService()
+	if svc != nil {
+		_ = svc.SendTestPush(c.Request.Context(), currentUserID(c))
+	}
 	RespondMessage(c, http.StatusOK, "test notification dispatched")
 }

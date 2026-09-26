@@ -1,17 +1,14 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
 	"timesheet-backend/dto/response"
-	"timesheet-backend/internal/repository"
-	"timesheet-backend/internal/service"
-	"timesheet-backend/models"
+	"timesheet-backend/internal/domain"
 )
 
 // ListProfileChanges godoc
@@ -27,12 +24,8 @@ import (
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/profile-changes [get]
 func (s *Server) ListProfileChanges(c *gin.Context) {
-	var changes []models.ProfileChangeRequest
-	q := s.DB.Preload("User").Preload("Reviewer").Order(orderCreatedAtDesc)
-	if status := c.Query("status"); status != "" {
-		q = q.Where("status = ?", status)
-	}
-	if err := q.Find(&changes).Error; err != nil {
+	changes, err := s.GetUserService().ListProfileChanges(c.Request.Context(), c.Query("status"))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -101,41 +94,20 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 		return
 	}
 
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database not available")
-		return
-	}
-
-	var change models.ProfileChangeRequest
-	if err := s.DB.WithContext(c.Request.Context()).Where(queryID, id).First(&change).Error; err != nil {
-		RespondError(c, http.StatusNotFound, "request not found")
-		return
-	}
-	if change.Status != models.ProfilePending {
-		RespondError(c, http.StatusConflict, "request already reviewed")
-		return
-	}
-
 	reviewer := currentUserID(c)
-	now := time.Now()
-
-	err = s.DB.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-		if action == "approve" {
-			txUserRepo := repository.NewUserRepository(tx)
-			txMasterRepo := repository.NewMasterRepository(tx)
-			txUserSvc := service.NewUserService(txUserRepo, s.Hasher, s.Mailer, txMasterRepo)
-			if err := txUserSvc.ApplyApprovedProfileChange(c.Request.Context(), &change); err != nil {
-				return err
-			}
-			change.Status = models.ProfileApproved
-		} else {
-			change.Status = "rejected"
+	if err := s.GetUserService().ReviewProfileChange(c.Request.Context(), uint(id), reviewer, action); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "request not found")
+			return
 		}
-		change.ReviewedBy = &reviewer
-		change.ReviewedAt = &now
-		return tx.Save(&change).Error
-	})
-	if err != nil {
+		if errors.Is(err, domain.ErrConflict) {
+			RespondError(c, http.StatusConflict, "request already reviewed")
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
 		RespondError(c, http.StatusInternalServerError, "failed to process profile change review: "+err.Error())
 		return
 	}

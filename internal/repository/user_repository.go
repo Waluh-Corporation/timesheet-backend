@@ -6,28 +6,12 @@ import (
 
 	"gorm.io/gorm"
 
+	"timesheet-backend/internal/domain"
 	"timesheet-backend/models"
 )
 
-// UserRepository defines the database persistence contract for User entities.
-type UserRepository interface {
-	FindByID(ctx context.Context, id uint) (*models.User, error)
-	FindByIDWithDetails(ctx context.Context, id uint) (*models.User, error)
-	FindByIDWithCredentials(ctx context.Context, id uint) (*models.User, error)
-	FindByUsernameOrEmail(ctx context.Context, identifier string) (*models.User, error)
-	FindByUsernameOrEmailWithCredentials(ctx context.Context, identifier string) (*models.User, error)
-	FindByEmail(ctx context.Context, email string) (*models.User, error)
-	Create(ctx context.Context, user *models.User) error
-	Update(ctx context.Context, user *models.User) error
-	UpdatePassword(ctx context.Context, id uint, passwordHash string, updatedAt time.Time) error
-
-	// WebAuthn Passkey operations
-	CreatePasskeyCredential(ctx context.Context, cred *models.WebAuthnCredential) error
-	UpdatePasskeySignCount(ctx context.Context, credID []byte, signCount uint32, backupState bool) error
-	ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error)
-	DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error)
-	UpdatePasskeyName(ctx context.Context, id uint, userID *uint, name string) (bool, error)
-}
+// UserRepository is re-exported from domain.UserRepository for clean architecture consistency.
+type UserRepository = domain.UserRepository
 
 type userRepository struct {
 	db *gorm.DB
@@ -92,6 +76,14 @@ func (r *userRepository) FindByEmail(ctx context.Context, email string) (*models
 	return &u, nil
 }
 
+func (r *userRepository) FindByEmailExcludingUser(ctx context.Context, email string, excludeUserID uint) (*models.User, error) {
+	var u models.User
+	if err := r.db.WithContext(ctx).Where("email = ? AND id != ?", email, excludeUserID).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 	return r.db.WithContext(ctx).Create(user).Error
 }
@@ -105,6 +97,52 @@ func (r *userRepository) UpdatePassword(ctx context.Context, id uint, passwordHa
 		"password_hash": passwordHash,
 		"updated_at":    updatedAt,
 	}).Error
+}
+
+func (r *userRepository) SoftDelete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Model(&models.User{}).Where("id = ? AND is_active = true", id).Updates(map[string]interface{}{
+		"is_active":  false,
+		"updated_at": time.Now(),
+	}).Error
+}
+
+func (r *userRepository) ListUsers(ctx context.Context, isActive *bool) ([]models.User, error) {
+	var users []models.User
+	query := r.db.WithContext(ctx).Order("created_at desc")
+	if isActive != nil {
+		query = query.Where("is_active = ?", *isActive)
+	}
+	err := query.Find(&users).Error
+	return users, err
+}
+
+func (r *userRepository) CreateProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error {
+	return r.db.WithContext(ctx).Create(change).Error
+}
+
+func (r *userRepository) ListProfileChanges(ctx context.Context, userID *uint, status string) ([]models.ProfileChangeRequest, error) {
+	var changes []models.ProfileChangeRequest
+	q := r.db.WithContext(ctx).Preload("User").Preload("Reviewer").Preload("CompanyRel", models.ActiveOnly).Preload("DepartmentRel", models.ActiveOnly).Order("created_at desc")
+	if userID != nil {
+		q = q.Where("user_id = ?", *userID)
+	}
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	err := q.Find(&changes).Error
+	return changes, err
+}
+
+func (r *userRepository) FindProfileChangeByID(ctx context.Context, id uint) (*models.ProfileChangeRequest, error) {
+	var change models.ProfileChangeRequest
+	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&change).Error; err != nil {
+		return nil, err
+	}
+	return &change, nil
+}
+
+func (r *userRepository) UpdateProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error {
+	return r.db.WithContext(ctx).Save(change).Error
 }
 
 func (r *userRepository) CreatePasskeyCredential(ctx context.Context, cred *models.WebAuthnCredential) error {

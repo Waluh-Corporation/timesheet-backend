@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
 	"timesheet-backend/dto/request"
 	"timesheet-backend/internal/domain"
@@ -39,28 +38,14 @@ func jakarta() *time.Location {
 }
 
 func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
-	var proj models.Project
-	if err := s.DB.Scopes(models.ActiveOnly).Where(queryID, refID).First(&proj).Error; err != nil || proj.ID == 0 {
+	if s.MasterSvc == nil {
 		return nil, errors.New("invalid project_ref_id: project does not exist or is inactive")
 	}
-	return &proj, nil
-}
-
-func (s *Server) buildProjectQuery(projectID, projectName string) *gorm.DB {
-	query := s.DB.Model(&models.Project{}).Scopes(models.ActiveOnly)
-	if idNum, err := strconv.Atoi(projectID); err == nil && idNum > 0 {
-		query = query.Where("id = ? OR code = ?", idNum, projectID)
-	} else if projectID != "" {
-		query = query.Where("code = ?", projectID)
+	proj, err := s.MasterSvc.FindProjectByID(context.Background(), refID)
+	if err != nil || proj == nil || !proj.IsActive {
+		return nil, errors.New("invalid project_ref_id: project does not exist or is inactive")
 	}
-	if projectName != "" {
-		if projectID != "" {
-			query = s.DB.Model(&models.Project{}).Scopes(models.ActiveOnly).Where("(code = ? OR LOWER(name) = LOWER(?))", projectID, projectName)
-		} else {
-			query = query.Where("LOWER(name) = LOWER(?)", projectName)
-		}
-	}
-	return query
+	return proj, nil
 }
 
 func reqContext(c *gin.Context) context.Context {
@@ -71,13 +56,7 @@ func reqContext(c *gin.Context) context.Context {
 }
 
 func (s *Server) getActivityService() service.ActivityService {
-	if s.ActivitySvc != nil {
-		return s.ActivitySvc
-	}
-	if s.DB != nil {
-		return service.NewActivityService(repository.NewActivityRepository(s.DB))
-	}
-	return nil
+	return s.ActivitySvc
 }
 
 // UpsertDailyActivity godoc

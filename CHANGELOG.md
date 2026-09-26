@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Asynchronous Generation Contract**: `POST /api/v1/timesheet/generate` now delegates to the background queue returning `202 Accepted` with job metadata (`TimesheetJobResponse`), while retaining backward-compatible synchronous generation if the queue is unconfigured.
 
+### Refactored
+- **Clean Architecture & Handler Decoupling**: Refactored HTTP handlers to adhere to Clean Architecture principles by eliminating direct database coupling (`s.DB`) from `handlers.Server` and all route handlers. Introduced pure domain entities under `internal/domain/entity`, domain repository interfaces in `internal/domain/repository.go`, bidirectional domain mappers in `models/mapper.go`, and encapsulated business logic within dedicated domain services (`UserService`, `MasterDataService`, `PushService`, `AuthenticatorService`, `SetupService`).
+
 - **Official Timesheet Formats Across All Companies**: Exported monthly timesheets now faithfully match the official spreadsheet layouts, colors, and branding for all partner companies (MII, SDD, Adidata, and NTT). Each generated file seamlessly incorporates authentic company headers, logos, and signature blocks without manual adjustments.
 - **Automatic Generation Date in Signatures**: The signature section across timesheets now automatically fills the exact generation date (e.g., `DATE : 22-Sep-2026`), ensuring date fields are consistently complete without requiring manual typing.
 - **Standardized Attendance Markers & Formulas**: Standardized attendance status markers for SDD timesheets to use standard status codes (`H`, `C`, `I`, `S`, `L`) instead of checkmarks (`v`), and aligned NTT summary row formulas to use `COUNTIF` matching other partner companies.

@@ -7,59 +7,12 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"timesheet-backend/internal/domain"
 	"timesheet-backend/models"
 )
 
-// MasterRepository defines database persistence operations for master data entities.
-type MasterRepository interface {
-	// Approvers
-	ListApprovers(ctx context.Context, roleType string, activeStatus *bool) ([]models.Approver, error)
-	FindApproverByID(ctx context.Context, id uint) (*models.Approver, error)
-	CreateApprover(ctx context.Context, a *models.Approver) error
-	UpdateApprover(ctx context.Context, a *models.Approver) error
-	SoftDeleteApprover(ctx context.Context, id uint) error
-
-	// Companies
-	ListCompanies(ctx context.Context, activeStatus *bool) ([]models.Company, error)
-	FindCompanyByID(ctx context.Context, id uint) (*models.Company, error)
-	FindCompanyByCode(ctx context.Context, code string) (*models.Company, error)
-	CreateCompany(ctx context.Context, c *models.Company) error
-	UpdateCompany(ctx context.Context, c *models.Company) error
-	SoftDeleteCompany(ctx context.Context, id uint) error
-
-	// Sites
-	ListSites(ctx context.Context, activeStatus *bool) ([]models.Site, error)
-	FindSiteByID(ctx context.Context, id uint) (*models.Site, error)
-	FindSiteByCode(ctx context.Context, code string) (*models.Site, error)
-	CreateSite(ctx context.Context, s *models.Site) error
-	UpdateSite(ctx context.Context, s *models.Site) error
-	SoftDeleteSite(ctx context.Context, id uint) error
-
-	// Divisions
-	ListDivisions(ctx context.Context, activeStatus *bool) ([]models.Division, error)
-	FindDivisionByID(ctx context.Context, id uint) (*models.Division, error)
-	FindDivisionByCode(ctx context.Context, code string) (*models.Division, error)
-	FindActiveDivisionByCodeOrName(ctx context.Context, identifier string) (*models.Division, error)
-	CreateDivision(ctx context.Context, d *models.Division) error
-	UpdateDivision(ctx context.Context, d *models.Division) error
-	SoftDeleteDivision(ctx context.Context, id uint) error
-
-	// Departments
-	ListDepartments(ctx context.Context, divisionID *uint, divisionName string, activeStatus *bool) ([]models.Department, error)
-	FindDepartmentByID(ctx context.Context, id uint) (*models.Department, error)
-	FindDepartmentByName(ctx context.Context, name string) (*models.Department, error)
-	CreateDepartment(ctx context.Context, d *models.Department) error
-	UpdateDepartment(ctx context.Context, d *models.Department) error
-	SoftDeleteDepartment(ctx context.Context, id uint) error
-
-	// Projects & ActivityStatuses
-	ListProjects(ctx context.Context, activeOnly bool) ([]models.Project, error)
-	ListActivityStatuses(ctx context.Context) ([]models.ActivityStatus, error)
-
-	// Holidays
-	ListHolidaysByMonth(ctx context.Context, year, month int) ([]models.Holiday, error)
-	UpsertHolidays(ctx context.Context, holidays []models.Holiday) error
-}
+// MasterRepository is re-exported from domain.MasterRepository.
+type MasterRepository = domain.MasterRepository
 
 type masterRepository struct {
 	db *gorm.DB
@@ -135,6 +88,15 @@ func (r *masterRepository) FindCompanyByCode(ctx context.Context, code string) (
 	return &c, nil
 }
 
+func (r *masterRepository) FindActiveCompanyByCodeOrName(ctx context.Context, identifier string) (*models.Company, error) {
+	var c models.Company
+	err := r.db.WithContext(ctx).Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", identifier, "%"+identifier+"%").First(&c).Error
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
 func (r *masterRepository) CreateCompany(ctx context.Context, c *models.Company) error {
 	return r.db.WithContext(ctx).Create(c).Error
 }
@@ -171,6 +133,15 @@ func (r *masterRepository) FindSiteByID(ctx context.Context, id uint) (*models.S
 func (r *masterRepository) FindSiteByCode(ctx context.Context, code string) (*models.Site, error) {
 	var s models.Site
 	err := r.db.WithContext(ctx).Where("LOWER(code) = LOWER(?)", code).First(&s).Error
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *masterRepository) FindActiveSiteByCodeOrName(ctx context.Context, identifier string) (*models.Site, error) {
+	var s models.Site
+	err := r.db.WithContext(ctx).Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", identifier, "%"+identifier+"%").First(&s).Error
 	if err != nil {
 		return nil, err
 	}
@@ -276,6 +247,15 @@ func (r *masterRepository) FindDepartmentByName(ctx context.Context, name string
 	return &d, nil
 }
 
+func (r *masterRepository) FindActiveDepartmentByCodeOrName(ctx context.Context, identifier string) (*models.Department, error) {
+	var d models.Department
+	err := r.db.WithContext(ctx).Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", identifier, "%"+identifier+"%").First(&d).Error
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
 func (r *masterRepository) CreateDepartment(ctx context.Context, d *models.Department) error {
 	return r.db.WithContext(ctx).Create(d).Error
 }
@@ -300,6 +280,14 @@ func (r *masterRepository) ListProjects(ctx context.Context, activeOnly bool) ([
 	return items, err
 }
 
+func (r *masterRepository) FindProjectByID(ctx context.Context, id uint) (*models.Project, error) {
+	var p models.Project
+	if err := r.db.WithContext(ctx).Scopes(models.ActiveOnly).Where("id = ?", id).First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 func (r *masterRepository) ListActivityStatuses(ctx context.Context) ([]models.ActivityStatus, error) {
 	var items []models.ActivityStatus
 	err := r.db.WithContext(ctx).Order("sort_order asc").Find(&items).Error
@@ -315,6 +303,18 @@ func (r *masterRepository) ListHolidaysByMonth(ctx context.Context, year, month 
 		Where("date >= ? AND date < ?", start, end).
 		Order("date asc").
 		Find(&holidays).Error
+	return holidays, err
+}
+
+func (r *masterRepository) ListAllHolidays(ctx context.Context, year *int) ([]models.Holiday, error) {
+	var holidays []models.Holiday
+	q := r.db.WithContext(ctx).Order("date asc")
+	if year != nil {
+		start := time.Date(*year, 1, 1, 0, 0, 0, 0, time.UTC)
+		end := start.AddDate(1, 0, 0)
+		q = q.Where("date >= ? AND date < ?", start, end)
+	}
+	err := q.Find(&holidays).Error
 	return holidays, err
 }
 

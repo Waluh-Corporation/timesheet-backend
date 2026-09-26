@@ -35,26 +35,31 @@ type clientCooldownRecord struct {
 
 // Server carries the shared dependencies used by all HTTP handlers.
 type Server struct {
-	DB           *gorm.DB
-	Cfg          *config.Config
-	Auth         *auth.Service
-	Mailer       *mailer.Mailer
-	Push         *push.Service
-	WebAuthn     *webauthn.WebAuthn
-	Hasher       auth.PasswordHasher
-	UserRepo     repository.UserRepository
-	UserSvc      service.UserService
-	TokenRepo    repository.TokenRepository
-	ActivityRepo repository.ActivityRepository
-	ActivitySvc  service.ActivityService
-	OvertimeRepo repository.OvertimeRepository
-	TimesheetSvc service.TimesheetService
-	MasterRepo   repository.MasterRepository
-	MasterSvc    service.MasterDataService
-	JobRepo      repository.JobRepository
-	QueueClient  queue.QueueClient
-	Storage      storage.StorageService
-	RedisClient  *redis.Client
+	Cfg               *config.Config
+	Auth              *auth.Service
+	Mailer            *mailer.Mailer
+	Push              *push.Service
+	WebAuthn          *webauthn.WebAuthn
+	Hasher            auth.PasswordHasher
+	UserRepo          repository.UserRepository
+	UserSvc           service.UserService
+	TokenRepo         repository.TokenRepository
+	ActivityRepo      repository.ActivityRepository
+	ActivitySvc       service.ActivityService
+	OvertimeRepo      repository.OvertimeRepository
+	TimesheetSvc      service.TimesheetService
+	MasterRepo        repository.MasterRepository
+	MasterSvc         service.MasterDataService
+	JobRepo           repository.JobRepository
+	PushRepo          repository.PushRepository
+	PushSvc           service.PushService
+	AuthenticatorRepo repository.AuthenticatorRepository
+	AuthenticatorSvc  service.AuthenticatorService
+	SetupRepo         repository.SetupRepository
+	SetupSvc          service.SetupService
+	QueueClient       queue.QueueClient
+	Storage           storage.StorageService
+	RedisClient       *redis.Client
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
@@ -69,7 +74,7 @@ type Server struct {
 	sendResetEmailFunc     func(toEmail, username, resetLink string) error
 }
 
-// NewServer wires up a Server and its WebAuthn relying party.
+// NewServer wires up a Server and its WebAuthn relying party without exposing DB to handlers.
 func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer.Mailer, p *push.Service) (*Server, error) {
 	wa, err := webauthn.New(&webauthn.Config{
 		RPDisplayName: cfg.RPDisplayName,
@@ -89,6 +94,13 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	var timesheetSvc service.TimesheetService
 	var masterRepo repository.MasterRepository
 	var masterSvc service.MasterDataService
+	var jobRepo repository.JobRepository
+	var pushRepo repository.PushRepository
+	var pushSvc service.PushService
+	var authRepo repository.AuthenticatorRepository
+	var authenticatorSvc service.AuthenticatorService
+	var setupRepo repository.SetupRepository
+	var setupSvc service.SetupService
 
 	if db != nil {
 		userRepo = repository.NewUserRepository(db)
@@ -100,33 +112,43 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		overtimeRepo = repository.NewOvertimeRepository(db)
 		timesheetSvc = service.NewTimesheetService(userRepo, activityRepo, overtimeRepo, masterRepo, m)
 		masterSvc = service.NewMasterDataService(masterRepo)
-	}
+		jobRepo = repository.NewJobRepository(db)
+		pushRepo = repository.NewPushRepository(db)
+		pushSvc = service.NewPushService(pushRepo, p)
+		authRepo = repository.NewAuthenticatorRepository(db)
+		authenticatorSvc = service.NewAuthenticatorService(authRepo)
+		setupRepo = repository.NewSetupRepository(db)
+		setupSvc = service.NewSetupService(setupRepo, authSvc)
 
-	if db != nil {
 		_ = database.SyncAuthenticatorAAGUIDs(db)
 	}
 
 	return &Server{
-		DB:               db,
-		Cfg:              cfg,
-		Auth:             authSvc,
-		Mailer:           m,
-		Push:             p,
-		WebAuthn:         wa,
-		Hasher:           auth.DefaultHasher,
-		UserRepo:         userRepo,
-		UserSvc:          userSvc,
-		TokenRepo:        tokenRepo,
-		ActivityRepo:     activityRepo,
-		ActivitySvc:      activitySvc,
-		OvertimeRepo:     overtimeRepo,
-		TimesheetSvc:     timesheetSvc,
-		MasterRepo:       masterRepo,
-		MasterSvc:        masterSvc,
-		JobRepo:          repository.NewJobRepository(db),
-		webAuthnSessions: make(map[string]*webAuthnSessionEntry),
-		resetCooldowns:   make(map[string]time.Time),
-		ipCooldowns:      make(map[string]*clientCooldownRecord),
+		Cfg:               cfg,
+		Auth:              authSvc,
+		Mailer:            m,
+		Push:              p,
+		WebAuthn:          wa,
+		Hasher:            auth.DefaultHasher,
+		UserRepo:          userRepo,
+		UserSvc:           userSvc,
+		TokenRepo:         tokenRepo,
+		ActivityRepo:      activityRepo,
+		ActivitySvc:       activitySvc,
+		OvertimeRepo:      overtimeRepo,
+		TimesheetSvc:      timesheetSvc,
+		MasterRepo:        masterRepo,
+		MasterSvc:         masterSvc,
+		JobRepo:           jobRepo,
+		PushRepo:          pushRepo,
+		PushSvc:           pushSvc,
+		AuthenticatorRepo: authRepo,
+		AuthenticatorSvc:  authenticatorSvc,
+		SetupRepo:         setupRepo,
+		SetupSvc:          setupSvc,
+		webAuthnSessions:  make(map[string]*webAuthnSessionEntry),
+		resetCooldowns:    make(map[string]time.Time),
+		ipCooldowns:       make(map[string]*clientCooldownRecord),
 	}, nil
 }
 
@@ -252,56 +274,17 @@ func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
 	return nil, false
 }
 
-// GetUserService retrieves or lazily initializes the UserService.
+// GetUserService retrieves the UserService.
 func (s *Server) GetUserService() service.UserService {
-	if s.UserSvc != nil {
-		return s.UserSvc
-	}
-	if s.DB != nil {
-		if s.UserRepo == nil {
-			s.UserRepo = repository.NewUserRepository(s.DB)
-		}
-		if s.MasterRepo == nil {
-			s.MasterRepo = repository.NewMasterRepository(s.DB)
-		}
-		s.UserSvc = service.NewUserService(s.UserRepo, s.Hasher, s.Mailer, s.MasterRepo)
-		return s.UserSvc
-	}
-	return nil
+	return s.UserSvc
 }
 
 func (s *Server) getTimesheetService() service.TimesheetService {
-	if s.TimesheetSvc != nil {
-		return s.TimesheetSvc
-	}
-	if s.DB != nil {
-		if s.OvertimeRepo == nil {
-			s.OvertimeRepo = repository.NewOvertimeRepository(s.DB)
-		}
-		if s.UserRepo == nil {
-			s.UserRepo = repository.NewUserRepository(s.DB)
-		}
-		if s.ActivityRepo == nil {
-			s.ActivityRepo = repository.NewActivityRepository(s.DB)
-		}
-		if s.MasterRepo == nil {
-			s.MasterRepo = repository.NewMasterRepository(s.DB)
-		}
-		s.TimesheetSvc = service.NewTimesheetService(s.UserRepo, s.ActivityRepo, s.OvertimeRepo, s.MasterRepo, s.Mailer)
-		return s.TimesheetSvc
-	}
-	return nil
+	return s.TimesheetSvc
 }
 
 func (s *Server) getJobRepo() repository.JobRepository {
-	if s.JobRepo != nil {
-		return s.JobRepo
-	}
-	if s.DB != nil {
-		s.JobRepo = repository.NewJobRepository(s.DB)
-		return s.JobRepo
-	}
-	return nil
+	return s.JobRepo
 }
 
 func (s *Server) getQueueClient() queue.QueueClient {
@@ -317,48 +300,35 @@ func (s *Server) getRedisClient() *redis.Client {
 }
 
 func (s *Server) getUserRepository() repository.UserRepository {
-	if s.UserRepo != nil {
-		return s.UserRepo
-	}
-	if s.DB != nil {
-		s.UserRepo = repository.NewUserRepository(s.DB)
-		return s.UserRepo
-	}
-	return nil
+	return s.UserRepo
 }
 
 func (s *Server) getActivityRepository() repository.ActivityRepository {
-	if s.ActivityRepo != nil {
-		return s.ActivityRepo
-	}
-	if s.DB != nil {
-		s.ActivityRepo = repository.NewActivityRepository(s.DB)
-		return s.ActivityRepo
-	}
-	return nil
+	return s.ActivityRepo
 }
 
 func (s *Server) getTokenRepository() repository.TokenRepository {
-	if s.TokenRepo != nil {
-		return s.TokenRepo
+	return s.TokenRepo
+}
+
+func (s *Server) getMasterService() service.MasterDataService {
+	return s.MasterSvc
+}
+
+func (s *Server) getPushService() service.PushService {
+	if s.PushSvc != nil {
+		return s.PushSvc
 	}
-	if s.DB != nil {
-		s.TokenRepo = repository.NewTokenRepository(s.DB)
-		return s.TokenRepo
+	if s.Push != nil {
+		return service.NewPushService(nil, s.Push)
 	}
 	return nil
 }
 
-func (s *Server) getMasterService() service.MasterDataService {
-	if s.MasterSvc != nil {
-		return s.MasterSvc
-	}
-	if s.DB != nil {
-		if s.MasterRepo == nil {
-			s.MasterRepo = repository.NewMasterRepository(s.DB)
-		}
-		s.MasterSvc = service.NewMasterDataService(s.MasterRepo)
-		return s.MasterSvc
-	}
-	return nil
+func (s *Server) getAuthenticatorService() service.AuthenticatorService {
+	return s.AuthenticatorSvc
+}
+
+func (s *Server) getSetupService() service.SetupService {
+	return s.SetupSvc
 }

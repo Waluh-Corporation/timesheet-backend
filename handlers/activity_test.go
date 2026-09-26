@@ -16,6 +16,8 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/response"
+	"timesheet-backend/internal/repository"
+	"timesheet-backend/internal/service"
 	"timesheet-backend/models"
 )
 
@@ -148,9 +150,10 @@ func TestActivityHandlers_GetAndListIntegration(t *testing.T) {
 
 	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
 	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
+		Cfg:         cfg,
+		Auth:        authSvc,
+		ActivitySvc: service.NewActivityService(repository.NewActivityRepository(tx)),
+		MasterSvc:   service.NewMasterDataService(repository.NewMasterRepository(tx)),
 	}
 
 	user1 := models.User{
@@ -401,9 +404,10 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 
 	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
 	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
+		Cfg:         cfg,
+		Auth:        authSvc,
+		ActivitySvc: service.NewActivityService(repository.NewActivityRepository(tx)),
+		MasterSvc:   service.NewMasterDataService(repository.NewMasterRepository(tx)),
 	}
 
 	user1 := models.User{
@@ -436,7 +440,7 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 	assertFatalCode(t, w, http.StatusOK)
 
 	var saved models.DailyActivity
-	if err := srv.DB.Preload("ProjectRef").Preload("StatusRef").Where("user_id = ?", user1.ID).Order("id desc").First(&saved).Error; err != nil {
+	if err := tx.Preload("ProjectRef").Preload("StatusRef").Where("user_id = ?", user1.ID).Order("id desc").First(&saved).Error; err != nil {
 		t.Fatalf("failed to query saved activity: %v", err)
 	}
 
@@ -519,7 +523,7 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 		assertFatalCode(t, wUpdate, http.StatusOK)
 
 		var reloaded models.DailyActivity
-		if err := srv.DB.Preload("ProjectRef").Preload("StatusRef").Where("id = ?", saved.ID).First(&reloaded).Error; err != nil {
+		if err := tx.Preload("ProjectRef").Preload("StatusRef").Where("id = ?", saved.ID).First(&reloaded).Error; err != nil {
 			t.Fatalf("failed to reload activity: %v", err)
 		}
 		if reloaded.ProjectRefID == nil || *reloaded.ProjectRefID != testProjBeta.ID {
@@ -568,8 +572,8 @@ func TestActivityHandlers_MasterData(t *testing.T) {
 	defer tx.Rollback()
 
 	srv := &Server{
-		DB:  tx,
-		Cfg: cfg,
+		Cfg:       cfg,
+		MasterSvc: service.NewMasterDataService(repository.NewMasterRepository(tx)),
 	}
 
 	comp := models.Company{Code: "test_comp", Name: "Test Company Inc"}
@@ -660,10 +664,7 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{
-		DB:  tx,
-		Cfg: cfg,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	user := models.User{
 		Username: "overtime_user_test",
@@ -685,7 +686,7 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		assertFatalCode(t, w, http.StatusOK)
 
 		var savedEntry models.OvertimeEntry
-		if err := srv.DB.Where("user_id = ?", user.ID).Order("id desc").First(&savedEntry).Error; err != nil {
+		if err := tx.Where("user_id = ?", user.ID).Order("id desc").First(&savedEntry).Error; err != nil {
 			t.Fatalf("failed to find overtime entry: %v", err)
 		}
 		otID := savedEntry.ID
@@ -721,25 +722,6 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		_, err := srv.findProjectByRefID(999999)
 		if err == nil {
 			t.Error("expected error for non-existent project_ref_id, got nil")
-		}
-	})
-
-	t.Run("buildProjectQuery coverage", func(t *testing.T) {
-		q1 := srv.buildProjectQuery("10", "Project A")
-		if q1 == nil {
-			t.Error("expected valid query")
-		}
-		q2 := srv.buildProjectQuery("PRJ", "Project B")
-		if q2 == nil {
-			t.Error("expected valid query")
-		}
-		q3 := srv.buildProjectQuery("", "Project C")
-		if q3 == nil {
-			t.Error("expected valid query")
-		}
-		q4 := srv.buildProjectQuery("PRJ", "")
-		if q4 == nil {
-			t.Error("expected valid query")
 		}
 	})
 

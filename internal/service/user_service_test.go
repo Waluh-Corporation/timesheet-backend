@@ -100,6 +100,49 @@ func (m *mockUserRepo) ListPasskeysByUserID(ctx context.Context, userID uint) ([
 	return nil, nil
 }
 
+func (m *mockUserRepo) FindByEmailExcludingUser(ctx context.Context, email string, excludeUserID uint) (*models.User, error) {
+	for _, u := range m.users {
+		if u.Email == email && u.ID != excludeUserID {
+			return u, nil
+		}
+	}
+	return nil, domain.ErrNotFound
+}
+
+func (m *mockUserRepo) SoftDelete(ctx context.Context, id uint) error {
+	if u, ok := m.users[id]; ok {
+		u.IsActive = false
+		return nil
+	}
+	return domain.ErrNotFound
+}
+
+func (m *mockUserRepo) ListUsers(ctx context.Context, isActive *bool) ([]models.User, error) {
+	var list []models.User
+	for _, u := range m.users {
+		if isActive == nil || u.IsActive == *isActive {
+			list = append(list, *u)
+		}
+	}
+	return list, nil
+}
+
+func (m *mockUserRepo) CreateProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error {
+	return nil
+}
+
+func (m *mockUserRepo) ListProfileChanges(ctx context.Context, userID *uint, status string) ([]models.ProfileChangeRequest, error) {
+	return nil, nil
+}
+
+func (m *mockUserRepo) FindProfileChangeByID(ctx context.Context, id uint) (*models.ProfileChangeRequest, error) {
+	return nil, domain.ErrNotFound
+}
+
+func (m *mockUserRepo) UpdateProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error {
+	return nil
+}
+
 func (m *mockUserRepo) DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error) {
 	return true, nil
 }

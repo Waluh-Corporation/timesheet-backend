@@ -162,10 +162,7 @@ func TestAdminMasterHandlers_ApproverDBIntegration(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{
-		DB:  tx,
-		Cfg: cfg,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	// 1. Create Approver
 	createBody := `{"name": "Master Approver", "role_type": "team_leader", "title": "Lead Engineer", "is_active": true}`
@@ -178,7 +175,7 @@ func TestAdminMasterHandlers_ApproverDBIntegration(t *testing.T) {
 	assertFatalCode(t, w, http.StatusCreated)
 
 	var created models.Approver
-	if err := srv.DB.Order("id desc").First(&created).Error; err != nil {
+	if err := tx.Order("id desc").First(&created).Error; err != nil {
 		t.Fatalf("failed to find created approver: %v", err)
 	}
 	idStr := fmt.Sprintf("%d", created.ID)
@@ -229,10 +226,7 @@ func TestAdminMasterHandlers_CompanyDBIntegration(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{
-		DB:  tx,
-		Cfg: cfg,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	// 1. Create Company
 	createBody := `{"code": "tstcorp", "name": "Test Corporation"}`
@@ -245,7 +239,7 @@ func TestAdminMasterHandlers_CompanyDBIntegration(t *testing.T) {
 	assertFatalCode(t, w, http.StatusCreated)
 
 	var created models.Company
-	if err := srv.DB.Where("code = ?", "tstcorp").First(&created).Error; err != nil {
+	if err := tx.Where("code = ?", "tstcorp").First(&created).Error; err != nil {
 		t.Fatalf("failed to find created company: %v", err)
 	}
 	idStr := fmt.Sprintf("%d", created.ID)
@@ -296,7 +290,7 @@ func TestAdminMasterHandlers_SiteCRUD(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{DB: tx, Cfg: cfg}
+	srv := newTestServer(t, tx, cfg)
 
 	// 1. Create Site
 	createBody := `{"code": "testsite", "name": "Test Site Jakarta"}`
@@ -309,7 +303,7 @@ func TestAdminMasterHandlers_SiteCRUD(t *testing.T) {
 	assertFatalCode(t, w, http.StatusCreated)
 
 	var created models.Site
-	if err := srv.DB.Where("code = ?", "testsite").First(&created).Error; err != nil {
+	if err := tx.Where("code = ?", "testsite").First(&created).Error; err != nil {
 		t.Fatalf("failed to find created site: %v", err)
 	}
 	idStr := fmt.Sprintf("%d", created.ID)
@@ -348,7 +342,7 @@ func TestAdminMasterHandlers_DivisionAndDepartmentCRUD(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{DB: tx, Cfg: cfg}
+	srv := newTestServer(t, tx, cfg)
 
 	// 1. Create Division
 	createDivBody := `{"code": "tdiv", "name": "Test Division WDD"}`
@@ -361,7 +355,7 @@ func TestAdminMasterHandlers_DivisionAndDepartmentCRUD(t *testing.T) {
 	assertFatalCode(t, w, http.StatusCreated)
 
 	var createdDiv models.Division
-	if err := srv.DB.Where("code = ?", "tdiv").First(&createdDiv).Error; err != nil {
+	if err := tx.Where("code = ?", "tdiv").First(&createdDiv).Error; err != nil {
 		t.Fatalf("failed to find created division: %v", err)
 	}
 	divIdStr := fmt.Sprintf("%d", createdDiv.ID)
@@ -384,7 +378,7 @@ func TestAdminMasterHandlers_DivisionAndDepartmentCRUD(t *testing.T) {
 	assertFatalCode(t, w, http.StatusCreated)
 
 	var createdDept models.Department
-	if err := srv.DB.Where("code = ?", "TDEPT").First(&createdDept).Error; err != nil {
+	if err := tx.Where("code = ?", "TDEPT").First(&createdDept).Error; err != nil {
 		t.Fatalf("failed to find created department: %v", err)
 	}
 	if createdDept.Division != "Test Division WDD" {
@@ -485,7 +479,7 @@ func TestAdminMasterHandlers_Validation_SitesDivisionsDepartments(t *testing.T) 
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{DB: tx, Cfg: cfg}
+	srv := newTestServer(t, tx, cfg)
 
 	// Invalid JSON payload tests
 	t.Run("Create handlers reject empty or invalid JSON", func(t *testing.T) {
@@ -592,7 +586,7 @@ func TestAdminMasterHandlers_AdminListEndpoints(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{DB: tx, Cfg: cfg}
+	srv := newTestServer(t, tx, cfg)
 
 	// Seed active and inactive entries
 	comp := models.Company{Code: "list_comp", Name: "List Comp", IsActive: true}
@@ -760,6 +754,18 @@ func (m *mockFailingMasterService) ListProjects(ctx context.Context, activeOnly 
 func (m *mockFailingMasterService) ListActivityStatuses(ctx context.Context) ([]models.ActivityStatus, error) {
 	return nil, errors.New("db error")
 }
+func (m *mockFailingMasterService) FindProjectByID(ctx context.Context, id uint) (*models.Project, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) GetHolidays(ctx context.Context, year, month int) ([]models.HolidayDTO, error) {
+	return nil, errors.New("db error")
+}
+func (m *mockFailingMasterService) SyncHolidays(ctx context.Context, year int) (int, error) {
+	return 0, errors.New("db error")
+}
+func (m *mockFailingMasterService) ListAllHolidays(ctx context.Context, year *int) ([]models.Holiday, error) {
+	return nil, errors.New("db error")
+}
 
 func TestAdminMasterHandlers_AdminList_ErrorsAndEdgeCases(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -828,7 +834,7 @@ func TestAdminMasterHandlers_AdminList_ErrorsAndEdgeCases(t *testing.T) {
 		db, cfg := setupTestDB(t)
 		tx := db.Begin()
 		defer tx.Rollback()
-		srv := &Server{DB: tx, Cfg: cfg}
+		srv := newTestServer(t, tx, cfg)
 
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -844,7 +850,7 @@ func TestAdminMasterHandlers_ReactivateInactiveRecords(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{DB: tx, Cfg: cfg}
+	srv := newTestServer(t, tx, cfg)
 
 	// 1. Inactive Approver -> reactivate
 	appr := models.Approver{Name: "Inactive Lead", RoleType: models.ApproverRoleTeamLeader}

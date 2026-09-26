@@ -23,11 +23,7 @@ func TestUserHandlers_ChangePassword(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{
-		DB:     tx,
-		Cfg:    cfg,
-		Hasher: auth.DefaultHasher,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	oldPassword := "OldValidSecretPass123!"
 	oldHash, err := auth.HashPassword(oldPassword)
@@ -138,11 +134,7 @@ func TestUserHandlers_CreateUser_NoResetTokenFlow(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{
-		DB:     tx,
-		Cfg:    cfg,
-		Hasher: auth.DefaultHasher,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	admin := models.User{
 		Username: "admin_create_test",
@@ -322,11 +314,7 @@ func TestUserHandlers_ErrorBranchesAndEdgeCases(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{
-		DB:     tx,
-		Cfg:    cfg,
-		Hasher: auth.DefaultHasher,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	disabledPass := "DisabledValidSecret123!"
 	disabledHash, _ := auth.HashPassword(disabledPass)
