@@ -145,15 +145,9 @@ func (s *Server) UpdateUser(c *gin.Context) {
 		return
 	}
 
-	if isSelf(c, uint(id)) {
-		if req.IsActive != nil && !*req.IsActive {
-			RespondError(c, http.StatusForbidden, "you cannot deactivate your own account")
-			return
-		}
-		if req.Role != nil && *req.Role != models.RoleAdmin {
-			RespondError(c, http.StatusForbidden, "you cannot remove your own admin role")
-			return
-		}
+	if msg, code := validateSelfUpdate(c, uint(id), &req); code != 0 {
+		RespondError(c, code, msg)
+		return
 	}
 
 	svc := s.GetUserService()
