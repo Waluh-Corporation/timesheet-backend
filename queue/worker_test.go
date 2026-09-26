@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -218,4 +219,77 @@ func TestWorkerServer_ProcessTaskDirect(t *testing.T) {
 	assert.NotNil(t, jobRepo.createdJob.DownloadToken)
 	assert.Equal(t, 3, jobRepo.createdJob.MaxDownloads)
 	assert.Equal(t, []byte("PK-mock-excel-binary"), storageSvc.uploadedBytes)
+}
+
+type mockFailingTimesheetService struct {
+	mockTimesheetService
+}
+
+func (m *mockFailingTimesheetService) GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	return nil, "", assert.AnError
+}
+
+type mockFailingStorageService struct {
+	mockStorageService
+}
+
+func (m *mockFailingStorageService) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
+	return assert.AnError
+}
+
+func TestWorkerServer_ErrorBranches(t *testing.T) {
+	cfg := &config.Config{
+		MailerWorkerCount:         0, // triggers default concurrency 5
+		ExcelMaxConcurrentJobs:    0, // triggers default maxConcurrent 10
+		TimesheetDownloadMaxQuota: 5,
+		AppBaseURL:                "https://timesheet.example.com",
+		S3RetentionDays:           14,
+	}
+
+	jobRepo := &mockJobRepository{}
+	userRepo := &mockUserRepo{}
+	storageSvc := &mockStorageService{}
+	tsSvc := &mockTimesheetService{}
+
+	worker := NewWorkerServer(cfg, jobRepo, userRepo, tsSvc, storageSvc, nil, nil)
+	worker.SetRedisClient(nil)
+
+	ctx := context.Background()
+	payload := GenerateTimesheetPayload{
+		JobID:  "job-err",
+		UserID: 2,
+		Month:  8,
+		Year:   2026,
+	}
+
+	// 1. Generation error
+	workerFailGen := NewWorkerServer(cfg, jobRepo, userRepo, &mockFailingTimesheetService{}, storageSvc, nil, nil)
+	err := workerFailGen.ProcessTaskDirect(ctx, payload)
+	assert.Error(t, err)
+	assert.Equal(t, models.JobStatusFailed, jobRepo.lastStatus)
+
+	// 2. Storage upload error
+	workerFailUpload := NewWorkerServer(cfg, jobRepo, userRepo, tsSvc, &mockFailingStorageService{}, nil, nil)
+	err = workerFailUpload.ProcessTaskDirect(ctx, payload)
+	assert.Error(t, err)
+	assert.Equal(t, models.JobStatusFailed, jobRepo.lastStatus)
+
+	// 3. Invalid payload JSON
+	taskBad := asynq.NewTask(TypeTimesheetGenerate, []byte("invalid-json"))
+	err = worker.handleTimesheetGenerate(ctx, taskBad)
+	assert.Error(t, err)
+
+	// 4. Context canceled before semaphore acquisition
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// Fill the semaphore to force waiting
+	for i := 0; i < 10; i++ {
+		worker.sem <- struct{}{}
+	}
+	err = worker.ProcessTaskDirect(canceledCtx, payload)
+	assert.Error(t, err)
+	// Drain semaphore
+	for i := 0; i < 10; i++ {
+		<-worker.sem
+	}
 }
