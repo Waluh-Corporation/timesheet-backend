@@ -77,11 +77,11 @@ func TestAuthenticatorService_SyncCommunityAuthenticators(t *testing.T) {
 	repo := &mockAuthenticatorRepo{}
 	svc := service.NewAuthenticatorService(repo)
 
-	// Cancelled context causes FetchCommunityAAGUIDs to fail
+	// Canceled context causes FetchCommunityAAGUIDs to fail
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := svc.SyncCommunityAuthenticators(ctx)
 	if err == nil {
-		t.Fatal("expected error with cancelled context")
+		t.Fatal("expected error with canceled context")
 	}
 }

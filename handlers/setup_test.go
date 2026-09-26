@@ -356,3 +356,21 @@ func TestSetupHandlers_EdgeCases(t *testing.T) {
 	srv.InitSetup(cEmptyItems)
 	assertResponseCode(t, wEmptyItems, http.StatusOK)
 }
+
+func TestSetupHandlers_ServiceUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	srv := &Server{} // zero-value server without setupService
+
+	wStatus := httptest.NewRecorder()
+	cStatus, _ := gin.CreateTestContext(wStatus)
+	cStatus.Request = httptest.NewRequest("GET", "/api/v1/setup/status", nil)
+	srv.GetSetupStatus(cStatus)
+	assertResponseCode(t, wStatus, http.StatusInternalServerError)
+
+	wInit := httptest.NewRecorder()
+	cInit, _ := gin.CreateTestContext(wInit)
+	cInit.Request = httptest.NewRequest("POST", "/api/v1/setup/init", bytes.NewReader([]byte("{}")))
+	cInit.Request.Header.Set("Content-Type", "application/json")
+	srv.InitSetup(cInit)
+	assertResponseCode(t, wInit, http.StatusInternalServerError)
+}

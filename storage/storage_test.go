@@ -77,4 +77,18 @@ func TestS3StorageService_Validation(t *testing.T) {
 		assert.False(t, exists)
 		assert.Contains(t, err.Error(), "object key cannot be empty")
 	})
+
+	t.Run("valid key for GetPresignedDownloadURL succeeds offline", func(t *testing.T) {
+		url, err := svc.GetPresignedDownloadURL(ctx, "exports/test.xlsx", 1*time.Hour)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, url)
+		assert.Contains(t, url, "exports/test.xlsx")
+	})
+
+	t.Run("valid key with filename and default expiry succeeds offline", func(t *testing.T) {
+		url, err := svc.GetPresignedDownloadURLWithFilename(ctx, "exports/test.xlsx", "my-timesheet.xlsx", 0)
+		assert.NoError(t, err)
+		assert.NotEmpty(t, url)
+		assert.Contains(t, url, "my-timesheet.xlsx")
+	})
 }
