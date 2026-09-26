@@ -31,7 +31,7 @@ Before creating branches, writing commits, or opening PRs, review [`docs/GIT_WOR
      ```
    - Commits must be atomic. Do not bundle unrelated changes, refactorings, or formatting tweaks into a single commit.
 4. **Changelog Maintenance**:
-   - Every user-facing feature, fix, or deprecation must update [`CHANGELOG.md`](CHANGELOG.md) under `## [Unreleased]` following [Keep a Changelog](https://keepachangelog.com/).
+   - Every user-facing feature, fix, or deprecation must update [`CHANGELOG.md`](CHANGELOG.md) under `## [Unreleased]` following [Keep a Changelog](https://keepachangelog.com/) and using non-technical language (English).
 
 ---
 
