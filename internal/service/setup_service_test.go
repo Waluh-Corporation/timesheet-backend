@@ -159,4 +159,22 @@ func TestSetupService_InitSetup(t *testing.T) {
 			t.Fatalf("expected ErrInvalidInput, got %v", err)
 		}
 	})
+
+	t.Run("fails on repo execute error", func(t *testing.T) {
+		repo := &mockSetupRepo{adminCount: 0, setting: "Y", executeErr: errors.New("db error")}
+		svc := service.NewSetupService(repo, nil)
+		_, _, err := svc.InitSetup(context.Background(), validReq)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("fails on get status error", func(t *testing.T) {
+		repo := &mockSetupRepo{countErr: errors.New("db count error")}
+		svc := service.NewSetupService(repo, nil)
+		_, _, err := svc.InitSetup(context.Background(), validReq)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
 }

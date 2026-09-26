@@ -60,4 +60,28 @@ func TestAuthenticatorService_ListAuthenticators(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
+
+	// Clamp branches
+	repo.listErr = nil
+	_, _, err = svc.ListAuthenticators(context.Background(), "", 0, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_, _, err = svc.ListAuthenticators(context.Background(), "", 1, 300)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAuthenticatorService_SyncCommunityAuthenticators(t *testing.T) {
+	repo := &mockAuthenticatorRepo{}
+	svc := service.NewAuthenticatorService(repo)
+
+	// Cancelled context causes FetchCommunityAAGUIDs to fail
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := svc.SyncCommunityAuthenticators(ctx)
+	if err == nil {
+		t.Fatal("expected error with cancelled context")
+	}
 }

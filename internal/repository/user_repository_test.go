@@ -254,4 +254,64 @@ func TestUserRepository(t *testing.T) {
 	if err != nil || !deleted2 {
 		t.Fatalf("repo.DeletePasskey(admin) failed: deleted=%v, err=%v", deleted2, err)
 	}
+
+	// Test FindByEmailExcludingUser
+	otherUser, err := repo.FindByEmailExcludingUser(ctx, user.Email, user.ID)
+	if err == nil || otherUser != nil {
+		t.Fatalf("expected not found when excluding self: %v", err)
+	}
+	foundOther, err := repo.FindByEmailExcludingUser(ctx, user.Email, 999999)
+	if err != nil || foundOther == nil || foundOther.ID != user.ID {
+		t.Fatalf("expected to find user when excluding different ID: %v", err)
+	}
+
+	// Test ListUsers
+	allUsers, err := repo.ListUsers(ctx, nil)
+	if err != nil || len(allUsers) == 0 {
+		t.Fatalf("repo.ListUsers(nil) failed: %v", err)
+	}
+	activeFlag := true
+	activeUsers, err := repo.ListUsers(ctx, &activeFlag)
+	if err != nil || len(activeUsers) == 0 {
+		t.Fatalf("repo.ListUsers(active) failed: %v", err)
+	}
+
+	// Test ProfileChange CRUD
+	pChange := &models.ProfileChangeRequest{
+		UserID: user.ID,
+		Status: models.ProfilePending,
+		Name:   "Pending New Name",
+		Notes:  "Test notes",
+	}
+	if err := repo.CreateProfileChange(ctx, pChange); err != nil {
+		t.Fatalf("repo.CreateProfileChange failed: %v", err)
+	}
+	if pChange.ID == 0 {
+		t.Fatal("expected assigned ID for profile change")
+	}
+
+	foundChange, err := repo.FindProfileChangeByID(ctx, pChange.ID)
+	if err != nil || foundChange == nil {
+		t.Fatalf("repo.FindProfileChangeByID failed: %v", err)
+	}
+	if foundChange.Name != "Pending New Name" {
+		t.Fatalf("expected name %s, got %s", "Pending New Name", foundChange.Name)
+	}
+
+	// ListProfileChanges with user and status filters
+	userChanges, err := repo.ListProfileChanges(ctx, &user.ID, string(models.ProfilePending))
+	if err != nil || len(userChanges) == 0 {
+		t.Fatalf("repo.ListProfileChanges with filters failed: %v", err)
+	}
+
+	allPendingChanges, err := repo.ListProfileChanges(ctx, nil, string(models.ProfilePending))
+	if err != nil || len(allPendingChanges) == 0 {
+		t.Fatalf("repo.ListProfileChanges status only failed: %v", err)
+	}
+
+	// UpdateProfileChange
+	pChange.Status = models.ProfileApproved
+	if err := repo.UpdateProfileChange(ctx, pChange); err != nil {
+		t.Fatalf("repo.UpdateProfileChange failed: %v", err)
+	}
 }

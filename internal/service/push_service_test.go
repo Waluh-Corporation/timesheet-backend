@@ -139,4 +139,11 @@ func TestPushService_Unsubscribe(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("GetPublicKey with nil dispatcher", func(t *testing.T) {
+		svc := service.NewPushService(&mockPushRepo{}, nil)
+		if key := svc.GetPublicKey(); key != "" {
+			t.Fatalf("expected empty string, got %s", key)
+		}
+	})
 }
