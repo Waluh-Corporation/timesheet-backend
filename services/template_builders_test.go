@@ -1,7 +1,11 @@
 package services
 
 import (
+	"archive/zip"
 	"bytes"
+	"fmt"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,10 +83,14 @@ func TestBuildMIIWorkbook(t *testing.T) {
 		t.Errorf("D10 formula = %q, want 'C10-B10'", formulaD10)
 	}
 
-	// Validate COUNTIF formula in Row 40
+	// Validate COUNTIF formula and value in Row 40
 	formulaE40, _ := f.GetCellFormula(sheet, "E40")
 	if formulaE40 != `COUNTIF(E9:E39,"P")` {
 		t.Errorf("E40 formula = %q, want 'COUNTIF(E9:E39,\"P\")'", formulaE40)
+	}
+	valE40, _ := f.GetCellValue(sheet, "E40")
+	if valE40 != "1" {
+		t.Errorf("E40 value = %q, want '1'", valE40)
 	}
 
 	// Validate that pictures were added to Sheet1
@@ -153,8 +161,8 @@ func TestBuildSDDWorkbook(t *testing.T) {
 
 	// Validate worked day (Day 3 -> Row 14)
 	valF14, _ := f.GetCellValue(sheet, "F14")
-	if valF14 != "v" {
-		t.Errorf("F14 (Hadir mark) = %q, want 'v'", valF14)
+	if valF14 != "H" {
+		t.Errorf("F14 (Hadir mark) = %q, want 'H'", valF14)
 	}
 
 	// Validate Total Jam Kerja formula = D14-C14
@@ -163,10 +171,14 @@ func TestBuildSDDWorkbook(t *testing.T) {
 		t.Errorf("E14 formula = %q, want 'D14-C14'", formulaE14)
 	}
 
-	// Validate COUNTIF formula in Row 43
+	// Validate COUNTIF formula and value in Row 43
 	formulaF43, _ := f.GetCellFormula(sheet, "F43")
-	if formulaF43 != `COUNTIF(F12:F42,"v")` {
-		t.Errorf("F43 formula = %q, want 'COUNTIF(F12:F42,\"v\")'", formulaF43)
+	if formulaF43 != `COUNTIF(F12:F42,"H")` {
+		t.Errorf("F43 formula = %q, want 'COUNTIF(F12:F42,\"H\")'", formulaF43)
+	}
+	valF43, _ := f.GetCellValue(sheet, "F43")
+	if valF43 != "1" {
+		t.Errorf("F43 value = %q, want '1'", valF43)
 	}
 }
 
@@ -224,31 +236,35 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 
 	// 1. Check TIMESHEET sheet
 	const sheetTS = "TIMESHEET"
-	valC3, _ := f.GetCellValue(sheetTS, "C3")
-	if valC3 != ": John Doe" {
-		t.Errorf("C3 = %q, want ': John Doe'", valC3)
+	valD4, _ := f.GetCellValue(sheetTS, "D4")
+	if valD4 != ": John Doe" {
+		t.Errorf("D4 = %q, want ': John Doe'", valD4)
 	}
-	valC4, _ := f.GetCellValue(sheetTS, "C4")
-	if valC4 != ": EMP-0001" {
-		t.Errorf("C4 = %q, want ': EMP-0001'", valC4)
-	}
-
-	// Day 4 -> Row 12
-	valE12, _ := f.GetCellValue(sheetTS, "E12")
-	if valE12 != "P" {
-		t.Errorf("E12 = %q, want 'P'", valE12)
+	valD5, _ := f.GetCellValue(sheetTS, "D5")
+	if valD5 != ": EMP-0001" {
+		t.Errorf("D5 = %q, want ': EMP-0001'", valD5)
 	}
 
-	// Formula Adidata: =(C12-B12)*24
-	formulaD12, _ := f.GetCellFormula(sheetTS, "D12")
-	if formulaD12 != "(C12-B12)*24" {
-		t.Errorf("D12 formula = %q, want '(C12-B12)*24'", formulaD12)
+	// Day 4 -> Row 13
+	valF13, _ := f.GetCellValue(sheetTS, "F13")
+	if valF13 != "P" {
+		t.Errorf("F13 = %q, want 'P'", valF13)
 	}
 
-	// Formula COUNTIF row 40
-	formulaE40, _ := f.GetCellFormula(sheetTS, "E40")
-	if formulaE40 != `COUNTIF(E9:E39,"P")` {
-		t.Errorf("E40 formula = %q, want 'COUNTIF(E9:E39,\"P\")'", formulaE40)
+	// Formula Adidata: =(D13-C13)*24
+	formulaE13, _ := f.GetCellFormula(sheetTS, "E13")
+	if formulaE13 != "(D13-C13)*24" {
+		t.Errorf("E13 formula = %q, want '(D13-C13)*24'", formulaE13)
+	}
+
+	// Formula COUNTIF row 41
+	formulaF41, _ := f.GetCellFormula(sheetTS, "F41")
+	if formulaF41 != `COUNTIF(F10:F40,"P")` {
+		t.Errorf("F41 formula = %q, want 'COUNTIF(F10:F40,\"P\")'", formulaF41)
+	}
+	valF41, _ := f.GetCellValue(sheetTS, "F41")
+	if valF41 != "1" {
+		t.Errorf("F41 value = %q, want '1'", valF41)
 	}
 
 	// 2. Check SPL sheet created for overtime
@@ -266,6 +282,57 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 	valTask, _ := f.GetCellValue(splSheet, "H12")
 	if valTask != "WIT BNIdirect bisnis - SME FINANCING" {
 		t.Errorf("SPL H12 = %q, want 'WIT BNIdirect bisnis - SME FINANCING'", valTask)
+	}
+}
+
+func TestWriteAdidataSingleSPL(t *testing.T) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	st, err := NewBuilderStyles(f)
+	if err != nil {
+		t.Fatalf("NewBuilderStyles: %v", err)
+	}
+
+	user := &models.User{
+		Name:       "Adidata Employee",
+		Division:   "WDL",
+		Department: "WCH",
+		Position:   "Lead Engineer",
+		EmployeeID: "ADI-777",
+	}
+	tl := models.Approver{Name: "TL Person"}
+	dh := models.Approver{Name: "DH Person"}
+	ot := models.OvertimeEntry{
+		Date:            time.Date(2026, 6, 10, 0, 0, 0, 0, time.UTC),
+		StartTime:       "18:00",
+		EndTime:         "21:00",
+		TaskDescription: "Emergency bugfix deployment",
+		TeamLeader:      &tl,
+		DepartmentHead:  &dh,
+	}
+	in := GenerationInput{
+		User: user,
+	}
+
+	splSheet := "SPL-Direct"
+	_, _ = f.NewSheet(splSheet)
+	writeAdidataSingleSPL(f, splSheet, in, ot, "ADI-777", st)
+
+	valTitle, _ := f.GetCellValue(splSheet, "B2")
+	if valTitle != "SURAT PERINTAH LEMBUR" {
+		t.Errorf("B2 = %q, want 'SURAT PERINTAH LEMBUR'", valTitle)
+	}
+	valNPP, _ := f.GetCellValue(splSheet, "E4")
+	if valNPP != ": ADI-777" {
+		t.Errorf("E4 = %q, want ': ADI-777'", valNPP)
+	}
+	valName, _ := f.GetCellValue(splSheet, "E5")
+	if valName != ": Adidata Employee" {
+		t.Errorf("E5 = %q, want ': Adidata Employee'", valName)
+	}
+	valSign, _ := f.GetCellValue(splSheet, "C21")
+	if valSign != "( Adidata Employee )" {
+		t.Errorf("C21 = %q, want '( Adidata Employee )'", valSign)
 	}
 }
 
@@ -337,10 +404,20 @@ func TestBuildNTTWorkbook(t *testing.T) {
 		t.Errorf("D11 formula = %q, want 'IF(C11>B11,(C11-B11),C11-B11+1)'", formulaD11)
 	}
 
-	// Validate COUNTA formula in Row 42
+	// Validate COUNTIF formula and value in Row 42
 	formulaE42, _ := f.GetCellFormula(sheet, "E42")
-	if formulaE42 != `COUNTA(E11:E41)` {
-		t.Errorf("E42 formula = %q, want 'COUNTA(E11:E41)'", formulaE42)
+	if formulaE42 != `COUNTIF(E11:E41,"P")` {
+		t.Errorf("E42 formula = %q, want 'COUNTIF(E11:E41,\"P\")'", formulaE42)
+	}
+	valE42, _ := f.GetCellValue(sheet, "E42")
+	if valE42 != "1" {
+		t.Errorf("E42 value = %q, want '1'", valE42)
+	}
+
+	// Validate Signature Date in Row 56
+	valB56, _ := f.GetCellValue(sheet, "B56")
+	if !strings.HasPrefix(valB56, "DATE: ") {
+		t.Errorf("B56 = %q, want prefix 'DATE: '", valB56)
 	}
 }
 
@@ -365,8 +442,8 @@ func TestTemplateBuilders_MasterApproversSignaturesWithoutOvertime(t *testing.T)
 	}{
 		{company: "mii", sheetName: "Sheet1", tlCell: "D46", dhCell: "G46", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
 		{company: "sdd", sheetName: "Juni", tlCell: "H52", dhCell: "L52", wantTL: "Nama : Budi TeamLeader", wantDH: "Nama : Dewi DeptHead"},
-		{company: "adidata", sheetName: "TIMESHEET", tlCell: "D48", dhCell: "G48", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
-		{company: "ntt", sheetName: "Timesheet", tlCell: "F57", dhCell: "J57", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
+		{company: "adidata", sheetName: "TIMESHEET", tlCell: "E44", dhCell: "I44", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
+		{company: "ntt", sheetName: "Timesheet", tlCell: "F55", dhCell: "J55", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
 	}
 
 	for _, tc := range testCases {
@@ -401,6 +478,268 @@ func TestTemplateBuilders_MasterApproversSignaturesWithoutOvertime(t *testing.T)
 			dhVal, _ := f.GetCellValue(tc.sheetName, tc.dhCell)
 			if dhVal != tc.wantDH {
 				t.Errorf("[%s] DH signature at %s = %q, want %q", tc.company, tc.dhCell, dhVal, tc.wantDH)
+			}
+		})
+	}
+}
+
+func TestTemplateBuilders_WorkingHoursAndTotalHourFormatting(t *testing.T) {
+	user := &models.User{
+		Name:       "Test User",
+		Division:   "WDL",
+		EmployeeID: "EMP-001",
+	}
+
+	// September 2026:
+	// Day 17 (Thu): Working day without activity -> default 08:00 and 17:00
+	// Day 19 (Sat): Weekend -> blank ""
+	// Day 21 (Mon): Working day with activity 07:00 - 18:00 -> 11:00 total
+	acts := []models.DailyActivity{
+		{
+			Date:      time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC),
+			StartTime: "07:00",
+			EndTime:   "18:00",
+			Status:    "P",
+			Activity:  "Sprint planning",
+		},
+	}
+
+	companies := []struct {
+		code      string
+		sheetName string
+		startRow  int
+		startCol  string
+		endCol    string
+		totalCol  string
+		isDecimal bool
+	}{
+		{code: "mii", sheetName: "Sheet1", startRow: 9, startCol: "B", endCol: "C", totalCol: "D", isDecimal: false},
+		{code: "sdd", sheetName: "September", startRow: 12, startCol: "C", endCol: "D", totalCol: "E", isDecimal: false},
+		{code: "adidata", sheetName: "TIMESHEET", startRow: 10, startCol: "C", endCol: "D", totalCol: "E", isDecimal: true},
+		{code: "ntt", sheetName: "Timesheet", startRow: 11, startCol: "B", endCol: "C", totalCol: "D", isDecimal: false},
+	}
+
+	for _, c := range companies {
+		t.Run(c.code, func(t *testing.T) {
+			in := GenerationInput{
+				CompanyCode: c.code,
+				User:        user,
+				Month:       9,
+				Year:        2026,
+				Activities:  acts,
+				Holidays:    map[int]string{},
+			}
+
+			out, err := GenerateFromTemplate(in)
+			if err != nil {
+				t.Fatalf("GenerateFromTemplate(%s): %v", c.code, err)
+			}
+
+			// Ensure no erroneous t="str" on formula cells in XML
+			zr, err := zip.NewReader(bytes.NewReader(out), int64(len(out)))
+			if err != nil {
+				t.Fatalf("[%s] open zip error: %v", c.code, err)
+			}
+			for _, zf := range zr.File {
+				if strings.HasPrefix(zf.Name, "xl/worksheets/sheet") {
+					rc, _ := zf.Open()
+					data, _ := io.ReadAll(rc)
+					_ = rc.Close()
+					if strings.Contains(string(data), `t="str"><f`) {
+						t.Errorf("[%s] found t=\"str\" on formula cell in %s", c.code, zf.Name)
+					}
+				}
+			}
+
+			f, err := excelize.OpenReader(bytes.NewReader(out))
+			if err != nil {
+				t.Fatalf("[%s] open excel error: %v", c.code, err)
+			}
+			defer f.Close()
+
+			// 1. Day 17: Working day without activity -> default 08:00, 17:00, total 09:00 (or 9.00)
+			r17 := c.startRow + 16
+			s17, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.startCol, r17))
+			e17, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.endCol, r17))
+			tot17, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.totalCol, r17))
+			if s17 != "08:00" {
+				t.Errorf("[%s] Day 17 start = %q, want '08:00'", c.code, s17)
+			}
+			if e17 != "17:00" {
+				t.Errorf("[%s] Day 17 end = %q, want '17:00'", c.code, e17)
+			}
+			wantTot17 := "09:00"
+			if c.isDecimal {
+				wantTot17 = "9.00"
+			}
+			if tot17 != wantTot17 {
+				t.Errorf("[%s] Day 17 total = %q, want %q", c.code, tot17, wantTot17)
+			}
+
+			// 2. Day 19: Weekend -> blank
+			r19 := c.startRow + 18
+			s19, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.startCol, r19))
+			e19, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.endCol, r19))
+			tot19, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.totalCol, r19))
+			if s19 != "" || e19 != "" || tot19 != "" {
+				t.Errorf("[%s] Weekend Day 19 should be blank, got start=%q, end=%q, total=%q", c.code, s19, e19, tot19)
+			}
+
+			// 3. Day 21: Working day with 07:00 - 18:00 activity -> total 11:00 (or 11.00)
+			r21 := c.startRow + 20
+			s21, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.startCol, r21))
+			e21, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.endCol, r21))
+			tot21, _ := f.GetCellValue(c.sheetName, fmt.Sprintf("%s%d", c.totalCol, r21))
+			if s21 != "07:00" {
+				t.Errorf("[%s] Day 21 start = %q, want '07:00'", c.code, s21)
+			}
+			if e21 != "18:00" {
+				t.Errorf("[%s] Day 21 end = %q, want '18:00'", c.code, e21)
+			}
+			wantTot21 := "11:00"
+			if c.isDecimal {
+				wantTot21 = "11.00"
+			}
+			if tot21 != wantTot21 {
+				t.Errorf("[%s] Day 21 total = %q, want %q", c.code, tot21, wantTot21)
+			}
+		})
+	}
+}
+
+func TestTemplateBuilders_TotalAttendanceUpdates(t *testing.T) {
+	user := &models.User{
+		Name:       "Test User",
+		Division:   "Engineering",
+		EmployeeID: "EMP-999",
+	}
+
+	activities := []models.DailyActivity{
+		{Date: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), Status: "P", StartTime: "08:00", EndTime: "17:00"},
+		{Date: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC), Status: "P", StartTime: "08:00", EndTime: "17:00"},
+		{Date: time.Date(2026, 6, 3, 0, 0, 0, 0, time.UTC), Status: "S", StartTime: "08:00", EndTime: "17:00"},
+		{Date: time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC), Status: "V", StartTime: "08:00", EndTime: "17:00"},
+		{Date: time.Date(2026, 6, 5, 0, 0, 0, 0, time.UTC), Status: "PM", StartTime: "08:00", EndTime: "17:00"},
+	}
+
+	testCases := []struct {
+		company   string
+		sheetName string
+		checks    map[string]string
+		formulas  map[string]string
+	}{
+		{
+			company:   "mii",
+			sheetName: "Sheet1",
+			checks: map[string]string{
+				"E40": "2", // P
+				"F40": "1", // S
+				"H40": "1", // PM
+				"I40": "1", // V
+				"G40": "0", // BT
+				"J40": "0", // X
+			},
+			formulas: map[string]string{
+				"E40": `COUNTIF(E9:E39,"P")`,
+				"F40": `COUNTIF(F9:F39,"S")`,
+			},
+		},
+		{
+			company:   "sdd",
+			sheetName: "Juni",
+			checks: map[string]string{
+				"F43": "2", // Hadir
+				"I43": "1", // Sakit
+				"H43": "1", // Izin (PM)
+				"G43": "1", // Cuti (V)
+				"J43": "0", // Lembur
+			},
+			formulas: map[string]string{
+				"F43": `COUNTIF(F12:F42,"H")`,
+				"G43": `COUNTIF(G12:G42,"C")`,
+				"H43": `COUNTIF(H12:H42,"I")`,
+				"I43": `COUNTIF(I12:I42,"S")`,
+				"J43": `COUNTIF(J12:J42,"L")`,
+			},
+		},
+		{
+			company:   "adidata",
+			sheetName: "TIMESHEET",
+			checks: map[string]string{
+				"F41": "2", // P
+				"G41": "1", // S
+				"I41": "1", // PM
+				"J41": "1", // V
+				"H41": "0", // BT
+				"K41": "0", // X
+			},
+			formulas: map[string]string{
+				"F41": `COUNTIF(F10:F40,"P")`,
+				"G41": `COUNTIF(G10:G40,"S")`,
+			},
+		},
+		{
+			company:   "ntt",
+			sheetName: "Timesheet",
+			checks: map[string]string{
+				"E42": "2", // P
+				"F42": "1", // S
+				"H42": "1", // PM
+				"I42": "1", // V
+				"G42": "0", // BT
+				"J42": "0", // X
+			},
+			formulas: map[string]string{
+				"E42": `COUNTIF(E11:E41,"P")`,
+				"F42": `COUNTIF(F11:F41,"S")`,
+				"G42": `COUNTIF(G11:G41,"BT")`,
+				"H42": `COUNTIF(H11:H41,"PM")`,
+				"I42": `COUNTIF(I11:I41,"V")`,
+				"J42": `COUNTIF(J11:J41,"X")`,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.company, func(t *testing.T) {
+			in := GenerationInput{
+				CompanyCode: tc.company,
+				User:        user,
+				Month:       6,
+				Year:        2026,
+				Activities:  activities,
+				Holidays:    map[int]string{},
+			}
+
+			out, err := GenerateFromTemplate(in)
+			if err != nil {
+				t.Fatalf("[%s] GenerateFromTemplate failed: %v", tc.company, err)
+			}
+
+			f, err := excelize.OpenReader(bytes.NewReader(out))
+			if err != nil {
+				t.Fatalf("[%s] OpenReader failed: %v", tc.company, err)
+			}
+			defer func() { _ = f.Close() }()
+
+			for cell, wantVal := range tc.checks {
+				gotVal, err := f.GetCellValue(tc.sheetName, cell)
+				if err != nil {
+					t.Errorf("[%s] GetCellValue(%s) error: %v", tc.company, cell, err)
+				}
+				if gotVal != wantVal {
+					t.Errorf("[%s] Cell %s value = %q, want %q", tc.company, cell, gotVal, wantVal)
+				}
+			}
+
+			for cell, wantFormula := range tc.formulas {
+				gotFormula, err := f.GetCellFormula(tc.sheetName, cell)
+				if err != nil {
+					t.Errorf("[%s] GetCellFormula(%s) error: %v", tc.company, cell, err)
+				}
+				if gotFormula != wantFormula {
+					t.Errorf("[%s] Cell %s formula = %q, want %q", tc.company, cell, gotFormula, wantFormula)
+				}
 			}
 		})
 	}

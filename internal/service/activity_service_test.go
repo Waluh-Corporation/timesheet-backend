@@ -88,6 +88,18 @@ func (m *mockActivityRepo) ListActiveByUser(ctx context.Context, userID uint, fi
 	return res, int64(len(res)), nil
 }
 
+func (m *mockActivityRepo) GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error) {
+	var latest time.Time
+	for _, act := range m.activities {
+		if act.UserID == userID && int(act.Date.Month()) == month && act.Date.Year() == year && act.IsActive {
+			if act.UpdatedAt.After(latest) {
+				latest = act.UpdatedAt
+			}
+		}
+	}
+	return latest, nil
+}
+
 func (m *mockActivityRepo) ValidateStatus(ctx context.Context, status string) (bool, error) {
 	return m.validStatus[status], nil
 }

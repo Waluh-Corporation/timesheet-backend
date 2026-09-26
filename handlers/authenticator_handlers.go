@@ -10,8 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/dto/response"
-	"timesheet-backend/models"
-	"timesheet-backend/services"
 )
 
 // SyncCommunityAuthenticators godoc
@@ -27,12 +25,12 @@ import (
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/authenticators/sync [post]
 func (s *Server) SyncCommunityAuthenticators(c *gin.Context) {
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database connection unavailable")
+	svc := s.getAuthenticatorService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "authenticator service unavailable")
 		return
 	}
-
-	total, err := services.SyncCommunityAAGUIDsToDB(c.Request.Context(), s.DB)
+	total, err := svc.SyncCommunityAuthenticators(c.Request.Context())
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "unexpected HTTP status") ||
@@ -69,8 +67,9 @@ func (s *Server) SyncCommunityAuthenticators(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/admin/authenticators [get]
 func (s *Server) AdminListAuthenticators(c *gin.Context) {
-	if s.DB == nil {
-		RespondError(c, http.StatusInternalServerError, "database connection unavailable")
+	svc := s.getAuthenticatorService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "authenticator service unavailable")
 		return
 	}
 
@@ -89,33 +88,10 @@ func (s *Server) AdminListAuthenticators(c *gin.Context) {
 
 	search := strings.TrimSpace(c.Query("search"))
 
-	query := s.DB.Model(&models.AuthenticatorAAGUID{})
-	if search != "" {
-		pattern := "%" + search + "%"
-		query = query.Where("LOWER(name) LIKE LOWER(?) OR LOWER(aaguid) LIKE LOWER(?)", pattern, pattern)
-	}
-
-	var total int64
-	if err := query.Count(&total).Error; err != nil {
+	items, total, err := svc.ListAuthenticators(c.Request.Context(), search, page, limit)
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
-	}
-
-	var records []models.AuthenticatorAAGUID
-	offset := (page - 1) * limit
-	if err := query.Order("name ASC").Offset(offset).Limit(limit).Find(&records).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	items := make([]response.AuthenticatorItemResponse, len(records))
-	for i, r := range records {
-		items[i] = response.AuthenticatorItemResponse{
-			AAGUID:    r.AAGUID,
-			Name:      r.Name,
-			Icon:      r.Icon,
-			UpdatedAt: r.UpdatedAt,
-		}
 	}
 
 	RespondSuccess(c, http.StatusOK, response.AuthenticatorListResponse{

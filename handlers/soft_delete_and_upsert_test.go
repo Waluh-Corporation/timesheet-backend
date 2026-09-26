@@ -11,7 +11,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"timesheet-backend/auth"
 	"timesheet-backend/dto/response"
 	"timesheet-backend/models"
 )
@@ -22,12 +21,7 @@ func TestSoftDelete_And_Upsert_Suite(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	// Setup master test data
 	comp := models.Company{Code: "ACME", Name: "Acme Corporation", IsActive: true}

@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/models"
+	"timesheet-backend/services"
 )
 
 // MasterDataService defines business logic for master data operations.
@@ -43,7 +46,13 @@ type MasterDataService interface {
 
 	// Projects & ActivityStatuses
 	ListProjects(ctx context.Context, activeOnly bool) ([]models.Project, error)
+	FindProjectByID(ctx context.Context, id uint) (*models.Project, error)
 	ListActivityStatuses(ctx context.Context) ([]models.ActivityStatus, error)
+
+	// Holidays
+	GetHolidays(ctx context.Context, year, month int) ([]models.HolidayDTO, error)
+	SyncHolidays(ctx context.Context, year int) (int, error)
+	ListAllHolidays(ctx context.Context, year *int) ([]models.Holiday, error)
 }
 
 type masterDataService struct {
@@ -379,6 +388,79 @@ func (s *masterDataService) ListProjects(ctx context.Context, activeOnly bool) (
 	return s.repo.ListProjects(ctx, activeOnly)
 }
 
+func (s *masterDataService) FindProjectByID(ctx context.Context, id uint) (*models.Project, error) {
+	return s.repo.FindProjectByID(ctx, id)
+}
+
 func (s *masterDataService) ListActivityStatuses(ctx context.Context) ([]models.ActivityStatus, error) {
 	return s.repo.ListActivityStatuses(ctx)
+}
+
+// --- Holidays ---
+func (s *masterDataService) GetHolidays(ctx context.Context, year, month int) ([]models.HolidayDTO, error) {
+	if yearlyHolidays, err := services.FetchHolidaysByYear(year); err == nil && len(yearlyHolidays) > 0 {
+		_ = s.saveYearlyHolidays(ctx, yearlyHolidays)
+		prefix := fmt.Sprintf("%04d-%02d-", year, month)
+		monthHolidays := make([]models.HolidayDTO, 0, len(yearlyHolidays))
+		for _, h := range yearlyHolidays {
+			if strings.HasPrefix(h.Date, prefix) {
+				monthHolidays = append(monthHolidays, h)
+			}
+		}
+		return monthHolidays, nil
+	}
+
+	dbHolidays, err := s.repo.ListHolidaysByMonth(ctx, year, month)
+	if err == nil && len(dbHolidays) > 0 {
+		resp := make([]models.HolidayDTO, 0, len(dbHolidays))
+		for _, dh := range dbHolidays {
+			resp = append(resp, models.HolidayDTO{
+				Date:          dh.Date.Format("2006-01-02"),
+				Description:   dh.Description,
+				IsJointLeave:  dh.IsJointLeave,
+				IsCutiBersama: dh.IsJointLeave,
+				IsCivic:       dh.IsCivic,
+				IsReligious:   dh.IsReligious,
+			})
+		}
+		return resp, nil
+	}
+	return []models.HolidayDTO{}, nil
+}
+
+func (s *masterDataService) SyncHolidays(ctx context.Context, year int) (int, error) {
+	yearlyHolidays, err := services.FetchHolidaysByYear(year)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch holidays from Kemendesa API: %w", err)
+	}
+	if len(yearlyHolidays) == 0 {
+		return 0, nil
+	}
+	syncedCount := s.saveYearlyHolidays(ctx, yearlyHolidays)
+	return syncedCount, nil
+}
+
+func (s *masterDataService) ListAllHolidays(ctx context.Context, year *int) ([]models.Holiday, error) {
+	return s.repo.ListAllHolidays(ctx, year)
+}
+
+func (s *masterDataService) saveYearlyHolidays(ctx context.Context, yearlyHolidays []models.HolidayDTO) int {
+	modelsHolidays := make([]models.Holiday, 0, len(yearlyHolidays))
+	for _, h := range yearlyHolidays {
+		if t, parseErr := time.Parse("2006-01-02", h.Date); parseErr == nil {
+			modelsHolidays = append(modelsHolidays, models.Holiday{
+				Date:         t,
+				Description:  h.Description,
+				IsJointLeave: h.IsJointLeave,
+				IsCivic:      h.IsCivic,
+				IsReligious:  h.IsReligious,
+			})
+		}
+	}
+	if len(modelsHolidays) > 0 {
+		if err := s.repo.UpsertHolidays(ctx, modelsHolidays); err == nil {
+			return len(modelsHolidays)
+		}
+	}
+	return 0
 }

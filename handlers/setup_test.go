@@ -26,6 +26,16 @@ func setupTestDB(t *testing.T) (*gorm.DB, *config.Config) {
 	return db, cfg
 }
 
+func newTestServer(t *testing.T, db *gorm.DB, cfg *config.Config) *Server {
+	t.Helper()
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
+	srv, err := NewServer(db, cfg, authSvc, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create test server: %v", err)
+	}
+	return srv
+}
+
 func assertResponseCode(t *testing.T, w *httptest.ResponseRecorder, expected int) {
 	t.Helper()
 	if w.Code != expected {
@@ -48,12 +58,7 @@ func TestSetupHandlers_InitWeakPassword(t *testing.T) {
 	_ = tx.Exec("DELETE FROM users WHERE role = 'admin'").Error
 	_ = tx.Save(&models.SystemSetting{Key: "is_new", Value: "Y"}).Error
 
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	payload := InitSetupRequest{
 		Admin: InitSetupAdminRequest{
@@ -82,12 +87,7 @@ func TestSetupHandlers_InitSuccess(t *testing.T) {
 	_ = tx.Exec("DELETE FROM users WHERE role = 'admin'").Error
 	_ = tx.Save(&models.SystemSetting{Key: "is_new", Value: "Y"}).Error
 
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	payload := InitSetupRequest{
 		Admin: InitSetupAdminRequest{
@@ -172,12 +172,7 @@ func TestSetupHandlers_GetSetupStatusIsNew(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	// Set is_new = Y
 	_ = tx.Save(&models.SystemSetting{Key: "is_new", Value: "Y"}).Error
@@ -215,12 +210,7 @@ func TestSetupHandlers_GetSetupStatusIsNew(t *testing.T) {
 func TestSetupHandlers_GetSetupStatusAdminExistence(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, cfg := setupTestDB(t)
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:   db,
-		Cfg:  cfg,
-		Auth: authSvc,
-	}
+	srv := newTestServer(t, db, cfg)
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
@@ -257,12 +247,7 @@ func TestSetupHandlers_InitAdminAlreadyExists(t *testing.T) {
 		t.Skip("skipping already-initialized test because no admin currently in test DB")
 	}
 
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:   db,
-		Cfg:  cfg,
-		Auth: authSvc,
-	}
+	srv := newTestServer(t, db, cfg)
 
 	payload := InitSetupRequest{
 		Admin: InitSetupAdminRequest{
@@ -304,12 +289,7 @@ func TestSetupHandlers_EdgeCases(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
-	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	// 1. Delete is_new setting but insert an admin user to trigger fallback in GetSetupStatus & isSystemAlreadyInitialized
 	_ = tx.Exec("DELETE FROM system_settings WHERE key = 'is_new'").Error
@@ -375,4 +355,22 @@ func TestSetupHandlers_EdgeCases(t *testing.T) {
 	cEmptyItems.Request.Header.Set("Content-Type", "application/json")
 	srv.InitSetup(cEmptyItems)
 	assertResponseCode(t, wEmptyItems, http.StatusOK)
+}
+
+func TestSetupHandlers_ServiceUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	srv := &Server{} // zero-value server without setupService
+
+	wStatus := httptest.NewRecorder()
+	cStatus, _ := gin.CreateTestContext(wStatus)
+	cStatus.Request = httptest.NewRequest("GET", "/api/v1/setup/status", nil)
+	srv.GetSetupStatus(cStatus)
+	assertResponseCode(t, wStatus, http.StatusInternalServerError)
+
+	wInit := httptest.NewRecorder()
+	cInit, _ := gin.CreateTestContext(wInit)
+	cInit.Request = httptest.NewRequest("POST", "/api/v1/setup/init", bytes.NewReader([]byte("{}")))
+	cInit.Request.Header.Set("Content-Type", "application/json")
+	srv.InitSetup(cInit)
+	assertResponseCode(t, wInit, http.StatusInternalServerError)
 }

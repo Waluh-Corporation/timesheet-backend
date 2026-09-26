@@ -1,12 +1,6 @@
 package services
 
 import (
-	"bytes"
-	"image"
-	_ "image/jpeg"
-	_ "image/png"
-	"strings"
-
 	"github.com/xuri/excelize/v2"
 )
 
@@ -87,7 +81,7 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
-		CustomNumFmt: strPtr("h:mm"),
+		CustomNumFmt: strPtr("hh:mm"),
 	})
 
 	decimalStyle, _ := f.NewStyle(&excelize.Style{
@@ -153,7 +147,7 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 		Fill:         excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
-		CustomNumFmt: strPtr("h:mm"),
+		CustomNumFmt: strPtr("hh:mm"),
 	})
 
 	greyDecimalStyle, _ := f.NewStyle(&excelize.Style{
@@ -184,49 +178,6 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 		GreyTimeStyle:       greyTimeStyle,
 		GreyDecimalStyle:    greyDecimalStyle,
 	}, nil
-}
-
-// addHeaderLogo attaches a logo image at the given cell location.
-func addHeaderLogo(f *excelize.File, sheet, cell string, imgData []byte, ext string, scaleX, scaleY float64) error {
-	if len(imgData) == 0 {
-		return nil
-	}
-	if ext == "" {
-		ext = ".png"
-	}
-	if !strings.HasPrefix(ext, ".") {
-		ext = "." + ext
-	}
-	if scaleX <= 0 {
-		scaleX = 0.5
-	}
-	if scaleY <= 0 {
-		scaleY = 0.5
-	}
-
-	return f.AddPictureFromBytes(sheet, cell, &excelize.Picture{
-		Extension: ext,
-		File:      imgData,
-		Format: &excelize.GraphicOptions{
-			ScaleX: scaleX,
-			ScaleY: scaleY,
-		},
-	})
-}
-
-// addHeaderLogoWithCM attaches a logo image at the given cell location sized to the given width and height in centimeters.
-func addHeaderLogoWithCM(f *excelize.File, sheet, cell string, imgData []byte, ext string, widthCM, heightCM float64) error {
-	if len(imgData) == 0 {
-		return nil
-	}
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(imgData))
-	if err != nil || cfg.Width == 0 || cfg.Height == 0 {
-		return addHeaderLogo(f, sheet, cell, imgData, ext, 0.545, 0.522)
-	}
-	pxPerCM := 96.0 / 2.54
-	scaleX := widthCM / (float64(cfg.Width) / pxPerCM)
-	scaleY := heightCM / (float64(cfg.Height) / pxPerCM)
-	return addHeaderLogo(f, sheet, cell, imgData, ext, scaleX, scaleY)
 }
 
 func strPtr(s string) *string {

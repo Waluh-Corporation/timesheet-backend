@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/xuri/excelize/v2"
+
+	"timesheet-backend/assets"
 	"timesheet-backend/models"
 )
 
@@ -325,12 +326,7 @@ func writeMasterEntryDetails(f *excelize.File, sheet string, r int, entry *model
 
 // GenerateExcel processes the master template and returns the filled spreadsheet as a byte array
 func GenerateExcel(req *models.TimesheetRequest, holidayMap map[string]string) ([]byte, error) {
-	templatePath := os.Getenv("TEMPLATE_PATH")
-	if templatePath == "" {
-		templatePath = "templates/master_template.xlsx"
-	}
-
-	f, err := excelize.OpenFile(templatePath)
+	f, err := excelize.OpenReader(bytes.NewReader(assets.MIITemplate))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open Excel template: %w", err)
 	}

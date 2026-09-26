@@ -9,7 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Asynchronous Timesheet Generation Engine**: High-throughput background generation pipeline powered by Redis (`hibiken/asynq`) with worker concurrency limiting (`EXCEL_MAX_CONCURRENT_JOBS`). Generation requests now return `202 Accepted` with a tracking Job ID, preventing HTTP timeouts and CPU starvation during peak generation windows.
+- **Magic Download Tokens & Single-User Quota Enforcement**: Single-user secure download links using Magic Download Tokens with automated quota enforcement (maximum 3 downloads per generation result) and 7-day expiration, eliminating link leakage and unauthorized sharing.
+- **Autonomous Cache Evaluation & Re-issue (Option A)**: Intelligent idempotency check on `POST /api/v1/timesheet/generate` that automatically inspects activity updates (`MAX(updated_at)`), profile modifications, and physical S3 file availability. Re-issues fresh download links in under 5ms without redundant Excel regeneration or S3 file duplication.
+- **Fast-Path Redis Counters, Debounce Lock & URL Caching**: Redis-backed atomic quota counters (`timesheet:token:{token}:count`), 10-second distributed debounce locking (`timesheet:lock:{uid}:{year}:{month}`), and 60-second temporary S3 Presigned URL caching (`timesheet:url:{token}`) to handle network reconnects with 0 MB server file bandwidth.
+- **Dedicated Secure Download Endpoint**: Added public `GET /api/v1/timesheet/downloads/:token` endpoint that validates token quota, increments access counts, and issues `302 Found` redirects directly to temporary S3 Presigned URLs.
+- **Configurable Download Token Quota**: Added `TIMESHEET_DOWNLOAD_MAX_QUOTA` configuration to `.env` (default 3) allowing administrators to tune maximum downloads permitted per generation link.
+- **HTTP HEAD Support on Magic Download Endpoint**: Added `HEAD` method support on `/api/v1/timesheet/downloads/:token` that returns `200 OK` for email security scanners and link preview bots (e.g., AWS SES link tracking, Gmail/Outlook filters) without consuming user download quota.
+- **S3-Compatible Object Storage & 7-Day Retention**: Automated storage integration using the official AWS SDK Go v2 (`aws/aws-sdk-go-v2/service/s3`) supporting AWS S3, MinIO, Cloudflare R2, and Wasabi. Exported timesheets are securely stored and delivered via 7-day presigned download links, with automated daily cleanup of expired files and database records.
+- **SES-Ready Rate-Limited Transactional Mailer**: Throttled outbound email delivery using token-bucket rate limiting (`golang.org/x/time/rate`), safeguarding in-house and cloud SMTP servers (such as Amazon SES) from connection spikes and rate limit penalties.
+- **Real-Time Job Notifications & Status APIs**: Users receive a Web Push notification and an email containing a direct secure download button as soon as their spreadsheet is ready. Added `GET /api/v1/timesheet/jobs/:id` and `GET /api/v1/timesheet/jobs` endpoints to monitor background job progress.
+
+### Changed
+- **Asynchronous Generation Contract**: `POST /api/v1/timesheet/generate` now delegates to the background queue returning `202 Accepted` with job metadata (`TimesheetJobResponse`), while retaining backward-compatible synchronous generation if the queue is unconfigured.
+
+### Refactored
+- **Clean Architecture & Handler Decoupling**: Refactored HTTP handlers to adhere to Clean Architecture principles by eliminating direct database coupling (`s.DB`) from `handlers.Server` and all route handlers. Introduced pure domain entities under `internal/domain/entity`, domain repository interfaces in `internal/domain/repository.go`, bidirectional domain mappers in `models/mapper.go`, and encapsulated business logic within dedicated domain services (`UserService`, `MasterDataService`, `PushService`, `AuthenticatorService`, `SetupService`).
+
+- **Official Timesheet Formats Across All Companies**: Exported monthly timesheets now faithfully match the official spreadsheet layouts, colors, and branding for all partner companies (MII, SDD, Adidata, and NTT). Each generated file seamlessly incorporates authentic company headers, logos, and signature blocks without manual adjustments.
+- **Automatic Generation Date in Signatures**: The signature section across timesheets now automatically fills the exact generation date (e.g., `DATE : 22-Sep-2026`), ensuring date fields are consistently complete without requiring manual typing.
+- **Standardized Attendance Markers & Formulas**: Standardized attendance status markers for SDD timesheets to use standard status codes (`H`, `C`, `I`, `S`, `L`) instead of checkmarks (`v`), and aligned NTT summary row formulas to use `COUNTIF` matching other partner companies.
+
 ### Fixed
+- **Timesheet Download Counter & Browser Attachment**: Fixed an issue where `download_count` did not increment on subsequent accesses due to redundant temporary URL caching. Removed 60-second Redis URL caching in favor of deterministic per-request S3 presigning (<0.05 ms memory computation) with RFC 6266 `Content-Disposition: attachment; filename="..."` headers, ensuring immediate browser file saving and accurate quota tracking.
+- **Total Attendance Calculation in Exported Timesheets**: Fixed an issue where the "Total Kehadiran" summary row remained 0 in generated Excel files even when attendance entries existed. The export engine now populates pre-calculated attendance totals alongside dynamic formulas and activates calculation properties upon opening.
+- **Adidata Timesheet Template Alignment**: Fixed a layout mismatch in generated Adidata timesheets where header metadata overwritten merged cells, data rows were shifted by one row, and working hours, attendance matrix, formulas, and signatures targeted incorrect cell coordinates. Exported Adidata timesheets now faithfully match the official master template layout, cell merges, and formulas.
+- **Accurate Working Hours and Total Hours Display**: Fixed an issue where regular working days without logged activities displayed confusing decimal fractions instead of default standard office hours (`08:00` and `17:00`). Daily and total working hours now consistently format as standard times (such as `09:00` or `11:00`), and weekends or holidays remain cleanly blank.
 - **Accurate App Impacted & Project Selection**: Fixed an issue where daily activities could display the wrong impacted application or project variant (such as showing Overseas or Bisnis instead of Cash) in the historical activity table and edit activity modal. Project selections and impacted applications are now consistently preserved and displayed accurately across all screens.
 
 ---

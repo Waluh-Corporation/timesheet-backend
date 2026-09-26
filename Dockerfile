@@ -38,8 +38,7 @@ WORKDIR /app
 # Copy binary from builder stage
 COPY --from=builder /app/main /app/main
 
-# Copy required runtime templates and Swagger documentation
-COPY --from=builder /app/templates /app/templates
+# Copy required Swagger documentation
 COPY --from=builder /app/docs /app/docs
 
 # Set ownership to unprivileged user

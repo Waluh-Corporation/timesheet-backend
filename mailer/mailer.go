@@ -1,6 +1,7 @@
 package mailer
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/time/rate"
 	gomail "gopkg.in/gomail.v2"
 
 	"timesheet-backend/config"
@@ -17,12 +19,24 @@ const defaultTimeFormatWIB = "02 Jan 2006, 15:04 WIB"
 
 // Mailer sends transactional and delivery email over SMTP.
 type Mailer struct {
-	cfg *config.Config
+	cfg     *config.Config
+	limiter *rate.Limiter
 }
 
 // New constructs a Mailer.
 func New(cfg *config.Config) *Mailer {
-	return &Mailer{cfg: cfg}
+	var limiter *rate.Limiter
+	if cfg != nil {
+		rateLimit := cfg.MailerRateLimit
+		if rateLimit <= 0 {
+			rateLimit = 10.0
+		}
+		limiter = rate.NewLimiter(rate.Limit(rateLimit), int(rateLimit))
+	}
+	return &Mailer{
+		cfg:     cfg,
+		limiter: limiter,
+	}
 }
 
 func (m *Mailer) dialer() *gomail.Dialer {
@@ -41,6 +55,15 @@ func (m *Mailer) send(msg *gomail.Message) error {
 		log.Printf("[mailer] SMTPHost not configured; skipping email dispatch")
 		return fmt.Errorf("smtp host not configured")
 	}
+
+	if m.limiter != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := m.limiter.Wait(ctx); err != nil {
+			log.Printf("[mailer] rate limiter error: %v", err)
+		}
+	}
+
 	msg.SetHeader("Auto-Submitted", "auto-generated")
 	msg.SetHeader("X-Mailer", "Timesheet-Portal-Mailer")
 
@@ -281,6 +304,49 @@ func (m *Mailer) SendTimesheetEmailWithDetails(to, username, company, period, fi
 		return err
 	}
 	log.Printf("[mailer] timesheet email successfully sent to %s (file: %s)", to, filename)
+	return nil
+}
+
+// SendTimesheetReadyEmail sends an email notification containing a secure presigned download link.
+func (m *Mailer) SendTimesheetReadyEmail(to, username, company, period, filename, downloadURL string, expiresAt time.Time) error {
+	comp := strings.TrimSpace(company)
+	subject := "Dokumen Timesheet Anda Telah Siap"
+	if comp != "" {
+		subject = fmt.Sprintf("Dokumen Timesheet %s Anda Telah Siap", comp)
+	}
+
+	expStr := ""
+	if !expiresAt.IsZero() {
+		expStr = expiresAt.In(m.timeLocation()).Format(defaultTimeFormatWIB)
+	}
+
+	htmlBody, textBody, err := RenderTimesheetEmail(TimesheetEmailData{
+		AppName:      m.appName(),
+		Username:     username,
+		Email:        to,
+		Company:      comp,
+		Period:       period,
+		Filename:     filename,
+		PortalURL:    m.frontendURL(),
+		SupportEmail: m.supportEmail(),
+		DownloadURL:  downloadURL,
+		ExpiresAt:    expStr,
+	})
+	if err != nil {
+		log.Printf("[mailer] failed to render timesheet ready email template: %v", err)
+		return err
+	}
+
+	msg := gomail.NewMessage()
+	msg.SetHeader("From", m.cfg.MailFrom)
+	msg.SetHeader("To", to)
+	msg.SetHeader("Subject", subject)
+	m.setMessageContent(msg, htmlBody, textBody)
+
+	if err := m.send(msg); err != nil {
+		return err
+	}
+	log.Printf("[mailer] timesheet ready email successfully sent to %s (file: %s)", to, filename)
 	return nil
 }
 

@@ -9,9 +9,6 @@ import (
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
-	"timesheet-backend/internal/repository"
-	"timesheet-backend/internal/service"
-	"timesheet-backend/models"
 )
 
 const (
@@ -47,30 +44,16 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 		return
 	}
 	uid := currentUserID(c)
-	if req.Email != "" {
-		var existing models.User
-		if err := s.DB.Where("email = ? AND id != ?", req.Email, uid).First(&existing).Error; err == nil {
-			RespondError(c, http.StatusBadRequest, "email is already registered by another user")
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "user service not available")
+		return
+	}
+	if err := svc.SubmitProfileChange(c.Request.Context(), uid, &req); err != nil {
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
 			return
 		}
-	}
-	change := models.ProfileChangeRequest{
-		UserID:       uid,
-		Status:       models.ProfilePending,
-		Name:         req.Name,
-		Email:        req.Email,
-		BniID:        req.BniID,
-		EmployeeID:   req.EmployeeID,
-		Division:     req.Division,
-		DivisionID:   req.DivisionID,
-		Department:   req.Department,
-		DepartmentID: req.DepartmentID,
-		Site:         req.Site,
-		SiteID:       req.SiteID,
-		CompanyID:    req.CompanyID,
-		Notes:        req.Notes,
-	}
-	if err := s.DB.Create(&change).Error; err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -88,10 +71,13 @@ func (s *Server) SubmitProfileChange(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/profile/changes [get]
 func (s *Server) MyProfileChanges(c *gin.Context) {
-	var changes []models.ProfileChangeRequest
-	if err := s.DB.Preload("CompanyRel", models.ActiveOnly).Preload("DepartmentRel", models.ActiveOnly).
-		Where("user_id = ?", currentUserID(c)).
-		Order(orderCreatedAtDesc).Find(&changes).Error; err != nil {
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "user service not available")
+		return
+	}
+	changes, err := svc.MyProfileChanges(c.Request.Context(), currentUserID(c))
+	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -152,9 +138,10 @@ func (s *Server) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	svc := s.UserSvc
+	svc := s.GetUserService()
 	if svc == nil {
-		svc = service.NewUserService(repository.NewUserRepository(s.DB), s.Hasher, s.Mailer)
+		RespondError(c, http.StatusInternalServerError, "user service not available")
+		return
 	}
 
 	if err := svc.ChangePassword(c.Request.Context(), uid, req.OldPassword, req.NewPassword); err != nil {

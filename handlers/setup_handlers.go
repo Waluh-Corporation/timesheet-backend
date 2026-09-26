@@ -1,93 +1,53 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 
-	"timesheet-backend/auth"
-	"timesheet-backend/database"
-	_ "timesheet-backend/dto/response"
-	"timesheet-backend/models"
+	"timesheet-backend/dto/request"
+	"timesheet-backend/dto/response"
+	"timesheet-backend/internal/domain"
+	_ "timesheet-backend/models"
 )
 
 // SetupStatusResponse describes the system initialization state.
-type SetupStatusResponse struct {
-	IsNew         string `json:"is_new" example:"Y"`
-	IsInitialized bool   `json:"is_initialized"`
-	RequiresSetup bool   `json:"requires_setup"`
-	AdminCount    int64  `json:"admin_count"`
-}
+type SetupStatusResponse = response.SetupStatusResponse
 
 // InitSetupAdminRequest carries administrator account details for setup.
-type InitSetupAdminRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=64" example:"admin"`
-	Email    string `json:"email" binding:"required,email" example:"admin@example.com"`
-	Name     string `json:"name" binding:"required" example:"Super Administrator"`
-	Password string `json:"password" binding:"required,min=8" example:"SuperSecretPass2026!"`
-}
+type InitSetupAdminRequest = request.InitSetupAdminRequest
 
 // InitSetupCompanyRequest carries initial company details.
-type InitSetupCompanyRequest struct {
-	Code string `json:"code" binding:"required" example:"mii"`
-	Name string `json:"name" binding:"required" example:"PT Mitra Integrasi Informatika"`
-}
+type InitSetupCompanyRequest = request.InitSetupCompanyRequest
 
 // InitSetupApproverRequest carries initial approver supervisor details.
-type InitSetupApproverRequest struct {
-	Name        string                  `json:"name" binding:"required" example:"Supervisor Name"`
-	RoleType    models.ApproverRoleType `json:"role_type" binding:"required,oneof=team_leader department_head" example:"team_leader"`
-	Title       string                  `json:"title" example:"Team Leader"`
-	CompanyCode string                  `json:"company_code" example:"mii"`
-}
+type InitSetupApproverRequest = request.InitSetupApproverRequest
 
 // InitSetupDepartmentRequest carries optional initial department details.
-type InitSetupDepartmentRequest struct {
-	Code        string `json:"code" binding:"required" example:"WCSD"`
-	Name        string `json:"name" binding:"required" example:"Wholesale Channel and Service Delivery"`
-	Division    string `json:"division" example:"Wholesale Digital Delivery"`
-	CompanyCode string `json:"company_code" example:"mii"`
-}
+type InitSetupDepartmentRequest = request.InitSetupDepartmentRequest
 
 // InitSetupRequest is the full payload for the one-time system initialization wizard.
-type InitSetupRequest struct {
-	Admin       InitSetupAdminRequest        `json:"admin" binding:"required"`
-	Companies   []InitSetupCompanyRequest    `json:"companies"`
-	Approvers   []InitSetupApproverRequest   `json:"approvers"`
-	Departments []InitSetupDepartmentRequest `json:"departments"`
-}
+type InitSetupRequest = request.InitSetupRequest
 
 // GetSetupStatus godoc
 // @Summary Check system onboarding initialization status
 // @Description Returns whether the system is already configured with an administrator or requires initial onboarding setup.
 // @Tags Setup
 // @Produce json
-// @Success 200 {object} handlers.SetupStatusResponse
+// @Success 200 {object} response.SetupStatusResponse
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/setup/status [get]
 func (s *Server) GetSetupStatus(c *gin.Context) {
-	var adminCount int64
-	if err := s.DB.Model(&models.User{}).Where("role = ? AND deleted_at IS NULL", models.RoleAdmin).Count(&adminCount).Error; err != nil {
-		RespondError(c, http.StatusInternalServerError, "failed to check setup status: "+err.Error())
+	svc := s.getSetupService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "setup service unavailable")
 		return
 	}
-
-	var setting models.SystemSetting
-	isNew := "Y"
-	if err := s.DB.Where("key = ?", "is_new").First(&setting).Error; err == nil {
-		isNew = strings.ToUpper(strings.TrimSpace(setting.Value))
-	} else if adminCount > 0 {
-		isNew = "N"
-	}
-
-	resp := SetupStatusResponse{
-		IsNew:         isNew,
-		IsInitialized: isNew == "N",
-		RequiresSetup: isNew == "Y",
-		AdminCount:    adminCount,
+	resp, err := svc.GetSetupStatus(c.Request.Context())
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to check setup status: "+err.Error())
+		return
 	}
 	RespondSuccess(c, http.StatusOK, resp)
 }
@@ -98,186 +58,46 @@ func (s *Server) GetSetupStatus(c *gin.Context) {
 // @Tags Setup
 // @Accept json
 // @Produce json
-// @Param request body handlers.InitSetupRequest true "Initialization payload"
-// @Success 200 {object} map[string]interface{} "Setup success response with admin token"
-// @Failure 400 {object} response.ErrorResponse "Bad request or validation error"
-// @Failure 403 {object} response.ErrorResponse "System already initialized"
-// @Failure 500 {object} response.ErrorResponse "Internal server error"
-// @Router /api/v1/setup/init [post]
-func (s *Server) isSystemAlreadyInitialized() (bool, error) {
-	var adminCount int64
-	if err := s.DB.Model(&models.User{}).Where("role = ? AND deleted_at IS NULL", models.RoleAdmin).Count(&adminCount).Error; err != nil {
-		return false, err
-	}
-
-	var setting models.SystemSetting
-	isNew := "Y"
-	if err := s.DB.Where("key = ?", "is_new").First(&setting).Error; err == nil {
-		isNew = strings.ToUpper(strings.TrimSpace(setting.Value))
-	} else if adminCount > 0 {
-		isNew = "N"
-	}
-
-	return isNew == "N" || adminCount > 0, nil
-}
-
-func seedSetupCompanies(tx *gorm.DB, companies []InitSetupCompanyRequest) error {
-	var existingComps []models.Company
-	if err := tx.Find(&existingComps).Error; err != nil {
-		return err
-	}
-	existing := make(map[string]struct{})
-	for _, comp := range existingComps {
-		existing[strings.ToLower(comp.Code)] = struct{}{}
-	}
-
-	for _, cr := range companies {
-		code := strings.ToLower(strings.TrimSpace(cr.Code))
-		if code == "" {
-			continue
-		}
-		if _, exists := existing[code]; !exists {
-			newComp := models.Company{
-				Code:     code,
-				Name:     strings.TrimSpace(cr.Name),
-				IsActive: true,
-			}
-			if err := tx.Create(&newComp).Error; err != nil {
-				return err
-			}
-			existing[code] = struct{}{}
-		}
-	}
-	return nil
-}
-
-func seedSetupDepartments(tx *gorm.DB, departments []InitSetupDepartmentRequest) error {
-	for _, dr := range departments {
-		code := strings.TrimSpace(dr.Code)
-		if code == "" {
-			continue
-		}
-
-		var count int64
-		_ = tx.Model(&models.Department{}).Where("code = ?", code).Count(&count).Error
-		if count == 0 {
-			newDept := models.Department{
-				Code:     code,
-				Name:     strings.TrimSpace(dr.Name),
-				Division: strings.TrimSpace(dr.Division),
-				IsActive: true,
-			}
-			if err := tx.Create(&newDept).Error; err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func seedSetupApprovers(tx *gorm.DB, approvers []InitSetupApproverRequest) error {
-	for _, ar := range approvers {
-		name := strings.TrimSpace(ar.Name)
-		if name == "" {
-			continue
-		}
-
-		newAppr := models.Approver{
-			Name:     name,
-			RoleType: ar.RoleType,
-			Title:    strings.TrimSpace(ar.Title),
-			IsActive: true,
-		}
-		if err := tx.Create(&newAppr).Error; err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// InitSetup godoc
-// @Summary Initialize system setup
-// @Description Performs initial system configuration: provisions companies, departments, approvers, and super admin account.
-// @Tags Setup
-// @Accept json
-// @Produce json
-// @Param request body handlers.InitSetupRequest true "Initialization payload"
+// @Param request body request.InitSetupRequest true "Initialization payload"
 // @Success 200 {object} map[string]interface{} "Setup success response with admin token"
 // @Failure 400 {object} response.ErrorResponse "Bad request or validation error"
 // @Failure 403 {object} response.ErrorResponse "System already initialized"
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/setup/init [post]
 func (s *Server) InitSetup(c *gin.Context) {
-	initialized, err := s.isSystemAlreadyInitialized()
+	svc := s.getSetupService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, "setup service unavailable")
+		return
+	}
+
+	status, err := svc.GetSetupStatus(c.Request.Context())
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to check setup status: "+err.Error())
 		return
 	}
-	if initialized {
+	if status.IsInitialized {
 		RespondError(c, http.StatusForbidden, "system is already initialized")
 		return
 	}
 
-	var req InitSetupRequest
+	var req request.InitSetupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		RespondError(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if err := auth.ValidatePassword(req.Admin.Password, req.Admin.Username, req.Admin.Email); err != nil {
-		RespondError(c, http.StatusBadRequest, "admin password policy violation: "+err.Error())
-		return
-	}
-
-	hash, err := auth.HashPassword(req.Admin.Password)
+	adminUser, token, err := svc.InitSetup(c.Request.Context(), &req)
 	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "failed to hash password: "+err.Error())
-		return
-	}
-
-	var adminUser models.User
-	err = s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := seedSetupCompanies(tx, req.Companies); err != nil {
-			return err
+		if errors.Is(err, domain.ErrForbidden) {
+			RespondError(c, http.StatusForbidden, err.Error())
+			return
 		}
-		if err := seedSetupDepartments(tx, req.Departments); err != nil {
-			return err
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
 		}
-		if err := seedSetupApprovers(tx, req.Approvers); err != nil {
-			return err
-		}
-
-		adminUser = models.User{
-			Username:     strings.TrimSpace(req.Admin.Username),
-			Email:        strings.TrimSpace(req.Admin.Email),
-			Name:         strings.TrimSpace(req.Admin.Name),
-			PasswordHash: string(hash),
-			Role:         models.RoleAdmin,
-			IsActive:     true,
-		}
-		if err := tx.Create(&adminUser).Error; err != nil {
-			return err
-		}
-
-		if err := database.SeedActivityStatuses(tx); err != nil {
-			return err
-		}
-
-		return tx.Save(&models.SystemSetting{
-			Key:       "is_new",
-			Value:     "N",
-			UpdatedAt: time.Now(),
-		}).Error
-	})
-
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "initialization transaction failed: "+err.Error())
-		return
-	}
-
-	token, err := s.Auth.GenerateToken(&adminUser)
-	if err != nil {
-		RespondError(c, http.StatusInternalServerError, "failed to issue session token: "+err.Error())
+		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 

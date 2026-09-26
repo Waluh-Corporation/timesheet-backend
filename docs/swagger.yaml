@@ -101,100 +101,6 @@ definitions:
     - code
     - name
     type: object
-  handlers.InitSetupAdminRequest:
-    properties:
-      email:
-        example: admin@example.com
-        type: string
-      name:
-        example: Super Administrator
-        type: string
-      password:
-        example: SuperSecretPass2026!
-        minLength: 8
-        type: string
-      username:
-        example: admin
-        maxLength: 64
-        minLength: 3
-        type: string
-    required:
-    - email
-    - name
-    - password
-    - username
-    type: object
-  handlers.InitSetupApproverRequest:
-    properties:
-      company_code:
-        example: mii
-        type: string
-      name:
-        example: Supervisor Name
-        type: string
-      role_type:
-        allOf:
-        - $ref: '#/definitions/models.ApproverRoleType'
-        enum:
-        - team_leader
-        - department_head
-        example: team_leader
-      title:
-        example: Team Leader
-        type: string
-    required:
-    - name
-    - role_type
-    type: object
-  handlers.InitSetupCompanyRequest:
-    properties:
-      code:
-        example: mii
-        type: string
-      name:
-        example: PT Mitra Integrasi Informatika
-        type: string
-    required:
-    - code
-    - name
-    type: object
-  handlers.InitSetupDepartmentRequest:
-    properties:
-      code:
-        example: WCSD
-        type: string
-      company_code:
-        example: mii
-        type: string
-      division:
-        example: Wholesale Digital Delivery
-        type: string
-      name:
-        example: Wholesale Channel and Service Delivery
-        type: string
-    required:
-    - code
-    - name
-    type: object
-  handlers.InitSetupRequest:
-    properties:
-      admin:
-        $ref: '#/definitions/handlers.InitSetupAdminRequest'
-      approvers:
-        items:
-          $ref: '#/definitions/handlers.InitSetupApproverRequest'
-        type: array
-      companies:
-        items:
-          $ref: '#/definitions/handlers.InitSetupCompanyRequest'
-        type: array
-      departments:
-        items:
-          $ref: '#/definitions/handlers.InitSetupDepartmentRequest'
-        type: array
-    required:
-    - admin
-    type: object
   handlers.OvertimeRequest:
     properties:
       date:
@@ -224,18 +130,6 @@ definitions:
     - end_time
     - start_time
     - task_description
-    type: object
-  handlers.SetupStatusResponse:
-    properties:
-      admin_count:
-        type: integer
-      is_initialized:
-        type: boolean
-      is_new:
-        example: "Y"
-        type: string
-      requires_setup:
-        type: boolean
     type: object
   handlers.UpdateApproverRequest:
     properties:
@@ -540,6 +434,18 @@ definitions:
       updated_at:
         type: string
     type: object
+  models.TimesheetJobStatus:
+    enum:
+    - queued
+    - processing
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - JobStatusQueued
+    - JobStatusProcessing
+    - JobStatusCompleted
+    - JobStatusFailed
   models.User:
     properties:
       bni_id:
@@ -737,6 +643,100 @@ definitions:
     required:
     - month
     - year
+    type: object
+  request.InitSetupAdminRequest:
+    properties:
+      email:
+        example: admin@example.com
+        type: string
+      name:
+        example: Super Administrator
+        type: string
+      password:
+        example: SuperSecretPass2026!
+        minLength: 8
+        type: string
+      username:
+        example: admin
+        maxLength: 64
+        minLength: 3
+        type: string
+    required:
+    - email
+    - name
+    - password
+    - username
+    type: object
+  request.InitSetupApproverRequest:
+    properties:
+      company_code:
+        example: mii
+        type: string
+      name:
+        example: Supervisor Name
+        type: string
+      role_type:
+        allOf:
+        - $ref: '#/definitions/models.ApproverRoleType'
+        enum:
+        - team_leader
+        - department_head
+        example: team_leader
+      title:
+        example: Team Leader
+        type: string
+    required:
+    - name
+    - role_type
+    type: object
+  request.InitSetupCompanyRequest:
+    properties:
+      code:
+        example: mii
+        type: string
+      name:
+        example: PT Mitra Integrasi Informatika
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  request.InitSetupDepartmentRequest:
+    properties:
+      code:
+        example: WCSD
+        type: string
+      company_code:
+        example: mii
+        type: string
+      division:
+        example: Wholesale Digital Delivery
+        type: string
+      name:
+        example: Wholesale Channel and Service Delivery
+        type: string
+    required:
+    - code
+    - name
+    type: object
+  request.InitSetupRequest:
+    properties:
+      admin:
+        $ref: '#/definitions/request.InitSetupAdminRequest'
+      approvers:
+        items:
+          $ref: '#/definitions/request.InitSetupApproverRequest'
+        type: array
+      companies:
+        items:
+          $ref: '#/definitions/request.InitSetupCompanyRequest'
+        type: array
+      departments:
+        items:
+          $ref: '#/definitions/request.InitSetupDepartmentRequest'
+        type: array
+    required:
+    - admin
     type: object
   request.LoginRequest:
     properties:
@@ -1265,6 +1265,18 @@ definitions:
         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         type: string
     type: object
+  response.SetupStatusResponse:
+    properties:
+      admin_count:
+        type: integer
+      is_initialized:
+        type: boolean
+      is_new:
+        example: "Y"
+        type: string
+      requires_setup:
+        type: boolean
+    type: object
   response.SubmitProfileChangeResponse:
     properties:
       code:
@@ -1278,6 +1290,33 @@ definitions:
       status:
         example: success
         type: string
+    type: object
+  response.TimesheetJobResponse:
+    properties:
+      created_at:
+        type: string
+      error_message:
+        type: string
+      expires_at:
+        type: string
+      id:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      month:
+        example: 7
+        type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/models.TimesheetJobStatus'
+        example: queued
+      updated_at:
+        type: string
+      user_id:
+        example: 1
+        type: integer
+      year:
+        example: 2026
+        type: integer
     type: object
   response.UpdateUserResponse:
     properties:
@@ -2259,8 +2298,8 @@ paths:
       - Master Data
   /api/v1/admin/profile-changes:
     get:
-      description: Retrieves submitted profile change requests with optional status
-        filtering (admin only).
+      description: Returns all submitted profile change requests with optional status
+        filter (admin only).
       parameters:
       - description: Filter by review status (pending, approved, rejected)
         in: query
@@ -2289,7 +2328,7 @@ paths:
             $ref: '#/definitions/response.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: List all profile change requests (Admin)
+      summary: List profile change requests (Admin)
       tags:
       - Admin
   /api/v1/admin/profile-changes/{id}/review:
@@ -3709,15 +3748,16 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Performs initial system configuration: provisions companies, departments,
-        approvers, and super admin account.'
+      description: One-time setup endpoint to create the primary Super Administrator,
+        initial companies, approvers, and departments. Automatically seeds ActivityStatus
+        and sets is_new = N. Fails with 403 if system is already initialized.
       parameters:
       - description: Initialization payload
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/handlers.InitSetupRequest'
+          $ref: '#/definitions/request.InitSetupRequest'
       produces:
       - application/json
       responses:
@@ -3738,7 +3778,7 @@ paths:
           description: Internal server error
           schema:
             $ref: '#/definitions/response.ErrorResponse'
-      summary: Initialize system setup
+      summary: Perform initial system onboarding setup
       tags:
       - Setup
   /api/v1/setup/status:
@@ -3751,7 +3791,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/handlers.SetupStatusResponse'
+            $ref: '#/definitions/response.SetupStatusResponse'
         "500":
           description: Internal server error
           schema:
@@ -3784,12 +3824,52 @@ paths:
       summary: List all sites
       tags:
       - Master Data
+  /api/v1/timesheet/downloads/{token}:
+    get:
+      description: Validates magic download token, enforces download limits, and redirects
+        directly to S3 storage. Supports HEAD for link verifiers.
+      parameters:
+      - description: Magic Download Token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: Link verified successfully (HEAD request)
+        "302":
+          description: Redirects directly to S3 Presigned URL
+          schema:
+            type: string
+        "400":
+          description: Invalid download token
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Download token not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "410":
+          description: Download token expired or quota exceeded
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      summary: Download generated timesheet via secure token
+      tags:
+      - Timesheet
   /api/v1/timesheet/generate:
     post:
       consumes:
       - application/json
-      description: Renders monthly activities and overtimes into an Excel (.xlsx)
-        workbook, initiates download, and dispatches an email copy.
+      description: Generates monthly timesheet Excel file. If background worker and
+        queue are configured, enqueues an asynchronous generation job and sends download
+        link to email upon completion. Otherwise, generates synchronously and streams
+        the file.
       parameters:
       - description: Generation parameters
         in: body
@@ -3799,11 +3879,16 @@ paths:
           $ref: '#/definitions/request.GenerateRequest'
       produces:
       - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+      - application/json
       responses:
         "200":
-          description: Generated Excel workbook (.xlsx)
+          description: Excel timesheet (.xlsx) (synchronous mode)
           schema:
             type: file
+        "202":
+          description: Job enqueued asynchronously
+          schema:
+            $ref: '#/definitions/response.TimesheetJobResponse'
         "400":
           description: Template or company mapping missing
           schema:
@@ -3816,13 +3901,71 @@ paths:
           description: User not found
           schema:
             $ref: '#/definitions/response.ErrorResponse'
+        "409":
+          description: Generation request in-flight or debounce active
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
         "500":
           description: Generation failed
           schema:
             $ref: '#/definitions/response.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Generate timesheet spreadsheet
+      summary: Generate timesheet
+      tags:
+      - Timesheet
+  /api/v1/timesheet/jobs:
+    get:
+      description: Returns recent timesheet generation jobs for the authenticated
+        user.
+      parameters:
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 10)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PaginatedResponse'
+      security:
+      - BearerAuth: []
+      summary: List user's timesheet generation jobs
+      tags:
+      - Timesheet
+  /api/v1/timesheet/jobs/{id}:
+    get:
+      description: Checks status of an asynchronous timesheet generation job.
+      parameters:
+      - description: Job ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.TimesheetJobResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Job not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get timesheet generation job status
       tags:
       - Timesheet
   /api/v1/users/change-password:

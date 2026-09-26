@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -14,6 +16,8 @@ import (
 
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/response"
+	"timesheet-backend/internal/repository"
+	"timesheet-backend/internal/service"
 	"timesheet-backend/models"
 )
 
@@ -146,9 +150,10 @@ func TestActivityHandlers_GetAndListIntegration(t *testing.T) {
 
 	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
 	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
+		Cfg:         cfg,
+		Auth:        authSvc,
+		ActivitySvc: service.NewActivityService(repository.NewActivityRepository(tx)),
+		MasterSvc:   service.NewMasterDataService(repository.NewMasterRepository(tx)),
 	}
 
 	user1 := models.User{
@@ -399,9 +404,10 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 
 	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
 	srv := &Server{
-		DB:   tx,
-		Cfg:  cfg,
-		Auth: authSvc,
+		Cfg:         cfg,
+		Auth:        authSvc,
+		ActivitySvc: service.NewActivityService(repository.NewActivityRepository(tx)),
+		MasterSvc:   service.NewMasterDataService(repository.NewMasterRepository(tx)),
 	}
 
 	user1 := models.User{
@@ -434,7 +440,7 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 	assertFatalCode(t, w, http.StatusOK)
 
 	var saved models.DailyActivity
-	if err := srv.DB.Preload("ProjectRef").Preload("StatusRef").Where("user_id = ?", user1.ID).Order("id desc").First(&saved).Error; err != nil {
+	if err := tx.Preload("ProjectRef").Preload("StatusRef").Where("user_id = ?", user1.ID).Order("id desc").First(&saved).Error; err != nil {
 		t.Fatalf("failed to query saved activity: %v", err)
 	}
 
@@ -517,7 +523,7 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
 		assertFatalCode(t, wUpdate, http.StatusOK)
 
 		var reloaded models.DailyActivity
-		if err := srv.DB.Preload("ProjectRef").Preload("StatusRef").Where("id = ?", saved.ID).First(&reloaded).Error; err != nil {
+		if err := tx.Preload("ProjectRef").Preload("StatusRef").Where("id = ?", saved.ID).First(&reloaded).Error; err != nil {
 			t.Fatalf("failed to reload activity: %v", err)
 		}
 		if reloaded.ProjectRefID == nil || *reloaded.ProjectRefID != testProjBeta.ID {
@@ -566,8 +572,8 @@ func TestActivityHandlers_MasterData(t *testing.T) {
 	defer tx.Rollback()
 
 	srv := &Server{
-		DB:  tx,
-		Cfg: cfg,
+		Cfg:       cfg,
+		MasterSvc: service.NewMasterDataService(repository.NewMasterRepository(tx)),
 	}
 
 	comp := models.Company{Code: "test_comp", Name: "Test Company Inc"}
@@ -658,10 +664,7 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 	tx := db.Begin()
 	defer tx.Rollback()
 
-	srv := &Server{
-		DB:  tx,
-		Cfg: cfg,
-	}
+	srv := newTestServer(t, tx, cfg)
 
 	user := models.User{
 		Username: "overtime_user_test",
@@ -683,7 +686,7 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		assertFatalCode(t, w, http.StatusOK)
 
 		var savedEntry models.OvertimeEntry
-		if err := srv.DB.Where("user_id = ?", user.ID).Order("id desc").First(&savedEntry).Error; err != nil {
+		if err := tx.Where("user_id = ?", user.ID).Order("id desc").First(&savedEntry).Error; err != nil {
 			t.Fatalf("failed to find overtime entry: %v", err)
 		}
 		otID := savedEntry.ID
@@ -719,25 +722,6 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		_, err := srv.findProjectByRefID(999999)
 		if err == nil {
 			t.Error("expected error for non-existent project_ref_id, got nil")
-		}
-	})
-
-	t.Run("buildProjectQuery coverage", func(t *testing.T) {
-		q1 := srv.buildProjectQuery("10", "Project A")
-		if q1 == nil {
-			t.Error("expected valid query")
-		}
-		q2 := srv.buildProjectQuery("PRJ", "Project B")
-		if q2 == nil {
-			t.Error("expected valid query")
-		}
-		q3 := srv.buildProjectQuery("", "Project C")
-		if q3 == nil {
-			t.Error("expected valid query")
-		}
-		q4 := srv.buildProjectQuery("PRJ", "")
-		if q4 == nil {
-			t.Error("expected valid query")
 		}
 	})
 
@@ -890,6 +874,160 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 		cCompID.Set(ctxUserID, user.ID)
 		srv.GenerateTimesheet(cCompID)
 		assertFatalCode(t, wCompID, http.StatusOK)
+
+		// 7. Async generation with QueueClient attached -> 202 Accepted
+		mockQ := &testActivityMockQueueClient{}
+		srv.QueueClient = mockQ
+		wAsync := httptest.NewRecorder()
+		cAsync, _ := gin.CreateTestContext(wAsync)
+		cAsync.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cAsync.Request.Header.Set("Content-Type", "application/json")
+		cAsync.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cAsync)
+		assertFatalCode(t, wAsync, http.StatusAccepted)
+		if mockQ.enqueuedJobID == "" {
+			t.Fatal("expected non-empty enqueuedJobID")
+		}
+
+		// 8. GetTimesheetJob -> 200 OK
+		wGetJob := httptest.NewRecorder()
+		cGetJob, _ := gin.CreateTestContext(wGetJob)
+		cGetJob.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/jobs/"+mockQ.enqueuedJobID, nil)
+		cGetJob.Params = gin.Params{{Key: "id", Value: mockQ.enqueuedJobID}}
+		cGetJob.Set(ctxUserID, user.ID)
+		srv.GetTimesheetJob(cGetJob)
+		assertFatalCode(t, wGetJob, http.StatusOK)
+
+		// 9. ListTimesheetJobs -> 200 OK
+		wListJobs := httptest.NewRecorder()
+		cListJobs, _ := gin.CreateTestContext(wListJobs)
+		cListJobs.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/jobs?page=1&limit=10", nil)
+		cListJobs.Set(ctxUserID, user.ID)
+		srv.ListTimesheetJobs(cListJobs)
+		assertFatalCode(t, wListJobs, http.StatusOK)
+
+		// 10. In-flight check: duplicate request while job is queued returns 409 Conflict
+		wInFlight := httptest.NewRecorder()
+		cInFlight, _ := gin.CreateTestContext(wInFlight)
+		cInFlight.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cInFlight.Request.Header.Set("Content-Type", "application/json")
+		cInFlight.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cInFlight)
+		assertFatalCode(t, wInFlight, http.StatusConflict)
+
+		// 11. Autonomous Re-issue (Cache Hit): Complete the job and request again -> 200 OK with fresh token
+		now := time.Now()
+		future := now.Add(7 * 24 * time.Hour)
+		initialToken := "initial-token-12345"
+		srv.Storage = &testActivityMockStorage{}
+		_ = tx.Model(&models.TimesheetJob{}).Where("id = ?", mockQ.enqueuedJobID).Updates(map[string]interface{}{
+			"status":           models.JobStatusCompleted,
+			"file_key":         "timesheets/1/job.xlsx",
+			"download_url":     "http://localhost:8080/api/v1/timesheet/downloads/" + initialToken,
+			"download_token":   initialToken,
+			"download_count":   3,
+			"max_downloads":    3,
+			"expires_at":       future,
+			"token_expires_at": future,
+		})
+
+		wCacheHit := httptest.NewRecorder()
+		cCacheHit, _ := gin.CreateTestContext(wCacheHit)
+		cCacheHit.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
+		cCacheHit.Request.Header.Set("Content-Type", "application/json")
+		cCacheHit.Set(ctxUserID, user.ID)
+		srv.GenerateTimesheet(cCacheHit)
+		assertFatalCode(t, wCacheHit, http.StatusOK)
+
+		updatedJob, err := srv.JobRepo.FindByID(context.Background(), mockQ.enqueuedJobID)
+		if err != nil || updatedJob == nil {
+			t.Fatalf("failed to fetch updated job from db: %v", err)
+		}
+		if updatedJob.DownloadToken == nil || *updatedJob.DownloadToken == "" || *updatedJob.DownloadToken == initialToken {
+			t.Fatalf("expected fresh download token in db, got: %v", updatedJob.DownloadToken)
+		}
+		reissuedToken := *updatedJob.DownloadToken
+
+		// 12. Test DownloadTimesheetByToken
+		// a. Invalid token format (< 10 chars)
+		wBadToken := httptest.NewRecorder()
+		cBadToken, _ := gin.CreateTestContext(wBadToken)
+		cBadToken.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/short", nil)
+		cBadToken.Params = gin.Params{{Key: "token", Value: "short"}}
+		srv.DownloadTimesheetByToken(cBadToken)
+		assertFatalCode(t, wBadToken, http.StatusBadRequest)
+
+		// b. Token not found
+		wTokenNotFound := httptest.NewRecorder()
+		cTokenNotFound, _ := gin.CreateTestContext(wTokenNotFound)
+		cTokenNotFound.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/non-existent-token-12345", nil)
+		cTokenNotFound.Params = gin.Params{{Key: "token", Value: "non-existent-token-12345"}}
+		srv.DownloadTimesheetByToken(cTokenNotFound)
+		assertFatalCode(t, wTokenNotFound, http.StatusNotFound)
+
+		// c. Test HEAD request from email scanners (e.g. AWS SES link tracking, Gmail preview)
+		// Should return 200 OK without incrementing download_count
+		wHead := httptest.NewRecorder()
+		cHead, _ := gin.CreateTestContext(wHead)
+		cHead.Request = httptest.NewRequest(http.MethodHead, "/api/v1/timesheet/downloads/"+reissuedToken, nil)
+		cHead.Params = gin.Params{{Key: "token", Value: reissuedToken}}
+		srv.DownloadTimesheetByToken(cHead)
+		assertFatalCode(t, wHead, http.StatusOK)
+
+		var jobBefore models.TimesheetJob
+		if err := tx.Where("download_token = ?", reissuedToken).First(&jobBefore).Error; err != nil {
+			t.Fatalf("failed to query job after HEAD: %v", err)
+		}
+		if jobBefore.DownloadCount != 0 {
+			t.Fatalf("expected download_count to remain 0 after HEAD, got %d", jobBefore.DownloadCount)
+		}
+
+		// d. Valid re-issued token: 3 downloads allowed with 302 Found redirect, counter increments each time
+		for i := 1; i <= 3; i++ {
+			wDL := httptest.NewRecorder()
+			cDL, _ := gin.CreateTestContext(wDL)
+			cDL.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/"+reissuedToken, nil)
+			cDL.Params = gin.Params{{Key: "token", Value: reissuedToken}}
+			srv.DownloadTimesheetByToken(cDL)
+			assertFatalCode(t, wDL, http.StatusFound)
+			if loc := wDL.Header().Get("Location"); !strings.Contains(loc, "https://s3.example.com/timesheets/") {
+				t.Fatalf("download %d: expected redirect to S3 URL, got %s", i, loc)
+			}
+
+			var j models.TimesheetJob
+			if err := tx.Where("download_token = ?", reissuedToken).First(&j).Error; err != nil {
+				t.Fatalf("download %d: failed to query job: %v", i, err)
+			}
+			if j.DownloadCount != i {
+				t.Fatalf("download %d: expected download_count to be %d, got %d", i, i, j.DownloadCount)
+			}
+		}
+
+		// 4th download: quota exceeded -> 410 Gone
+		wQuotaExceeded := httptest.NewRecorder()
+		cQuotaExceeded, _ := gin.CreateTestContext(wQuotaExceeded)
+		cQuotaExceeded.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/"+reissuedToken, nil)
+		cQuotaExceeded.Params = gin.Params{{Key: "token", Value: reissuedToken}}
+		srv.DownloadTimesheetByToken(cQuotaExceeded)
+		assertFatalCode(t, wQuotaExceeded, http.StatusGone)
+
+		// d. Expired token -> 410 Gone
+		expiredToken := "expired-token-12345678"
+		past := now.Add(-1 * time.Hour)
+		_ = tx.Model(&models.TimesheetJob{}).Where("id = ?", mockQ.enqueuedJobID).Updates(map[string]interface{}{
+			"download_token":   expiredToken,
+			"download_count":   0,
+			"token_expires_at": past,
+		})
+		wExpired := httptest.NewRecorder()
+		cExpired, _ := gin.CreateTestContext(wExpired)
+		cExpired.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/"+expiredToken, nil)
+		cExpired.Params = gin.Params{{Key: "token", Value: expiredToken}}
+		srv.DownloadTimesheetByToken(cExpired)
+		assertFatalCode(t, wExpired, http.StatusGone)
+
+		srv.QueueClient = nil
+		srv.Storage = nil
 	})
 
 	t.Run("sanitize helper", func(t *testing.T) {
@@ -898,4 +1036,39 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 			t.Errorf("unexpected sanitized string: %q", s)
 		}
 	})
+}
+
+type testActivityMockQueueClient struct {
+	enqueuedJobID string
+}
+
+func (m *testActivityMockQueueClient) EnqueueTimesheetJob(ctx context.Context, jobID string, userID uint, month, year int) error {
+	m.enqueuedJobID = jobID
+	return nil
+}
+
+func (m *testActivityMockQueueClient) Close() error {
+	return nil
+}
+
+type testActivityMockStorage struct{}
+
+func (s *testActivityMockStorage) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
+	return nil
+}
+
+func (s *testActivityMockStorage) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
+	return "https://s3.example.com/timesheets/" + key, nil
+}
+
+func (s *testActivityMockStorage) GetPresignedDownloadURLWithFilename(ctx context.Context, key string, filename string, expiry time.Duration) (string, error) {
+	return "https://s3.example.com/timesheets/" + key, nil
+}
+
+func (s *testActivityMockStorage) Delete(ctx context.Context, key string) error {
+	return nil
+}
+
+func (s *testActivityMockStorage) FileExists(ctx context.Context, key string) (bool, error) {
+	return true, nil
 }

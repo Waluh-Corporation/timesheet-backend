@@ -8,21 +8,21 @@
     "views": [
       {
         "id": "request-lifecycle",
-        "label": "API Request Lifecycle",
-        "focus": ["clients", "proxy", "api", "auth", "db"],
-        "note": "Clients authenticate via JWT or WebAuthn passkeys before hitting protected REST endpoints backed by PostgreSQL."
+        "label": "Clean Architecture Request Lifecycle",
+        "focus": ["clients", "proxy", "api", "services", "repositories", "db"],
+        "note": "Clients authenticate via JWT or passkeys. Gin controllers delegate to domain services and repository mappers backed by PostgreSQL."
       },
       {
         "id": "timesheet-generation",
-        "label": "Timesheet Generation & Email",
-        "focus": ["api", "services", "smtp", "db"],
-        "note": "Dedicated company builders assemble normalized activity data into formatted Excel workbooks and deliver them via SMTP."
+        "label": "Asynchronous Timesheet Engine",
+        "focus": ["api", "services", "redis", "worker", "storage", "smtp"],
+        "note": "Heavy timesheet exports are enqueued to Redis Asynq, processed by workers with Excelize v2, saved to S3, and delivered via SMTP."
       },
       {
         "id": "background-jobs",
-        "label": "Background Services & Integrations",
-        "focus": ["scheduler", "webpush", "services", "holidays_api", "db"],
-        "note": "Scheduled cron tasks trigger daily Web Push reminders at 17:00 WIB and synchronize public holidays from Kemendesa."
+        "label": "Background Scheduling & Notifications",
+        "focus": ["scheduler", "webpush", "services", "repositories", "db"],
+        "note": "Robfig cron scheduler triggers daily 17:00 WIB push alerts for unsubmitted timesheets and automated token housekeeping."
       }
     ]
   },
@@ -45,40 +45,79 @@
       "size": [140, 60]
     },
     {
-      "id": "auth",
-      "type": "security",
-      "label": "Auth Service",
-      "sublabel": "Argon2id + JWT + Passkeys",
-      "tag": "FIDO2 / RBAC",
-      "pos": [450, 110],
-      "size": [150, 64]
+      "id": "scheduler",
+      "type": "backend",
+      "label": "Cron Scheduler",
+      "sublabel": "17:00 WIB & Token GC",
+      "tag": "robfig/cron (WIB)",
+      "pos": [460, 100],
+      "size": [152, 60]
     },
     {
       "id": "api",
       "type": "backend",
       "label": "Gin REST API",
-      "sublabel": "HTTP Handlers :8080",
+      "sublabel": "HTTP Controllers :8080",
       "brand": "go",
-      "pos": [450, 260],
-      "size": [150, 60]
+      "tag": "Gin & DTO Binding",
+      "pos": [460, 260],
+      "size": [152, 60]
+    },
+    {
+      "id": "webpush",
+      "type": "external",
+      "label": "WebPush Service",
+      "sublabel": "VAPID Push Reminders",
+      "tag": "RFC 8291 / 8292",
+      "pos": [692, 100],
+      "size": [152, 60]
     },
     {
       "id": "services",
       "type": "backend",
-      "label": "Core Services",
-      "sublabel": "Excel Builders & Holiday Client",
-      "tag": "Excelize & PDF",
-      "pos": [680, 260],
-      "size": [160, 60]
+      "label": "Domain Services",
+      "sublabel": "Auth, Timesheet & Master",
+      "brand": "go",
+      "tag": "Clean Architecture",
+      "pos": [692, 260],
+      "size": [152, 60]
     },
     {
-      "id": "scheduler",
+      "id": "redis",
+      "type": "database",
+      "label": "Redis 7",
+      "sublabel": "Asynq Queue & Tokens",
+      "brand": "redis",
+      "tag": "Queue & Cache :6379",
+      "pos": [692, 420],
+      "size": [152, 60]
+    },
+    {
+      "id": "smtp",
+      "type": "external",
+      "label": "SMTP Server",
+      "sublabel": "Transactional Mailer",
+      "tag": "Rate-Limited gomail",
+      "pos": [924, 100],
+      "size": [152, 60]
+    },
+    {
+      "id": "repositories",
       "type": "backend",
-      "label": "Cron Scheduler",
-      "sublabel": "17:00 WIB & Token GC",
-      "tag": "robfig/cron",
-      "pos": [450, 420],
-      "size": [150, 60]
+      "label": "Repository Layer",
+      "sublabel": "Data Access & Mappers",
+      "tag": "GORM & IDOR Boundary",
+      "pos": [924, 260],
+      "size": [152, 60]
+    },
+    {
+      "id": "worker",
+      "type": "backend",
+      "label": "Asynq Worker",
+      "sublabel": "Timesheet Engine Pool",
+      "tag": "Async Background Worker",
+      "pos": [924, 420],
+      "size": [152, 60]
     },
     {
       "id": "db",
@@ -87,39 +126,24 @@
       "sublabel": "3NF Relational DB :5432",
       "brand": "postgresql",
       "tag": "GORM & Migrations",
-      "pos": [680, 420],
-      "size": [160, 60]
+      "pos": [1156, 260],
+      "size": [152, 60]
     },
     {
-      "id": "holidays_api",
-      "type": "external",
-      "label": "Kemendesa API",
-      "sublabel": "Public Holiday Sync",
-      "pos": [920, 260],
-      "size": [140, 60]
-    },
-    {
-      "id": "smtp",
-      "type": "external",
-      "label": "SMTP Server",
-      "sublabel": "Transactional Mail",
-      "pos": [920, 110],
-      "size": [140, 60]
-    },
-    {
-      "id": "webpush",
-      "type": "external",
-      "label": "WebPush Service",
-      "sublabel": "VAPID Push Reminders",
-      "pos": [920, 420],
-      "size": [140, 60]
+      "id": "storage",
+      "type": "cloud",
+      "label": "S3 Object Storage",
+      "sublabel": "MinIO / AWS S3 Bucket",
+      "tag": "Magic Download Tokens",
+      "pos": [1156, 420],
+      "size": [152, 60]
     }
   ],
   "boundaries": [
     {
       "kind": "region",
-      "label": "Timesheet Backend Service Boundary",
-      "wraps": ["proxy", "auth", "api", "services", "scheduler", "db"]
+      "label": "Timesheet Backend Host / Container Boundary",
+      "wraps": ["proxy", "scheduler", "api", "services", "repositories", "db", "redis", "worker"]
     }
   ],
   "connections": [
@@ -134,92 +158,89 @@
       "id": "proxy-to-api",
       "from": "proxy",
       "to": "api",
-      "label": "proxy pass"
-    },
-    {
-      "id": "api-to-auth",
-      "from": "api",
-      "to": "auth",
-      "label": "verify token",
-      "variant": "security",
-      "fromSide": "top",
-      "toSide": "bottom"
+      "label": "proxy"
     },
     {
       "id": "api-to-services",
       "from": "api",
       "to": "services",
-      "label": "delegate"
+      "label": "dispatch"
     },
     {
-      "id": "api-to-db",
-      "from": "api",
+      "id": "services-to-repositories",
+      "from": "services",
+      "to": "repositories",
+      "label": "queries"
+    },
+    {
+      "id": "repositories-to-db",
+      "from": "repositories",
       "to": "db",
-      "label": "GORM query",
+      "label": "GORM"
+    },
+    {
+      "id": "services-to-redis",
+      "from": "services",
+      "to": "redis",
+      "label": "enqueue",
       "fromSide": "bottom",
-      "toSide": "top"
+      "toSide": "top",
+      "labelDy": 24
     },
     {
-      "id": "scheduler-to-db",
-      "from": "scheduler",
-      "to": "db",
-      "label": "clean tokens",
-      "variant": "dashed",
-      "fromSide": "right",
+      "id": "redis-to-worker",
+      "from": "redis",
+      "to": "worker",
+      "label": "dequeue"
+    },
+    {
+      "id": "worker-to-storage",
+      "from": "worker",
+      "to": "storage",
+      "label": "store"
+    },
+    {
+      "id": "services-to-smtp",
+      "from": "services",
+      "to": "smtp",
+      "label": "email",
+      "fromSide": "top",
       "toSide": "left"
     },
     {
       "id": "scheduler-to-webpush",
       "from": "scheduler",
       "to": "webpush",
-      "label": "push alert",
-      "fromSide": "bottom",
-      "toSide": "bottom",
+      "label": "17:00 WIB",
       "variant": "dashed"
-    },
-    {
-      "id": "services-to-smtp",
-      "from": "services",
-      "to": "smtp",
-      "label": "email .xlsx",
-      "fromSide": "top",
-      "toSide": "left"
-    },
-    {
-      "id": "services-to-holidays",
-      "from": "services",
-      "to": "holidays_api",
-      "label": "fetch sync",
-      "fromSide": "right",
-      "toSide": "left"
     }
   ],
   "cards": [
     {
       "dot": "cyan",
-      "title": "Ingress & Authentication",
+      "title": "Ingress & Clean Architecture",
       "items": [
-        "Gin REST API protected by Argon2id password hashing and WebAuthn (FIDO2 passkeys)",
-        "Role-Based Access Control (RBAC) with user and admin access boundaries",
-        "Consistent JSON response envelopes and sanitized route parameter validation"
+        "Gin REST API controllers decouple HTTP routing from business logic using DTO request validation and response envelopes",
+        "Authentication via Argon2id password hashing, JWT bearer tokens, and WebAuthn (FIDO2 passkeys) with RBAC authorization",
+        "Repository pattern encapsulates GORM data access with context cancellation propagation and strict user IDOR boundaries"
       ]
     },
     {
       "dot": "emerald",
-      "title": "Business Engine & Storage",
+      "title": "Asynchronous Timesheet Engine",
       "items": [
-        "Dedicated multi-company workbook builders (MII, NTT, SDD, Adidata) via Excelize v2",
-        "Pure 3NF normalized PostgreSQL schema with canonical foreign keys and domain CHECK constraints",
-        "Embedded versioned database migrations with automatic execution and connection pooling"
+        "Multi-company Excel workbook builders (MII, NTT, SDD, Adidata) powered by Excelize v2 and PDF conversion",
+        "Redis 7 distributed job queue with Asynq worker pools preventing HTTP request timeouts on large data exports",
+        "S3-compatible object storage with time-bound cryptographic magic download tokens and automatic lifecycle pruning"
       ]
     },
     {
       "dot": "rose",
-      "title": "Background & External Integrations",
+      "title": "Reliability & Background Automation",
       "items": [
-        "Daily cron scheduler firing at 17:00 WIB for unsubmitted timesheet push alerts",
-        "Transactional email notifications via SMTP for password resets and onboarding",
-        "Automated Indonesian national public holiday synchronization via Kemendesa API"
+        "Robfig cron scheduler operating in Asia/Jakarta timezone (WIB) firing daily reminders at 17:00 WIB for unsubmitted activities",
+        "WebPush notifications dispatched using RFC 8291/8292 VAPID encryption to desktop and mobile browser clients",
+        "Automated DBA housekeeping purging expired refresh tokens, password reset nonces, and stale storage objects"
       ]
     }
   ]
