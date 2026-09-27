@@ -20,6 +20,7 @@ import (
 	"timesheet-backend/models"
 	"timesheet-backend/push"
 	"timesheet-backend/queue"
+	"timesheet-backend/services"
 	"timesheet-backend/storage"
 )
 
@@ -60,6 +61,7 @@ type Server struct {
 	QueueClient       queue.QueueClient
 	Storage           storage.StorageService
 	RedisClient       *redis.Client
+	GeoIP             *services.GeoIPService
 
 	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
 	// handed to the client for the duration of a single begin/finish exchange.
@@ -83,6 +85,15 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	var geoSvc *services.GeoIPService
+	if cfg != nil {
+		var gErr error
+		geoSvc, gErr = services.NewGeoIPService(cfg.IP2LocationDBPath)
+		if gErr != nil {
+			slog.Warn("failed to initialize IP2Location service", "error", gErr)
+		}
 	}
 
 	var userRepo repository.UserRepository
@@ -146,6 +157,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		AuthenticatorSvc:  authenticatorSvc,
 		SetupRepo:         setupRepo,
 		SetupSvc:          setupSvc,
+		GeoIP:             geoSvc,
 		webAuthnSessions:  make(map[string]*webAuthnSessionEntry),
 		resetCooldowns:    make(map[string]time.Time),
 		ipCooldowns:       make(map[string]*clientCooldownRecord),
@@ -217,7 +229,7 @@ func (s *Server) checkAndRecordResetCooldown(email, ip string, cooldown time.Dur
 	return true
 }
 
-func (s *Server) dispatchResetEmail(toEmail, username, resetLink string) {
+func (s *Server) dispatchResetEmail(toEmail, username, resetLink, clientIP, location string) {
 	if s.sendResetEmailFunc != nil {
 		go func() {
 			if err := s.sendResetEmailFunc(toEmail, username, resetLink); err != nil {
@@ -228,7 +240,7 @@ func (s *Server) dispatchResetEmail(toEmail, username, resetLink string) {
 	}
 	if s.Mailer != nil {
 		go func() {
-			if err := s.Mailer.SendResetEmailWithUser(toEmail, username, resetLink); err != nil {
+			if err := s.Mailer.SendResetEmailWithDetails(toEmail, username, resetLink, clientIP, location); err != nil {
 				slog.Error("failed to send password reset email", "error", err, "email", toEmail)
 			}
 		}()

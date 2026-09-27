@@ -15,12 +15,69 @@ type BaseLayoutData struct {
 	Preheader    string
 	Subject      string
 	BadgeText    string
-	BadgeColor   string // e.g. indigo, emerald, amber, sky
+	BadgeColor   string // e.g. indigo, emerald, amber, sky, rose
 	HeaderTitle  string
 	SupportEmail string
 	PortalURL    string
 	CurrentYear  int
 	SystemNotice string
+}
+
+// AppInitial returns the first rune of AppName for monogram badge rendering.
+func (b BaseLayoutData) AppInitial() string {
+	runes := []rune(strings.TrimSpace(b.AppName))
+	if len(runes) > 0 {
+		return strings.ToUpper(string(runes[0]))
+	}
+	return "T"
+}
+
+// BadgeBgColor returns the background hex color for the category badge.
+func (b BaseLayoutData) BadgeBgColor() string {
+	switch b.BadgeColor {
+	case "emerald":
+		return "#ecfdf5"
+	case "amber":
+		return "#fffbeb"
+	case "sky":
+		return "#f0f9ff"
+	case "rose":
+		return "#fff1f2"
+	default:
+		return "#eef2ff"
+	}
+}
+
+// BadgeTextColor returns the text hex color for the category badge.
+func (b BaseLayoutData) BadgeTextColor() string {
+	switch b.BadgeColor {
+	case "emerald":
+		return "#047857"
+	case "amber":
+		return "#b45309"
+	case "sky":
+		return "#0284c7"
+	case "rose":
+		return "#e11d48"
+	default:
+		return "#4f46e5"
+	}
+}
+
+// BadgeBorderColor returns the border hex color for the category badge.
+func (b BaseLayoutData) BadgeBorderColor() string {
+	switch b.BadgeColor {
+	case "emerald":
+		return "#a7f3d0"
+	case "amber":
+		return "#fde68a"
+	case "sky":
+		return "#bae6fd"
+	case "rose":
+		return "#fecdd3"
+	default:
+		return "#c7d2fe"
+	}
 }
 
 //go:embed layout.html

@@ -68,8 +68,7 @@ Silakan gunakan kredensial berikut untuk masuk ke portal:
 
 Detail Kredensial Akun:
 - Username: %s
-%s%s- Status Akun: Aktif
-
+%s%s
 Tautan Login:
 %s
 

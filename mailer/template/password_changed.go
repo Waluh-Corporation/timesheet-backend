@@ -15,6 +15,8 @@ type PasswordChangedEmailData struct {
 	LoginURL     string
 	SupportEmail string
 	PortalURL    string
+	IPAddress    string
+	Location     string
 }
 
 //go:embed password_changed.html
@@ -52,9 +54,18 @@ func RenderPasswordChangedEmail(data PasswordChangedEmailData) (htmlBody string,
 		return "", "", err
 	}
 
+	ipLine := ""
+	if data.IPAddress != "" {
+		ipLine = fmt.Sprintf("\n- Alamat IP: %s", data.IPAddress)
+	}
+	locLine := ""
+	if data.Location != "" {
+		locLine = fmt.Sprintf("\n- Lokasi: %s", data.Location)
+	}
+
 	textBody = fmt.Sprintf(`Halo %s,
 
-Kata sandi akun %s Anda telah berhasil diperbarui pada %s.
+Kata sandi akun %s Anda telah berhasil diperbarui pada %s.%s%s
 
 Jika Anda yang melakukan perubahan ini, Anda dapat masuk kembali dengan kata sandi baru Anda:
 %s
@@ -64,7 +75,7 @@ Jika Anda TIDAK pernah meminta atau melakukan perubahan ini, segera hubungi admi
 
 --
 %s
-`, greetingName, data.AppName, data.ChangedAt, data.LoginURL, data.AppName)
+`, greetingName, data.AppName, data.ChangedAt, ipLine, locLine, data.LoginURL, data.AppName)
 
 	return htmlBody, textBody, nil
 }
