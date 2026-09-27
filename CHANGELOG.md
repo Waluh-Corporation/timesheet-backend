@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-09-27
+
 ### Added
 - **IP2Location Geolocation Integration**: Integrated `github.com/ip2location/ip2location-go/v9` to resolve requesting client IP addresses into approximate geographic locations (city, country) displayed in password reset and password changed security notifications. Configured via `IP2LOCATION_DB_PATH` in `.env` with thread-safe lookup and graceful fallback when the database file is not present.
 - **Modernized Transactional Email Design**: Redesigned transactional emails with responsive 600px containers, brand monogram header, dynamic color-coded category badges (`Akun Baru`, `Reset Sandi`, `Timesheet Siap`, `Pengingat`, `Keamanan Akun`), dark mode support (`prefers-color-scheme: dark` and Outlook `[data-ogsc]`), and preheader whitespace padding.
@@ -245,7 +247,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Daily browser push notifications at 17:00 WIB to remind staff to fill out missing timesheet entries.
   - Email delivery for generated timesheet reports and account setup links.
 
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...HEAD
+[1.13.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.1...v1.10.0
