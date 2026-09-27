@@ -225,6 +225,16 @@ func (m *Mailer) SendResetEmail(to, resetLink string) error {
 
 // SendResetEmailWithUser delivers a password-reset link with personalized greeting.
 func (m *Mailer) SendResetEmailWithUser(to, username, resetLink string) error {
+	return m.SendResetEmailWithDetails(to, username, resetLink, "", "")
+}
+
+// SendResetEmailWithIP delivers a password-reset link with client IP address.
+func (m *Mailer) SendResetEmailWithIP(to, username, resetLink, ipAddress string) error {
+	return m.SendResetEmailWithDetails(to, username, resetLink, ipAddress, "")
+}
+
+// SendResetEmailWithDetails delivers a password-reset link with personalized greeting, requester IP address, and location.
+func (m *Mailer) SendResetEmailWithDetails(to, username, resetLink, ipAddress, location string) error {
 	ttl := 60 * time.Minute
 	if m.cfg != nil && m.cfg.ResetTokenTTL > 0 {
 		ttl = m.cfg.ResetTokenTTL
@@ -246,6 +256,8 @@ func (m *Mailer) SendResetEmailWithUser(to, username, resetLink string) error {
 		ExpiresAt:     expiresAt,
 		SupportEmail:  m.supportEmail(),
 		PortalURL:     m.frontendURL(),
+		IPAddress:     ipAddress,
+		Location:      location,
 	})
 	if err != nil {
 		log.Printf("[mailer] failed to render reset email template: %v", err)
@@ -380,6 +392,16 @@ func (m *Mailer) SendReminderEmail(to, username, dateStr, activityURL string) er
 
 // SendPasswordChangedEmail delivers a security notice confirming password was updated.
 func (m *Mailer) SendPasswordChangedEmail(to, username string) error {
+	return m.SendPasswordChangedEmailWithDetails(to, username, "", "")
+}
+
+// SendPasswordChangedEmailWithIP delivers a security notice confirming password was updated with client IP address.
+func (m *Mailer) SendPasswordChangedEmailWithIP(to, username, ipAddress string) error {
+	return m.SendPasswordChangedEmailWithDetails(to, username, ipAddress, "")
+}
+
+// SendPasswordChangedEmailWithDetails delivers a security notice confirming password was updated with client IP address and location.
+func (m *Mailer) SendPasswordChangedEmailWithDetails(to, username, ipAddress, location string) error {
 	loginURL := ""
 	if m.frontendURL() != "" {
 		loginURL = strings.TrimRight(m.frontendURL(), "/") + "/login"
@@ -393,6 +415,8 @@ func (m *Mailer) SendPasswordChangedEmail(to, username string) error {
 		LoginURL:     loginURL,
 		SupportEmail: m.supportEmail(),
 		PortalURL:    m.frontendURL(),
+		IPAddress:    ipAddress,
+		Location:     location,
 	})
 	if err != nil {
 		log.Printf("[mailer] failed to render password changed email template: %v", err)

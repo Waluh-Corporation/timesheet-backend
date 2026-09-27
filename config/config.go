@@ -102,6 +102,9 @@ type Config struct {
 
 	// Timesheet download token max quota.
 	TimesheetDownloadMaxQuota int
+
+	// IP2Location binary database path (.BIN).
+	IP2LocationDBPath string
 }
 
 func getEnv(key, fallback string) string {
@@ -306,6 +309,7 @@ func Load() *Config {
 
 		ExcelMaxConcurrentJobs:    getEnvInt("EXCEL_MAX_CONCURRENT_JOBS", 10),
 		TimesheetDownloadMaxQuota: maxDownloadQuota,
+		IP2LocationDBPath:         getEnv("IP2LOCATION_DB_PATH", ""),
 	}
 
 	if cfg.RateLimitEnabled {

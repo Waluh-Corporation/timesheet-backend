@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **IP2Location Geolocation Integration**: Integrated `github.com/ip2location/ip2location-go/v9` to resolve requesting client IP addresses into approximate geographic locations (city, country) displayed in password reset and password changed security notifications. Configured via `IP2LOCATION_DB_PATH` in `.env` with thread-safe lookup and graceful fallback when the database file is not present.
+- **Modernized Transactional Email Design**: Redesigned transactional emails with responsive 600px containers, brand monogram header, dynamic color-coded category badges (`Akun Baru`, `Reset Sandi`, `Timesheet Siap`, `Pengingat`, `Keamanan Akun`), dark mode support (`prefers-color-scheme: dark` and Outlook `[data-ogsc]`), and preheader whitespace padding.
+- **Bulletproof Email Action Buttons**: Added Microsoft Outlook VML (`v:roundrect`) button fallbacks across notification templates ensuring consistent rendering across desktop Outlook, webmail, and mobile mail clients.
+
+### Changed
+- **Security Notification Detail Box**:
+  - Replaced the "Berlaku Hingga" row in password reset emails with the requester's IP address and approximate geolocation in dedicated rows.
+  - Replaced the "Status Keamanan" row in password changed notification emails with the actor's IP address and approximate geolocation in dedicated rows.
+  - Removed "Status Akun" from account setup emails.
+
 ## [1.12.0] - 2026-09-26
 
 ### Added

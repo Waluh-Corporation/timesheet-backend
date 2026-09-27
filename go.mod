@@ -13,6 +13,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/hibiken/asynq v0.26.0
+	github.com/ip2location/ip2location-go/v9 v9.8.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.12.1
@@ -111,4 +112,5 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
+	lukechampine.com/uint128 v1.2.0 // indirect
 )

@@ -80,8 +80,12 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 				// 3. Atomically invalidate previous active reset tokens and save the new active token
 				if err := tokenRepo.CreateResetTokenWithInvalidation(c.Request.Context(), resetToken, now); err == nil {
 					link := s.publicBaseURL(c) + "/reset-password?token=" + raw
-					s.dispatchResetEmail(user.Email, user.Username, link)
-					slog.Info("password reset link issued", "user_id", user.ID, "ip", clientIP)
+					var loc string
+					if s.GeoIP != nil {
+						loc = s.GeoIP.Lookup(clientIP).FormatLocation()
+					}
+					s.dispatchResetEmail(user.Email, user.Username, link, clientIP, loc)
+					slog.Info("password reset link issued", "user_id", user.ID, "ip", clientIP, "location", loc)
 				} else {
 					slog.Error("failed to create reset token with invalidation", "error", err, "user_id", user.ID)
 				}
@@ -266,9 +270,14 @@ func (s *Server) ResetPassword(c *gin.Context) {
 	slog.Info("password reset successfully completed", "user_id", user.ID, "ip", c.ClientIP())
 
 	if s.Mailer != nil && user.Email != "" {
-		go func(to, username string) {
-			_ = s.Mailer.SendPasswordChangedEmail(to, username)
-		}(user.Email, user.Username)
+		ip := c.ClientIP()
+		var loc string
+		if s.GeoIP != nil {
+			loc = s.GeoIP.Lookup(ip).FormatLocation()
+		}
+		go func(to, username, clientIP, location string) {
+			_ = s.Mailer.SendPasswordChangedEmailWithDetails(to, username, clientIP, location)
+		}(user.Email, user.Username, ip, loc)
 	}
 
 	RespondMessage(c, http.StatusOK, "password updated")
