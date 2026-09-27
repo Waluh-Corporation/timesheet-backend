@@ -330,3 +330,27 @@ func TestForgotPassword_ConcurrencyRaceFree(t *testing.T) {
 	require.NoError(t, tx.Where("user_id = ? AND used_at IS NULL", testUser.ID).Find(&activeTokens).Error)
 	assert.Equal(t, 1, len(activeTokens), "Exactly 1 active token must exist in the database")
 }
+
+func TestServer_DispatchResetEmail_WithMailer(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, cfg := setupTestDB(t)
+
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	m := mailer.New(cfg)
+	srv, err := NewServer(tx, cfg, nil, m, nil)
+	require.NoError(t, err)
+
+	// 1. Dispatch through real mailer branch
+	srv.dispatchResetEmail("test@example.com", "user", "http://localhost/reset", "127.0.0.1", "Jakarta, Indonesia")
+
+	// 2. Dispatch through custom func error branch
+	srv.sendResetEmailFunc = func(toEmail, username, resetLink string) error {
+		return assert.AnError
+	}
+	srv.dispatchResetEmail("test@example.com", "user", "http://localhost/reset", "127.0.0.1", "Jakarta, Indonesia")
+
+	// Wait briefly for goroutines to finish execution
+	time.Sleep(50 * time.Millisecond)
+}

@@ -23,6 +23,8 @@ main
 # Temp files and logs
 *.log
 *.out
+*.bin
+*.BIN
 coverage*
 scratch/
 sshpass.py

@@ -17,6 +17,8 @@ type ResetEmailData struct {
 	SupportEmail  string
 	PortalURL     string
 	RequestedAt   string
+	IPAddress     string
+	Location      string
 }
 
 //go:embed reset.html
@@ -60,6 +62,15 @@ func RenderResetEmail(data ResetEmailData) (htmlBody string, textBody string, er
 		return "", "", err
 	}
 
+	ipLine := ""
+	if data.IPAddress != "" {
+		ipLine = fmt.Sprintf("- Alamat IP: %s\n", data.IPAddress)
+	}
+	locLine := ""
+	if data.Location != "" {
+		locLine = fmt.Sprintf("- Lokasi: %s\n", data.Location)
+	}
+
 	textBody = fmt.Sprintf(`Halo %s,
 
 Kami menerima permintaan untuk mengatur ulang kata sandi akun %s Anda.
@@ -69,14 +80,13 @@ Gunakan tautan di bawah ini untuk membuat kata sandi baru:
 
 Detail Permintaan:
 - Waktu Permintaan: %s
-- Berlaku Hingga: %s
-
+%s%s
 PENTING: Tautan ini bersifat rahasia dan hanya berlaku hingga %s. Jangan bagikan tautan ini kepada siapapun.
 Jika Anda tidak meminta pengaturan ulang kata sandi ini, abaikan email ini; akun Anda tetap aman.
 
 --
 %s
-`, greetingName, data.AppName, data.ResetURL, data.RequestedAt, data.ExpiresAt, data.ExpiresAt, data.AppName)
+`, greetingName, data.AppName, data.ResetURL, data.RequestedAt, ipLine, locLine, data.ExpiresAt, data.AppName)
 
 	return htmlBody, textBody, nil
 }

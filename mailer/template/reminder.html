@@ -1,8 +1,9 @@
 <p
+  class="content-text"
   style="
     margin: 0;
     color: #4b5563;
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     font-size: 15px;
     line-height: 1.65;
   "
@@ -17,6 +18,7 @@
   cellpadding="0"
   cellspacing="0"
   border="0"
+  class="details-card"
   style="
     width: 100%;
     margin: 24px 0 0;
@@ -26,15 +28,17 @@
   "
 >
   <tr>
-    <td style="padding: 16px 20px;">
+    <td style="padding: 18px 20px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Tanggal</td>
-          <td width="65%" style="padding: 5px 0; font-size: 14px; font-weight: bold; color: #111827;">{{.Date}}</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Tanggal</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Date}}</td>
         </tr>
         <tr>
-          <td width="35%" style="padding: 5px 0; font-size: 13px; font-weight: 600; color: #6b7280;">Status Log</td>
-          <td width="65%" style="padding: 5px 0; font-size: 13px; font-weight: bold; color: #e11d48;">Belum Diisi</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Status Log</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: bold; color: #e11d48; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            <span style="display: inline-block; padding: 2px 8px; background-color: #ffe4e6; border: 1px solid #fecdd3; border-radius: 4px; color: #e11d48; font-weight: bold; font-size: 12px; letter-spacing: 0.2px;">Belum Diisi</span>
+          </td>
         </tr>
       </table>
     </td>
@@ -57,13 +61,13 @@
         xmlns:v="urn:schemas-microsoft-com:vml"
         xmlns:w="urn:schemas-microsoft-com:office:word"
         href="{{.ActivityURL}}"
-        style="height: 48px; v-text-anchor: middle; width: 220px"
+        style="height: 48px; v-text-anchor: middle; width: 240px"
         arcsize="17%"
         strokecolor="#4f46e5"
         fillcolor="#4f46e5"
       >
         <w:anchorlock />
-        <center style="color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: bold">
+        <center style="color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: bold">
           Isi Aktivitas Hari Ini
         </center>
       </v:roundrect>
@@ -72,12 +76,12 @@
       <a
         href="{{.ActivityURL}}"
         target="_blank"
-        class="confirm-button"
+        class="confirm-button btn-block"
         style="
           display: inline-block;
-          padding: 14px 26px;
+          padding: 14px 28px;
           color: #ffffff;
-          font-family: Arial, Helvetica, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
           font-size: 15px;
           font-weight: bold;
           line-height: 18px;
@@ -109,11 +113,11 @@
   "
 >
   <tr>
-    <td style="padding: 12px 14px;">
-      <p style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #0369a1;">
+    <td style="padding: 12px 16px;">
+      <p style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #0369a1; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Tips Pencatatan
       </p>
-      <p style="margin: 0; font-size: 12px; color: #0c4a6e; line-height: 1.5;">
+      <p style="margin: 0; font-size: 12px; color: #0c4a6e; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Mencatat aktivitas kerja secara rutin setiap hari membantu menjaga akurasi laporan dan mempermudah saat batas waktu rekapitulasi (cutoff) tiba.
       </p>
     </td>
