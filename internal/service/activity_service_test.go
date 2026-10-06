@@ -512,3 +512,92 @@ func TestActivityService_WorkingHoursValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestActivityService_UpsertDailyActivity_PeriodLimits(t *testing.T) {
+	repo := newMockActivityRepo()
+	svc := NewActivityService(repo)
+	// Pin service time to October 15, 2026
+	refTime := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	if actImpl, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+		actImpl.SetNowFunc(func() time.Time { return refTime })
+	}
+
+	tests := []struct {
+		name        string
+		date        string
+		isAdmin     bool
+		expectError bool
+		errContains string
+	}{
+		{
+			name:        "current month date is allowed",
+			date:        "2026-10-10",
+			isAdmin:     false,
+			expectError: false,
+		},
+		{
+			name:        "previous month (1 month ago) is allowed",
+			date:        "2026-09-15",
+			isAdmin:     false,
+			expectError: false,
+		},
+		{
+			name:        "first day of previous month is allowed",
+			date:        "2026-09-01",
+			isAdmin:     false,
+			expectError: false,
+		},
+		{
+			name:        "two months ago is rejected for regular user",
+			date:        "2026-08-31",
+			isAdmin:     false,
+			expectError: true,
+			errContains: "timesheet date cannot be older than the previous month (maximum 1 month)",
+		},
+		{
+			name:        "future month is rejected for regular user",
+			date:        "2026-11-01",
+			isAdmin:     false,
+			expectError: true,
+			errContains: "timesheet date cannot be in future months",
+		},
+		{
+			name:        "two months ago is allowed for admin",
+			date:        "2026-08-15",
+			isAdmin:     true,
+			expectError: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tc.isAdmin {
+				ctx = domain.WithUserRole(ctx, "admin")
+			}
+			req := &request.DailyActivityRequest{
+				Date:      tc.date,
+				StartTime: "08:00",
+				EndTime:   "17:00",
+				Status:    "P",
+				Activity:  "Test task",
+			}
+			err := svc.UpsertDailyActivity(ctx, 1, req)
+			if tc.expectError {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !errors.Is(err, domain.ErrInvalidInput) {
+					t.Errorf("expected ErrInvalidInput, got %v", err)
+				}
+				if !strings.Contains(err.Error(), tc.errContains) {
+					t.Errorf("expected error containing %q, got: %s", tc.errContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}

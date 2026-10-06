@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Previous Month Timesheet Access & Entry**: Users can now access, record daily activities, log overtime, and generate timesheet spreadsheets for both the current month and the previous month (maximum 1 month back). Submissions older than the previous month or for future months are strictly validated and rejected for standard users, while administrators maintain unrestricted historical access.
+
 ## [1.13.0] - 2026-09-27
 
 ### Added

@@ -50,7 +50,11 @@ func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
 
 func reqContext(c *gin.Context) context.Context {
 	if c != nil && c.Request != nil && c.Request.Context() != nil {
-		return c.Request.Context()
+		ctx := c.Request.Context()
+		if role := currentUserRole(c); role != "" {
+			ctx = domain.WithUserRole(ctx, string(role))
+		}
+		return ctx
 	}
 	return context.Background()
 }

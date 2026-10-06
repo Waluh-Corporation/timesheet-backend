@@ -49,6 +49,13 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		return
 	}
 
+	if currentUserRole(c) != models.RoleAdmin {
+		if err := domain.ValidateTimesheetPeriod(req.Month, req.Year, time.Now(), jakarta()); err != nil {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
 	uid := currentUserID(c)
 	userRepo := s.getUserRepository()
 	if userRepo == nil {

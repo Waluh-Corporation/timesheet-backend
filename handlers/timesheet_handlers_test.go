@@ -307,12 +307,28 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 	_ = userRepo.Create(context.Background(), userWithCompany)
 	_ = userRepo.Create(context.Background(), userNoCompany)
 
-	// Seed activity for userWithCompany in months 1..6, year 2026
+	nowJakarta := time.Now().In(jakarta())
+	currMonth := int(nowJakarta.Month())
+	currYear := nowJakarta.Year()
+	prevDate := nowJakarta.AddDate(0, -1, 0)
+	prevMonth := int(prevDate.Month())
+	prevYear := prevDate.Year()
+
+	// Seed activity for userWithCompany in current and previous month, plus months 1..6
 	actRepo := repository.NewActivityRepository(tx)
-	for m := 1; m <= 6; m++ {
+	for _, dt := range []time.Time{
+		time.Date(currYear, time.Month(currMonth), 1, 0, 0, 0, 0, time.UTC),
+		time.Date(prevYear, time.Month(prevMonth), 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 2, 15, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 4, 15, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC),
+		time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
+	} {
 		act := &models.DailyActivity{
 			UserID:    userWithCompany.ID,
-			Date:      time.Date(2026, time.Month(m), 15, 0, 0, 0, 0, time.UTC),
+			Date:      dt,
 			StartTime: "08:00",
 			EndTime:   "17:00",
 			Status:    "P",
@@ -354,7 +370,7 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 
 	t.Run("UserRepo uninitialized returns 500", func(t *testing.T) {
 		emptySrv := &Server{}
-		payload, _ := json.Marshal(request.GenerateRequest{Month: 6, Year: 2026})
+		payload, _ := json.Marshal(request.GenerateRequest{Month: currMonth, Year: currYear})
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payload))
@@ -364,7 +380,7 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 	})
 
 	t.Run("User not found returns 404", func(t *testing.T) {
-		payload, _ := json.Marshal(request.GenerateRequest{Month: 6, Year: 2026})
+		payload, _ := json.Marshal(request.GenerateRequest{Month: currMonth, Year: currYear})
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Set("userID", uint(999999))
@@ -375,7 +391,7 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 	})
 
 	t.Run("User without company returns 400", func(t *testing.T) {
-		payload, _ := json.Marshal(request.GenerateRequest{Month: 6, Year: 2026})
+		payload, _ := json.Marshal(request.GenerateRequest{Month: currMonth, Year: currYear})
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Set("userID", userNoCompany.ID)
@@ -386,10 +402,17 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 	})
 
 	t.Run("No activities for period returns 400", func(t *testing.T) {
-		payload, _ := json.Marshal(request.GenerateRequest{Month: 7, Year: 2026})
+		// Use userNoCompany (no activities) with an assigned company
+		userNoAct := &models.User{
+			Username: "user_no_act",
+			Company:  "sdd",
+			IsActive: true,
+		}
+		_ = userRepo.Create(context.Background(), userNoAct)
+		payload, _ := json.Marshal(request.GenerateRequest{Month: currMonth, Year: currYear})
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
-		c.Set("userID", userWithCompany.ID)
+		c.Set("userID", userNoAct.ID)
 		c.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payload))
 		c.Request.Header.Set("Content-Type", "application/json")
 		srv.GenerateTimesheet(c)
@@ -398,7 +421,7 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 
 	t.Run("Synchronous fallback without queue", func(t *testing.T) {
 		srv.QueueClient = nil
-		payload, _ := json.Marshal(request.GenerateRequest{Month: 6, Year: 2026})
+		payload, _ := json.Marshal(request.GenerateRequest{Month: currMonth, Year: currYear})
 
 		// 1. TimesheetSvc nil -> 500
 		srv.TimesheetSvc = nil
@@ -475,6 +498,7 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		w1 := httptest.NewRecorder()
 		c1, _ := gin.CreateTestContext(w1)
 		c1.Set("userID", userWithCompany.ID)
+		c1.Set("userRole", string(models.RoleAdmin))
 		c1.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payload1))
 		c1.Request.Header.Set("Content-Type", "application/json")
 		srv.GenerateTimesheet(c1)
@@ -500,6 +524,7 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		w2 := httptest.NewRecorder()
 		c2, _ := gin.CreateTestContext(w2)
 		c2.Set("userID", userWithCompany.ID)
+		c2.Set("userRole", string(models.RoleAdmin))
 		c2.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payload2))
 		c2.Request.Header.Set("Content-Type", "application/json")
 		srv.GenerateTimesheet(c2)
@@ -511,6 +536,7 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		w3 := httptest.NewRecorder()
 		c3, _ := gin.CreateTestContext(w3)
 		c3.Set("userID", userWithCompany.ID)
+		c3.Set("userRole", string(models.RoleAdmin))
 		c3.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payload3))
 		c3.Request.Header.Set("Content-Type", "application/json")
 		srv.GenerateTimesheet(c3)
@@ -522,9 +548,58 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		w4 := httptest.NewRecorder()
 		c4, _ := gin.CreateTestContext(w4)
 		c4.Set("userID", userWithCompany.ID)
+		c4.Set("userRole", string(models.RoleAdmin))
 		c4.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payload4))
 		c4.Request.Header.Set("Content-Type", "application/json")
 		srv.GenerateTimesheet(c4)
 		assertResponseCode(t, w4, http.StatusAccepted)
+	})
+
+	t.Run("Period limit enforcement for regular user vs admin", func(t *testing.T) {
+		srv.QueueClient = nil
+		srv.TimesheetSvc = &mockTimesheetService{genOut: []byte("content"), genName: "Timesheet.xlsx"}
+
+		// 1. Regular user with older than 1 month -> 400
+		oldDate := nowJakarta.AddDate(0, -2, 0)
+		oldPayload, _ := json.Marshal(request.GenerateRequest{Month: int(oldDate.Month()), Year: oldDate.Year()})
+		wOld := httptest.NewRecorder()
+		cOld, _ := gin.CreateTestContext(wOld)
+		cOld.Set("userID", userWithCompany.ID)
+		cOld.Set("userRole", string(models.RoleUser))
+		cOld.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(oldPayload))
+		cOld.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(cOld)
+		assertResponseCode(t, wOld, http.StatusBadRequest)
+
+		// 2. Regular user with previous month (1 month ago) -> 200 OK
+		prevPayload, _ := json.Marshal(request.GenerateRequest{Month: prevMonth, Year: prevYear})
+		wPrev := httptest.NewRecorder()
+		cPrev, _ := gin.CreateTestContext(wPrev)
+		cPrev.Set("userID", userWithCompany.ID)
+		cPrev.Set("userRole", string(models.RoleUser))
+		cPrev.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(prevPayload))
+		cPrev.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(cPrev)
+		assertResponseCode(t, wPrev, http.StatusOK)
+
+		// 3. Admin user with older than 1 month -> 200 OK (bypasses period limit)
+		_ = actRepo.Create(context.Background(), &models.DailyActivity{
+			UserID:    userWithCompany.ID,
+			Date:      time.Date(oldDate.Year(), oldDate.Month(), 15, 0, 0, 0, 0, time.UTC),
+			StartTime: "08:00",
+			EndTime:   "17:00",
+			Status:    "P",
+			Activity:  "Historical work",
+			IsActive:  true,
+		})
+
+		wAdmin := httptest.NewRecorder()
+		cAdmin, _ := gin.CreateTestContext(wAdmin)
+		cAdmin.Set("userID", userWithCompany.ID)
+		cAdmin.Set("userRole", models.RoleAdmin)
+		cAdmin.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(oldPayload))
+		cAdmin.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(cAdmin)
+		assertResponseCode(t, wAdmin, http.StatusOK)
 	})
 }

@@ -28,6 +28,7 @@ type timesheetService struct {
 	overtimeRepo repository.OvertimeRepository
 	masterRepo   repository.MasterRepository
 	mailer       *mailer.Mailer
+	nowFunc      func() time.Time
 }
 
 // NewTimesheetService constructs a TimesheetService implementation.
@@ -44,7 +45,13 @@ func NewTimesheetService(
 		overtimeRepo: overtimeRepo,
 		masterRepo:   masterRepo,
 		mailer:       m,
+		nowFunc:      time.Now,
 	}
+}
+
+// SetNowFunc overrides the time provider for testing purposes.
+func (s *timesheetService) SetNowFunc(fn func() time.Time) {
+	s.nowFunc = fn
 }
 
 func sanitizeFilename(s string) string {
@@ -62,6 +69,17 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Invalid month or year")
 	}
 	loc := jakartaLocation()
+	now := time.Now()
+	if s.nowFunc != nil {
+		now = s.nowFunc()
+	}
+
+	if !domain.IsAdminFromContext(ctx) {
+		if err := domain.ValidateTimesheetPeriod(month, year, now, loc); err != nil {
+			return nil, "", err
+		}
+	}
+
 	user, err := s.userRepo.FindByIDWithDetails(ctx, userID)
 	if err != nil || user == nil {
 		return nil, "", domain.NewUserError(domain.ErrNotFound, "User not found")
@@ -150,6 +168,17 @@ func (s *timesheetService) UpsertOvertime(ctx context.Context, userID uint, req 
 		return domain.NewUserError(domain.ErrInvalidInput, "Invalid date format, expected YYYY-MM-DD")
 	}
 
+	now := time.Now()
+	if s.nowFunc != nil {
+		now = s.nowFunc()
+	}
+
+	if !domain.IsAdminFromContext(ctx) {
+		if err := domain.ValidateTimesheetDate(date, now, loc); err != nil {
+			return err
+		}
+	}
+
 	var entry *models.OvertimeEntry
 	if req.ID != 0 {
 		entry, _ = s.overtimeRepo.FindActiveByID(ctx, req.ID, userID)
@@ -220,6 +249,17 @@ func (s *timesheetService) DeleteOvertime(ctx context.Context, id uint, userID u
 	entry, err := s.overtimeRepo.FindActiveByID(ctx, id, userID)
 	if err != nil || entry == nil {
 		return domain.NewUserError(domain.ErrNotFound, "Overtime entry not found")
+	}
+
+	now := time.Now()
+	if s.nowFunc != nil {
+		now = s.nowFunc()
+	}
+
+	if !domain.IsAdminFromContext(ctx) {
+		if err := domain.ValidateTimesheetDate(entry.Date, now, jakartaLocation()); err != nil {
+			return err
+		}
 	}
 	return s.overtimeRepo.SoftDelete(ctx, id, userID)
 }
