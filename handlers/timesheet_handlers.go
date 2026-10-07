@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,8 @@ import (
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/push"
+	"timesheet-backend/queue"
+	"timesheet-backend/storage"
 )
 
 // GenerateTimesheet godoc
@@ -38,220 +41,278 @@ import (
 // @Failure 500 {object} response.ErrorResponse "Generation failed"
 // @Router /api/v1/timesheet/generate [post]
 func (s *Server) GenerateTimesheet(c *gin.Context) {
-	var req request.GenerateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	if req.Month < 1 || req.Month > 12 || req.Year < 2000 || req.Year > 2100 {
-		RespondError(c, http.StatusBadRequest, "Invalid month or year")
+	req, ok := s.bindAndValidateGenerateRequest(c)
+	if !ok {
 		return
 	}
 
 	uid := currentUserID(c)
+	user, ok := s.validateUserWithCompany(c, uid)
+	if !ok {
+		return
+	}
+
+	if !s.checkUserHasActivities(c, uid, req.Month, req.Year) {
+		return
+	}
+
+	if s.handleAsyncGeneration(c, user, req) {
+		return
+	}
+
+	s.handleSyncGenerationFallback(c, uid, req)
+}
+
+func (s *Server) bindAndValidateGenerateRequest(c *gin.Context) (*request.GenerateRequest, bool) {
+	var req request.GenerateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, err.Error())
+		return nil, false
+	}
+
+	if req.Month < 1 || req.Month > 12 || req.Year < 2000 || req.Year > 2100 {
+		RespondError(c, http.StatusBadRequest, "Invalid month or year")
+		return nil, false
+	}
+
+	if currentUserRole(c) != models.RoleAdmin {
+		if err := domain.ValidateTimesheetPeriod(req.Month, req.Year, time.Now(), jakarta()); err != nil {
+			RespondError(c, http.StatusBadRequest, err.Error())
+			return nil, false
+		}
+	}
+	return &req, true
+}
+
+func (s *Server) validateUserWithCompany(c *gin.Context, uid uint) (*models.User, bool) {
 	userRepo := s.getUserRepository()
 	if userRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "user repository not initialized")
-		return
+		return nil, false
 	}
 
 	user, err := userRepo.FindByIDWithDetails(reqContext(c), uid)
 	if err != nil || user == nil {
 		RespondError(c, http.StatusNotFound, "user not found")
-		return
+		return nil, false
 	}
 
-	hasCompany := false
-	if user.CompanyRel != nil && user.CompanyRel.Code != "" {
-		hasCompany = true
-	} else if user.CompanyID != nil && *user.CompanyID != 0 {
-		hasCompany = true
-	} else if strings.TrimSpace(user.Company) != "" {
-		hasCompany = true
-	}
-	if !hasCompany {
+	if !hasUserCompany(user) {
 		RespondError(c, http.StatusBadRequest, "User has no company assigned")
-		return
+		return nil, false
 	}
+	return user, true
+}
 
+func hasUserCompany(user *models.User) bool {
+	if user.CompanyRel != nil && user.CompanyRel.Code != "" {
+		return true
+	}
+	if user.CompanyID != nil && *user.CompanyID != 0 {
+		return true
+	}
+	return strings.TrimSpace(user.Company) != ""
+}
+
+func (s *Server) checkUserHasActivities(c *gin.Context, uid uint, month, year int) bool {
 	actRepo := s.getActivityRepository()
-	if actRepo != nil {
-		m := req.Month
-		y := req.Year
-		filter := repository.ActivityFilter{
-			Month: &m,
-			Year:  &y,
-			IsAll: true,
-		}
-		activities, _, aerr := actRepo.ListActiveByUser(reqContext(c), uid, filter)
-		if aerr != nil {
-			RespondError(c, http.StatusInternalServerError, "failed to check activities: "+aerr.Error())
-			return
-		}
-		if len(activities) == 0 {
-			RespondError(c, http.StatusBadRequest, "No activities recorded for this period")
-			return
-		}
+	if actRepo == nil {
+		return true
 	}
+	filter := repository.ActivityFilter{
+		Month: &month,
+		Year:  &year,
+		IsAll: true,
+	}
+	activities, _, aerr := actRepo.ListActiveByUser(reqContext(c), uid, filter)
+	if aerr != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to check activities: "+aerr.Error())
+		return false
+	}
+	if len(activities) == 0 {
+		RespondError(c, http.StatusBadRequest, "No activities recorded for this period")
+		return false
+	}
+	return true
+}
 
+func (s *Server) handleAsyncGeneration(c *gin.Context, user *models.User, req *request.GenerateRequest) bool {
 	jobRepo := s.getJobRepo()
 	queueClient := s.getQueueClient()
-
-	if queueClient != nil && jobRepo != nil {
-		// 1. Distributed debouncing lock via Redis (Edge Case 3)
-		rdb := s.getRedisClient()
-		lockKey := fmt.Sprintf("timesheet:lock:%d:%d:%02d", uid, req.Year, req.Month)
-		if rdb != nil {
-			acquired, lerr := rdb.SetNX(reqContext(c), lockKey, "locked", 10*time.Second).Result()
-			if lerr == nil && !acquired {
-				RespondError(c, http.StatusConflict, "A generation request for this period is currently being processed. Please wait a moment.")
-				return
-			}
-		}
-
-		// 2. Check if there's already an in-flight job (queued or processing)
-		if inFlight, err := jobRepo.HasInFlightJob(reqContext(c), uid, req.Month, req.Year); err == nil && inFlight {
-			RespondError(c, http.StatusConflict, "A generation request for this period is already queued or processing. Please check your email or wait a moment.")
-			return
-		}
-
-		// 3. Autonomous Cache Evaluation & Re-issue (Option A)
-		activeJob, err := jobRepo.FindActiveCompletedJob(reqContext(c), uid, req.Month, req.Year)
-		if err == nil && activeJob != nil && activeJob.FileKey != "" {
-			isCacheValid := true
-
-			// Check if activities were modified after job was created
-			if actRepo != nil {
-				latestActUpdate, aerr := actRepo.GetLatestActivityUpdateTime(reqContext(c), uid, req.Month, req.Year)
-				if aerr == nil && !latestActUpdate.IsZero() && latestActUpdate.After(activeJob.CreatedAt) {
-					isCacheValid = false
-				}
-			}
-
-			// Check if user profile was modified after job was created
-			if isCacheValid && user.UpdatedAt.After(activeJob.CreatedAt) {
-				isCacheValid = false
-			}
-
-			// Check if physical file exists in storage
-			if isCacheValid {
-				storageSvc := s.getStorage()
-				if storageSvc != nil {
-					exists, serr := storageSvc.FileExists(reqContext(c), activeJob.FileKey)
-					if serr != nil || !exists {
-						isCacheValid = false
-					}
-				}
-			}
-
-			if isCacheValid {
-				// Autonomous Re-issue without regenerating XLSX or duplicating in S3
-				newToken := uuid.New().String()
-				maxDownloads := 3
-				if s.Cfg != nil && s.Cfg.TimesheetDownloadMaxQuota > 0 {
-					maxDownloads = s.Cfg.TimesheetDownloadMaxQuota
-				}
-				retentionDays := 7
-				if s.Cfg != nil && s.Cfg.S3RetentionDays > 0 {
-					retentionDays = s.Cfg.S3RetentionDays
-				}
-				tokenExpiry := time.Now().Add(time.Duration(retentionDays) * 24 * time.Hour)
-
-				if rerr := jobRepo.RenewDownloadToken(reqContext(c), activeJob.ID, newToken, maxDownloads, tokenExpiry); rerr == nil {
-					// Initialize fast-path counter in Redis
-					if rdb != nil {
-						tokenKey := fmt.Sprintf("timesheet:token:%s:count", newToken)
-						_ = rdb.Set(reqContext(c), tokenKey, 0, time.Duration(retentionDays)*24*time.Hour).Err()
-					}
-
-					baseURL := s.publicBaseURL(c)
-					if s.Cfg != nil && s.Cfg.AppBaseURL != "" {
-						baseURL = s.Cfg.AppBaseURL
-					}
-					downloadURL := fmt.Sprintf("%s/api/v1/timesheet/downloads/%s", baseURL, newToken)
-
-					// Dispatch email notification asynchronously
-					if s.Mailer != nil && user.Email != "" {
-						compName := ""
-						if user.CompanyRel != nil {
-							compName = user.CompanyRel.Name
-						} else {
-							compName = user.Company
-						}
-						period := mailer.FormatMonthYearIndonesian(req.Month, req.Year)
-						filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", user.Username, req.Month, req.Year)
-						toEmail := user.Email
-						toUsername := user.Username
-						m := s.Mailer
-						go func() {
-							if merr := m.SendTimesheetReadyEmail(toEmail, toUsername, compName, period, filename, downloadURL, tokenExpiry); merr != nil {
-								slog.Error("failed to send re-issued timesheet ready email", "error", merr, "email", toEmail)
-							}
-						}()
-					}
-
-					// Dispatch Web Push notification
-					if s.Push != nil {
-						pushTitle := "Timesheet Telah Siap"
-						pushBody := fmt.Sprintf("Timesheet periode %02d/%04d Anda telah siap diunduh.", req.Month, req.Year)
-						s.Push.SendToUser(uid, push.Payload{
-							Title: pushTitle,
-							Body:  pushBody,
-							URL:   downloadURL,
-						})
-					}
-
-					activeJob.DownloadURL = downloadURL
-					activeJob.DownloadToken = &newToken
-					activeJob.DownloadCount = 0
-					activeJob.MaxDownloads = maxDownloads
-					activeJob.TokenExpiresAt = &tokenExpiry
-
-					c.JSON(http.StatusOK, gin.H{
-						"code":    http.StatusOK,
-						"status":  "success",
-						"message": "Timesheet retrieved from cache and new download link re-issued. Please check your email.",
-						"data":    response.ToTimesheetJobResponse(activeJob),
-					})
-					return
-				}
-			}
-		}
-
-		// 4. Cache Miss or Invalidation: Enqueue new generation job
-		jobID := uuid.New().String()
-		job := &models.TimesheetJob{
-			ID:        jobID,
-			UserID:    uid,
-			Month:     req.Month,
-			Year:      req.Year,
-			Status:    models.JobStatusQueued,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-
-		if err := jobRepo.Create(reqContext(c), job); err != nil {
-			RespondError(c, http.StatusInternalServerError, "failed to create generation job: "+err.Error())
-			return
-		}
-
-		if err := queueClient.EnqueueTimesheetJob(reqContext(c), jobID, uid, req.Month, req.Year); err != nil {
-			_ = jobRepo.UpdateStatus(reqContext(c), jobID, models.JobStatusFailed, "", "", "failed to enqueue task: "+err.Error(), nil)
-			RespondError(c, http.StatusInternalServerError, "failed to enqueue generation task: "+err.Error())
-			return
-		}
-
-		c.JSON(http.StatusAccepted, gin.H{
-			"code":    http.StatusAccepted,
-			"status":  "success",
-			"message": "Timesheet generation job queued successfully. The download link will be sent to your email once ready.",
-			"data":    response.ToTimesheetJobResponse(job),
-		})
-		return
+	if queueClient == nil || jobRepo == nil {
+		return false
 	}
 
-	// Fallback when queue is not configured
+	if !s.acquireGenerationLock(c, user.ID, req.Year, req.Month) {
+		return true
+	}
+
+	if inFlight, err := jobRepo.HasInFlightJob(reqContext(c), user.ID, req.Month, req.Year); err == nil && inFlight {
+		RespondError(c, http.StatusConflict, "A generation request for this period is already queued or processing. Please check your email or wait a moment.")
+		return true
+	}
+
+	if s.tryHandleCachedJob(c, jobRepo, user, req.Month, req.Year) {
+		return true
+	}
+
+	return s.enqueueNewGenerationJob(c, jobRepo, queueClient, user.ID, req.Month, req.Year)
+}
+
+func (s *Server) acquireGenerationLock(c *gin.Context, uid uint, year, month int) bool {
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		return true
+	}
+	lockKey := fmt.Sprintf("timesheet:lock:%d:%d:%02d", uid, year, month)
+	acquired, lerr := rdb.SetNX(reqContext(c), lockKey, "locked", 10*time.Second).Result()
+	if lerr == nil && !acquired {
+		RespondError(c, http.StatusConflict, "A generation request for this period is currently being processed. Please wait a moment.")
+		return false
+	}
+	return true
+}
+
+func (s *Server) tryHandleCachedJob(c *gin.Context, jobRepo repository.JobRepository, user *models.User, month, year int) bool {
+	activeJob, err := jobRepo.FindActiveCompletedJob(reqContext(c), user.ID, month, year)
+	if err != nil || activeJob == nil || activeJob.FileKey == "" {
+		return false
+	}
+
+	if !isJobCacheValid(reqContext(c), activeJob, user, s.getActivityRepository(), s.getStorage(), month, year) {
+		return false
+	}
+
+	return s.reissueCachedJob(c, jobRepo, activeJob, user, month, year)
+}
+
+func isJobCacheValid(ctx context.Context, job *models.TimesheetJob, user *models.User, actRepo repository.ActivityRepository, storageSvc storage.StorageService, month, year int) bool {
+	if actRepo != nil {
+		latestActUpdate, aerr := actRepo.GetLatestActivityUpdateTime(ctx, user.ID, month, year)
+		if aerr == nil && !latestActUpdate.IsZero() && latestActUpdate.After(job.CreatedAt) {
+			return false
+		}
+	}
+
+	if user.UpdatedAt.After(job.CreatedAt) {
+		return false
+	}
+
+	if storageSvc != nil {
+		exists, serr := storageSvc.FileExists(ctx, job.FileKey)
+		if serr != nil || !exists {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) reissueCachedJob(c *gin.Context, jobRepo repository.JobRepository, activeJob *models.TimesheetJob, user *models.User, month, year int) bool {
+	newToken := uuid.New().String()
+	maxDownloads := 3
+	if s.Cfg != nil && s.Cfg.TimesheetDownloadMaxQuota > 0 {
+		maxDownloads = s.Cfg.TimesheetDownloadMaxQuota
+	}
+	retentionDays := 7
+	if s.Cfg != nil && s.Cfg.S3RetentionDays > 0 {
+		retentionDays = s.Cfg.S3RetentionDays
+	}
+	tokenExpiry := time.Now().Add(time.Duration(retentionDays) * 24 * time.Hour)
+
+	if rerr := jobRepo.RenewDownloadToken(reqContext(c), activeJob.ID, newToken, maxDownloads, tokenExpiry); rerr != nil {
+		return false
+	}
+
+	if rdb := s.getRedisClient(); rdb != nil {
+		tokenKey := fmt.Sprintf("timesheet:token:%s:count", newToken)
+		_ = rdb.Set(reqContext(c), tokenKey, 0, time.Duration(retentionDays)*24*time.Hour).Err()
+	}
+
+	baseURL := s.publicBaseURL(c)
+	if s.Cfg != nil && s.Cfg.AppBaseURL != "" {
+		baseURL = s.Cfg.AppBaseURL
+	}
+	downloadURL := fmt.Sprintf("%s/api/v1/timesheet/downloads/%s", baseURL, newToken)
+
+	s.dispatchReissueNotifications(user, downloadURL, tokenExpiry, month, year)
+
+	activeJob.DownloadURL = downloadURL
+	activeJob.DownloadToken = &newToken
+	activeJob.DownloadCount = 0
+	activeJob.MaxDownloads = maxDownloads
+	activeJob.TokenExpiresAt = &tokenExpiry
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    http.StatusOK,
+		"status":  "success",
+		"message": "Timesheet retrieved from cache and new download link re-issued. Please check your email.",
+		"data":    response.ToTimesheetJobResponse(activeJob),
+	})
+	return true
+}
+
+func (s *Server) dispatchReissueNotifications(user *models.User, downloadURL string, tokenExpiry time.Time, month, year int) {
+	if s.Mailer != nil && user.Email != "" {
+		compName := user.Company
+		if user.CompanyRel != nil {
+			compName = user.CompanyRel.Name
+		}
+		period := mailer.FormatMonthYearIndonesian(month, year)
+		filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", user.Username, month, year)
+		toEmail := user.Email
+		toUsername := user.Username
+		m := s.Mailer
+		go func() {
+			if merr := m.SendTimesheetReadyEmail(toEmail, toUsername, compName, period, filename, downloadURL, tokenExpiry); merr != nil {
+				slog.Error("failed to send re-issued timesheet ready email", "error", merr, "email", toEmail)
+			}
+		}()
+	}
+
+	if s.Push != nil {
+		pushTitle := "Timesheet Telah Siap"
+		pushBody := fmt.Sprintf("Timesheet periode %02d/%04d Anda telah siap diunduh.", month, year)
+		s.Push.SendToUser(user.ID, push.Payload{
+			Title: pushTitle,
+			Body:  pushBody,
+			URL:   downloadURL,
+		})
+	}
+}
+
+func (s *Server) enqueueNewGenerationJob(c *gin.Context, jobRepo repository.JobRepository, queueClient queue.QueueClient, uid uint, month, year int) bool {
+	jobID := uuid.New().String()
+	job := &models.TimesheetJob{
+		ID:        jobID,
+		UserID:    uid,
+		Month:     month,
+		Year:      year,
+		Status:    models.JobStatusQueued,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := jobRepo.Create(reqContext(c), job); err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to create generation job: "+err.Error())
+		return true
+	}
+
+	if err := queueClient.EnqueueTimesheetJob(reqContext(c), jobID, uid, month, year); err != nil {
+		_ = jobRepo.UpdateStatus(reqContext(c), jobID, models.JobStatusFailed, "", "", "failed to enqueue task: "+err.Error(), nil)
+		RespondError(c, http.StatusInternalServerError, "failed to enqueue generation task: "+err.Error())
+		return true
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"code":    http.StatusAccepted,
+		"status":  "success",
+		"message": "Timesheet generation job queued successfully. The download link will be sent to your email once ready.",
+		"data":    response.ToTimesheetJobResponse(job),
+	})
+	return true
+}
+
+func (s *Server) handleSyncGenerationFallback(c *gin.Context, uid uint, req *request.GenerateRequest) {
 	tsSvc := s.getTimesheetService()
 	if tsSvc == nil {
 		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")
@@ -369,13 +430,10 @@ func (s *Server) ListTimesheetJobs(c *gin.Context) {
 // @Router /api/v1/timesheet/downloads/{token} [get]
 func (s *Server) DownloadTimesheetByToken(c *gin.Context) {
 	token := strings.TrimSpace(c.Param("token"))
-	if token == "" || len(token) < 10 {
+	if len(token) < 10 {
 		RespondError(c, http.StatusBadRequest, "Invalid download token")
 		return
 	}
-
-	ctx := reqContext(c)
-	rdb := s.getRedisClient()
 
 	jobRepo := s.getJobRepo()
 	if jobRepo == nil {
@@ -383,94 +441,118 @@ func (s *Server) DownloadTimesheetByToken(c *gin.Context) {
 		return
 	}
 
-	// Step 1: Query job by download token
+	ctx := reqContext(c)
 	job, err := jobRepo.FindByDownloadToken(ctx, token)
 	if err != nil || job == nil {
 		RespondError(c, http.StatusNotFound, "Download token not found or invalid")
 		return
 	}
 
-	// Step 2: Check token expiration
-	if job.TokenExpiresAt != nil && job.TokenExpiresAt.Before(time.Now()) {
-		RespondError(c, http.StatusGone, "Download token has expired. Please generate a new timesheet to get an updated link.")
+	maxQuota := s.configuredDownloadQuota()
+	if !validateDownloadTokenQuota(c, job, maxQuota) {
 		return
 	}
 
-	// Step 3: Check download quota (max downloads)
-	maxDownloads := job.MaxDownloads
-	if maxDownloads <= 0 {
-		if s.Cfg != nil && s.Cfg.TimesheetDownloadMaxQuota > 0 {
-			maxDownloads = s.Cfg.TimesheetDownloadMaxQuota
-		} else {
-			maxDownloads = 3
-		}
-	}
-	if job.DownloadCount >= maxDownloads {
-		RespondError(c, http.StatusGone, "Download quota exceeded. Please generate a new timesheet to get an updated link.")
-		return
-	}
-
-	// Step 4: Handle HEAD request from link scanners (SES tracking, email clients)
-	// Return 200 OK without incrementing counter or consuming download quota
 	if c.Request.Method == http.MethodHead {
 		c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 		c.Status(http.StatusOK)
 		return
 	}
 
-	// Step 5: Fast-path atomic counter in Redis
-	tokenKey := fmt.Sprintf("timesheet:token:%s:count", token)
-	if rdb != nil {
-		remainingTTL := 7 * 24 * time.Hour
-		if job.TokenExpiresAt != nil && job.TokenExpiresAt.After(time.Now()) {
-			remainingTTL = time.Until(*job.TokenExpiresAt)
-		}
-		ttlSeconds := int64(remainingTTL.Seconds())
-		if ttlSeconds <= 0 {
-			ttlSeconds = 60
-		}
-
-		// Atomic Lua script: initializes counter with DB count if missing, sets TTL, and increments
-		const incrQuotaScript = `
-			local exists = redis.call('EXISTS', KEYS[1])
-			if exists == 0 then
-				redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
-			end
-			return redis.call('INCR', KEYS[1])
-		`
-		newCount, err := rdb.Eval(ctx, incrQuotaScript, []string{tokenKey}, job.DownloadCount, ttlSeconds).Int64()
-		if err == nil && newCount > int64(maxDownloads) {
-			RespondError(c, http.StatusGone, "Download quota exceeded. Please generate a new timesheet to get an updated link.")
-			return
-		}
+	if !s.recordRedisDownloadQuota(ctx, token, job, maxQuota) {
+		RespondError(c, http.StatusGone, "Download quota exceeded. Please generate a new timesheet to get an updated link.")
+		return
 	}
 
-	// Step 6: Increment download count in PostgreSQL
 	if err := jobRepo.IncrementDownloadCount(ctx, job.ID); err != nil {
 		slog.Error("failed to increment download count in db", "error", err, "job_id", job.ID)
 	}
 
-	// Step 7: Generate temporary Presigned S3 URL valid for 15 minutes with attachment filename
+	s.redirectPresignedS3Download(c, ctx, job.FileKey)
+}
+
+func (s *Server) configuredDownloadQuota() int {
+	if s.Cfg != nil && s.Cfg.TimesheetDownloadMaxQuota > 0 {
+		return s.Cfg.TimesheetDownloadMaxQuota
+	}
+	return 3
+}
+
+func validateDownloadTokenQuota(c *gin.Context, job *models.TimesheetJob, maxQuota int) bool {
+	if job.TokenExpiresAt != nil && job.TokenExpiresAt.Before(time.Now()) {
+		RespondError(c, http.StatusGone, "Download token has expired. Please generate a new timesheet to get an updated link.")
+		return false
+	}
+
+	maxDownloads := job.MaxDownloads
+	if maxDownloads <= 0 {
+		maxDownloads = maxQuota
+	}
+
+	if job.DownloadCount >= maxDownloads {
+		RespondError(c, http.StatusGone, "Download quota exceeded. Please generate a new timesheet to get an updated link.")
+		return false
+	}
+	return true
+}
+
+func (s *Server) recordRedisDownloadQuota(ctx context.Context, token string, job *models.TimesheetJob, maxQuota int) bool {
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		return true
+	}
+
+	maxDownloads := job.MaxDownloads
+	if maxDownloads <= 0 {
+		maxDownloads = maxQuota
+	}
+
+	tokenKey := fmt.Sprintf("timesheet:token:%s:count", token)
+	remainingTTL := 7 * 24 * time.Hour
+	if job.TokenExpiresAt != nil && job.TokenExpiresAt.After(time.Now()) {
+		remainingTTL = time.Until(*job.TokenExpiresAt)
+	}
+	ttlSeconds := int64(remainingTTL.Seconds())
+	if ttlSeconds <= 0 {
+		ttlSeconds = 60
+	}
+
+	// Atomic Lua script: initializes counter with DB count if missing, sets TTL, and increments
+	const incrQuotaScript = `
+		local exists = redis.call('EXISTS', KEYS[1])
+		if exists == 0 then
+			redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+		end
+		return redis.call('INCR', KEYS[1])
+	`
+	newCount, err := rdb.Eval(ctx, incrQuotaScript, []string{tokenKey}, job.DownloadCount, ttlSeconds).Int64()
+	return err != nil || newCount <= int64(maxDownloads)
+}
+
+func (s *Server) redirectPresignedS3Download(c *gin.Context, ctx context.Context, fileKey string) {
 	storageSvc := s.getStorage()
 	if storageSvc == nil {
 		RespondError(c, http.StatusInternalServerError, "Storage service not initialized")
 		return
 	}
 
-	filename := path.Base(job.FileKey)
-	if idx := strings.Index(filename, "_"); idx != -1 && idx+1 < len(filename) {
-		filename = filename[idx+1:]
-	}
-	if filename == "" || filename == "." {
-		filename = "timesheet.xlsx"
-	}
-
-	presignedURL, err := storageSvc.GetPresignedDownloadURLWithFilename(ctx, job.FileKey, filename, 15*time.Minute)
+	filename := extractAttachmentFilename(fileKey)
+	presignedURL, err := storageSvc.GetPresignedDownloadURLWithFilename(ctx, fileKey, filename, 15*time.Minute)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "Failed to generate download link: "+err.Error())
 		return
 	}
 
-	// Step 8: 302 Found Redirect to S3
 	c.Redirect(http.StatusFound, presignedURL)
+}
+
+func extractAttachmentFilename(fileKey string) string {
+	filename := path.Base(fileKey)
+	if idx := strings.Index(filename, "_"); idx != -1 && idx+1 < len(filename) {
+		filename = filename[idx+1:]
+	}
+	if filename == "" || filename == "." {
+		return "timesheet.xlsx"
+	}
+	return filename
 }

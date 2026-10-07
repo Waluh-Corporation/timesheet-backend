@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Previous Month Timesheet Access & Entry**: Users can now access, record daily activities, log overtime, and generate timesheet spreadsheets for both the current month and the previous month (maximum 1 month back). Submissions older than the previous month or for future months are strictly validated and rejected for standard users, while administrators maintain unrestricted historical access.
 - **Audit Logging & Activity Trail**: Added comprehensive immutable audit logs for administrative actions (account creation, profile modifications, deactivations, personal data anonymization, and profile change reviews) recording actors, target entities, IP addresses, user agents, and metadata.
 - **UU PDP Right to be Forgotten (Personal Data Anonymization)**: Added secure data anonymization endpoint (`POST /api/v1/admin/users/:id/anonymize`) allowing administrators to scrub personally identifiable information (PII) including name, email, credentials, and passkeys while retaining historical activity records for regulatory compliance.
 - **Redis TLS, ACL & Connection Pool Hardening**: Enhanced Redis integration with TLS encrypted in-flight communication, ACL username authentication, and connection pool controls (pool size, idle connections, timeouts) across the caching layer and background task queue.

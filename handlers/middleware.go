@@ -96,6 +96,26 @@ func currentUserID(c *gin.Context) uint {
 	return id
 }
 
+// currentUserRole returns the authenticated user role from context.
+// It safely handles both models.Role and string types stored in ctxRole.
+func currentUserRole(c *gin.Context) models.Role {
+	if c == nil {
+		return ""
+	}
+	v, ok := c.Get(ctxRole)
+	if !ok || v == nil {
+		return ""
+	}
+	switch r := v.(type) {
+	case models.Role:
+		return r
+	case string:
+		return models.Role(r)
+	default:
+		return ""
+	}
+}
+
 // matchHostOrURL checks whether host matches target or target's host.
 func matchHostOrURL(target, host, hostOnly string) bool {
 	if target == "" {

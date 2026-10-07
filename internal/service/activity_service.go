@@ -26,12 +26,21 @@ type ActivityService interface {
 }
 
 type activityService struct {
-	repo repository.ActivityRepository
+	repo    repository.ActivityRepository
+	nowFunc func() time.Time
 }
 
 // NewActivityService constructs an ActivityService implementation.
 func NewActivityService(repo repository.ActivityRepository) ActivityService {
-	return &activityService{repo: repo}
+	return &activityService{
+		repo:    repo,
+		nowFunc: time.Now,
+	}
+}
+
+// SetNowFunc overrides the time provider for testing purposes.
+func (s *activityService) SetNowFunc(fn func() time.Time) {
+	s.nowFunc = fn
 }
 
 func jakartaLocation() *time.Location {
@@ -95,6 +104,17 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, jakartaLocation())
 	if err != nil {
 		return domain.NewUserError(domain.ErrInvalidInput, "Invalid date format, expected YYYY-MM-DD")
+	}
+
+	now := time.Now()
+	if s.nowFunc != nil {
+		now = s.nowFunc()
+	}
+
+	if !domain.IsAdminFromContext(ctx) {
+		if err := domain.ValidateTimesheetDate(date, now, jakartaLocation()); err != nil {
+			return err
+		}
 	}
 
 	// Default status to 'P' if not provided
