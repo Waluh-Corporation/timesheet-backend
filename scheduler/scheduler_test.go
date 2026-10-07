@@ -170,6 +170,7 @@ func TestScheduler_WithDB(t *testing.T) {
 	act := models.DailyActivity{
 		UserID:   u.ID,
 		Date:     time.Date(now.Year(), now.Month(), now.Day(), 10, 0, 0, 0, s.loc),
+		Status:   "P",
 		Activity: "Working",
 		IsActive: true,
 	}

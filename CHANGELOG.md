@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Audit Logging & Activity Trail**: Added comprehensive immutable audit logs for administrative actions (account creation, profile modifications, deactivations, personal data anonymization, and profile change reviews) recording actors, target entities, IP addresses, user agents, and metadata.
+- **UU PDP Right to be Forgotten (Personal Data Anonymization)**: Added secure data anonymization endpoint (`POST /api/v1/admin/users/:id/anonymize`) allowing administrators to scrub personally identifiable information (PII) including name, email, credentials, and passkeys while retaining historical activity records for regulatory compliance.
+- **Redis TLS, ACL & Connection Pool Hardening**: Enhanced Redis integration with TLS encrypted in-flight communication, ACL username authentication, and connection pool controls (pool size, idle connections, timeouts) across the caching layer and background task queue.
+- **Server-Side Token Revocation & Active Session Invalidation**: Added Redis-backed JWT blacklisting (`jti`) upon user logout and active account caching to immediately terminate revoked or deactivated sessions.
+
+### Changed
+- **Access Token Expiry Alignment**: Aligned JWT access token lifespan to 15 minutes (`ACCESS_TOKEN_EXPIRY_MINUTES`) while utilizing refresh tokens for long-lived sessions, reducing exposure windows in accordance with OWASP API security guidelines.
+- **API Response Sanitization**: Sanitized authentication and passkey responses to return dedicated DTOs (`UserResponse`) instead of raw database entities, ensuring internal database fields are never serialized over the wire.
+- **Atomic Quota Counters**: Upgraded timesheet download quota counters to execute atomically via Redis Lua scripts, eliminating race conditions during concurrent download requests.
+- **Optimized Daily Reminder Scheduler**: Replaced repetitive user database queries in the reminder scheduler with an efficient single-pass query, improving scheduler throughput and database responsiveness.
+
 ## [1.13.0] - 2026-09-27
 
 ### Added

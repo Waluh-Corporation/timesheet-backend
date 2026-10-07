@@ -70,12 +70,20 @@ services:
   redis:
     image: redis:7-alpine
     container_name: timesheet_redis
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+        exec redis-server --requirepass "$$REDIS_PASSWORD"
+      else
+        exec redis-server
+      fi'
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -95,7 +103,7 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-timesheet}"
       TZ: Asia/Jakarta
     ports:
-      - "5432:5432" # Direct access for DBeaver / psql / Navicat
+      - "127.0.0.1:5432:5432" # Direct access for DBeaver / psql / Navicat (localhost only)
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -107,7 +109,7 @@ func (s *Server) Login(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, response.LoginResponse{
 		Token:        token,
 		RefreshToken: rawRefreshToken,
-		User:         *user,
+		User:         response.ToUserResponse(user),
 	})
 }
 
@@ -236,6 +238,24 @@ func (s *Server) Logout(c *gin.Context) {
 	var req request.LogoutRequest
 	_ = c.ShouldBindJSON(&req)
 
+	// 1. Blacklist active access token in Redis if Bearer token is provided
+	header := c.GetHeader("Authorization")
+	if strings.HasPrefix(header, "Bearer ") {
+		rawToken := strings.TrimPrefix(header, "Bearer ")
+		if claims, err := s.Auth.ParseToken(rawToken); err == nil && claims != nil {
+			rdb := s.getRedisClient()
+			if rdb != nil && claims.ID != "" && claims.ExpiresAt != nil {
+				remaining := time.Until(claims.ExpiresAt.Time)
+				if remaining > 0 {
+					blacklistKey := fmt.Sprintf("jwt:blacklist:%s", claims.ID)
+					_ = rdb.Set(c.Request.Context(), blacklistKey, "revoked", remaining).Err()
+					slog.Info("access token blacklisted in redis", "jti", claims.ID, "user_id", claims.UserID)
+				}
+			}
+		}
+	}
+
+	// 2. Revoke Refresh Token
 	if req.RefreshToken != "" {
 		tokenRepo := s.getTokenRepository()
 		if tokenRepo != nil {
@@ -256,7 +276,7 @@ func (s *Server) Logout(c *gin.Context) {
 // @Tags User
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} models.User
+// @Success 200 {object} response.UserResponse
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
 // @Failure 404 {object} response.ErrorResponse "User not found"
 // @Router /api/v1/me [get]
@@ -271,5 +291,5 @@ func (s *Server) Me(c *gin.Context) {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
-	RespondSuccess(c, http.StatusOK, user)
+	RespondSuccess(c, http.StatusOK, response.ToUserResponse(user))
 }

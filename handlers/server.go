@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"timesheet-backend/auth"
@@ -58,6 +61,7 @@ type Server struct {
 	AuthenticatorSvc  service.AuthenticatorService
 	SetupRepo         repository.SetupRepository
 	SetupSvc          service.SetupService
+	AuditRepo         repository.AuditRepository
 	QueueClient       queue.QueueClient
 	Storage           storage.StorageService
 	RedisClient       *redis.Client
@@ -112,6 +116,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	var authenticatorSvc service.AuthenticatorService
 	var setupRepo repository.SetupRepository
 	var setupSvc service.SetupService
+	var auditRepo repository.AuditRepository
 
 	if db != nil {
 		userRepo = repository.NewUserRepository(db)
@@ -130,6 +135,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		authenticatorSvc = service.NewAuthenticatorService(authRepo)
 		setupRepo = repository.NewSetupRepository(db)
 		setupSvc = service.NewSetupService(setupRepo, authSvc)
+		auditRepo = repository.NewAuditRepository(db)
 
 		_ = database.SyncAuthenticatorAAGUIDs(db)
 	}
@@ -157,6 +163,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		AuthenticatorSvc:  authenticatorSvc,
 		SetupRepo:         setupRepo,
 		SetupSvc:          setupSvc,
+		AuditRepo:         auditRepo,
 		GeoIP:             geoSvc,
 		webAuthnSessions:  make(map[string]*webAuthnSessionEntry),
 		resetCooldowns:    make(map[string]time.Time),
@@ -343,4 +350,38 @@ func (s *Server) getAuthenticatorService() service.AuthenticatorService {
 
 func (s *Server) getSetupService() service.SetupService {
 	return s.SetupSvc
+}
+
+func (s *Server) getAuditRepository() repository.AuditRepository {
+	if s == nil {
+		return nil
+	}
+	return s.AuditRepo
+}
+
+func (s *Server) recordAuditLog(ctx context.Context, actorID *uint, actorUsername, action, resourceType, resourceID, ip, userAgent string, details interface{}) {
+	repo := s.getAuditRepository()
+	if repo == nil {
+		return
+	}
+	if actorID != nil && *actorID == 0 {
+		actorID = nil
+	}
+	var detailsBytes datatypes.JSON
+	if details != nil {
+		if b, err := json.Marshal(details); err == nil {
+			detailsBytes = datatypes.JSON(b)
+		}
+	}
+	entry := &models.AuditLog{
+		ActorID:       actorID,
+		ActorUsername: actorUsername,
+		Action:        action,
+		ResourceType:  resourceType,
+		ResourceID:    resourceID,
+		IPAddress:     ip,
+		UserAgent:     userAgent,
+		Details:       detailsBytes,
+	}
+	_ = repo.Create(ctx, entry)
 }

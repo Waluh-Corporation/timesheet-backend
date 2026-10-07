@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -113,6 +114,9 @@ func (s *Server) CreateUser(c *gin.Context) {
 		return
 	}
 
+	cid := currentUserID(c)
+	s.recordAuditLog(c.Request.Context(), &cid, "", "USER_CREATED", "user", strconv.Itoa(int(user.ID)), c.ClientIP(), c.Request.UserAgent(), gin.H{"username": user.Username, "email": user.Email, "role": user.Role})
+
 	RespondSuccess(c, http.StatusCreated, response.CreateUserData{
 		Message: "user created successfully",
 		User:    response.ToUserResponse(user),
@@ -175,6 +179,10 @@ func (s *Server) UpdateUser(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, "failed to update user: "+err.Error())
 		return
 	}
+	if rdb := s.getRedisClient(); rdb != nil {
+		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
+	}
+	s.recordAuditLog(c.Request.Context(), &callerID, "", "USER_UPDATED", "user", strconv.Itoa(int(id)), c.ClientIP(), c.Request.UserAgent(), req)
 	RespondMessage(c, http.StatusOK, "user updated successfully")
 }
 
@@ -220,5 +228,59 @@ func (s *Server) DeleteUser(c *gin.Context) {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if rdb := s.getRedisClient(); rdb != nil {
+		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
+	}
+	s.recordAuditLog(c.Request.Context(), &callerID, "", "USER_DEACTIVATED", "user", strconv.Itoa(int(id)), c.ClientIP(), c.Request.UserAgent(), nil)
 	RespondMessage(c, http.StatusOK, "user deactivated successfully")
+}
+
+// AnonymizeUser godoc
+// @Summary Anonymize user personal data (UU PDP / Right to be Forgotten)
+// @Description Scrubs PII from user account, tokens, passkeys, and profile change requests while preserving anonymized activity records for compliance.
+// @Tags Admin
+// @Security BearerAuth
+// @Produce json
+// @Param id path int true "User ID"
+// @Success 200 {object} response.MessageResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid user ID"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 403 {object} response.ErrorResponse "Admin only or self-anonymization forbidden"
+// @Failure 404 {object} response.ErrorResponse "User not found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/admin/users/{id}/anonymize [post]
+func (s *Server) AnonymizeUser(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
+		return
+	}
+	if isSelf(c, uint(id)) {
+		RespondError(c, http.StatusForbidden, "you cannot anonymize your own account")
+		return
+	}
+	svc := s.GetUserService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errUserServiceUnavailable)
+		return
+	}
+
+	callerID := currentUserID(c)
+	if err := svc.AdminAnonymizeUser(c.Request.Context(), uint(id), callerID); err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			RespondError(c, http.StatusForbidden, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, errUserNotFound)
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if rdb := s.getRedisClient(); rdb != nil {
+		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
+	}
+	s.recordAuditLog(c.Request.Context(), &callerID, "", "USER_ANONYMIZED", "user", strconv.Itoa(int(id)), c.ClientIP(), c.Request.UserAgent(), nil)
+	RespondMessage(c, http.StatusOK, "user personal data anonymized successfully")
 }

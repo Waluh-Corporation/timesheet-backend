@@ -421,17 +421,24 @@ func (s *Server) DownloadTimesheetByToken(c *gin.Context) {
 	// Step 5: Fast-path atomic counter in Redis
 	tokenKey := fmt.Sprintf("timesheet:token:%s:count", token)
 	if rdb != nil {
-		// Sync with DB count if key doesn't exist
-		exists, _ := rdb.Exists(ctx, tokenKey).Result()
-		if exists == 0 {
-			remainingTTL := 7 * 24 * time.Hour
-			if job.TokenExpiresAt != nil && job.TokenExpiresAt.After(time.Now()) {
-				remainingTTL = time.Until(*job.TokenExpiresAt)
-			}
-			_ = rdb.Set(ctx, tokenKey, job.DownloadCount, remainingTTL).Err()
+		remainingTTL := 7 * 24 * time.Hour
+		if job.TokenExpiresAt != nil && job.TokenExpiresAt.After(time.Now()) {
+			remainingTTL = time.Until(*job.TokenExpiresAt)
+		}
+		ttlSeconds := int64(remainingTTL.Seconds())
+		if ttlSeconds <= 0 {
+			ttlSeconds = 60
 		}
 
-		newCount, err := rdb.Incr(ctx, tokenKey).Result()
+		// Atomic Lua script: initializes counter with DB count if missing, sets TTL, and increments
+		const incrQuotaScript = `
+			local exists = redis.call('EXISTS', KEYS[1])
+			if exists == 0 then
+				redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+			end
+			return redis.call('INCR', KEYS[1])
+		`
+		newCount, err := rdb.Eval(ctx, incrQuotaScript, []string{tokenKey}, job.DownloadCount, ttlSeconds).Int64()
 		if err == nil && newCount > int64(maxDownloads) {
 			RespondError(c, http.StatusGone, "Download quota exceeded. Please generate a new timesheet to get an updated link.")
 			return

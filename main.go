@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"log/slog"
@@ -178,7 +179,11 @@ func main() {
 		return
 	}
 
-	authSvc := auth.NewService(cfg.JWTSecret, cfg.JWTExpiry)
+	tokenExpiry := cfg.AccessTokenExpiry
+	if tokenExpiry <= 0 {
+		tokenExpiry = 15 * time.Minute
+	}
+	authSvc := auth.NewService(cfg.JWTSecret, tokenExpiry)
 	mailSvc := mailer.New(cfg)
 	pushSvc := push.New(cfg, db)
 
@@ -189,16 +194,23 @@ func main() {
 
 	var redisClient *redis.Client
 	if cfg.RedisAddr != "" {
-		redisClient = redis.NewClient(&redis.Options{
+		redisOpts := &redis.Options{
 			Addr:         cfg.RedisAddr,
+			Username:     cfg.RedisUsername,
 			Password:     cfg.RedisPassword,
 			DB:           cfg.RedisDB,
-			DialTimeout:  2 * time.Second,
-			ReadTimeout:  1 * time.Second,
-			WriteTimeout: 1 * time.Second,
-			PoolSize:     20,
-			MinIdleConns: 5,
-		})
+			DialTimeout:  cfg.RedisDialTimeout,
+			ReadTimeout:  cfg.RedisReadTimeout,
+			WriteTimeout: cfg.RedisWriteTimeout,
+			PoolSize:     cfg.RedisPoolSize,
+			MinIdleConns: cfg.RedisMinIdleConns,
+		}
+		if cfg.RedisTLSEnabled {
+			redisOpts.TLSConfig = &tls.Config{
+				InsecureSkipVerify: cfg.RedisTLSSkipVerify, //nolint:gosec // configurable for internal TLS
+			}
+		}
+		redisClient = redis.NewClient(redisOpts)
 		pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
 		if err := redisClient.Ping(pingCtx).Err(); err != nil {
 			logger.Warn("redis client failed to ping, continuing with graceful degradation", slog.Any("error", err))
@@ -382,6 +394,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.POST("/users", s.CreateUser)
 		admin.PATCH("/users/:id", s.UpdateUser)
 		admin.DELETE("/users/:id", s.DeleteUser)
+		admin.POST("/users/:id/anonymize", s.AnonymizeUser)
 		admin.GET("/users/:id/passkeys", s.AdminListPasskeys)
 		admin.PATCH("/users/:id/passkeys/:pid", s.AdminUpdatePasskey)
 		admin.DELETE("/users/:id/passkeys/:pid", s.AdminDeletePasskey)

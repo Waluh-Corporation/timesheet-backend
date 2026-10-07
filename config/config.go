@@ -80,9 +80,17 @@ type Config struct {
 	CORSAllowedOrigins []string
 
 	// Redis task queue configuration.
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
+	RedisAddr          string
+	RedisPassword      string
+	RedisDB            int
+	RedisTLSEnabled    bool
+	RedisTLSSkipVerify bool
+	RedisUsername      string
+	RedisPoolSize      int
+	RedisMinIdleConns  int
+	RedisDialTimeout   time.Duration
+	RedisReadTimeout   time.Duration
+	RedisWriteTimeout  time.Duration
 
 	// S3-compatible object storage configuration.
 	S3Endpoint      string
@@ -292,9 +300,17 @@ func Load() *Config {
 
 		CORSAllowedOrigins: parseOrigins(getEnv("CORS_ALLOWED_ORIGINS", "")),
 
-		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword: getEnv("REDIS_PASSWORD", ""),
-		RedisDB:       getEnvInt("REDIS_DB", 0),
+		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
+		RedisDB:            getEnvInt("REDIS_DB", 0),
+		RedisTLSEnabled:    getEnvBool("REDIS_TLS_ENABLED", false),
+		RedisTLSSkipVerify: getEnvBool("REDIS_TLS_SKIP_VERIFY", false),
+		RedisUsername:      getEnv("REDIS_USERNAME", ""),
+		RedisPoolSize:      getEnvInt("REDIS_POOL_SIZE", 20),
+		RedisMinIdleConns:  getEnvInt("REDIS_MIN_IDLE_CONNS", 5),
+		RedisDialTimeout:   time.Duration(getEnvInt("REDIS_DIAL_TIMEOUT_MS", 2000)) * time.Millisecond,
+		RedisReadTimeout:   time.Duration(getEnvInt("REDIS_READ_TIMEOUT_MS", 1000)) * time.Millisecond,
+		RedisWriteTimeout:  time.Duration(getEnvInt("REDIS_WRITE_TIMEOUT_MS", 1000)) * time.Millisecond,
 
 		S3Endpoint:      getEnv("S3_ENDPOINT", ""),
 		S3Region:        getEnv("S3_REGION", "us-east-1"),

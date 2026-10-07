@@ -196,21 +196,22 @@ func (s *Scheduler) sendDailyReminders() {
 
 	log.Printf("[scheduler] running daily reminder for %s", startOfDay.Format("2006-01-02"))
 
-	var users []models.User
-	if err := s.db.Where("is_active = ? AND role = ?", true, models.RoleUser).Find(&users).Error; err != nil {
-		log.Printf("[scheduler] failed to load users: %v", err)
+	var targetUserIDs []uint
+	subQuery := s.db.Model(&models.DailyActivity{}).
+		Select("1").
+		Where("daily_activities.user_id = users.id AND daily_activities.date >= ? AND daily_activities.date < ?", startOfDay, endOfDay)
+
+	err := s.db.Model(&models.User{}).
+		Where("is_active = ? AND role = ?", true, models.RoleUser).
+		Where("NOT EXISTS (?)", subQuery).
+		Pluck("id", &targetUserIDs).Error
+	if err != nil {
+		log.Printf("[scheduler] failed to load users needing reminder: %v", err)
 		return
 	}
 
-	for _, u := range users {
-		var count int64
-		s.db.Model(&models.DailyActivity{}).
-			Where("user_id = ? AND date >= ? AND date < ?", u.ID, startOfDay, endOfDay).
-			Count(&count)
-		if count > 0 {
-			continue // already filled today
-		}
-		s.push.SendToUser(u.ID, push.Payload{
+	for _, userID := range targetUserIDs {
+		s.push.SendToUser(userID, push.Payload{
 			Title: "Timesheet Reminder",
 			Body:  "Waktunya isi timesheet hari ini!",
 			URL:   "/activity",

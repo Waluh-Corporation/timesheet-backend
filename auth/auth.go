@@ -8,8 +8,16 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 
 	"timesheet-backend/models"
+)
+
+const (
+	// TokenIssuer identifies the backend system issuing JWT credentials.
+	TokenIssuer = "timesheet-backend"
+	// TokenAudience defines the expected relying audience.
+	TokenAudience = "timesheet-portal"
 )
 
 // Claims is the JWT payload carried in the session token.
@@ -37,6 +45,9 @@ func (s *Service) GenerateToken(u *models.User) (string, error) {
 		UserID: u.ID,
 		Role:   u.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    TokenIssuer,
+			Audience:  jwt.ClaimStrings{TokenAudience},
+			ID:        uuid.NewString(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.expiry)),
 			Subject:   u.Username,
@@ -61,6 +72,9 @@ func (s *Service) ParseToken(tokenStr string) (*Claims, error) {
 	}
 	if !token.Valid {
 		return nil, errors.New("invalid token")
+	}
+	if claims.Issuer != "" && claims.Issuer != TokenIssuer {
+		return nil, errors.New("invalid token issuer")
 	}
 	return claims, nil
 }

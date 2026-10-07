@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -28,8 +29,14 @@ func NewQueueClient(cfg *config.Config) (QueueClient, error) {
 	}
 	redisOpt := asynq.RedisClientOpt{
 		Addr:     cfg.RedisAddr,
+		Username: cfg.RedisUsername,
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
+	}
+	if cfg.RedisTLSEnabled {
+		redisOpt.TLSConfig = &tls.Config{
+			InsecureSkipVerify: cfg.RedisTLSSkipVerify, //nolint:gosec // configurable for internal TLS
+		}
 	}
 	client := asynq.NewClient(redisOpt)
 	return &asynqClient{client: client}, nil

@@ -112,5 +112,11 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 		return
 	}
 
+	auditAction := "PROFILE_CHANGE_APPROVED"
+	if action == "reject" {
+		auditAction = "PROFILE_CHANGE_REJECTED"
+	}
+	s.recordAuditLog(c.Request.Context(), &reviewer, "", auditAction, "profile_change", strconv.Itoa(int(id)), c.ClientIP(), c.Request.UserAgent(), map[string]string{"action": action})
+
 	RespondMessage(c, http.StatusOK, "profile change request "+action+"d")
 }

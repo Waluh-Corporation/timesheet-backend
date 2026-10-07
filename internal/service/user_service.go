@@ -26,6 +26,7 @@ type UserService interface {
 	AdminCreateUser(ctx context.Context, req *request.CreateUserRequest, loginBaseURL string) (*models.User, string, error)
 	AdminUpdateUser(ctx context.Context, id uint, callerID uint, req *request.UpdateUserRequest) error
 	AdminDeleteUser(ctx context.Context, id uint, callerID uint) error
+	AdminAnonymizeUser(ctx context.Context, id uint, callerID uint) error
 
 	// Profile Change Requests
 	SubmitProfileChange(ctx context.Context, userID uint, req *request.ProfileChangeRequestDTO) error
@@ -321,6 +322,20 @@ func (s *userService) AdminDeleteUser(ctx context.Context, id uint, callerID uin
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil || user == nil {
 		return domain.NewUserError(domain.ErrNotFound, "user not found")
+	}
+	return s.repo.SoftDelete(ctx, id)
+}
+
+func (s *userService) AdminAnonymizeUser(ctx context.Context, id uint, callerID uint) error {
+	if id == callerID {
+		return domain.NewUserError(domain.ErrForbidden, "you cannot anonymize your own account")
+	}
+	user, err := s.repo.FindByID(ctx, id)
+	if err != nil || user == nil {
+		return domain.NewUserError(domain.ErrNotFound, "user not found")
+	}
+	if err := s.repo.Anonymize(ctx, id); err != nil {
+		return fmt.Errorf("failed to anonymize user data: %w", err)
 	}
 	return s.repo.SoftDelete(ctx, id)
 }

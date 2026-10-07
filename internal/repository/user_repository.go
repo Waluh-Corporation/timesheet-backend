@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -104,6 +105,25 @@ func (r *userRepository) SoftDelete(ctx context.Context, id uint) error {
 		"is_active":  false,
 		"updated_at": time.Now(),
 	}).Error
+}
+
+func (r *userRepository) Anonymize(ctx context.Context, id uint) error {
+	redactedName := fmt.Sprintf("ANONYMIZED_USER_%d", id)
+	redactedEmail := fmt.Sprintf("deleted_%d@timesheet.local", id)
+	redactedUsername := fmt.Sprintf("deleted_user_%d", id)
+
+	updates := map[string]interface{}{
+		"name":          redactedName,
+		"username":      redactedUsername,
+		"email":         redactedEmail,
+		"bni_id":        "",
+		"employee_id":   "",
+		"password_hash": "",
+		"is_active":     false,
+		"updated_at":    time.Now(),
+	}
+
+	return r.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", id).Updates(updates).Error
 }
 
 func (r *userRepository) ListUsers(ctx context.Context, isActive *bool) ([]models.User, error) {

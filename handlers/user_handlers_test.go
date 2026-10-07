@@ -41,6 +41,29 @@ func TestUserHandlers_SelfProtectionAndValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("AnonymizeUser rejects anonymizing own account", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "10"}}
+		c.Set(ctxUserID, uint(10)) // caller is user 10
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/10/anonymize", nil)
+
+		srv.AnonymizeUser(c)
+		assertResponseCode(t, w, http.StatusForbidden)
+	})
+
+	t.Run("AnonymizeUser rejects invalid ID", func(t *testing.T) {
+		for _, invalidID := range []string{"abc", "0", "-5"} {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Params = gin.Params{{Key: "id", Value: invalidID}}
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+invalidID+"/anonymize", nil)
+
+			srv.AnonymizeUser(c)
+			assertResponseCode(t, w, http.StatusBadRequest)
+		}
+	})
+
 	t.Run("UpdateUser rejects deactivating own account", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)

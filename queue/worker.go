@@ -3,6 +3,7 @@ package queue
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -48,8 +49,14 @@ func NewWorkerServer(
 ) *WorkerServer {
 	redisOpt := asynq.RedisClientOpt{
 		Addr:     cfg.RedisAddr,
+		Username: cfg.RedisUsername,
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
+	}
+	if cfg.RedisTLSEnabled {
+		redisOpt.TLSConfig = &tls.Config{
+			InsecureSkipVerify: cfg.RedisTLSSkipVerify, //nolint:gosec // configurable for internal TLS
+		}
 	}
 
 	concurrency := cfg.MailerWorkerCount

@@ -120,6 +120,15 @@ func (m *mockUserRepo) SoftDelete(ctx context.Context, id uint) error {
 	return domain.ErrNotFound
 }
 
+func (m *mockUserRepo) Anonymize(ctx context.Context, id uint) error {
+	if u, ok := m.users[id]; ok {
+		u.Name = "ANONYMIZED_USER"
+		u.IsActive = false
+		return nil
+	}
+	return domain.ErrNotFound
+}
+
 func (m *mockUserRepo) ListUsers(ctx context.Context, isActive *bool) ([]models.User, error) {
 	var list []models.User
 	for _, u := range m.users {

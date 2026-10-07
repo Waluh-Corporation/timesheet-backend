@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -35,13 +37,37 @@ func (s *Server) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// Immediate Account Revocation: Validate that the user account exists and is active
-		userRepo := s.getUserRepository()
-		if userRepo != nil {
-			user, uerr := userRepo.FindByID(c.Request.Context(), claims.UserID)
-			if uerr != nil || user == nil || !user.IsActive {
-				RespondAbortError(c, http.StatusUnauthorized, "account is deactivated or suspended")
+		rdb := s.getRedisClient()
+		// Check token blacklist in Redis if jti is present
+		if claims.ID != "" && rdb != nil {
+			blacklistKey := fmt.Sprintf("jwt:blacklist:%s", claims.ID)
+			if exists, _ := rdb.Exists(c.Request.Context(), blacklistKey).Result(); exists > 0 {
+				RespondAbortError(c, http.StatusUnauthorized, "token has been revoked")
 				return
+			}
+		}
+
+		// Immediate Account Revocation: Validate that the user account exists and is active
+		// Fast-path: Check Redis cache first (TTL 2 minutes)
+		activeKey := fmt.Sprintf("user:active:%d", claims.UserID)
+		var isActiveCached bool
+		if rdb != nil {
+			if val, err := rdb.Get(c.Request.Context(), activeKey).Result(); err == nil && val == "1" {
+				isActiveCached = true
+			}
+		}
+
+		if !isActiveCached {
+			userRepo := s.getUserRepository()
+			if userRepo != nil {
+				user, uerr := userRepo.FindByID(c.Request.Context(), claims.UserID)
+				if uerr != nil || user == nil || !user.IsActive {
+					RespondAbortError(c, http.StatusUnauthorized, "account is deactivated or suspended")
+					return
+				}
+				if rdb != nil {
+					_ = rdb.Set(c.Request.Context(), activeKey, "1", 2*time.Minute).Err()
+				}
 			}
 		}
 
