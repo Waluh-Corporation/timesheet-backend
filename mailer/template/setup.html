@@ -31,18 +31,18 @@
   <tr>
     <td style="padding: 18px 20px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr>
+        <tr class="stack-row">
           <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Username</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Username}}</td>
         </tr>
         {{if .Email}}
-        <tr>
+        <tr class="stack-row">
           <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Email Terdaftar</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 500; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Email}}</td>
         </tr>
         {{end}}
         {{if .InitialPassword}}
-        <tr>
+        <tr class="stack-row">
           <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Password Awal</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #4f46e5;">
             <span style="display: inline-block; padding: 3px 8px; background-color: #eef2ff; border: 1px solid #c7d2fe; border-radius: 4px; color: #4338ca; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 13px; letter-spacing: 0.5px;">{{.InitialPassword}}</span>
@@ -61,6 +61,7 @@
   cellpadding="0"
   cellspacing="0"
   border="0"
+  class="callout-warning"
   style="
     width: 100%;
     margin-top: 18px;
@@ -71,10 +72,10 @@
 >
   <tr>
     <td style="padding: 12px 16px;">
-      <p style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #92400e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <p class="callout-warning-title" style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #92400e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Imbauan Keamanan Akun
       </p>
-      <p style="margin: 0; font-size: 12px; color: #b45309; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <p class="callout-warning-text" style="margin: 0; font-size: 12px; color: #b45309; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Demi menjaga keamanan akun dan privasi data Anda, harap segera ganti kata sandi awal ini melalui menu Akun / Profil setelah berhasil masuk untuk pertama kali.
       </p>
     </td>
@@ -82,7 +83,7 @@
 </table>
 
 <!-- ACTION BUTTON -->
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 26px 0 0;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn-shell" style="margin: 26px 0 0;">
   <tr>
     <td
       align="center"
@@ -103,7 +104,7 @@
         fillcolor="#4f46e5"
       >
         <w:anchorlock />
-        <center style="color: #ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; font-weight: bold">
+        <center style="color: #ffffff; font-family: Arial, sans-serif; font-size: 15px; font-weight: bold">
           Masuk ke Portal
         </center>
       </v:roundrect>
@@ -160,6 +161,8 @@
       font-size: 11px;
       line-height: 1.55;
       word-break: break-all;
+      overflow-wrap: anywhere;
+      word-wrap: break-word;
     "
   >
     <a href="{{.SetupURL}}" target="_blank" style="color: #4f46e5; text-decoration: none;">{{.SetupURL}}</a>
@@ -173,6 +176,7 @@
   cellpadding="0"
   cellspacing="0"
   border="0"
+  class="callout-indigo"
   style="
     width: 100%;
     margin-top: 22px;
@@ -183,10 +187,10 @@
 >
   <tr>
     <td style="padding: 12px 16px;">
-      <p style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #3730a3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <p class="callout-indigo-title" style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #3730a3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Dukungan Login Biometrik / Passkey
       </p>
-      <p style="margin: 0; font-size: 12px; color: #4338ca; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <p class="callout-indigo-text" style="margin: 0; font-size: 12px; color: #4338ca; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Setelah mengatur kata sandi, Anda dapat mendaftarkan Passkey (Face ID, Touch ID, atau Windows Hello) pada menu Profil untuk proses masuk yang instan dan tanpa kata sandi.
       </p>
     </td>
