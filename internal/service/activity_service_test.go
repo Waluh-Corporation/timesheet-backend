@@ -55,6 +55,21 @@ func (m *mockActivityRepo) FindActiveByUserAndDate(ctx context.Context, userID u
 	return nil, domain.ErrNotFound
 }
 
+func (m *mockActivityRepo) FindPreviousActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error) {
+	var latest *models.DailyActivity
+	for _, act := range m.activities {
+		if act.UserID == userID && act.IsActive && act.Date.Before(date) {
+			if latest == nil || act.Date.After(latest.Date) {
+				latest = act
+			}
+		}
+	}
+	if latest == nil {
+		return nil, domain.ErrNotFound
+	}
+	return latest, nil
+}
+
 func (m *mockActivityRepo) Create(ctx context.Context, activity *models.DailyActivity) error {
 	if m.createErr != nil {
 		return m.createErr
@@ -596,6 +611,157 @@ func TestActivityService_UpsertDailyActivity_PeriodLimits(t *testing.T) {
 			} else {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestActivityService_GetPreviousDailyActivity(t *testing.T) {
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	friDate := time.Date(2026, 10, 9, 0, 0, 0, 0, loc)  // Friday
+	monDate := time.Date(2026, 10, 12, 0, 0, 0, 0, loc) // Monday
+
+	proj := &models.Project{
+		ID:          10,
+		Code:        "PRJ-PREV",
+		Name:        "Previous Project",
+		AppImpacted: "Mobile App",
+		IsActive:    true,
+	}
+
+	tests := []struct {
+		name          string
+		setupRepo     func(*mockActivityRepo)
+		targetDate    string
+		nowTime       time.Time
+		userID        uint
+		expectError   bool
+		errType       error
+		expectedDesc  string
+		expectedProj  string
+		expectedStart string
+	}{
+		{
+			name: "success - finds previous Friday activity when target date is Monday",
+			setupRepo: func(r *mockActivityRepo) {
+				r.projects[proj.ID] = proj
+				r.activities[1] = &models.DailyActivity{
+					ID:           1,
+					UserID:       1,
+					Date:         friDate,
+					StartTime:    "08:30",
+					EndTime:      "17:30",
+					Status:       "P",
+					Activity:     "Finished sprint backlog item 42",
+					ProjectRefID: &proj.ID,
+					ProjectRef:   proj,
+					IsActive:     true,
+				}
+			},
+			targetDate:    "2026-10-12",
+			userID:        1,
+			expectError:   false,
+			expectedDesc:  "Finished sprint backlog item 42",
+			expectedProj:  "Previous Project",
+			expectedStart: "08:30",
+		},
+		{
+			name: "success - defaults to current day when targetDate is empty",
+			setupRepo: func(r *mockActivityRepo) {
+				r.activities[1] = &models.DailyActivity{
+					ID:        1,
+					UserID:    1,
+					Date:      friDate,
+					StartTime: "08:00",
+					EndTime:   "17:00",
+					Status:    "P",
+					Activity:  "Routine Friday maintenance",
+					IsActive:  true,
+				}
+			},
+			targetDate:   "",
+			nowTime:      monDate,
+			userID:       1,
+			expectError:  false,
+			expectedDesc: "Routine Friday maintenance",
+		},
+		{
+			name: "error - not found when user has no prior activities",
+			setupRepo: func(r *mockActivityRepo) {
+				// No activities seeded for userID 2
+			},
+			targetDate:  "2026-10-12",
+			userID:      2,
+			expectError: true,
+			errType:     domain.ErrNotFound,
+		},
+		{
+			name: "error - not found when all activities are after target date",
+			setupRepo: func(r *mockActivityRepo) {
+				r.activities[1] = &models.DailyActivity{
+					ID:       1,
+					UserID:   1,
+					Date:     monDate,
+					Activity: "Monday task",
+					IsActive: true,
+				}
+			},
+			targetDate:  "2026-10-09", // querying before Monday
+			userID:      1,
+			expectError: true,
+			errType:     domain.ErrNotFound,
+		},
+		{
+			name:        "error - invalid target date format",
+			setupRepo:   func(r *mockActivityRepo) {},
+			targetDate:  "12-10-2026",
+			userID:      1,
+			expectError: true,
+			errType:     domain.ErrInvalidInput,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockActivityRepo()
+			if tc.setupRepo != nil {
+				tc.setupRepo(repo)
+			}
+
+			svc := NewActivityService(repo)
+			if !tc.nowTime.IsZero() {
+				if s, ok := svc.(*activityService); ok {
+					s.SetNowFunc(func() time.Time {
+						return tc.nowTime
+					})
+				}
+			}
+
+			ctx := context.Background()
+			res, err := svc.GetPreviousDailyActivity(ctx, tc.userID, tc.targetDate)
+			if tc.expectError {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if tc.errType != nil && !errors.Is(err, tc.errType) {
+					t.Errorf("expected error type %v, got %v", tc.errType, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if res == nil {
+					t.Fatal("expected non-nil response")
+				}
+				if tc.expectedDesc != "" && res.Activity != tc.expectedDesc {
+					t.Errorf("expected activity description %q, got %q", tc.expectedDesc, res.Activity)
+				}
+				if tc.expectedProj != "" && res.ProjectName != tc.expectedProj {
+					t.Errorf("expected project name %q, got %q", tc.expectedProj, res.ProjectName)
+				}
+				if tc.expectedStart != "" && res.StartTime != tc.expectedStart {
+					t.Errorf("expected start time %q, got %q", tc.expectedStart, res.StartTime)
 				}
 			}
 		})

@@ -216,4 +216,26 @@ func TestActivityRepository(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for non-existent user and date, got nil")
 	}
+
+	// 11. FindPreviousActiveByUserAndDate
+	// 11a. Should find the activity created above when querying a later date
+	prevAct, err := repo.FindPreviousActiveByUserAndDate(ctx, user.ID, date.AddDate(0, 0, 1))
+	if err != nil {
+		t.Fatalf("expected to find previous activity, got err: %v", err)
+	}
+	if prevAct.ID != act.ID {
+		t.Errorf("expected previous activity ID %d, got %d", act.ID, prevAct.ID)
+	}
+
+	// 11b. When querying the exact same date (strictly before), it should not match
+	_, err = repo.FindPreviousActiveByUserAndDate(ctx, user.ID, date)
+	if err == nil {
+		t.Error("expected error when querying with same date, got nil")
+	}
+
+	// 11c. Non-existent user
+	_, err = repo.FindPreviousActiveByUserAndDate(ctx, 999999, date.AddDate(0, 0, 1))
+	if err == nil {
+		t.Error("expected error for non-existent user, got nil")
+	}
 }

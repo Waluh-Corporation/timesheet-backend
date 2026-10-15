@@ -30,6 +30,7 @@ type ActivityFilter struct {
 type ActivityRepository interface {
 	FindActiveByID(ctx context.Context, id uint) (*models.DailyActivity, error)
 	FindActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error)
+	FindPreviousActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error)
 	Create(ctx context.Context, activity *models.DailyActivity) error
 	Update(ctx context.Context, activity *models.DailyActivity) error
 	ListActiveByUser(ctx context.Context, userID uint, filter ActivityFilter) ([]models.DailyActivity, int64, error)
@@ -59,6 +60,17 @@ func (r *activityRepository) FindActiveByID(ctx context.Context, id uint) (*mode
 func (r *activityRepository) FindActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error) {
 	var activity models.DailyActivity
 	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Where("user_id = ? AND date = ? AND is_active = true", userID, date).First(&activity).Error; err != nil {
+		return nil, err
+	}
+	return &activity, nil
+}
+
+func (r *activityRepository) FindPreviousActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error) {
+	var activity models.DailyActivity
+	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").
+		Where("user_id = ? AND date < ? AND is_active = true", userID, date).
+		Order("date desc").
+		First(&activity).Error; err != nil {
 		return nil, err
 	}
 	return &activity, nil

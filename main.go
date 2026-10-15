@@ -360,6 +360,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		// Daily activity entry + list + detail + generation.
 		authed.POST("/activities", s.UpsertDailyActivity)
 		authed.GET("/activities", s.ListActivities)
+		authed.GET("/activities/previous", s.GetPreviousDailyActivity)
 		authed.GET("/activities/:id", s.GetDailyActivity)
 		authed.POST("/overtimes", s.UpsertOvertime)
 		authed.GET("/overtimes", s.ListMonthlyOvertimes)

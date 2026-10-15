@@ -219,3 +219,20 @@ func TestRegisterRoutes_RateLimitConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestRegisterRoutes_ActivityPrevious(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	cfg := &config.Config{}
+	srv := &handlers.Server{Cfg: cfg}
+	registerRoutes(r, srv)
+
+	// An unauthenticated request to /api/v1/activities/previous should hit AuthMiddleware and return 401
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/activities/previous", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for unauthenticated request to /api/v1/activities/previous, got %d", w.Code)
+	}
+}

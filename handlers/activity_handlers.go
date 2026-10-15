@@ -147,6 +147,45 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, *resp)
 }
 
+// GetPreviousDailyActivity godoc
+// @Summary Get previous day activity
+// @Description Retrieves the most recent active daily activity strictly before the specified reference date (default: today in WIB) to allow copying/autofilling activity descriptions.
+// @Tags Activity
+// @Security BearerAuth
+// @Produce json
+// @Param date query string false "Reference date (YYYY-MM-DD, default: today)"
+// @Success 200 {object} response.DailyActivityResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid date format"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 404 {object} response.ErrorResponse "No previous activity found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/activities/previous [get]
+func (s *Server) GetPreviousDailyActivity(c *gin.Context) {
+	svc := s.getActivityService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
+		return
+	}
+
+	dateParam := c.Query("date")
+	resp, err := svc.GetPreviousDailyActivity(reqContext(c), currentUserID(c), dateParam)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "no previous activity found")
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			msg := strings.TrimPrefix(err.Error(), domain.ErrInvalidInput.Error()+": ")
+			RespondError(c, http.StatusBadRequest, msg)
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondSuccess(c, http.StatusOK, *resp)
+}
+
 func determineActivitySortOrder(c *gin.Context) string {
 	sortOrder := strings.ToLower(c.Query("sort"))
 	if sortOrder == "asc" || sortOrder == "desc" {

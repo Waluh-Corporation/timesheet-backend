@@ -275,6 +275,85 @@ func TestActivityHandlers_GetAndListIntegration(t *testing.T) {
 		assertFatalCode(t, w, http.StatusNotFound)
 	})
 
+	t.Run("GetPreviousDailyActivity returns previous activity for owner with date param", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities/previous?date=2026-09-03", nil)
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.GetPreviousDailyActivity(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		var resp struct {
+			Code int                            `json:"code"`
+			Data response.DailyActivityResponse `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if resp.Data.ID != act2.ID {
+			t.Errorf("expected previous activity ID %d, got %d", act2.ID, resp.Data.ID)
+		}
+		if resp.Data.Activity != "Working on feature 2" {
+			t.Errorf("unexpected activity description: %s", resp.Data.Activity)
+		}
+	})
+
+	t.Run("GetPreviousDailyActivity defaults to latest activity when date param is empty", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities/previous", nil)
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.GetPreviousDailyActivity(c)
+		assertFatalCode(t, w, http.StatusOK)
+
+		var resp struct {
+			Code int                            `json:"code"`
+			Data response.DailyActivityResponse `json:"data"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		// Since act3 is the latest on 2026-09-03 and current time > 2026-09-03
+		if resp.Data.ID != act3.ID {
+			t.Errorf("expected latest previous activity ID %d, got %d", act3.ID, resp.Data.ID)
+		}
+		if resp.Data.Activity != "Business trip" {
+			t.Errorf("unexpected activity description: %s", resp.Data.Activity)
+		}
+	})
+
+	t.Run("GetPreviousDailyActivity returns 404 when no activity exists before date", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities/previous?date=2026-09-01", nil)
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.GetPreviousDailyActivity(c)
+		assertFatalCode(t, w, http.StatusNotFound)
+		if !strings.Contains(w.Body.String(), "no previous activity found") {
+			t.Errorf("expected 'no previous activity found' in response, got %s", w.Body.String())
+		}
+	})
+
+	t.Run("GetPreviousDailyActivity returns 400 when date format is invalid", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities/previous?date=03-09-2026", nil)
+		c.Set(ctxUserID, user1.ID)
+		c.Set(ctxRole, models.RoleUser)
+
+		srv.GetPreviousDailyActivity(c)
+		assertFatalCode(t, w, http.StatusBadRequest)
+		if !strings.Contains(w.Body.String(), "Invalid date format") {
+			t.Errorf("expected invalid date format in response, got %s", w.Body.String())
+		}
+	})
+
 	t.Run("ListActivities with pagination", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
@@ -374,6 +453,17 @@ func TestActivityHandlers_UninitializedService(t *testing.T) {
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest("GET", "/api/v1/activities", nil)
 		srv.ListActivities(c)
+		assertResponseCode(t, w, http.StatusInternalServerError)
+		if !strings.Contains(w.Body.String(), errActivityServiceNotInitialized) {
+			t.Errorf("expected %q in body, got %s", errActivityServiceNotInitialized, w.Body.String())
+		}
+	})
+
+	t.Run("GetPreviousDailyActivity uninitialized", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest("GET", "/api/v1/activities/previous", nil)
+		srv.GetPreviousDailyActivity(c)
 		assertResponseCode(t, w, http.StatusInternalServerError)
 		if !strings.Contains(w.Body.String(), errActivityServiceNotInitialized) {
 			t.Errorf("expected %q in body, got %s", errActivityServiceNotInitialized, w.Body.String())

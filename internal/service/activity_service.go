@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
@@ -22,6 +25,7 @@ const (
 type ActivityService interface {
 	UpsertDailyActivity(ctx context.Context, userID uint, req *request.DailyActivityRequest) error
 	GetDailyActivity(ctx context.Context, userID uint, id uint) (*response.DailyActivityResponse, error)
+	GetPreviousDailyActivity(ctx context.Context, userID uint, targetDate string) (*response.DailyActivityResponse, error)
 	ListActivities(ctx context.Context, userID uint, filter repository.ActivityFilter) ([]response.DailyActivityResponse, response.PaginationMeta, error)
 }
 
@@ -240,4 +244,51 @@ func (s *activityService) ListActivities(ctx context.Context, userID uint, filte
 	}
 
 	return respList, meta, nil
+}
+
+func (s *activityService) GetPreviousDailyActivity(ctx context.Context, userID uint, targetDate string) (*response.DailyActivityResponse, error) {
+	loc := jakartaLocation()
+	var refDate time.Time
+
+	trimmed := strings.TrimSpace(targetDate)
+	if trimmed == "" {
+		if s.nowFunc != nil {
+			refDate = s.nowFunc().In(loc)
+		} else {
+			refDate = time.Now().In(loc)
+		}
+		refDate = time.Date(refDate.Year(), refDate.Month(), refDate.Day(), 0, 0, 0, 0, loc)
+	} else {
+		parsed, err := time.ParseInLocation(dateFormatYYYYMMDD, trimmed, loc)
+		if err != nil {
+			return nil, domain.NewUserError(domain.ErrInvalidInput, "Invalid date format, expected YYYY-MM-DD")
+		}
+		refDate = parsed
+	}
+
+	activity, err := s.repo.FindPreviousActiveByUserAndDate(ctx, userID, refDate)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, domain.ErrNotFound) {
+			return nil, domain.NewUserError(domain.ErrNotFound, "No previous activity found")
+		}
+		return nil, err
+	}
+	if activity == nil {
+		return nil, domain.NewUserError(domain.ErrNotFound, "No previous activity found")
+	}
+
+	return &response.DailyActivityResponse{
+		ID:           activity.ID,
+		Date:         activity.Date,
+		StartTime:    activity.StartTime,
+		EndTime:      activity.EndTime,
+		Activity:     activity.Activity,
+		ProjectName:  activity.GetProjectName(),
+		ProjectID:    activity.GetProjectCode(),
+		Status:       activity.Status,
+		AppImpacted:  activity.GetAppImpacted(),
+		ProjectRefID: activity.ProjectRefID,
+		ProjectRef:   activity.ProjectRef,
+		StatusRef:    activity.StatusRef,
+	}, nil
 }

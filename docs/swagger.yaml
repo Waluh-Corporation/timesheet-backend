@@ -1133,7 +1133,7 @@ definitions:
         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         type: string
       user:
-        $ref: '#/definitions/models.User'
+        $ref: '#/definitions/response.UserResponse'
     type: object
   response.MessageResponse:
     properties:
@@ -1573,6 +1573,44 @@ paths:
       security:
       - BearerAuth: []
       summary: Get daily activity detail
+      tags:
+      - Activity
+  /api/v1/activities/previous:
+    get:
+      description: 'Retrieves the most recent active daily activity strictly before
+        the specified reference date (default: today in WIB) to allow copying/autofilling
+        activity descriptions.'
+      parameters:
+      - description: 'Reference date (YYYY-MM-DD, default: today)'
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DailyActivityResponse'
+        "400":
+          description: Invalid date format
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: No previous activity found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get previous day activity
       tags:
       - Activity
   /api/v1/activity-statuses:
@@ -2690,6 +2728,48 @@ paths:
       summary: Update user (Admin)
       tags:
       - Admin
+  /api/v1/admin/users/{id}/anonymize:
+    post:
+      description: Scrubs PII from user account, tokens, passkeys, and profile change
+        requests while preserving anonymized activity records for compliance.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only or self-anonymization forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Anonymize user personal data (UU PDP / Right to be Forgotten)
+      tags:
+      - Admin
   /api/v1/admin/users/{id}/passkeys:
     get:
       description: Retrieves all registered passkeys for the specified user (admin
@@ -3295,7 +3375,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.User'
+            $ref: '#/definitions/response.UserResponse'
         "401":
           description: Unauthorized
           schema:
