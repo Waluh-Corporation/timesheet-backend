@@ -30,8 +30,9 @@ Before creating branches, writing commits, or opening PRs, review [`docs/GIT_WOR
      chore(scope): build, CI/CD, or dependencies
      ```
    - Commits must be atomic. Do not bundle unrelated changes, refactorings, or formatting tweaks into a single commit.
-4. **Changelog Maintenance**:
+4. **Changelog Maintenance & Retention Policy**:
    - Every user-facing feature, fix, or deprecation must update [`CHANGELOG.md`](CHANGELOG.md) under `## [Unreleased]` following [Keep a Changelog](https://keepachangelog.com/) and using non-technical language (English).
+   - **5-Version Retention Limit**: [`CHANGELOG.md`](CHANGELOG.md) strictly maintains a rolling window of only the latest **5 released versions** plus the active `## [Unreleased]` section. Historical entries older than the 5 latest released versions must be pruned to maintain clarity, fast loading, and relevancy.
 
 ---
 
