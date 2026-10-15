@@ -11,16 +11,18 @@ All AI agents (Antigravity, Copilot, Cursor, etc.) working on this repository MU
 Before creating branches, writing commits, or opening PRs, review [`docs/GIT_WORKFLOW.md`](docs/GIT_WORKFLOW.md).
 
 1. **Base Branch Rule**:
-   - Every new feature or bugfix branch **MUST** be branched from the latest `main`:
+   - Every new feature (`feat/*`) or regular bugfix branch (`fix/*`) **MUST** be branched from the latest `development`:
      ```bash
-     git checkout main && git pull origin main
+     git checkout development && git pull origin development
      git checkout -b feat/<feature-name>
      ```
-   - **Never** branch a new feature from `development`.
+   - Only emergency production hotfixes (`hotfix/*` or `fix/critical-*`) are branched directly from `main`.
 2. **PR Target Rule**:
-   - Pull Requests for all new work **MUST** target `development`.
-   - Only release PRs (`development` → `main`) or critical hotfixes target `main`.
-3. **Commit & PR Conventions**:
+   - Pull Requests for all new work (`feat/*`, `fix/*`) **MUST** target `development`.
+   - Only release PRs (`development` → `main`) or emergency hotfixes target `main`.
+3. **Merge Strategy**:
+   - All PRs (feature to `development` and release to `main`) **MUST** be merged using **"Create a merge commit" (`--no-ff`)** to preserve full atomic commit history and traceability.
+4. **Commit & PR Conventions**:
    - Commit messages and PR titles must strictly follow [Conventional Commits](https://www.conventionalcommits.org/):
      ```
      feat(scope): short description in lowercase
@@ -30,7 +32,7 @@ Before creating branches, writing commits, or opening PRs, review [`docs/GIT_WOR
      chore(scope): build, CI/CD, or dependencies
      ```
    - Commits must be atomic. Do not bundle unrelated changes, refactorings, or formatting tweaks into a single commit.
-4. **Changelog Maintenance & Retention Policy**:
+5. **Changelog Maintenance & Retention Policy**:
    - Every user-facing feature, fix, or deprecation must update [`CHANGELOG.md`](CHANGELOG.md) under `## [Unreleased]` following [Keep a Changelog](https://keepachangelog.com/) and using non-technical language (English).
    - **5-Version Retention Limit**: [`CHANGELOG.md`](CHANGELOG.md) strictly maintains a rolling window of only the latest **5 released versions** plus the active `## [Unreleased]` section. Historical entries older than the 5 latest released versions must be pruned to maintain clarity, fast loading, and relevancy.
 
