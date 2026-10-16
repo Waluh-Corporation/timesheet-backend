@@ -17,6 +17,7 @@ import (
 type mockActivityRepo struct {
 	activities  map[uint]*models.DailyActivity
 	projects    map[uint]*models.Project
+	users       map[uint]*models.User
 	validStatus map[string]bool
 	createErr   error
 	updateErr   error
@@ -27,6 +28,7 @@ func newMockActivityRepo() *mockActivityRepo {
 	return &mockActivityRepo{
 		activities: make(map[uint]*models.DailyActivity),
 		projects:   make(map[uint]*models.Project),
+		users:      make(map[uint]*models.User),
 		validStatus: map[string]bool{
 			"P":  true,
 			"BT": true,
@@ -143,6 +145,59 @@ func (m *mockActivityRepo) FindActiveProjectByCodeOrName(ctx context.Context, pr
 		}
 	}
 	return nil, errors.New("project not found")
+}
+
+func isMatchingMonthlyWitness(act *models.DailyActivity, userID uint, month, year int) bool {
+	return act != nil && act.UserID == userID && act.IsActive && act.IsBeritaAcara && act.WitnessID != nil &&
+		int(act.Date.Month()) == month && act.Date.Year() == year
+}
+
+func (m *mockActivityRepo) GetMonthlyWitness(ctx context.Context, userID uint, month, year int) (*models.User, error) {
+	for _, act := range m.activities {
+		if !isMatchingMonthlyWitness(act, userID, month, year) {
+			continue
+		}
+		if act.Witness != nil {
+			return act.Witness, nil
+		}
+		if u, ok := m.users[*act.WitnessID]; ok {
+			return u, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockActivityRepo) UpdateMonthlyWitness(ctx context.Context, userID uint, month, year int, newWitnessID uint) (int64, error) {
+	newWitness := m.users[newWitnessID]
+	var count int64
+	for _, act := range m.activities {
+		if act.UserID == userID && act.IsActive && act.IsBeritaAcara {
+			if int(act.Date.Month()) == month && act.Date.Year() == year {
+				act.WitnessID = &newWitnessID
+				act.Witness = newWitness
+				count++
+			}
+		}
+	}
+	return count, nil
+}
+
+func (m *mockActivityRepo) GetEligibleWitnesses(ctx context.Context, excludeUserID uint) ([]models.User, error) {
+	var list []models.User
+	for _, u := range m.users {
+		if u.ID != excludeUserID && u.IsActive && u.Role == models.RoleUser {
+			list = append(list, *u)
+		}
+	}
+	return list, nil
+}
+
+func (m *mockActivityRepo) FindWitnessByID(ctx context.Context, witnessID uint) (*models.User, error) {
+	u, ok := m.users[witnessID]
+	if !ok || !u.IsActive {
+		return nil, domain.ErrNotFound
+	}
+	return u, nil
 }
 
 func TestActivityService_UpsertDailyActivity(t *testing.T) {
@@ -287,7 +342,7 @@ func TestActivityService_GetDailyActivity(t *testing.T) {
 	}
 }
 
-func TestActivityService_ListActivities(t *testing.T) {
+func TestActivityService_ListActivities(t *testing.T) { // NOSONAR
 	repo := newMockActivityRepo()
 	svc := NewActivityService(repo)
 	ctx := context.Background()
@@ -445,7 +500,7 @@ func TestActivityService_UpsertProjectResolution(t *testing.T) {
 	}
 }
 
-func TestActivityService_WorkingHoursValidation(t *testing.T) {
+func TestActivityService_WorkingHoursValidation(t *testing.T) { // NOSONAR
 	repo := newMockActivityRepo()
 	svc := NewActivityService(repo)
 	ctx := context.Background()
@@ -528,7 +583,7 @@ func TestActivityService_WorkingHoursValidation(t *testing.T) {
 	}
 }
 
-func TestActivityService_UpsertDailyActivity_PeriodLimits(t *testing.T) {
+func TestActivityService_UpsertDailyActivity_PeriodLimits(t *testing.T) { // NOSONAR
 	repo := newMockActivityRepo()
 	svc := NewActivityService(repo)
 	// Pin service time to October 15, 2026
@@ -617,7 +672,7 @@ func TestActivityService_UpsertDailyActivity_PeriodLimits(t *testing.T) {
 	}
 }
 
-func TestActivityService_GetPreviousDailyActivity(t *testing.T) {
+func TestActivityService_GetPreviousDailyActivity(t *testing.T) { // NOSONAR
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	friDate := time.Date(2026, 10, 9, 0, 0, 0, 0, loc)  // Friday
 	monDate := time.Date(2026, 10, 12, 0, 0, 0, 0, loc) // Monday
@@ -765,5 +820,226 @@ func TestActivityService_GetPreviousDailyActivity(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func setupBeritaAcaraTestService(repo *mockActivityRepo) ActivityService {
+	u1 := &models.User{ID: 1, Username: "user1", Name: "Employee One", Role: models.RoleUser, IsActive: true}
+	u2 := &models.User{ID: 2, Username: "user2", Name: "Witness A", Role: models.RoleUser, IsActive: true}
+	u3 := &models.User{ID: 3, Username: "user3", Name: "Witness B", Role: models.RoleUser, IsActive: true}
+	admin := &models.User{ID: 4, Username: "admin", Name: "Admin User", Role: models.RoleAdmin, IsActive: true}
+	inactive := &models.User{ID: 5, Username: "inactive", Name: "Inactive User", Role: models.RoleUser, IsActive: false}
+
+	repo.users[1] = u1
+	repo.users[2] = u2
+	repo.users[3] = u3
+	repo.users[4] = admin
+	repo.users[5] = inactive
+
+	svc := NewActivityService(repo)
+	if s, ok := svc.(*activityService); ok {
+		s.SetNowFunc(func() time.Time {
+			return time.Date(2026, 11, 20, 0, 0, 0, 0, time.UTC)
+		})
+	}
+	return svc
+}
+
+func TestActivityService_BeritaAcara_Validation(t *testing.T) {
+	repo := newMockActivityRepo()
+	ctx := context.Background()
+	svc := setupBeritaAcaraTestService(repo)
+
+	// Case 0: BA entry without BeritaAcaraNotes -> error
+	reqNoNotes := &request.DailyActivityRequest{
+		Date:          "2026-11-02",
+		Status:        "BT",
+		Activity:      "BA task without notes",
+		IsBeritaAcara: true,
+	}
+	err := svc.UpsertDailyActivity(ctx, 1, reqNoNotes)
+	if err == nil {
+		t.Fatal("expected error on BA entry without notes, got nil")
+	}
+	var userErr *domain.UserError
+	if !errors.As(err, &userErr) || !strings.Contains(userErr.Msg, "Berita acara notes are required") {
+		t.Fatalf("expected 'Berita acara notes are required', got: %v", err)
+	}
+
+	// Case 1: First BA entry in month without witness_id -> error
+	reqNoWitness := &request.DailyActivityRequest{
+		Date:             "2026-11-02",
+		Status:           "BT",
+		Activity:         "BA task without witness",
+		IsBeritaAcara:    true,
+		BeritaAcaraNotes: "Ada kendala jaringan",
+	}
+	err = svc.UpsertDailyActivity(ctx, 1, reqNoWitness)
+	if err == nil {
+		t.Fatal("expected error on first BA entry without witness_id, got nil")
+	}
+	if !errors.As(err, &userErr) || !strings.Contains(userErr.Msg, "Berita acara witness is required") {
+		t.Fatalf("expected 'Berita acara witness is required' message, got: %v", err)
+	}
+
+	// Case 2: Self as witness -> error
+	selfID := uint(1)
+	reqSelfWitness := &request.DailyActivityRequest{
+		Date:             "2026-11-02",
+		Status:           "BT",
+		Activity:         "BA task with self as witness",
+		IsBeritaAcara:    true,
+		WitnessID:        &selfID,
+		BeritaAcaraNotes: "Ada kendala jaringan",
+	}
+	err = svc.UpsertDailyActivity(ctx, 1, reqSelfWitness)
+	if err == nil {
+		t.Fatal("expected error on self witness, got nil")
+	}
+	if !errors.As(err, &userErr) || !strings.Contains(userErr.Msg, "Cannot select yourself as a berita acara witness") {
+		t.Fatalf("expected self-witness error, got: %v", err)
+	}
+
+	// Case 3: Admin as witness -> error
+	adminID := uint(4)
+	reqAdminWitness := &request.DailyActivityRequest{
+		Date:             "2026-11-02",
+		Status:           "BT",
+		Activity:         "BA task with admin witness",
+		IsBeritaAcara:    true,
+		WitnessID:        &adminID,
+		BeritaAcaraNotes: "Ada kendala jaringan",
+	}
+	err = svc.UpsertDailyActivity(ctx, 1, reqAdminWitness)
+	if err == nil {
+		t.Fatal("expected error on admin witness, got nil")
+	}
+	if !errors.As(err, &userErr) || !strings.Contains(userErr.Msg, "Witness must be a user with 'user' role") {
+		t.Fatalf("expected admin-witness error, got: %v", err)
+	}
+
+	// Case 4: Inactive user as witness -> error
+	inactiveID := uint(5)
+	reqInactiveWitness := &request.DailyActivityRequest{
+		Date:             "2026-11-02",
+		Status:           "BT",
+		Activity:         "BA task with inactive witness",
+		IsBeritaAcara:    true,
+		WitnessID:        &inactiveID,
+		BeritaAcaraNotes: "Ada kendala jaringan",
+	}
+	err = svc.UpsertDailyActivity(ctx, 1, reqInactiveWitness)
+	if err == nil {
+		t.Fatal("expected error on inactive witness, got nil")
+	}
+}
+
+func TestActivityService_BeritaAcara_LockingAndAutoFill(t *testing.T) {
+	repo := newMockActivityRepo()
+	ctx := context.Background()
+	svc := setupBeritaAcaraTestService(repo)
+
+	// Case 5: Valid first BA entry with User 2 (Witness A) -> success
+	w2ID := uint(2)
+	reqValid := &request.DailyActivityRequest{
+		Date:             "2026-11-02",
+		Status:           "BT",
+		Activity:         "BA task day 1",
+		IsBeritaAcara:    true,
+		WitnessID:        &w2ID,
+		BeritaAcaraNotes: "First note",
+	}
+	if err := svc.UpsertDailyActivity(ctx, 1, reqValid); err != nil {
+		t.Fatalf("unexpected error on valid BA entry: %v", err)
+	}
+
+	// Case 6: Second BA entry in same month without witness_id -> auto-fills User 2
+	reqAutoFill := &request.DailyActivityRequest{
+		Date:             "2026-11-03",
+		Status:           "BT",
+		Activity:         "BA task day 2 auto fill",
+		IsBeritaAcara:    true,
+		BeritaAcaraNotes: "Second note",
+	}
+	if err := svc.UpsertDailyActivity(ctx, 1, reqAutoFill); err != nil {
+		t.Fatalf("unexpected error on auto-fill BA entry: %v", err)
+	}
+	d2, _ := time.ParseInLocation(dateFormatYYYYMMDD, "2026-11-03", jakartaLocation())
+	act2, err := repo.FindActiveByUserAndDate(ctx, 1, d2)
+	if err != nil || act2.WitnessID == nil || *act2.WitnessID != 2 {
+		t.Fatalf("expected WitnessID auto-filled to 2, got: %v", act2)
+	}
+
+	// Case 7: Second BA entry in same month with DIFFERENT witness (User 3) -> rejected
+	w3ID := uint(3)
+	reqDifferentWitness := &request.DailyActivityRequest{
+		Date:             "2026-11-04",
+		Status:           "BT",
+		Activity:         "BA task day 3 different witness",
+		IsBeritaAcara:    true,
+		WitnessID:        &w3ID,
+		BeritaAcaraNotes: "Third note",
+	}
+	err = svc.UpsertDailyActivity(ctx, 1, reqDifferentWitness)
+	if err == nil {
+		t.Fatal("expected error on different witness in same month, got nil")
+	}
+	var userErr *domain.UserError
+	if !errors.As(err, &userErr) || !strings.Contains(userErr.Msg, "The witness for this month has already been designated as") {
+		t.Fatalf("expected locked witness error, got: %v", err)
+	}
+
+	// Check Monthly Witness API
+	mw, err := svc.GetMonthlyWitness(ctx, 1, 11, 2026)
+	if err != nil || mw == nil {
+		t.Fatalf("expected monthly witness, got: %v, err: %v", mw, err)
+	}
+	if mw.ID != 2 || mw.Name != "Witness A" {
+		t.Errorf("expected witness A (id 2), got: %+v", mw)
+	}
+
+	// Case 8: Update Monthly Witness to User 3 (Witness B) -> succeeds
+	rows, updatedWitness, err := svc.UpdateMonthlyWitness(ctx, 1, 11, 2026, 3)
+	if err != nil {
+		t.Fatalf("unexpected error on UpdateMonthlyWitness: %v", err)
+	}
+	if rows != 2 {
+		t.Errorf("expected 2 rows updated, got: %d", rows)
+	}
+	if updatedWitness.ID != 3 || updatedWitness.Name != "Witness B" {
+		t.Errorf("expected updated witness to be Witness B (id 3), got: %+v", updatedWitness)
+	}
+
+	d1, _ := time.ParseInLocation(dateFormatYYYYMMDD, "2026-11-02", jakartaLocation())
+	act1, _ := repo.FindActiveByUserAndDate(ctx, 1, d1)
+	if act1.WitnessID == nil || *act1.WitnessID != 3 {
+		t.Errorf("expected act1 witness updated to 3, got: %v", act1.WitnessID)
+	}
+}
+
+func TestActivityService_GetEligibleWitnesses(t *testing.T) {
+	repo := newMockActivityRepo()
+	ctx := context.Background()
+
+	repo.users[1] = &models.User{ID: 1, Username: "user1", Role: models.RoleUser, IsActive: true}
+	repo.users[2] = &models.User{ID: 2, Username: "user2", Role: models.RoleUser, IsActive: true}
+	repo.users[3] = &models.User{ID: 3, Username: "user3", Role: models.RoleUser, IsActive: true}
+	repo.users[4] = &models.User{ID: 4, Username: "admin", Role: models.RoleAdmin, IsActive: true}
+	repo.users[5] = &models.User{ID: 5, Username: "inactive", Role: models.RoleUser, IsActive: false}
+
+	svc := NewActivityService(repo)
+	witnesses, err := svc.GetEligibleWitnesses(ctx, 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should only include active RoleUser excluding user 1: users 2 and 3
+	if len(witnesses) != 2 {
+		t.Fatalf("expected 2 witnesses, got %d", len(witnesses))
+	}
+	for _, w := range witnesses {
+		if w.ID == 1 || w.ID == 4 || w.ID == 5 {
+			t.Errorf("unexpected witness in list: %d", w.ID)
+		}
 	}
 }
