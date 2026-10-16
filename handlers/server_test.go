@@ -163,17 +163,34 @@ func TestServer_Sessions(t *testing.T) {
 		t.Errorf("expected session to be consumed on first take")
 	}
 
-	// Test expired session (> 5 minutes)
+	// Test expired session (> 3 minutes)
 	srv.sessionsMu.Lock()
 	srv.webAuthnSessions["expired-session"] = &webAuthnSessionEntry{
 		data:      data,
-		createdAt: time.Now().Add(-6 * time.Minute),
+		createdAt: time.Now().Add(-4 * time.Minute),
 	}
 	srv.sessionsMu.Unlock()
 
 	_, okExpired := srv.takeSession("expired-session")
 	if okExpired {
 		t.Errorf("expected expired session to be rejected")
+	}
+
+	// Verify proactive cleanup during putSession
+	srv.sessionsMu.Lock()
+	srv.webAuthnSessions["stale-session"] = &webAuthnSessionEntry{
+		data:      data,
+		createdAt: time.Now().Add(-5 * time.Minute),
+	}
+	srv.sessionsMu.Unlock()
+
+	srv.putSession("session-new", data)
+
+	srv.sessionsMu.Lock()
+	_, staleExists := srv.webAuthnSessions["stale-session"]
+	srv.sessionsMu.Unlock()
+	if staleExists {
+		t.Errorf("expected stale session to be proactively pruned on putSession")
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -156,6 +157,9 @@ func (w *WorkerServer) handleTimesheetGenerate(ctx context.Context, t *asynq.Tas
 	// 4. Upload to S3
 	fileKey := fmt.Sprintf("timesheets/%d/%s_%s", p.UserID, p.JobID, filename)
 	contentType := "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	if strings.HasSuffix(filename, ".zip") {
+		contentType = "application/zip"
+	}
 	if err := w.storage.Upload(ctx, fileKey, bytes.NewReader(out), contentType); err != nil {
 		errMsg := fmt.Sprintf("s3 upload error: %v", err)
 		_ = w.jobRepo.UpdateStatus(ctx, p.JobID, models.JobStatusFailed, "", "", errMsg, nil)

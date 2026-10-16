@@ -35,6 +35,7 @@ type ActivityRepository interface {
 	Update(ctx context.Context, activity *models.DailyActivity) error
 	ListActiveByUser(ctx context.Context, userID uint, filter ActivityFilter) ([]models.DailyActivity, int64, error)
 	ValidateStatus(ctx context.Context, status string) (bool, error)
+	ValidateWitness(ctx context.Context, witnessID uint, excludeUserID uint) (*models.User, error)
 	FindActiveProjectByRefID(ctx context.Context, refID uint) (*models.Project, error)
 	FindActiveProjectByCodeOrName(ctx context.Context, projectID, projectName string) (*models.Project, error)
 	GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error)
@@ -51,7 +52,7 @@ func NewActivityRepository(db *gorm.DB) ActivityRepository {
 
 func (r *activityRepository) FindActiveByID(ctx context.Context, id uint) (*models.DailyActivity, error) {
 	var activity models.DailyActivity
-	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Where("id = ? AND is_active = true", id).First(&activity).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Preload("Witness").Where("id = ? AND is_active = true", id).First(&activity).Error; err != nil {
 		return nil, err
 	}
 	return &activity, nil
@@ -59,7 +60,7 @@ func (r *activityRepository) FindActiveByID(ctx context.Context, id uint) (*mode
 
 func (r *activityRepository) FindActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error) {
 	var activity models.DailyActivity
-	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Where("user_id = ? AND date = ? AND is_active = true", userID, date).First(&activity).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Preload("Witness").Where("user_id = ? AND date = ? AND is_active = true", userID, date).First(&activity).Error; err != nil {
 		return nil, err
 	}
 	return &activity, nil
@@ -67,7 +68,7 @@ func (r *activityRepository) FindActiveByUserAndDate(ctx context.Context, userID
 
 func (r *activityRepository) FindPreviousActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error) {
 	var activity models.DailyActivity
-	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").
+	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Preload("Witness").
 		Where("user_id = ? AND date < ? AND is_active = true", userID, date).
 		Order("date desc").
 		First(&activity).Error; err != nil {
@@ -155,7 +156,7 @@ func (r *activityRepository) ListActiveByUser(ctx context.Context, userID uint, 
 	}
 
 	activities := make([]models.DailyActivity, 0)
-	if err := dataQuery.Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Find(&activities).Error; err != nil {
+	if err := dataQuery.Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Preload("Witness").Find(&activities).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -169,6 +170,18 @@ func (r *activityRepository) ValidateStatus(ctx context.Context, status string) 
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *activityRepository) ValidateWitness(ctx context.Context, witnessID uint, excludeUserID uint) (*models.User, error) {
+	if witnessID == 0 || witnessID == excludeUserID {
+		return nil, errors.New("invalid witness: cannot witness own activity")
+	}
+	var u models.User
+	err := r.db.WithContext(ctx).Scopes(models.ActiveOnly).Where("id = ? AND role = ?", witnessID, models.RoleUser).First(&u).Error
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 func (r *activityRepository) FindActiveProjectByRefID(ctx context.Context, refID uint) (*models.Project, error) {

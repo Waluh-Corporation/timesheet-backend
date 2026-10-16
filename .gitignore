@@ -26,7 +26,7 @@ main
 *.bin
 *.BIN
 coverage*
-scratch/
+scratch*/
 sshpass.py
 *.sh
 # Keep these scripts tracked despite the blanket *.sh ignore above.

@@ -602,6 +602,9 @@ definitions:
       end_time:
         example: "17:00"
         type: string
+      is_berita_acara:
+        example: false
+        type: boolean
       project_id:
         example: P24015
         type: string
@@ -617,6 +620,9 @@ definitions:
       status:
         example: P
         type: string
+      witness_id:
+        example: 2
+        type: integer
     required:
     - date
     type: object
@@ -1082,6 +1088,8 @@ definitions:
         type: string
       id:
         type: integer
+      is_berita_acara:
+        type: boolean
       project_id:
         type: string
       project_name:
@@ -1096,6 +1104,8 @@ definitions:
         type: string
       status_ref:
         $ref: '#/definitions/models.ActivityStatus'
+      witness_id:
+        type: integer
     type: object
   response.DeleteResponse:
     properties:
@@ -1417,6 +1427,27 @@ definitions:
       valid:
         example: true
         type: boolean
+    type: object
+  response.WitnessResponse:
+    properties:
+      bni_id:
+        example: "87654321"
+        type: string
+      department:
+        example: Core Banking
+        type: string
+      employee_id:
+        example: EMP-002
+        type: string
+      id:
+        example: 2
+        type: integer
+      name:
+        example: Jane Doe
+        type: string
+      username:
+        example: jane_doe
+        type: string
     type: object
 info:
   contact:
@@ -3190,6 +3221,37 @@ paths:
       summary: Verify password reset token
       tags:
       - Auth
+  /api/v1/berita-acara/witnesses:
+    get:
+      description: Returns active users with role 'user' who can be selected as a
+        witness for Berita Acara, excluding the requesting user.
+      parameters:
+      - description: Search query by name, username, employee ID, or BNI ID
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/response.WitnessResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Database error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List eligible witnesses for Berita Acara
+      tags:
+      - Berita Acara
   /api/v1/companies:
     get:
       description: Returns all companies with their associated departments.

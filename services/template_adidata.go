@@ -11,6 +11,8 @@ import (
 	"timesheet-backend/models"
 )
 
+const defaultJuniorProgrammer = "Junior Programmer"
+
 // renderAdidataTemplate renders a monthly timesheet based on Adidata's master template.
 func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 	f, err := excelize.OpenReader(bytes.NewReader(assets.AdidataTemplate))
@@ -20,7 +22,6 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 	defer func() { _ = f.Close() }()
 
 	const sheetTS = "TIMESHEET"
-	// If sheet is named "Sheet1", rename to "TIMESHEET"
 	for _, sh := range f.GetSheetList() {
 		if strings.EqualFold(sh, "Sheet1") {
 			_ = f.SetSheetName(sh, sheetTS)
@@ -41,7 +42,7 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 
 	empID := ResolveEmployeeID(in.User)
 	div := ""
-	pos := "Junior Programmer"
+	pos := defaultJuniorProgrammer
 	if in.User != nil {
 		div = in.User.Division
 		if in.User.Position != "" {
@@ -53,15 +54,54 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 	}
 	periodStr := fmt.Sprintf("%s %d", MonthNameIndonesian(in.Month), in.Year)
 
-	// In Adidata master template, labels are B2:C2, B3:C3, B4, B5:C5, B6:C6 and values are D2, D3, D4, D5, D6.
+	writeAdidataMetadata(f, sheetTS, userName, empID, div, periodStr)
+
+	byDay := BuildByDayMap(in.Activities)
+	daysInMonth := GetDaysInMonth(in.Year, in.Month)
+	statusCounts := writeAdidataDailyRows(f, sheetTS, in, byDay, daysInMonth, st)
+
+	adidataSummary := map[string]SummaryFormulaItem{
+		"F": {Formula: `COUNTIF(F10:F40,"P")`, Value: statusCounts["P"]},
+		"G": {Formula: `COUNTIF(G10:G40,"S")`, Value: statusCounts["S"]},
+		"H": {Formula: `COUNTIF(H10:H40,"BT")`, Value: statusCounts["BT"]},
+		"I": {Formula: `COUNTIF(I10:I40,"PM")`, Value: statusCounts["PM"]},
+		"J": {Formula: `COUNTIF(J10:J40,"V")`, Value: statusCounts["V"]},
+		"K": {Formula: `COUNTIF(K10:K40,"x")`, Value: statusCounts["X"]},
+	}
+	WriteSummaryRowWithValues(f, sheetTS, "41", adidataSummary, st.BoldCenterStyle)
+
+	tlName, dhName := ResolveApprovers(in)
+	WriteSignatures(f, sheetTS, in, SignatureCellsConfig{
+		UserCell:     "B44",
+		TLCell:       "E44",
+		DHCell:       "I44",
+		UserDateCell: "B50",
+		TLDateCell:   "E50",
+		DHDateCell:   "I50",
+		DatePrefix:   "DATE : ",
+	})
+	_ = f.SetCellValue(sheetTS, "B49", "( "+pos+" )")
+
+	// Dynamic Overtime SPL Sheets
+	writeAdidataOvertimeSheets(f, in, empID, userName, tlName, dhName, st)
+
+	// Always delete SPL_TEMPLATE if it was present so only generated SPL sheets remain
+	if idx, _ := f.GetSheetIndex("SPL_TEMPLATE"); idx != -1 {
+		_ = f.DeleteSheet("SPL_TEMPLATE")
+	}
+
+	return WriteWorkbookToBuffer(f, "adidata")
+}
+
+func writeAdidataMetadata(f *excelize.File, sheetTS, userName, empID, div, periodStr string) {
 	_ = f.SetCellValue(sheetTS, "D2", ": PT BANK NEGARA INDONESIA (PERSERO) Tbk")
 	_ = f.SetCellValue(sheetTS, "D3", ": "+div)
 	_ = f.SetCellValue(sheetTS, "D4", ": "+userName)
 	_ = f.SetCellValue(sheetTS, "D5", ": "+empID)
 	_ = f.SetCellValue(sheetTS, "D6", ": "+periodStr)
+}
 
-	byDay := BuildByDayMap(in.Activities)
-	daysInMonth := GetDaysInMonth(in.Year, in.Month)
+func writeAdidataDailyRows(f *excelize.File, sheetTS string, in GenerationInput, byDay map[int]models.DailyActivity, daysInMonth int, st *BuilderStyles) map[string]int {
 	allCols := []string{"B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
 	wrapCols := []string{"L", "O", "Q", "R"}
 	statusCounts := make(map[string]int)
@@ -82,7 +122,14 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 		ApplyDayRowStyles(f, sheetTS, "B", rs, allCols, wrapCols, dsc)
 		_ = f.SetCellValue(sheetTS, "B"+rs, dsc.Date)
 
-		WriteWorkingHoursRow(f, sheetTS, "C", "D", "E", rs, "(D%s-C%s)*24", true, dsc)
+		WriteWorkingHoursRow(f, sheetTS, WorkingHoursConfig{
+			StartCol:       "C",
+			EndCol:         "D",
+			TotalCol:       "E",
+			RowStr:         rs,
+			FormulaFmt:     "(D%s-C%s)*24",
+			IsDecimalTotal: true,
+		}, dsc)
 
 		status := ""
 		if dsc.HasActivity {
@@ -107,80 +154,89 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 			statusCounts[status]++
 		}
 	}
+	return statusCounts
+}
 
-	adidataSummary := map[string]SummaryFormulaItem{
-		"F": {Formula: `COUNTIF(F10:F40,"P")`, Value: statusCounts["P"]},
-		"G": {Formula: `COUNTIF(G10:G40,"S")`, Value: statusCounts["S"]},
-		"H": {Formula: `COUNTIF(H10:H40,"BT")`, Value: statusCounts["BT"]},
-		"I": {Formula: `COUNTIF(I10:I40,"PM")`, Value: statusCounts["PM"]},
-		"J": {Formula: `COUNTIF(J10:J40,"V")`, Value: statusCounts["V"]},
-		"K": {Formula: `COUNTIF(K10:K40,"x")`, Value: statusCounts["X"]},
+type adidataSPLMeta struct {
+	EmpID    string
+	UserName string
+	DeptDiv  string
+	Pos      string
+	TLName   string
+	DHName   string
+}
+
+func resolveAdidataDeptDiv(u *models.User) string {
+	if u == nil || u.Department == "" {
+		return "WCH / WDL"
 	}
-	WriteSummaryRowWithValues(f, sheetTS, "41", adidataSummary, st.BoldCenterStyle)
+	if u.Division != "" {
+		return u.Department + " / " + u.Division
+	}
+	return u.Department
+}
 
-	tlName, dhName := ResolveApprovers(in)
-	WriteSignatures(f, sheetTS, in, "B44", "E44", "I44", "B50", "E50", "I50", "DATE : ")
-	_ = f.SetCellValue(sheetTS, "B49", "( "+pos+" )")
-
-	// Dynamic Overtime SPL Sheets
-	if len(in.Overtimes) > 0 {
-		pos := in.User.Position
-		if pos == "" {
-			pos = "Junior Programmer"
-		}
-		deptDiv := in.User.Department
-		if deptDiv == "" {
-			deptDiv = "WCH / WDL"
-		} else if in.User.Division != "" {
-			deptDiv = deptDiv + " / " + in.User.Division
-		}
-
-		splTmplIdx, _ := f.GetSheetIndex("SPL_TEMPLATE")
-		for i, ot := range in.Overtimes {
-			splSheet := fmt.Sprintf("SPL-%d", i+1)
-			if splTmplIdx != -1 {
-				_, _ = f.NewSheet(splSheet)
-				targetIdx, _ := f.GetSheetIndex(splSheet)
-				_ = f.CopySheet(splTmplIdx, targetIdx)
-			} else {
-				_, _ = f.NewSheet(splSheet)
-				writeAdidataSingleSPL(f, splSheet, in, ot, empID, st)
-			}
-
-			_ = f.SetCellValue(splSheet, "B2", "SURAT PERINTAH LEMBUR")
-			_ = f.SetCellValue(splSheet, "E4", ": "+empID)
-			_ = f.SetCellValue(splSheet, "E5", ": "+userName)
-			_ = f.SetCellValue(splSheet, "E6", ": "+deptDiv)
-			_ = f.SetCellValue(splSheet, "E7", ": "+pos)
-			_ = f.SetCellValue(splSheet, "D12", ot.Date.Format("02 January 2006"))
-			_ = f.SetCellValue(splSheet, "F12", fmt.Sprintf("%s - %s", ot.StartTime, ot.EndTime))
-			_ = f.SetCellValue(splSheet, "H12", ot.TaskDescription)
-
-			otTL, otDH := ExtractApprovers([]models.OvertimeEntry{ot})
-			if otTL == "" {
-				otTL = tlName
-			}
-			if otDH == "" {
-				otDH = dhName
-			}
-			if userName != "" {
-				_ = f.SetCellValue(splSheet, "C21", "( "+userName+" )")
-			}
-			if otTL != "" {
-				_ = f.SetCellValue(splSheet, "G21", "( "+otTL+" )")
-			}
-			if otDH != "" {
-				_ = f.SetCellValue(splSheet, "L21", "( "+otDH+" )")
-			}
-		}
+func writeAdidataOvertimeSheets(f *excelize.File, in GenerationInput, empID, userName, tlName, dhName string, st *BuilderStyles) {
+	if len(in.Overtimes) == 0 {
+		return
+	}
+	pos := in.User.Position
+	if pos == "" {
+		pos = defaultJuniorProgrammer
+	}
+	meta := adidataSPLMeta{
+		EmpID:    empID,
+		UserName: userName,
+		DeptDiv:  resolveAdidataDeptDiv(in.User),
+		Pos:      pos,
+		TLName:   tlName,
+		DHName:   dhName,
 	}
 
-	// Always delete SPL_TEMPLATE if it was present so only generated SPL sheets remain
-	if idx, _ := f.GetSheetIndex("SPL_TEMPLATE"); idx != -1 {
-		_ = f.DeleteSheet("SPL_TEMPLATE")
+	splTmplIdx, _ := f.GetSheetIndex("SPL_TEMPLATE")
+	for i, ot := range in.Overtimes {
+		splSheet := fmt.Sprintf("SPL-%d", i+1)
+		createOrCopyAdidataSPLSheet(f, splSheet, splTmplIdx, in, ot, empID, st)
+		populateAdidataSPLSheet(f, splSheet, ot, meta)
 	}
+}
 
-	return WriteWorkbookToBuffer(f, "adidata")
+func createOrCopyAdidataSPLSheet(f *excelize.File, splSheet string, tmplIdx int, in GenerationInput, ot models.OvertimeEntry, empID string, st *BuilderStyles) {
+	_, _ = f.NewSheet(splSheet)
+	if tmplIdx != -1 {
+		targetIdx, _ := f.GetSheetIndex(splSheet)
+		_ = f.CopySheet(tmplIdx, targetIdx)
+		return
+	}
+	writeAdidataSingleSPL(f, splSheet, in, ot, empID, st)
+}
+
+func populateAdidataSPLSheet(f *excelize.File, splSheet string, ot models.OvertimeEntry, meta adidataSPLMeta) {
+	_ = f.SetCellValue(splSheet, "B2", "SURAT PERINTAH LEMBUR")
+	_ = f.SetCellValue(splSheet, "E4", ": "+meta.EmpID)
+	_ = f.SetCellValue(splSheet, "E5", ": "+meta.UserName)
+	_ = f.SetCellValue(splSheet, "E6", ": "+meta.DeptDiv)
+	_ = f.SetCellValue(splSheet, "E7", ": "+meta.Pos)
+	_ = f.SetCellValue(splSheet, "D12", ot.Date.Format("02 January 2006"))
+	_ = f.SetCellValue(splSheet, "F12", fmt.Sprintf("%s - %s", ot.StartTime, ot.EndTime))
+	_ = f.SetCellValue(splSheet, "H12", ot.TaskDescription)
+
+	otTL, otDH := ExtractApprovers([]models.OvertimeEntry{ot})
+	if otTL == "" {
+		otTL = meta.TLName
+	}
+	if otDH == "" {
+		otDH = meta.DHName
+	}
+	if meta.UserName != "" {
+		_ = f.SetCellValue(splSheet, "C21", "( "+meta.UserName+" )")
+	}
+	if otTL != "" {
+		_ = f.SetCellValue(splSheet, "G21", "( "+otTL+" )")
+	}
+	if otDH != "" {
+		_ = f.SetCellValue(splSheet, "L21", "( "+otDH+" )")
+	}
 }
 
 func writeAdidataSingleSPL(f *excelize.File, splSheet string, in GenerationInput, ot models.OvertimeEntry, empID string, st *BuilderStyles) {
@@ -199,14 +255,9 @@ func writeAdidataSingleSPL(f *excelize.File, splSheet string, in GenerationInput
 
 	pos := in.User.Position
 	if pos == "" {
-		pos = "Junior Programmer"
+		pos = defaultJuniorProgrammer
 	}
-	deptDiv := in.User.Department
-	if deptDiv == "" {
-		deptDiv = "WCH / WDL"
-	} else if in.User.Division != "" {
-		deptDiv = deptDiv + " / " + in.User.Division
-	}
+	deptDiv := resolveAdidataDeptDiv(in.User)
 
 	_ = f.SetCellValue(splSheet, "C4", "NPP")
 	_ = f.SetCellValue(splSheet, "E4", ": "+empID)

@@ -34,6 +34,7 @@ func newMockActivityRepo() *mockActivityRepo {
 			"PM": true,
 			"V":  true,
 			"X":  true,
+			"BA": true,
 		},
 	}
 }
@@ -117,6 +118,13 @@ func (m *mockActivityRepo) GetLatestActivityUpdateTime(ctx context.Context, user
 
 func (m *mockActivityRepo) ValidateStatus(ctx context.Context, status string) (bool, error) {
 	return m.validStatus[status], nil
+}
+
+func (m *mockActivityRepo) ValidateWitness(ctx context.Context, witnessID uint, excludeUserID uint) (*models.User, error) {
+	if witnessID == 0 || witnessID == excludeUserID {
+		return nil, errors.New("invalid witness")
+	}
+	return &models.User{ID: witnessID, Role: models.RoleUser, IsActive: true}, nil
 }
 
 func (m *mockActivityRepo) FindActiveProjectByRefID(ctx context.Context, refID uint) (*models.Project, error) {
@@ -762,6 +770,176 @@ func TestActivityService_GetPreviousDailyActivity(t *testing.T) {
 				}
 				if tc.expectedStart != "" && res.StartTime != tc.expectedStart {
 					t.Errorf("expected start time %q, got %q", tc.expectedStart, res.StartTime)
+				}
+			}
+		})
+	}
+}
+
+func TestActivityService_BeritaAcaraValidation(t *testing.T) {
+	ctx := context.Background()
+
+	userID := uint(1)
+	witnessID := uint(2)
+	selfID := userID
+	zeroID := uint(0)
+
+	tests := []struct {
+		name        string
+		req         *request.DailyActivityRequest
+		expectError bool
+		errContains string
+		validateAct func(t *testing.T, act *models.DailyActivity)
+	}{
+		{
+			name: "error - is_berita_acara true but empty activity explanation",
+			req: &request.DailyActivityRequest{
+				Date:          "2026-09-20",
+				StartTime:     "08:00",
+				EndTime:       "17:00",
+				Status:        "P",
+				Activity:      "   ",
+				IsBeritaAcara: true,
+				WitnessID:     &witnessID,
+			},
+			expectError: true,
+			errContains: "Activity explanation is required for Berita Acara",
+		},
+		{
+			name: "error - status BA but empty activity explanation",
+			req: &request.DailyActivityRequest{
+				Date:      "2026-09-20",
+				StartTime: "08:00",
+				EndTime:   "17:00",
+				Status:    "BA",
+				Activity:  "",
+				WitnessID: &witnessID,
+			},
+			expectError: true,
+			errContains: "Activity explanation is required for Berita Acara",
+		},
+		{
+			name: "error - is_berita_acara true but missing witness",
+			req: &request.DailyActivityRequest{
+				Date:          "2026-09-20",
+				StartTime:     "08:00",
+				EndTime:       "17:00",
+				Status:        "P",
+				Activity:      "Production server maintenance",
+				IsBeritaAcara: true,
+				WitnessID:     nil,
+			},
+			expectError: true,
+			errContains: "A witness is required for Berita Acara",
+		},
+		{
+			name: "error - is_berita_acara true with zero witness ID",
+			req: &request.DailyActivityRequest{
+				Date:          "2026-09-20",
+				StartTime:     "08:00",
+				EndTime:       "17:00",
+				Status:        "P",
+				Activity:      "Production server maintenance",
+				IsBeritaAcara: true,
+				WitnessID:     &zeroID,
+			},
+			expectError: true,
+			errContains: "A witness is required for Berita Acara",
+		},
+		{
+			name: "error - is_berita_acara true with witness as self",
+			req: &request.DailyActivityRequest{
+				Date:          "2026-09-20",
+				StartTime:     "08:00",
+				EndTime:       "17:00",
+				Status:        "P",
+				Activity:      "Production server maintenance",
+				IsBeritaAcara: true,
+				WitnessID:     &selfID,
+			},
+			expectError: true,
+			errContains: "Witness cannot be the same user as the activity owner",
+		},
+		{
+			name: "success - valid berita acara with explanation and 1 witness",
+			req: &request.DailyActivityRequest{
+				Date:          "2026-09-20",
+				StartTime:     "08:00",
+				EndTime:       "17:00",
+				Status:        "P",
+				Activity:      "Investigated network latency and deployed patch",
+				IsBeritaAcara: true,
+				WitnessID:     &witnessID,
+			},
+			expectError: false,
+			validateAct: func(t *testing.T, act *models.DailyActivity) {
+				if !act.IsBeritaAcara {
+					t.Errorf("expected IsBeritaAcara true, got false")
+				}
+				if act.WitnessID == nil || *act.WitnessID != witnessID {
+					t.Errorf("expected WitnessID %d, got %v", witnessID, act.WitnessID)
+				}
+				if act.Activity != "Investigated network latency and deployed patch" {
+					t.Errorf("expected activity description to match")
+				}
+			},
+		},
+		{
+			name: "success - regular activity clears witness even if witnessID passed",
+			req: &request.DailyActivityRequest{
+				Date:          "2026-09-21",
+				StartTime:     "08:00",
+				EndTime:       "17:00",
+				Status:        "P",
+				Activity:      "Regular feature coding",
+				IsBeritaAcara: false,
+				WitnessID:     &witnessID,
+			},
+			expectError: false,
+			validateAct: func(t *testing.T, act *models.DailyActivity) {
+				if act.IsBeritaAcara {
+					t.Errorf("expected IsBeritaAcara false, got true")
+				}
+				if act.WitnessID != nil {
+					t.Errorf("expected nil WitnessID for non-BA activity, got %v", act.WitnessID)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := newMockActivityRepo()
+			svc := NewActivityService(repo)
+			if actImpl, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+				actImpl.SetNowFunc(func() time.Time {
+					return time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+				})
+			}
+
+			err := svc.UpsertDailyActivity(ctx, userID, tc.req)
+			if tc.expectError {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if !errors.Is(err, domain.ErrInvalidInput) {
+					t.Errorf("expected ErrInvalidInput, got: %v", err)
+				}
+				if tc.errContains != "" && !strings.Contains(err.Error(), tc.errContains) {
+					t.Errorf("expected error containing %q, got: %s", tc.errContains, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if tc.validateAct != nil {
+					loc, _ := time.LoadLocation("Asia/Jakarta")
+					date, _ := time.ParseInLocation("2006-01-02", tc.req.Date, loc)
+					act, findErr := repo.FindActiveByUserAndDate(ctx, userID, date)
+					if findErr != nil || act == nil {
+						t.Fatalf("failed to find saved activity: %v", findErr)
+					}
+					tc.validateAct(t, act)
 				}
 			}
 		})

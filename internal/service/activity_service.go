@@ -105,20 +105,9 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 		return err
 	}
 
-	date, err := time.ParseInLocation(dateFormatYYYYMMDD, req.Date, jakartaLocation())
+	date, err := s.parseAndValidateDate(ctx, req.Date)
 	if err != nil {
-		return domain.NewUserError(domain.ErrInvalidInput, "Invalid date format, expected YYYY-MM-DD")
-	}
-
-	now := time.Now()
-	if s.nowFunc != nil {
-		now = s.nowFunc()
-	}
-
-	if !domain.IsAdminFromContext(ctx) {
-		if err := domain.ValidateTimesheetDate(date, now, jakartaLocation()); err != nil {
-			return err
-		}
+		return err
 	}
 
 	// Default status to 'P' if not provided
@@ -132,36 +121,91 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 		return domain.NewUserError(domain.ErrInvalidInput, "Invalid status code: must be a valid activity status (e.g. P, BT, S, PM, V, X)")
 	}
 
+	isBA := req.IsBeritaAcara || strings.EqualFold(req.Status, "BA")
+	var witnessID *uint
+	if isBA {
+		if strings.TrimSpace(req.Activity) == "" {
+			return domain.NewUserError(domain.ErrInvalidInput, "Activity explanation is required for Berita Acara")
+		}
+		if req.WitnessID == nil || *req.WitnessID == 0 {
+			return domain.NewUserError(domain.ErrInvalidInput, "A witness is required for Berita Acara")
+		}
+		resolvedWitnessID, err := s.resolveDailyActivityWitness(ctx, req.WitnessID, userID)
+		if err != nil {
+			return err
+		}
+		witnessID = resolvedWitnessID
+	}
+
 	activity := models.DailyActivity{
-		UserID:       userID,
-		Date:         date,
-		StartTime:    req.StartTime,
-		EndTime:      req.EndTime,
-		Status:       req.Status,
-		Activity:     req.Activity,
-		ProjectRefID: req.ProjectRefID,
+		UserID:        userID,
+		Date:          date,
+		StartTime:     req.StartTime,
+		EndTime:       req.EndTime,
+		Status:        req.Status,
+		Activity:      req.Activity,
+		ProjectRefID:  req.ProjectRefID,
+		IsBeritaAcara: isBA,
+		WitnessID:     witnessID,
 	}
 
 	if err := s.resolveProject(ctx, req, &activity); err != nil {
 		return domain.NewUserError(domain.ErrInvalidInput, err.Error())
 	}
 
+	return s.saveOrUpdateActivity(ctx, userID, date, &activity, isBA, witnessID)
+}
+
+func (s *activityService) parseAndValidateDate(ctx context.Context, dateStr string) (time.Time, error) {
+	date, err := time.ParseInLocation(dateFormatYYYYMMDD, dateStr, jakartaLocation())
+	if err != nil {
+		return time.Time{}, domain.NewUserError(domain.ErrInvalidInput, "Invalid date format, expected YYYY-MM-DD")
+	}
+
+	now := time.Now()
+	if s.nowFunc != nil {
+		now = s.nowFunc()
+	}
+
+	if !domain.IsAdminFromContext(ctx) {
+		if err := domain.ValidateTimesheetDate(date, now, jakartaLocation()); err != nil {
+			return time.Time{}, err
+		}
+	}
+	return date, nil
+}
+
+func (s *activityService) resolveDailyActivityWitness(ctx context.Context, witnessID *uint, userID uint) (*uint, error) {
+	if witnessID == nil || *witnessID == 0 {
+		return nil, nil
+	}
+	if *witnessID == userID {
+		return nil, domain.NewUserError(domain.ErrInvalidInput, "Witness cannot be the same user as the activity owner")
+	}
+	witness, werr := s.repo.ValidateWitness(ctx, *witnessID, userID)
+	if werr != nil || witness == nil {
+		return nil, domain.NewUserError(domain.ErrInvalidInput, "Selected witness not found or does not have role 'user'")
+	}
+	return witnessID, nil
+}
+
+func (s *activityService) saveOrUpdateActivity(ctx context.Context, userID uint, date time.Time, activity *models.DailyActivity, isBA bool, witnessID *uint) error {
 	existing, err := s.repo.FindActiveByUserAndDate(ctx, userID, date)
 	if err == nil && existing != nil && existing.ID != 0 {
-		// Existing active record found -> UPDATE
-		existing.StartTime = req.StartTime
-		existing.EndTime = req.EndTime
-		existing.Status = req.Status
-		existing.Activity = req.Activity
+		existing.StartTime = activity.StartTime
+		existing.EndTime = activity.EndTime
+		existing.Status = activity.Status
+		existing.Activity = activity.Activity
 		existing.ProjectRefID = activity.ProjectRefID
 		existing.ProjectRef = activity.ProjectRef
+		existing.IsBeritaAcara = isBA
+		existing.WitnessID = witnessID
 		existing.UpdatedAt = time.Now()
 		return s.repo.Update(ctx, existing)
 	}
 
-	// No active record for this date -> INSERT new record with is_active = true
 	activity.IsActive = true
-	return s.repo.Create(ctx, &activity)
+	return s.repo.Create(ctx, activity)
 }
 
 func (s *activityService) GetDailyActivity(ctx context.Context, userID uint, id uint) (*response.DailyActivityResponse, error) {
@@ -175,18 +219,20 @@ func (s *activityService) GetDailyActivity(ctx context.Context, userID uint, id 
 	}
 
 	return &response.DailyActivityResponse{
-		ID:           activity.ID,
-		Date:         activity.Date,
-		StartTime:    activity.StartTime,
-		EndTime:      activity.EndTime,
-		Activity:     activity.Activity,
-		ProjectName:  activity.GetProjectName(),
-		ProjectID:    activity.GetProjectCode(),
-		Status:       activity.Status,
-		AppImpacted:  activity.GetAppImpacted(),
-		ProjectRefID: activity.ProjectRefID,
-		ProjectRef:   activity.ProjectRef,
-		StatusRef:    activity.StatusRef,
+		ID:            activity.ID,
+		Date:          activity.Date,
+		StartTime:     activity.StartTime,
+		EndTime:       activity.EndTime,
+		Activity:      activity.Activity,
+		ProjectName:   activity.GetProjectName(),
+		ProjectID:     activity.GetProjectCode(),
+		Status:        activity.Status,
+		AppImpacted:   activity.GetAppImpacted(),
+		ProjectRefID:  activity.ProjectRefID,
+		ProjectRef:    activity.ProjectRef,
+		StatusRef:     activity.StatusRef,
+		IsBeritaAcara: activity.IsBeritaAcara,
+		WitnessID:     activity.WitnessID,
 	}, nil
 }
 
@@ -199,18 +245,20 @@ func (s *activityService) ListActivities(ctx context.Context, userID uint, filte
 	respList := make([]response.DailyActivityResponse, len(activities))
 	for i, a := range activities {
 		respList[i] = response.DailyActivityResponse{
-			ID:           a.ID,
-			Date:         a.Date,
-			StartTime:    a.StartTime,
-			EndTime:      a.EndTime,
-			Activity:     a.Activity,
-			ProjectName:  a.GetProjectName(),
-			ProjectID:    a.GetProjectCode(),
-			Status:       a.Status,
-			AppImpacted:  a.GetAppImpacted(),
-			ProjectRefID: a.ProjectRefID,
-			ProjectRef:   a.ProjectRef,
-			StatusRef:    a.StatusRef,
+			ID:            a.ID,
+			Date:          a.Date,
+			StartTime:     a.StartTime,
+			EndTime:       a.EndTime,
+			Activity:      a.Activity,
+			ProjectName:   a.GetProjectName(),
+			ProjectID:     a.GetProjectCode(),
+			Status:        a.Status,
+			AppImpacted:   a.GetAppImpacted(),
+			ProjectRefID:  a.ProjectRefID,
+			ProjectRef:    a.ProjectRef,
+			StatusRef:     a.StatusRef,
+			IsBeritaAcara: a.IsBeritaAcara,
+			WitnessID:     a.WitnessID,
 		}
 	}
 
@@ -278,17 +326,19 @@ func (s *activityService) GetPreviousDailyActivity(ctx context.Context, userID u
 	}
 
 	return &response.DailyActivityResponse{
-		ID:           activity.ID,
-		Date:         activity.Date,
-		StartTime:    activity.StartTime,
-		EndTime:      activity.EndTime,
-		Activity:     activity.Activity,
-		ProjectName:  activity.GetProjectName(),
-		ProjectID:    activity.GetProjectCode(),
-		Status:       activity.Status,
-		AppImpacted:  activity.GetAppImpacted(),
-		ProjectRefID: activity.ProjectRefID,
-		ProjectRef:   activity.ProjectRef,
-		StatusRef:    activity.StatusRef,
+		ID:            activity.ID,
+		Date:          activity.Date,
+		StartTime:     activity.StartTime,
+		EndTime:       activity.EndTime,
+		Activity:      activity.Activity,
+		ProjectName:   activity.GetProjectName(),
+		ProjectID:     activity.GetProjectCode(),
+		Status:        activity.Status,
+		AppImpacted:   activity.GetAppImpacted(),
+		ProjectRefID:  activity.ProjectRefID,
+		ProjectRef:    activity.ProjectRef,
+		StatusRef:     activity.StatusRef,
+		IsBeritaAcara: activity.IsBeritaAcara,
+		WitnessID:     activity.WitnessID,
 	}, nil
 }

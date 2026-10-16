@@ -1,8 +1,11 @@
 package service_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -69,6 +72,12 @@ func TestTimesheetService_OvertimeAndWorkbook(t *testing.T) {
 	})
 	t.Run("Workbook_Generation", func(t *testing.T) {
 		testWorkbookGenerationSuccess(t, svc, tx, ctx, user.ID)
+	})
+	t.Run("Workbook_Generation_With_Berita_Acara", func(t *testing.T) {
+		testWorkbookGenerationWithBeritaAcara(t, svc, tx, ctx, user.ID)
+	})
+	t.Run("Workbook_Generation_With_Berita_Acara_Conflicting_Witnesses", func(t *testing.T) {
+		testWorkbookGenerationWithBeritaAcaraConflictingWitnesses(t, svc, tx, ctx, user.ID)
 	})
 }
 
@@ -167,5 +176,106 @@ func testWorkbookGenerationSuccess(t *testing.T, svc service.TimesheetService, t
 	}
 	if len(wb) == 0 || filename == "" {
 		t.Fatalf("expected non-empty workbook and filename, got len %d, filename %s", len(wb), filename)
+	}
+}
+
+func testWorkbookGenerationWithBeritaAcara(t *testing.T, svc service.TimesheetService, tx *gorm.DB, ctx context.Context, userID uint) {
+	t.Helper()
+	witness := &models.User{
+		Username:   "ts_witness_user",
+		Email:      "ts_witness@example.com",
+		Role:       models.RoleUser,
+		Name:       "Witness User",
+		IsActive:   true,
+		EmployeeID: "EMP-WIT-1",
+	}
+	if err := tx.Create(witness).Error; err != nil {
+		t.Fatalf("failed to create witness: %v", err)
+	}
+
+	baAct := &models.DailyActivity{
+		UserID:        userID,
+		Date:          time.Date(2026, 6, 16, 0, 0, 0, 0, time.UTC),
+		StartTime:     "08:30",
+		EndTime:       "17:30",
+		Status:        "P",
+		Activity:      "Incident Investigation / Berita Acara",
+		IsBeritaAcara: true,
+		WitnessID:     &witness.ID,
+		IsActive:      true,
+	}
+	if err := tx.Create(baAct).Error; err != nil {
+		t.Fatalf("failed to create BA activity: %v", err)
+	}
+
+	wb, filename, err := svc.GenerateWorkbook(ctx, userID, 6, 2026)
+	if err != nil {
+		t.Fatalf("GenerateWorkbook with BA failed: %v", err)
+	}
+	if !strings.HasSuffix(filename, ".zip") {
+		t.Fatalf("expected .zip filename when BA entries exist, got: %s", filename)
+	}
+	if !strings.Contains(filename, "Timesheet_and_Berita_Acara_") {
+		t.Fatalf("expected filename to contain Timesheet_and_Berita_Acara_, got: %s", filename)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(wb), int64(len(wb)))
+	if err != nil {
+		t.Fatalf("failed to open generated zip archive: %v", err)
+	}
+
+	hasXLSX := false
+	hasDOCX := false
+	for _, f := range zr.File {
+		if strings.HasSuffix(f.Name, ".xlsx") {
+			hasXLSX = true
+		}
+		if strings.HasSuffix(f.Name, ".docx") {
+			hasDOCX = true
+		}
+	}
+	if !hasXLSX {
+		t.Fatalf("expected zip archive to contain an .xlsx file, files: %+v", zr.File)
+	}
+	if !hasDOCX {
+		t.Fatalf("expected zip archive to contain a .docx file, files: %+v", zr.File)
+	}
+}
+
+func testWorkbookGenerationWithBeritaAcaraConflictingWitnesses(t *testing.T, svc service.TimesheetService, tx *gorm.DB, ctx context.Context, userID uint) {
+	t.Helper()
+	witness2 := &models.User{
+		Username:   "ts_witness_user_2",
+		Email:      "ts_witness_2@example.com",
+		Role:       models.RoleUser,
+		Name:       "Witness User 2",
+		IsActive:   true,
+		EmployeeID: "EMP-WIT-2",
+	}
+	if err := tx.Create(witness2).Error; err != nil {
+		t.Fatalf("failed to create second witness: %v", err)
+	}
+
+	conflictingBA := &models.DailyActivity{
+		UserID:        userID,
+		Date:          time.Date(2026, 6, 17, 0, 0, 0, 0, time.UTC),
+		StartTime:     "09:00",
+		EndTime:       "18:00",
+		Status:        "P",
+		Activity:      "Second Incident Investigation",
+		IsBeritaAcara: true,
+		WitnessID:     &witness2.ID,
+		IsActive:      true,
+	}
+	if err := tx.Create(conflictingBA).Error; err != nil {
+		t.Fatalf("failed to create conflicting BA activity: %v", err)
+	}
+
+	_, _, err := svc.GenerateWorkbook(ctx, userID, 6, 2026)
+	if !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for conflicting witnesses in month, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "must have the same witness") {
+		t.Fatalf("expected error message to mention same witness, got: %s", err.Error())
 	}
 }

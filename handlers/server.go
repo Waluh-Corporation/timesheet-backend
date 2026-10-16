@@ -254,7 +254,18 @@ func (s *Server) dispatchResetEmail(toEmail, username, resetLink, clientIP, loca
 	}
 }
 
+const (
+	webAuthnSessionTTL    = 3 * time.Minute
+	webAuthnSessionPrefix = "webauthn:session:"
+)
+
 func (s *Server) putSession(id string, data *webauthn.SessionData) {
+	if s != nil && s.RedisClient != nil && data != nil {
+		if b, err := json.Marshal(data); err == nil {
+			_ = s.RedisClient.Set(context.Background(), webAuthnSessionPrefix+id, b, webAuthnSessionTTL).Err()
+		}
+	}
+
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
 
@@ -262,8 +273,8 @@ func (s *Server) putSession(id string, data *webauthn.SessionData) {
 		s.webAuthnSessions = make(map[string]*webAuthnSessionEntry)
 	}
 
-	// Proactively clean up expired sessions (> 5 minutes old)
-	cutoff := time.Now().Add(-5 * time.Minute)
+	// Proactively clean up expired sessions (> 3 minutes old)
+	cutoff := time.Now().Add(-webAuthnSessionTTL)
 	for k, v := range s.webAuthnSessions {
 		if v.createdAt.Before(cutoff) {
 			delete(s.webAuthnSessions, k)
@@ -277,6 +288,20 @@ func (s *Server) putSession(id string, data *webauthn.SessionData) {
 }
 
 func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
+	if s != nil && s.RedisClient != nil {
+		val, err := s.RedisClient.GetDel(context.Background(), webAuthnSessionPrefix+id).Result()
+		if err == nil && val != "" {
+			var data webauthn.SessionData
+			if jerr := json.Unmarshal([]byte(val), &data); jerr == nil {
+				// Clean in-memory backup if present
+				s.sessionsMu.Lock()
+				delete(s.webAuthnSessions, id)
+				s.sessionsMu.Unlock()
+				return &data, true
+			}
+		}
+	}
+
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
 	if s.webAuthnSessions == nil {
@@ -285,7 +310,7 @@ func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
 	entry, ok := s.webAuthnSessions[id]
 	if ok {
 		delete(s.webAuthnSessions, id)
-		if time.Since(entry.createdAt) > 5*time.Minute {
+		if time.Since(entry.createdAt) > webAuthnSessionTTL {
 			return nil, false
 		}
 		return entry.data, true
