@@ -36,9 +36,6 @@ type UserRepository interface {
 	ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error)
 	DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error)
 	UpdatePasskeyName(ctx context.Context, id uint, userID *uint, name string) (bool, error)
-
-	// Witnesses
-	ListWitnesses(ctx context.Context, excludeUserID uint, search string) ([]models.User, error)
 }
 
 // MasterRepository defines persistence operations for master data, org structure, and holidays.

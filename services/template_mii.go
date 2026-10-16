@@ -74,14 +74,7 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		ApplyDayRowStyles(f, sheet, "A", rs, allCols, []string{"K", "Q"}, dsc)
 		_ = f.SetCellValue(sheet, "A"+rs, dsc.Date)
 
-		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
-			StartCol:       "B",
-			EndCol:         "C",
-			TotalCol:       "D",
-			RowStr:         rs,
-			FormulaFmt:     "C%s-B%s",
-			IsDecimalTotal: false,
-		}, dsc)
+		WriteWorkingHoursRow(f, sheet, "B", "C", "D", rs, "C%s-B%s", false, dsc)
 
 		status := ""
 		if dsc.HasActivity {
@@ -115,14 +108,6 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 	}
 	WriteSummaryRowWithValues(f, sheet, "40", miiSummary, st.BoldCenterStyle)
 
-	WriteSignatures(f, sheet, in, SignatureCellsConfig{
-		UserCell:     "A46",
-		TLCell:       "D46",
-		DHCell:       "G46",
-		UserDateCell: "A47",
-		TLDateCell:   "D47",
-		DHDateCell:   "G47",
-		DatePrefix:   "DATE : ",
-	})
+	WriteSignatures(f, sheet, in, "A46", "D46", "G46", "A47", "D47", "G47", "DATE : ")
 	return WriteWorkbookToBuffer(f, "mii")
 }

@@ -233,11 +233,8 @@ func (s *Server) reissueCachedJob(c *gin.Context, jobRepo repository.JobReposito
 		baseURL = s.Cfg.AppBaseURL
 	}
 	downloadURL := fmt.Sprintf("%s/api/v1/timesheet/downloads/%s", baseURL, newToken)
-	filename := path.Base(activeJob.FileKey)
-	if filename == "" || filename == "." {
-		filename = fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", user.Username, month, year)
-	}
-	s.dispatchReissueNotifications(user, downloadURL, tokenExpiry, month, year, filename)
+
+	s.dispatchReissueNotifications(user, downloadURL, tokenExpiry, month, year)
 
 	activeJob.DownloadURL = downloadURL
 	activeJob.DownloadToken = &newToken
@@ -254,13 +251,14 @@ func (s *Server) reissueCachedJob(c *gin.Context, jobRepo repository.JobReposito
 	return true
 }
 
-func (s *Server) dispatchReissueNotifications(user *models.User, downloadURL string, tokenExpiry time.Time, month, year int, filename string) {
+func (s *Server) dispatchReissueNotifications(user *models.User, downloadURL string, tokenExpiry time.Time, month, year int) {
 	if s.Mailer != nil && user.Email != "" {
 		compName := user.Company
 		if user.CompanyRel != nil {
 			compName = user.CompanyRel.Name
 		}
 		period := mailer.FormatMonthYearIndonesian(month, year)
+		filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", user.Username, month, year)
 		toEmail := user.Email
 		toUsername := user.Username
 		m := s.Mailer
@@ -335,13 +333,8 @@ func (s *Server) handleSyncGenerationFallback(c *gin.Context, uid uint, req *req
 		return
 	}
 
-	contentType := "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	if strings.HasSuffix(filename, ".zip") {
-		contentType = "application/zip"
-	}
-
 	c.Header("Content-Disposition", "attachment; filename="+filename)
-	c.Data(http.StatusOK, contentType, out)
+	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
 }
 
 // GetTimesheetJob godoc

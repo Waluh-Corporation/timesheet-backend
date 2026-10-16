@@ -259,13 +259,10 @@ type DailyActivity struct {
 	Activity  string `gorm:"type:text" json:"activity"`
 	IsActive  bool   `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_daily_activities_active" json:"is_active"`
 
-	ProjectRefID  *uint           `gorm:"index" json:"project_ref_id"`
-	ProjectRef    *Project        `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
-	StatusRef     *ActivityStatus `gorm:"foreignKey:Status;references:Code;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"status_ref,omitempty"`
-	User          *User           `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user,omitempty"`
-	IsBeritaAcara bool            `gorm:"column:is_berita_acara;default:false;not null;index:idx_daily_activities_is_berita_acara" json:"is_berita_acara"`
-	WitnessID     *uint           `gorm:"column:witness_id;index:idx_daily_activities_witness_id" json:"witness_id,omitempty"`
-	Witness       *User           `gorm:"foreignKey:WitnessID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"witness,omitempty"`
+	ProjectRefID *uint           `gorm:"index" json:"project_ref_id"`
+	ProjectRef   *Project        `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
+	StatusRef    *ActivityStatus `gorm:"foreignKey:Status;references:Code;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"status_ref,omitempty"`
+	User         *User           `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user,omitempty"`
 }
 
 // GetProjectCode returns the canonical project code from the referenced Project,

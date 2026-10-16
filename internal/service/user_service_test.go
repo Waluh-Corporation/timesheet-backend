@@ -180,16 +180,6 @@ func (m *mockUserRepo) UpdatePasskeyName(ctx context.Context, id uint, userID *u
 	return true, nil
 }
 
-func (m *mockUserRepo) ListWitnesses(ctx context.Context, excludeUserID uint, search string) ([]models.User, error) {
-	var res []models.User
-	for _, u := range m.users {
-		if u.ID != excludeUserID && u.IsActive && u.Role == models.RoleUser {
-			res = append(res, *u)
-		}
-	}
-	return res, nil
-}
-
 func TestUserService_ApplyApprovedProfileChange(t *testing.T) {
 	repo := newMockUserRepo()
 	svc := NewUserService(repo, auth.DefaultHasher, nil)

@@ -1,11 +1,8 @@
 package service
 
 import (
-	"archive/zip"
-	"bytes"
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"timesheet-backend/dto/request"
@@ -140,7 +137,7 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		approvers, _ = s.masterRepo.ListApprovers(ctx, "", &activeStatus)
 	}
 
-	excelBytes, err := services.GenerateFromTemplate(services.GenerationInput{
+	out, err := services.GenerateFromTemplate(services.GenerationInput{
 		CompanyCode: companyCode,
 		User:        user,
 		Month:       month,
@@ -154,79 +151,8 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		return nil, "", err
 	}
 
-	// Detect if there are any Berita Acara entries in the month
-	baActivities := make([]models.DailyActivity, 0)
-	var witnessID *uint
-	for _, a := range activities {
-		if a.IsBeritaAcara || strings.EqualFold(a.Status, "BA") {
-			baActivities = append(baActivities, a)
-			if a.WitnessID == nil || *a.WitnessID == 0 {
-				return nil, "", domain.NewUserError(domain.ErrInvalidInput, "A witness is required for all Berita Acara entries")
-			}
-			if witnessID == nil {
-				witnessID = a.WitnessID
-			} else if *witnessID != *a.WitnessID {
-				return nil, "", domain.NewUserError(domain.ErrInvalidInput, "All Berita Acara entries in the month must have the same witness")
-			}
-		}
-	}
-
-	excelFilename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitizeFilename(user.Username), month, year)
-
-	// If no Berita Acara entries, return Excel directly
-	if len(baActivities) == 0 {
-		return excelBytes, excelFilename, nil
-	}
-
-	// Resolve witness for Berita Acara
-	var witness *models.User
-	if witnessID != nil && s.userRepo != nil {
-		witness, _ = s.userRepo.FindByIDWithDetails(ctx, *witnessID)
-	}
-	if witness == nil || witness.Role != models.RoleUser {
-		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Selected witness for Berita Acara is invalid or not an active user")
-	}
-
-	docxBytes, err := services.GenerateBeritaAcara(services.BeritaAcaraInput{
-		User:       user,
-		Witness:    witness,
-		Month:      month,
-		Year:       year,
-		Activities: baActivities,
-		Approvers:  approvers,
-	})
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to generate berita acara: %w", err)
-	}
-
-	docxFilename := fmt.Sprintf("Berita_Acara_%s_%02d_%04d.docx", sanitizeFilename(user.Username), month, year)
-
-	// Bundle Excel and Word into a ZIP archive
-	var zipBuf bytes.Buffer
-	zw := zip.NewWriter(&zipBuf)
-
-	ew, err := zw.Create(excelFilename)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create zip entry for timesheet: %w", err)
-	}
-	if _, err := ew.Write(excelBytes); err != nil {
-		return nil, "", fmt.Errorf("failed to write timesheet to zip: %w", err)
-	}
-
-	dw, err := zw.Create(docxFilename)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create zip entry for berita acara: %w", err)
-	}
-	if _, err := dw.Write(docxBytes); err != nil {
-		return nil, "", fmt.Errorf("failed to write berita acara to zip: %w", err)
-	}
-
-	if err := zw.Close(); err != nil {
-		return nil, "", fmt.Errorf("failed to finalize zip archive: %w", err)
-	}
-
-	zipFilename := fmt.Sprintf("Timesheet_and_Berita_Acara_%s_%02d_%04d.zip", sanitizeFilename(user.Username), month, year)
-	return zipBuf.Bytes(), zipFilename, nil
+	filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitizeFilename(user.Username), month, year)
+	return out, filename, nil
 }
 
 func (s *timesheetService) UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error {

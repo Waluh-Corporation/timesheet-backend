@@ -2722,54 +2722,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/berita-acara/witnesses": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns active users with role 'user' who can be selected as a witness for Berita Acara, excluding the requesting user.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Berita Acara"
-                ],
-                "summary": "List eligible witnesses for Berita Acara",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Search query by name, username, employee ID, or BNI ID",
-                        "name": "q",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/response.WitnessResponse"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Database error",
-                        "schema": {
-                            "$ref": "#/definitions/response.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/companies": {
             "get": {
                 "security": [
@@ -5025,10 +4977,6 @@ const docTemplate = `{
                     "type": "string",
                     "example": "17:00"
                 },
-                "is_berita_acara": {
-                    "type": "boolean",
-                    "example": false
-                },
                 "project_id": {
                     "type": "string",
                     "example": "P24015"
@@ -5048,10 +4996,6 @@ const docTemplate = `{
                 "status": {
                     "type": "string",
                     "example": "P"
-                },
-                "witness_id": {
-                    "type": "integer",
-                    "example": 2
                 }
             }
         },
@@ -5722,9 +5666,6 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "is_berita_acara": {
-                    "type": "boolean"
-                },
                 "project_id": {
                     "type": "string"
                 },
@@ -5745,9 +5686,6 @@ const docTemplate = `{
                 },
                 "status_ref": {
                     "$ref": "#/definitions/models.ActivityStatus"
-                },
-                "witness_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -6214,35 +6152,6 @@ const docTemplate = `{
                 "valid": {
                     "type": "boolean",
                     "example": true
-                }
-            }
-        },
-        "response.WitnessResponse": {
-            "type": "object",
-            "properties": {
-                "bni_id": {
-                    "type": "string",
-                    "example": "87654321"
-                },
-                "department": {
-                    "type": "string",
-                    "example": "Core Banking"
-                },
-                "employee_id": {
-                    "type": "string",
-                    "example": "EMP-002"
-                },
-                "id": {
-                    "type": "integer",
-                    "example": 2
-                },
-                "name": {
-                    "type": "string",
-                    "example": "Jane Doe"
-                },
-                "username": {
-                    "type": "string",
-                    "example": "jane_doe"
                 }
             }
         }

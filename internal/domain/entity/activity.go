@@ -4,19 +4,17 @@ import "time"
 
 // DailyActivity represents a recorded daily timesheet activity of an employee.
 type DailyActivity struct {
-	ID            uint
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-	UserID        uint
-	Date          time.Time
-	StartTime     string
-	EndTime       string
-	Status        string
-	Activity      string
-	IsActive      bool
-	ProjectRefID  *uint
-	IsBeritaAcara bool
-	WitnessID     *uint
+	ID           uint
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	UserID       uint
+	Date         time.Time
+	StartTime    string
+	EndTime      string
+	Status       string
+	Activity     string
+	IsActive     bool
+	ProjectRefID *uint
 }
 
 // OvertimeEntry represents an employee's recorded overtime work entry.

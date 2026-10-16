@@ -192,8 +192,32 @@ func main() {
 		logger.Warn("s3 storage service not configured or failed to initialize", slog.Any("error", err))
 	}
 
-	redisClient := initRedisClient(cfg, logger)
-	if redisClient != nil {
+	var redisClient *redis.Client
+	if cfg.RedisAddr != "" {
+		redisOpts := &redis.Options{
+			Addr:         cfg.RedisAddr,
+			Username:     cfg.RedisUsername,
+			Password:     cfg.RedisPassword,
+			DB:           cfg.RedisDB,
+			DialTimeout:  cfg.RedisDialTimeout,
+			ReadTimeout:  cfg.RedisReadTimeout,
+			WriteTimeout: cfg.RedisWriteTimeout,
+			PoolSize:     cfg.RedisPoolSize,
+			MinIdleConns: cfg.RedisMinIdleConns,
+		}
+		if cfg.RedisTLSEnabled {
+			redisOpts.TLSConfig = &tls.Config{
+				InsecureSkipVerify: cfg.RedisTLSSkipVerify, //nolint:gosec // configurable for internal TLS
+			}
+		}
+		redisClient = redis.NewClient(redisOpts)
+		pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		if err := redisClient.Ping(pingCtx).Err(); err != nil {
+			logger.Warn("redis client failed to ping, continuing with graceful degradation", slog.Any("error", err))
+		} else {
+			logger.Info("connected to redis successfully", slog.String("addr", cfg.RedisAddr))
+		}
+		pingCancel()
 		defer func() { _ = redisClient.Close() }()
 	}
 
@@ -213,8 +237,17 @@ func main() {
 	srv.QueueClient = queueClient
 	srv.RedisClient = redisClient
 
-	stopWorker := startWorkerServer(cfg, srv, storageSvc, mailSvc, pushSvc, redisClient, logger)
-	defer stopWorker()
+	if queueClient != nil && storageSvc != nil {
+		workerServer := queue.NewWorkerServer(cfg, srv.JobRepo, srv.UserRepo, srv.TimesheetSvc, storageSvc, mailSvc, pushSvc)
+		if redisClient != nil {
+			workerServer.SetRedisClient(redisClient)
+		}
+		if werr := workerServer.Start(); werr != nil {
+			logger.Error("failed to start queue worker server", slog.Any("error", werr))
+		} else {
+			defer workerServer.Shutdown()
+		}
+	}
 
 	sched := scheduler.New(db, pushSvc, cfg.Timezone, cfg.ReminderCron, cfg.CleanupCron)
 	if storageSvc != nil {
@@ -316,10 +349,6 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.POST("/users/change-password", s.ChangePassword)
 		authed.POST("/profile/change", s.SubmitProfileChange)
 		authed.GET("/profile/changes", s.MyProfileChanges)
-
-		// Witnesses
-		authed.GET("/witnesses", s.ListWitnesses)
-		authed.GET("/berita-acara/witnesses", s.ListWitnesses)
 
 		// Passkey registration + self-service management for the logged-in user.
 		authed.POST("/passkey/register/begin", s.BeginPasskeyRegistration)
@@ -459,54 +488,4 @@ func spaHandler(staticRoot string) gin.HandlerFunc {
 		}
 		c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
 	}
-}
-
-func initRedisClient(cfg *config.Config, logger *slog.Logger) *redis.Client {
-	if cfg.RedisAddr == "" {
-		return nil
-	}
-	redisOpts := &redis.Options{
-		Addr:         cfg.RedisAddr,
-		Username:     cfg.RedisUsername,
-		Password:     cfg.RedisPassword,
-		DB:           cfg.RedisDB,
-		DialTimeout:  cfg.RedisDialTimeout,
-		ReadTimeout:  cfg.RedisReadTimeout,
-		WriteTimeout: cfg.RedisWriteTimeout,
-		PoolSize:     cfg.RedisPoolSize,
-		MinIdleConns: cfg.RedisMinIdleConns,
-	}
-	if cfg.RedisTLSEnabled {
-		redisOpts.TLSConfig = &tls.Config{
-			InsecureSkipVerify: cfg.RedisTLSSkipVerify, //nolint:gosec // configurable for internal TLS
-		}
-	}
-	redisClient := redis.NewClient(redisOpts)
-	pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer pingCancel()
-	if err := redisClient.Ping(pingCtx).Err(); err != nil {
-		logger.Warn("redis client failed to ping, continuing with graceful degradation", slog.Any("error", err))
-	} else {
-		logger.Info("connected to redis successfully", slog.String("addr", cfg.RedisAddr))
-	}
-	return redisClient
-}
-
-func startWorkerServer(cfg *config.Config, srv *handlers.Server, storageSvc storage.StorageService, mailSvc *mailer.Mailer, pushSvc *push.Service, redisClient *redis.Client, logger *slog.Logger) func() {
-	if srv.QueueClient == nil || storageSvc == nil {
-		return func() {
-			// No-op cleanup closure when queue client or storage service is not configured.
-		}
-	}
-	workerServer := queue.NewWorkerServer(cfg, srv.JobRepo, srv.UserRepo, srv.TimesheetSvc, storageSvc, mailSvc, pushSvc)
-	if redisClient != nil {
-		workerServer.SetRedisClient(redisClient)
-	}
-	if err := workerServer.Start(); err != nil {
-		logger.Error("failed to start queue worker server", slog.Any("error", err))
-		return func() {
-			// No-op cleanup closure when worker server fails to start.
-		}
-	}
-	return func() { workerServer.Shutdown() }
 }

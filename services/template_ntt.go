@@ -9,7 +9,6 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"timesheet-backend/assets"
-	"timesheet-backend/models"
 )
 
 // renderNTTTemplate renders a monthly timesheet based on NTT's master template.
@@ -47,31 +46,6 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 
 	byDay := BuildByDayMap(in.Activities)
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
-	statusCounts := writeNTTDailyRows(f, sheet, in, byDay, daysInMonth, st)
-
-	nttSummary := map[string]SummaryFormulaItem{
-		"E": {Formula: `COUNTIF(E11:E41,"P")`, Value: statusCounts["P"]},
-		"F": {Formula: `COUNTIF(F11:F41,"S")`, Value: statusCounts["S"]},
-		"G": {Formula: `COUNTIF(G11:G41,"BT")`, Value: statusCounts["BT"]},
-		"H": {Formula: `COUNTIF(H11:H41,"PM")`, Value: statusCounts["PM"]},
-		"I": {Formula: `COUNTIF(I11:I41,"V")`, Value: statusCounts["V"]},
-		"J": {Formula: `COUNTIF(J11:J41,"X")`, Value: statusCounts["X"]},
-	}
-	WriteSummaryRowWithValues(f, sheet, "42", nttSummary, st.BoldCenterStyle)
-
-	WriteSignatures(f, sheet, in, SignatureCellsConfig{
-		UserCell:     "B55",
-		TLCell:       "F55",
-		DHCell:       "J55",
-		UserDateCell: "B56",
-		TLDateCell:   "F56",
-		DHDateCell:   "J56",
-		DatePrefix:   "DATE: ",
-	})
-	return WriteWorkbookToBuffer(f, "ntt")
-}
-
-func writeNTTDailyRows(f *excelize.File, sheet string, in GenerationInput, byDay map[int]models.DailyActivity, daysInMonth int, st *BuilderStyles) map[string]int {
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
 	statusCounts := make(map[string]int)
 
@@ -88,14 +62,7 @@ func writeNTTDailyRows(f *excelize.File, sheet string, in GenerationInput, byDay
 		ApplyDayRowStyles(f, sheet, "A", rs, allCols, []string{"K"}, dsc)
 		_ = f.SetCellValue(sheet, "A"+rs, dsc.Date)
 
-		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
-			StartCol:       "B",
-			EndCol:         "C",
-			TotalCol:       "D",
-			RowStr:         rs,
-			FormulaFmt:     "IF(C{row}>B{row},(C{row}-B{row}),C{row}-B{row}+1)",
-			IsDecimalTotal: false,
-		}, dsc)
+		WriteWorkingHoursRow(f, sheet, "B", "C", "D", rs, "IF(C{row}>B{row},(C{row}-B{row}),C{row}-B{row}+1)", false, dsc)
 
 		status := ""
 		if dsc.HasActivity {
@@ -108,12 +75,7 @@ func writeNTTDailyRows(f *excelize.File, sheet string, in GenerationInput, byDay
 			if projCode == "" {
 				projCode = "P24015"
 			}
-			WriteActivityProjectCells(f, sheet, rs, row, ActivityProjectDetails{
-				Activity:    dsc.Activity.Activity,
-				ProjectName: projName,
-				ProjectCode: projCode,
-				AppImpacted: dsc.Activity.GetAppImpacted(),
-			})
+			WriteActivityProjectCells(f, sheet, rs, row, dsc.Activity.Activity, projName, projCode, dsc.Activity.GetAppImpacted())
 		} else if dsc.IsHolidayOrWeekend {
 			WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
 		}
@@ -123,5 +85,17 @@ func writeNTTDailyRows(f *excelize.File, sheet string, in GenerationInput, byDay
 			statusCounts[status]++
 		}
 	}
-	return statusCounts
+
+	nttSummary := map[string]SummaryFormulaItem{
+		"E": {Formula: `COUNTIF(E11:E41,"P")`, Value: statusCounts["P"]},
+		"F": {Formula: `COUNTIF(F11:F41,"S")`, Value: statusCounts["S"]},
+		"G": {Formula: `COUNTIF(G11:G41,"BT")`, Value: statusCounts["BT"]},
+		"H": {Formula: `COUNTIF(H11:H41,"PM")`, Value: statusCounts["PM"]},
+		"I": {Formula: `COUNTIF(I11:I41,"V")`, Value: statusCounts["V"]},
+		"J": {Formula: `COUNTIF(J11:J41,"X")`, Value: statusCounts["X"]},
+	}
+	WriteSummaryRowWithValues(f, sheet, "42", nttSummary, st.BoldCenterStyle)
+
+	WriteSignatures(f, sheet, in, "B55", "F55", "J55", "B56", "F56", "J56", "DATE: ")
+	return WriteWorkbookToBuffer(f, "ntt")
 }

@@ -56,28 +56,6 @@ func ToUserResponse(u *models.User) UserResponse {
 	}
 }
 
-// WitnessResponse represents an active user eligible to witness a Berita Acara.
-type WitnessResponse struct {
-	ID         uint   `json:"id" example:"2"`
-	Name       string `json:"name" example:"Jane Doe"`
-	Username   string `json:"username" example:"jane_doe"`
-	EmployeeID string `json:"employee_id" example:"EMP-002"`
-	BniID      string `json:"bni_id" example:"87654321"`
-	Department string `json:"department" example:"Core Banking"`
-}
-
-// ToWitnessResponse maps a models.User to a safe WitnessResponse DTO.
-func ToWitnessResponse(u *models.User) WitnessResponse {
-	return WitnessResponse{
-		ID:         u.ID,
-		Name:       u.Name,
-		Username:   u.Username,
-		EmployeeID: u.EmployeeID,
-		BniID:      u.BniID,
-		Department: u.Department,
-	}
-}
-
 // CreateUserData represents the response data payload when an admin creates a new user.
 type CreateUserData struct {
 	Message string       `json:"message" example:"user created successfully"`

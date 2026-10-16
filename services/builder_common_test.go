@@ -292,12 +292,7 @@ func TestBuilderCommon_NewHelpers(t *testing.T) {
 	}
 
 	// WriteActivityProjectCells
-	WriteActivityProjectCells(f, sheet, "10", 10, ActivityProjectDetails{
-		Activity:    "Dev Task",
-		ProjectName: "Proj A",
-		ProjectCode: "P01",
-		AppImpacted: "App X",
-	})
+	WriteActivityProjectCells(f, sheet, "10", 10, "Dev Task", "Proj A", "P01", "App X")
 	vK, _ := f.GetCellValue(sheet, "K10")
 	vL, _ := f.GetCellValue(sheet, "L10")
 	if vK != "Dev Task" || vL != "Proj A" {
@@ -338,15 +333,9 @@ func TestBuilderCommon_NewHelpers(t *testing.T) {
 	}
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
 	called := false
-	WriteBuilderDailyRows(f, sheet, in, BuilderDailyRowsConfig{
-		StartRow: 10,
-		AllCols:  allCols,
-		WrapCols: []string{"K"},
-		Styles:   st,
-		WriteAct: func(rs string, row int, dsc DayStyleContext) {
-			called = true
-			_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
-		},
+	WriteBuilderDailyRows(f, sheet, in, 10, allCols, []string{"K"}, st, func(rs string, row int, dsc DayStyleContext) {
+		called = true
+		_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
 	})
 	if !called {
 		t.Errorf("expected writeAct to be called for day 1")

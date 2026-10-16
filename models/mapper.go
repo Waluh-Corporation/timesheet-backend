@@ -346,19 +346,17 @@ func (a *DailyActivity) ToDomain() *entity.DailyActivity {
 		return nil
 	}
 	return &entity.DailyActivity{
-		ID:            a.ID,
-		CreatedAt:     a.CreatedAt,
-		UpdatedAt:     a.UpdatedAt,
-		UserID:        a.UserID,
-		Date:          a.Date,
-		StartTime:     a.StartTime,
-		EndTime:       a.EndTime,
-		Status:        a.Status,
-		Activity:      a.Activity,
-		IsActive:      a.IsActive,
-		ProjectRefID:  a.ProjectRefID,
-		IsBeritaAcara: a.IsBeritaAcara,
-		WitnessID:     a.WitnessID,
+		ID:           a.ID,
+		CreatedAt:    a.CreatedAt,
+		UpdatedAt:    a.UpdatedAt,
+		UserID:       a.UserID,
+		Date:         a.Date,
+		StartTime:    a.StartTime,
+		EndTime:      a.EndTime,
+		Status:       a.Status,
+		Activity:     a.Activity,
+		IsActive:     a.IsActive,
+		ProjectRefID: a.ProjectRefID,
 	}
 }
 
@@ -368,19 +366,17 @@ func DailyActivityFromDomain(e *entity.DailyActivity) *DailyActivity {
 		return nil
 	}
 	return &DailyActivity{
-		ID:            e.ID,
-		CreatedAt:     e.CreatedAt,
-		UpdatedAt:     e.UpdatedAt,
-		UserID:        e.UserID,
-		Date:          e.Date,
-		StartTime:     e.StartTime,
-		EndTime:       e.EndTime,
-		Status:        e.Status,
-		Activity:      e.Activity,
-		IsActive:      e.IsActive,
-		ProjectRefID:  e.ProjectRefID,
-		IsBeritaAcara: e.IsBeritaAcara,
-		WitnessID:     e.WitnessID,
+		ID:           e.ID,
+		CreatedAt:    e.CreatedAt,
+		UpdatedAt:    e.UpdatedAt,
+		UserID:       e.UserID,
+		Date:         e.Date,
+		StartTime:    e.StartTime,
+		EndTime:      e.EndTime,
+		Status:       e.Status,
+		Activity:     e.Activity,
+		IsActive:     e.IsActive,
+		ProjectRefID: e.ProjectRefID,
 	}
 }
 
