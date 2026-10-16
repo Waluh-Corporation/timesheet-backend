@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/response"
@@ -143,7 +144,7 @@ func assertListActivitiesPagination(t *testing.T, dataLen int, meta response.Pag
 	}
 }
 
-func TestActivityHandlers_GetAndListIntegration(t *testing.T) {
+func TestActivityHandlers_GetAndListIntegration(t *testing.T) { // NOSONAR
 	db, cfg := setupTestDB(t)
 	tx := db.Begin()
 	defer tx.Rollback()
@@ -487,7 +488,7 @@ func assertProjectSyncFields(t *testing.T, act models.DailyActivity, proj models
 	}
 }
 
-func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) {
+func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) { // NOSONAR
 	db, cfg := setupTestDB(t)
 	tx := db.Begin()
 	defer tx.Rollback()
@@ -749,7 +750,7 @@ func TestActivityHandlers_MasterData(t *testing.T) {
 	})
 }
 
-func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
+func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) { // NOSONAR
 	db, cfg := setupTestDB(t)
 	tx := db.Begin()
 	defer tx.Rollback()
@@ -1126,6 +1127,186 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) {
 			t.Errorf("unexpected sanitized string: %q", s)
 		}
 	})
+}
+
+func setupBeritaAcaraHandlerTest(t *testing.T) (*Server, *gorm.DB, models.User, models.User, models.User, models.User) {
+	db, cfg := setupTestDB(t)
+	tx := db.Begin()
+
+	authSvc := auth.NewService("test-secret-at-least-32-chars-long!", cfg.JWTExpiry)
+	srv := &Server{
+		Cfg:         cfg,
+		Auth:        authSvc,
+		ActivitySvc: service.NewActivityService(repository.NewActivityRepository(tx)),
+		MasterSvc:   service.NewMasterDataService(repository.NewMasterRepository(tx)),
+	}
+
+	user1 := models.User{
+		Username: "ba_caller_user",
+		Email:    "caller@example.com",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+	_ = tx.Create(&user1)
+
+	user2 := models.User{
+		Username: "ba_witness_1",
+		Name:     "Saksi Satu",
+		Email:    "witness1@example.com",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+	_ = tx.Create(&user2)
+
+	user3 := models.User{
+		Username: "ba_witness_2",
+		Name:     "Saksi Dua",
+		Email:    "witness2@example.com",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+	_ = tx.Create(&user3)
+
+	admin := models.User{
+		Username: "ba_admin_user",
+		Name:     "Admin",
+		Email:    "admin_ba@example.com",
+		Role:     models.RoleAdmin,
+		IsActive: true,
+	}
+	_ = tx.Create(&admin)
+
+	return srv, tx, user1, user2, user3, admin
+}
+
+func TestActivityHandlers_ListWitnesses(t *testing.T) {
+	srv, tx, user1, _, _, admin := setupBeritaAcaraHandlerTest(t)
+	defer tx.Rollback()
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/users/witnesses", nil)
+	c.Set(ctxUserID, user1.ID)
+	c.Set(ctxRole, models.RoleUser)
+
+	srv.ListWitnesses(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	var resp struct {
+		Code int                        `json:"code"`
+		Data []response.WitnessResponse `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(resp.Data) < 2 {
+		t.Fatalf("expected at least 2 witnesses, got %d", len(resp.Data))
+	}
+	for _, wItem := range resp.Data {
+		if wItem.ID == user1.ID {
+			t.Errorf("caller should not be in witness list")
+		}
+		if wItem.ID == admin.ID {
+			t.Errorf("admin should not be in witness list")
+		}
+	}
+}
+
+func TestActivityHandlers_BeritaAcaraWitnessFlow(t *testing.T) {
+	srv, tx, user1, user2, user3, _ := setupBeritaAcaraHandlerTest(t)
+	defer tx.Rollback()
+
+	reqBody := `{"date":"2026-10-01","activity":"Troubleshooting server outage","status":"BT","start_time":"08:30","end_time":"17:30","is_berita_acara":true,"witness_id":` + itoa(user2.ID) + `,"berita_acara_notes":"Genset failure"}`
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/activities", strings.NewReader(reqBody))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxUserID, user1.ID)
+	c.Set(ctxRole, models.RoleUser)
+
+	srv.UpsertDailyActivity(c)
+	assertFatalCode(t, w, http.StatusOK)
+
+	// List activities for October 2026 and verify meta.monthly_witness
+	wList := httptest.NewRecorder()
+	cList, _ := gin.CreateTestContext(wList)
+	cList.Request = httptest.NewRequest(http.MethodGet, "/api/v1/activities?month=10&year=2026", nil)
+	cList.Set(ctxUserID, user1.ID)
+	cList.Set(ctxRole, models.RoleUser)
+
+	srv.ListActivities(cList)
+	assertFatalCode(t, wList, http.StatusOK)
+
+	var listResp struct {
+		Code           int                              `json:"code"`
+		Data           []response.DailyActivityResponse `json:"data"`
+		MonthlyWitness *response.WitnessResponse        `json:"monthly_witness"`
+	}
+	if err := json.Unmarshal(wList.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("failed to parse list response: %v", err)
+	}
+	if listResp.MonthlyWitness == nil {
+		t.Fatalf("expected monthly_witness in response, got nil (body: %s)", wList.Body.String())
+	}
+	if listResp.MonthlyWitness.ID != user2.ID {
+		t.Errorf("expected witness id %d, got %d", user2.ID, listResp.MonthlyWitness.ID)
+	}
+
+	// Update Monthly Witness to user3
+	updateBody := `{"month":10,"year":2026,"witness_id":` + itoa(user3.ID) + `}`
+	wUpdate := httptest.NewRecorder()
+	cUpdate, _ := gin.CreateTestContext(wUpdate)
+	cUpdate.Request = httptest.NewRequest(http.MethodPut, "/api/v1/activities/witness", strings.NewReader(updateBody))
+	cUpdate.Request.Header.Set("Content-Type", "application/json")
+	cUpdate.Set(ctxUserID, user1.ID)
+	cUpdate.Set(ctxRole, models.RoleUser)
+
+	srv.UpdateMonthlyWitness(cUpdate)
+	assertFatalCode(t, wUpdate, http.StatusOK)
+
+	// Verify ListActivities now reflects user3
+	wList2 := httptest.NewRecorder()
+	cList2, _ := gin.CreateTestContext(wList2)
+	cList2.Request = httptest.NewRequest(http.MethodGet, "/api/v1/activities?month=10&year=2026", nil)
+	cList2.Set(ctxUserID, user1.ID)
+	cList2.Set(ctxRole, models.RoleUser)
+
+	srv.ListActivities(cList2)
+	assertFatalCode(t, wList2, http.StatusOK)
+
+	var listResp2 struct {
+		MonthlyWitness *response.WitnessResponse `json:"monthly_witness"`
+	}
+	if err := json.Unmarshal(wList2.Body.Bytes(), &listResp2); err != nil {
+		t.Fatalf("failed to parse second list response: %v", err)
+	}
+	if listResp2.MonthlyWitness == nil || listResp2.MonthlyWitness.ID != user3.ID {
+		t.Errorf("expected updated witness id %d in response, got %+v", user3.ID, listResp2.MonthlyWitness)
+	}
+}
+
+func TestActivityHandlers_UpdateMonthlyWitness_Validation(t *testing.T) {
+	srv, tx, user1, _, _, _ := setupBeritaAcaraHandlerTest(t)
+	defer tx.Rollback()
+
+	// Invalid JSON
+	wBadJSON := httptest.NewRecorder()
+	cBadJSON, _ := gin.CreateTestContext(wBadJSON)
+	cBadJSON.Request = httptest.NewRequest(http.MethodPut, "/api/v1/activities/witness", strings.NewReader("bad-json"))
+	cBadJSON.Request.Header.Set("Content-Type", "application/json")
+	cBadJSON.Set(ctxUserID, user1.ID)
+	srv.UpdateMonthlyWitness(cBadJSON)
+	assertFatalCode(t, wBadJSON, http.StatusBadRequest)
+
+	// Self as witness
+	wSelf := httptest.NewRecorder()
+	cSelf, _ := gin.CreateTestContext(wSelf)
+	bodySelf := `{"month":10,"year":2026,"witness_id":` + itoa(user1.ID) + `}`
+	cSelf.Request = httptest.NewRequest(http.MethodPut, "/api/v1/activities/witness", strings.NewReader(bodySelf))
+	cSelf.Request.Header.Set("Content-Type", "application/json")
+	cSelf.Set(ctxUserID, user1.ID)
+	srv.UpdateMonthlyWitness(cSelf)
+	assertFatalCode(t, wSelf, http.StatusBadRequest)
 }
 
 type testActivityMockQueueClient struct {

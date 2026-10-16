@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/dto/request"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
@@ -287,10 +288,101 @@ func (s *Server) ListActivities(c *gin.Context) {
 		return
 	}
 
-	RespondPaginated(c, http.StatusOK, respItems, meta.Page, meta.Limit, meta.TotalRows)
+	var monthlyWitness *response.WitnessResponse
+	if filter.Month != nil && filter.Year != nil {
+		monthlyWitness, _ = svc.GetMonthlyWitness(reqContext(c), uid, *filter.Month, *filter.Year)
+	}
+
+	extra := make(map[string]interface{})
+	if monthlyWitness != nil {
+		extra["monthly_witness"] = monthlyWitness
+	}
+
+	RespondPaginatedWithMeta(c, http.StatusOK, respItems, meta.Page, meta.Limit, meta.TotalRows, extra)
 }
 
 // ListMonthlyActivities delegates to ListActivities for backwards-compatibility.
 func (s *Server) ListMonthlyActivities(c *gin.Context) {
 	s.ListActivities(c)
+}
+
+// ListWitnesses godoc
+// @Summary List eligible witnesses for Berita Acara
+// @Description Returns active users with role 'user' eligible to be chosen as a witness (excluding current user)
+// @Tags Activity
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} response.APIResponse{data=[]response.WitnessResponse}
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/users/witnesses [get]
+func (s *Server) ListWitnesses(c *gin.Context) {
+	uid := currentUserID(c)
+	svc := s.getActivityService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
+		return
+	}
+
+	witnesses, err := svc.GetEligibleWitnesses(reqContext(c), uid)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondSuccess(c, http.StatusOK, witnesses)
+}
+
+// UpdateMonthlyWitness godoc
+// @Summary Update witness for all Berita Acara entries in a given month
+// @Description Updates the witness ID for all Berita Acara daily activities in the specified month and year
+// @Tags Activity
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param body body request.UpdateMonthlyWitnessRequest true "Update witness payload"
+// @Success 200 {object} response.APIResponse
+// @Failure 400 {object} response.ErrorResponse "Bad request"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/activities/witness [put]
+func (s *Server) UpdateMonthlyWitness(c *gin.Context) {
+	uid := currentUserID(c)
+	svc := s.getActivityService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
+		return
+	}
+
+	var req request.UpdateMonthlyWitnessRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "Invalid request payload: "+err.Error())
+		return
+	}
+
+	count, witness, err := svc.UpdateMonthlyWitness(reqContext(c), uid, req.Month, req.Year, req.WitnessID)
+	if err != nil {
+		var userErr *domain.UserError
+		if errors.As(err, &userErr) {
+			status := domain.MapErrorToHTTPStatus(userErr.Err)
+			RespondError(c, status, userErr.Msg)
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var witResp *response.WitnessResponse
+	if witness != nil {
+		witResp = &response.WitnessResponse{
+			ID:   witness.ID,
+			Name: witness.Name,
+		}
+	}
+
+	RespondSuccess(c, http.StatusOK, gin.H{
+		"message":       "Monthly witness updated successfully for all Berita Acara records in this period",
+		"updated_count": count,
+		"witness":       witResp,
+	})
 }

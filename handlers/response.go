@@ -55,11 +55,16 @@ func RespondAbortError(c *gin.Context, code int, message string) {
 
 // RespondPaginated sends a 2xx JSON response wrapped with pagination metadata.
 func RespondPaginated(c *gin.Context, code int, data interface{}, page int, limit int, totalRows int64) {
+	RespondPaginatedWithMeta(c, code, data, page, limit, totalRows, nil)
+}
+
+// RespondPaginatedWithMeta sends a 2xx JSON response wrapped with pagination metadata and optional extra fields.
+func RespondPaginatedWithMeta(c *gin.Context, code int, data interface{}, page int, limit int, totalRows int64, extra map[string]interface{}) {
 	totalPages := 0
 	if limit > 0 {
 		totalPages = int(math.Ceil(float64(totalRows) / float64(limit)))
 	}
-	c.JSON(code, gin.H{
+	resp := gin.H{
 		"code":   code,
 		"status": "success",
 		"data":   data,
@@ -69,7 +74,11 @@ func RespondPaginated(c *gin.Context, code int, data interface{}, page int, limi
 			"total_rows":  totalRows,
 			"total_pages": totalPages,
 		},
-	})
+	}
+	for k, v := range extra {
+		resp[k] = v
+	}
+	c.JSON(code, resp)
 }
 
 // Convenience methods on Server

@@ -65,6 +65,9 @@ type mockTimesheetService struct {
 func (m *mockTimesheetService) GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
 	return m.genOut, m.genName, m.genErr
 }
+func (m *mockTimesheetService) GenerateBeritaAcara(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	return nil, "", nil
+}
 func (m *mockTimesheetService) UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error {
 	return nil
 }
