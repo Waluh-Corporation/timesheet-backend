@@ -17,6 +17,7 @@ import (
 // TimesheetService defines business operations for generating timesheets and managing overtime records.
 type TimesheetService interface {
 	GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error)
+	GenerateBeritaAcara(ctx context.Context, userID uint, month int, year int) ([]byte, string, error)
 	UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error
 	ListMonthlyOvertimes(ctx context.Context, userID uint, month int, year int) ([]response.OvertimeResponse, error)
 	DeleteOvertime(ctx context.Context, id uint, userID uint) error
@@ -65,19 +66,9 @@ func sanitizeFilename(s string) string {
 }
 
 func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
-	if month < 1 || month > 12 || year < 2000 || year > 2100 {
-		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Invalid month or year")
-	}
-	loc := jakartaLocation()
-	now := time.Now()
-	if s.nowFunc != nil {
-		now = s.nowFunc()
-	}
-
-	if !domain.IsAdminFromContext(ctx) {
-		if err := domain.ValidateTimesheetPeriod(month, year, now, loc); err != nil {
-			return nil, "", err
-		}
+	loc, err := s.validateTimesheetPeriod(ctx, month, year)
+	if err != nil {
+		return nil, "", err
 	}
 
 	user, err := s.userRepo.FindByIDWithDetails(ctx, userID)
@@ -85,23 +76,10 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		return nil, "", domain.NewUserError(domain.ErrNotFound, "User not found")
 	}
 
-	companyCode := ""
-	if user.CompanyRel != nil {
-		companyCode = user.CompanyRel.Code
-	} else if user.CompanyID != nil && *user.CompanyID != 0 && s.masterRepo != nil {
-		if comp, cerr := s.masterRepo.FindCompanyByID(ctx, *user.CompanyID); cerr == nil && comp != nil {
-			companyCode = comp.Code
-		}
+	companyCode, err := s.resolveCompanyCode(ctx, user)
+	if err != nil {
+		return nil, "", err
 	}
-	if companyCode == "" && user.Company != "" {
-		companyCode = user.Company
-	}
-	if companyCode == "" {
-		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "User has no company assigned")
-	}
-
-	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
-	end := start.AddDate(0, 1, 0)
 
 	filter := repository.ActivityFilter{
 		Month:     &month,
@@ -117,24 +95,11 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		return nil, "", domain.NewUserError(domain.ErrInvalidInput, "No activities recorded for this period")
 	}
 
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, 0)
 	overtimes, err := s.overtimeRepo.FindByUserAndMonth(ctx, user.ID, start, end)
 	if err != nil {
 		return nil, "", err
-	}
-
-	holidays := map[int]string{}
-	if s.masterRepo != nil {
-		if hs, herr := s.masterRepo.ListHolidaysByMonth(ctx, year, month); herr == nil {
-			for _, h := range hs {
-				holidays[h.Date.Day()] = h.Description
-			}
-		}
-	}
-
-	var approvers []models.Approver
-	if s.masterRepo != nil {
-		activeStatus := true
-		approvers, _ = s.masterRepo.ListApprovers(ctx, "", &activeStatus)
 	}
 
 	out, err := services.GenerateFromTemplate(services.GenerationInput{
@@ -144,8 +109,8 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		Year:        year,
 		Activities:  activities,
 		Overtimes:   overtimes,
-		Approvers:   approvers,
-		Holidays:    holidays,
+		Approvers:   s.fetchActiveApprovers(ctx),
+		Holidays:    s.fetchHolidaysMap(ctx, year, month),
 	})
 	if err != nil {
 		return nil, "", err
@@ -153,6 +118,159 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 
 	filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", sanitizeFilename(user.Username), month, year)
 	return out, filename, nil
+}
+
+func (s *timesheetService) GenerateBeritaAcara(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	loc, err := s.validateTimesheetPeriod(ctx, month, year)
+	if err != nil {
+		return nil, "", err
+	}
+
+	user, err := s.userRepo.FindByIDWithDetails(ctx, userID)
+	if err != nil || user == nil {
+		return nil, "", domain.NewUserError(domain.ErrNotFound, "User not found")
+	}
+
+	filter := repository.ActivityFilter{
+		Month:     &month,
+		Year:      &year,
+		SortOrder: "asc",
+		IsAll:     true,
+	}
+	activities, _, err := s.activityRepo.ListActiveByUser(ctx, user.ID, filter)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var baActivities []models.DailyActivity
+	for _, a := range activities {
+		if a.IsBeritaAcara {
+			baActivities = append(baActivities, a)
+		}
+	}
+	if len(baActivities) == 0 {
+		return nil, "", nil
+	}
+
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, 0)
+	overtimes, _ := s.overtimeRepo.FindByUserAndMonth(ctx, user.ID, start, end)
+
+	teamLeadName, _ := services.ResolveApprovers(services.GenerationInput{
+		Overtimes: overtimes,
+		Approvers: s.fetchActiveApprovers(ctx),
+	})
+
+	deptName := user.Department
+	if user.DepartmentRel != nil && user.DepartmentRel.Name != "" {
+		deptName = user.DepartmentRel.Name
+	}
+	empName := user.Name
+	if empName == "" {
+		empName = user.Username
+	}
+
+	payload := services.BeritaAcaraPayload{
+		EmployeeName: empName,
+		NPP:          user.BniID,
+		Department:   deptName,
+		GroupName:    user.GroupName,
+		WitnessName:  s.resolveWitnessName(ctx, user.ID, month, year, baActivities),
+		TeamLeadName: teamLeadName,
+		Items:        buildBeritaAcaraItems(baActivities),
+	}
+
+	out, err := services.GenerateBeritaAcaraDocx(payload)
+	if err != nil {
+		return nil, "", err
+	}
+
+	filename := fmt.Sprintf("Berita_Acara_%s_%02d_%04d.docx", sanitizeFilename(user.Username), month, year)
+	return out, filename, nil
+}
+
+func (s *timesheetService) validateTimesheetPeriod(ctx context.Context, month, year int) (*time.Location, error) {
+	if month < 1 || month > 12 || year < 2000 || year > 2100 {
+		return nil, domain.NewUserError(domain.ErrInvalidInput, "Invalid month or year")
+	}
+	loc := jakartaLocation()
+	now := time.Now()
+	if s.nowFunc != nil {
+		now = s.nowFunc()
+	}
+	if !domain.IsAdminFromContext(ctx) {
+		if err := domain.ValidateTimesheetPeriod(month, year, now, loc); err != nil {
+			return nil, err
+		}
+	}
+	return loc, nil
+}
+
+func (s *timesheetService) resolveCompanyCode(ctx context.Context, user *models.User) (string, error) {
+	if user.CompanyRel != nil && user.CompanyRel.Code != "" {
+		return user.CompanyRel.Code, nil
+	}
+	if user.CompanyID != nil && *user.CompanyID != 0 && s.masterRepo != nil {
+		if comp, cerr := s.masterRepo.FindCompanyByID(ctx, *user.CompanyID); cerr == nil && comp != nil && comp.Code != "" {
+			return comp.Code, nil
+		}
+	}
+	if user.Company != "" {
+		return user.Company, nil
+	}
+	return "", domain.NewUserError(domain.ErrInvalidInput, "User has no company assigned")
+}
+
+func (s *timesheetService) fetchHolidaysMap(ctx context.Context, year, month int) map[int]string {
+	holidays := make(map[int]string)
+	if s.masterRepo != nil {
+		if hs, herr := s.masterRepo.ListHolidaysByMonth(ctx, year, month); herr == nil {
+			for _, h := range hs {
+				holidays[h.Date.Day()] = h.Description
+			}
+		}
+	}
+	return holidays
+}
+
+func (s *timesheetService) fetchActiveApprovers(ctx context.Context) []models.Approver {
+	if s.masterRepo != nil {
+		activeStatus := true
+		approvers, _ := s.masterRepo.ListApprovers(ctx, "", &activeStatus)
+		return approvers
+	}
+	return nil
+}
+
+func (s *timesheetService) resolveWitnessName(ctx context.Context, userID uint, month, year int, baActivities []models.DailyActivity) string {
+	for _, a := range baActivities {
+		if a.Witness != nil && a.Witness.Name != "" {
+			return a.Witness.Name
+		}
+		if a.WitnessID != nil && *a.WitnessID != 0 {
+			if w, werr := s.activityRepo.FindWitnessByID(ctx, *a.WitnessID); werr == nil && w != nil && w.Name != "" {
+				return w.Name
+			}
+		}
+	}
+	if w, werr := s.activityRepo.GetMonthlyWitness(ctx, userID, month, year); werr == nil && w != nil {
+		return w.Name
+	}
+	return ""
+}
+
+func buildBeritaAcaraItems(baActivities []models.DailyActivity) []services.BeritaAcaraItem {
+	items := make([]services.BeritaAcaraItem, 0, len(baActivities))
+	for _, a := range baActivities {
+		items = append(items, services.BeritaAcaraItem{
+			Date:      a.Date,
+			Day:       services.IndonesianDayName(a.Date.Weekday()),
+			StartTime: a.StartTime,
+			EndTime:   a.EndTime,
+			Notes:     a.BeritaAcaraNotes,
+		})
+	}
+	return items
 }
 
 func (s *timesheetService) UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error {
