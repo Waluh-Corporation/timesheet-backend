@@ -115,7 +115,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 	}
 
 	cid := currentUserID(c)
-	s.recordAuditLog(c.Request.Context(), &cid, "", "USER_CREATED", "user", strconv.Itoa(int(user.ID)), c.ClientIP(), c.Request.UserAgent(), gin.H{"username": user.Username, "email": user.Email, "role": user.Role})
+	s.recordAuditLog(c.Request.Context(), &cid, "USER_CREATED", "user", strconv.FormatUint(uint64(user.ID), 10), c.ClientIP(), c.Request.UserAgent(), gin.H{"username": user.Username, "email": user.Email, "role": user.Role})
 
 	RespondSuccess(c, http.StatusCreated, response.CreateUserData{
 		Message: "user created successfully",
@@ -182,7 +182,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	if rdb := s.getRedisClient(); rdb != nil {
 		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
 	}
-	s.recordAuditLog(c.Request.Context(), &callerID, "", "USER_UPDATED", "user", strconv.Itoa(int(id)), c.ClientIP(), c.Request.UserAgent(), req)
+	s.recordAuditLog(c.Request.Context(), &callerID, "USER_UPDATED", "user", strconv.FormatUint(id, 10), c.ClientIP(), c.Request.UserAgent(), req)
 	RespondMessage(c, http.StatusOK, "user updated successfully")
 }
 
@@ -231,7 +231,7 @@ func (s *Server) DeleteUser(c *gin.Context) {
 	if rdb := s.getRedisClient(); rdb != nil {
 		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
 	}
-	s.recordAuditLog(c.Request.Context(), &callerID, "", "USER_DEACTIVATED", "user", strconv.Itoa(int(id)), c.ClientIP(), c.Request.UserAgent(), nil)
+	s.recordAuditLog(c.Request.Context(), &callerID, "USER_DEACTIVATED", "user", strconv.FormatUint(id, 10), c.ClientIP(), c.Request.UserAgent(), nil)
 	RespondMessage(c, http.StatusOK, "user deactivated successfully")
 }
 
@@ -281,6 +281,6 @@ func (s *Server) AnonymizeUser(c *gin.Context) {
 	if rdb := s.getRedisClient(); rdb != nil {
 		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
 	}
-	s.recordAuditLog(c.Request.Context(), &callerID, "", "USER_ANONYMIZED", "user", strconv.Itoa(int(id)), c.ClientIP(), c.Request.UserAgent(), nil)
+	s.recordAuditLog(c.Request.Context(), &callerID, "USER_ANONYMIZED", "user", strconv.FormatUint(id, 10), c.ClientIP(), c.Request.UserAgent(), nil)
 	RespondMessage(c, http.StatusOK, "user personal data anonymized successfully")
 }

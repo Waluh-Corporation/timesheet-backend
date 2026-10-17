@@ -1,6 +1,6 @@
 module timesheet-backend
 
-go 1.26.0
+go 1.27.2
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
@@ -86,7 +86,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
-	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/philhofer/fwd v1.2.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.64.0 // indirect
 	github.com/richardlehane/mscfb v1.0.9 // indirect

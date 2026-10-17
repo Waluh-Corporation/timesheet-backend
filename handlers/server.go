@@ -359,13 +359,19 @@ func (s *Server) getAuditRepository() repository.AuditRepository {
 	return s.AuditRepo
 }
 
-func (s *Server) recordAuditLog(ctx context.Context, actorID *uint, actorUsername, action, resourceType, resourceID, ip, userAgent string, details interface{}) {
+func (s *Server) recordAuditLog(ctx context.Context, actorID *uint, action, resourceType, resourceID, ip, userAgent string, details interface{}) {
 	repo := s.getAuditRepository()
 	if repo == nil {
 		return
 	}
 	if actorID != nil && *actorID == 0 {
 		actorID = nil
+	}
+	actorUsername := ""
+	if actorID != nil && s != nil && s.UserRepo != nil {
+		if u, err := s.UserRepo.FindByID(ctx, *actorID); err == nil && u != nil {
+			actorUsername = u.Username
+		}
 	}
 	var detailsBytes datatypes.JSON
 	if details != nil {

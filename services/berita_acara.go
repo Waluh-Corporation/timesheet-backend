@@ -173,14 +173,16 @@ func processZipEntry(writer *zip.Writer, file *zip.File, payload BeritaAcaraPayl
 		return fmt.Errorf("failed to create zip entry %s: %w", file.Name, err)
 	}
 
+	const maxZipEntrySize = 10 * 1024 * 1024 // 10MB limit per entry to prevent decompression bombs
+
 	if file.Name != "word/document.xml" {
-		if _, err := io.Copy(w, rc); err != nil {
+		if _, err := io.Copy(w, io.LimitReader(rc, maxZipEntrySize)); err != nil {
 			return fmt.Errorf("failed to copy template file %s: %w", file.Name, err)
 		}
 		return nil
 	}
 
-	xmlBytes, err := io.ReadAll(rc)
+	xmlBytes, err := io.ReadAll(io.LimitReader(rc, maxZipEntrySize))
 	if err != nil {
 		return fmt.Errorf("failed to read word/document.xml: %w", err)
 	}
