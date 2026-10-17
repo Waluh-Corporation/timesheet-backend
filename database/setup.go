@@ -152,6 +152,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.RefreshToken{},
 		&models.SystemSetting{},
 		&models.AuthenticatorAAGUID{},
+		&models.UserSignature{},
 	)
 }
 

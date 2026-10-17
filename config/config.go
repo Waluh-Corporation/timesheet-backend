@@ -118,6 +118,15 @@ type Config struct {
 
 	// IP2Location binary database path (.BIN).
 	IP2LocationDBPath string
+
+	// DocuSeal self-hosted e-signature integration configuration.
+	DocusealEnabled            bool
+	DocusealInternalURL        string
+	DocusealPublicURL          string
+	DocusealAPIKey             string
+	DocusealWebhookSecret      string
+	DocusealSpecimenTemplateID int
+	DocusealSignatureFieldName string
 }
 
 func getEnv(key, fallback string) string {
@@ -346,6 +355,14 @@ func Load() *Config {
 		ExcelMaxConcurrentJobs:    getEnvInt("EXCEL_MAX_CONCURRENT_JOBS", 10),
 		TimesheetDownloadMaxQuota: maxDownloadQuota,
 		IP2LocationDBPath:         getEnv("IP2LOCATION_DB_PATH", ""),
+
+		DocusealEnabled:            getEnvBool("DOCUSEAL_ENABLED", false),
+		DocusealInternalURL:        strings.TrimRight(getEnv("DOCUSEAL_INTERNAL_URL", "http://192.168.0.2:3003"), "/"),
+		DocusealPublicURL:          strings.TrimRight(getEnv("DOCUSEAL_PUBLIC_URL", "https://docuseal.fafr.my.id"), "/"),
+		DocusealAPIKey:             getEnv("DOCUSEAL_API_KEY", ""),
+		DocusealWebhookSecret:      getEnv("DOCUSEAL_WEBHOOK_SECRET", ""),
+		DocusealSpecimenTemplateID: getEnvInt("DOCUSEAL_SPECIMEN_TEMPLATE_ID", 0),
+		DocusealSignatureFieldName: getEnv("DOCUSEAL_SIGNATURE_FIELD_NAME", "Signature"),
 	}
 
 	if cfg.RateLimitEnabled {

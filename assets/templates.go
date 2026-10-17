@@ -26,3 +26,8 @@ var NTTTemplate []byte
 //
 //go:embed templates/Berita_Acara-Template.docx
 var BeritaAcaraTemplate []byte
+
+// SignatureFontTTF holds the embedded cursive TrueType font used to render typed signatures.
+//
+//go:embed templates/GreatVibes-Regular.ttf
+var SignatureFontTTF []byte

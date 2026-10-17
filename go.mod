@@ -22,6 +22,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	github.com/xuri/excelize/v2 v2.11.0
 	golang.org/x/crypto v0.58.0
+	golang.org/x/image v0.45.0
 	golang.org/x/time v0.16.0
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gorm.io/datatypes v1.2.7

@@ -89,6 +89,7 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 		DatePrefix:   "DATE : ",
 	})
 	_ = f.SetCellValue(sheetTS, "B49", "( "+pos+" )")
+	WriteSignatureImage(f, sheetTS, "B45", in.UserSignaturePNG)
 
 	// Render consolidated multi-row SPL sheet
 	renderAdidataOvertimeSheet(f, in, empID, userName, tlName, dhName, st)
@@ -305,6 +306,7 @@ func renderAdidataOvertimeSheet(
 
 	otTL, otDH := resolveOvertimeApprovers(in.Overtimes, tlName, dhName)
 	writeAdidataSPLSignaturesMulti(f, splSheet, totalRow, userName, pos, otTL, otDH)
+	WriteSignatureImage(f, splSheet, fmt.Sprintf("B%d", totalRow+4), in.UserSignaturePNG)
 	deleteSPLTemplateSheet(f)
 }
 
@@ -422,6 +424,7 @@ func writeAdidataMultiSPL(f *excelize.File, splSheet string, in GenerationInput,
 	styleMergedRange(f, splSheet, "B"+sigPosRow, "E"+sigPosRow, st.DataCenterStyle)
 	_ = f.SetCellValue(splSheet, "B"+sigNameRow, "( "+userName+" )")
 	_ = f.SetCellValue(splSheet, "B"+sigPosRow, pos)
+	WriteSignatureImage(f, splSheet, fmt.Sprintf("B%d", totalRow+4), in.UserSignaturePNG)
 
 	_ = f.MergeCell(splSheet, "G"+sigNameRow, "K"+sigNameRow)
 	_ = f.MergeCell(splSheet, "G"+sigPosRow, "K"+sigPosRow)

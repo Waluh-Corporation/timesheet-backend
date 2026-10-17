@@ -67,6 +67,7 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 		DHDateCell:   "J56",
 		DatePrefix:   "DATE: ",
 	})
+	WriteSignatureImage(f, sheet, "B51", in.UserSignaturePNG)
 	return WriteWorkbookToBuffer(f, "ntt")
 }
 

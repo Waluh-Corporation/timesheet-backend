@@ -62,6 +62,9 @@ type Server struct {
 	SetupRepo         repository.SetupRepository
 	SetupSvc          service.SetupService
 	AuditRepo         repository.AuditRepository
+	SignatureRepo     repository.SignatureRepository
+	SignatureSvc      service.SignatureService
+	DocusealClient    services.DocusealClient
 	QueueClient       queue.QueueClient
 	Storage           storage.StorageService
 	RedisClient       *redis.Client
@@ -92,11 +95,15 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	}
 
 	var geoSvc *services.GeoIPService
+	var docusealClient services.DocusealClient
 	if cfg != nil {
 		var gErr error
 		geoSvc, gErr = services.NewGeoIPService(cfg.IP2LocationDBPath)
 		if gErr != nil {
 			slog.Warn("failed to initialize IP2Location service", "error", gErr)
+		}
+		if cfg.DocusealEnabled {
+			docusealClient = services.NewDocusealClient(cfg)
 		}
 	}
 
@@ -117,6 +124,8 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	var setupRepo repository.SetupRepository
 	var setupSvc service.SetupService
 	var auditRepo repository.AuditRepository
+	var sigRepo repository.SignatureRepository
+	var sigSvc service.SignatureService
 
 	if db != nil {
 		userRepo = repository.NewUserRepository(db)
@@ -136,6 +145,8 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		setupRepo = repository.NewSetupRepository(db)
 		setupSvc = service.NewSetupService(setupRepo, authSvc)
 		auditRepo = repository.NewAuditRepository(db)
+		sigRepo = repository.NewSignatureRepository(db)
+		sigSvc = service.NewSignatureService(cfg, sigRepo, userRepo, docusealClient, nil)
 
 		_ = database.SyncAuthenticatorAAGUIDs(db)
 	}
@@ -164,6 +175,9 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		SetupRepo:         setupRepo,
 		SetupSvc:          setupSvc,
 		AuditRepo:         auditRepo,
+		SignatureRepo:     sigRepo,
+		SignatureSvc:      sigSvc,
+		DocusealClient:    docusealClient,
 		GeoIP:             geoSvc,
 		webAuthnSessions:  make(map[string]*webAuthnSessionEntry),
 		resetCooldowns:    make(map[string]time.Time),
@@ -359,6 +373,33 @@ func (s *Server) getAuthenticatorService() service.AuthenticatorService {
 
 func (s *Server) getSetupService() service.SetupService {
 	return s.SetupSvc
+}
+
+// SetStorage attaches the object storage service to the Server and wires dependent services.
+func (s *Server) SetStorage(storageSvc storage.StorageService) {
+	if s == nil {
+		return
+	}
+	s.Storage = storageSvc
+	if s.TimesheetSvc != nil && s.SignatureRepo != nil {
+		service.ConfigureTimesheetSignature(s.TimesheetSvc, s.SignatureRepo, storageSvc)
+	}
+	if s.SignatureRepo != nil && s.UserRepo != nil {
+		s.SignatureSvc = service.NewSignatureService(s.Cfg, s.SignatureRepo, s.UserRepo, s.DocusealClient, storageSvc)
+	}
+}
+
+func (s *Server) getSignatureService() service.SignatureService {
+	if s == nil {
+		return nil
+	}
+	if s.SignatureSvc != nil {
+		return s.SignatureSvc
+	}
+	if s.SignatureRepo != nil && s.UserRepo != nil {
+		return service.NewSignatureService(s.Cfg, s.SignatureRepo, s.UserRepo, s.DocusealClient, s.Storage)
+	}
+	return nil
 }
 
 func (s *Server) getAuditRepository() repository.AuditRepository {

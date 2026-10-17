@@ -123,5 +123,6 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		DHDateCell:   "G47",
 		DatePrefix:   "DATE : ",
 	})
+	WriteSignatureImage(f, sheet, "A42", in.UserSignaturePNG)
 	return WriteWorkbookToBuffer(f, "mii")
 }

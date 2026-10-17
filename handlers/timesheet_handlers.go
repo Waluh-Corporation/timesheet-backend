@@ -183,6 +183,14 @@ func (s *Server) tryHandleCachedJob(c *gin.Context, jobRepo repository.JobReposi
 		return false
 	}
 
+	if s.SignatureRepo != nil {
+		if activeSig, serr := s.SignatureRepo.FindActiveByUserID(reqContext(c), user.ID); serr == nil && activeSig != nil {
+			if activeSig.UpdatedAt.After(activeJob.CreatedAt) {
+				return false
+			}
+		}
+	}
+
 	return s.reissueCachedJob(c, jobRepo, activeJob, user, month, year)
 }
 

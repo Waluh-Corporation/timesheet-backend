@@ -194,7 +194,7 @@ func main() {
 		logger.Error("failed to init server", slog.Any("error", err))
 		os.Exit(1)
 	}
-	srv.Storage = storageSvc
+	srv.SetStorage(storageSvc)
 	srv.QueueClient = queueClient
 	srv.RedisClient = redisClient
 
@@ -294,6 +294,9 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	// Public VAPID key (needed before the user is subscribed).
 	api.GET("/push/vapid-public-key", s.GetVAPIDKey)
 
+	// Public DocuSeal webhook endpoint (verified via X-Docuseal-Signature / X-Webhook-Secret).
+	api.POST("/webhooks/docuseal", s.DocusealWebhook)
+
 	// Public magic download token endpoint (quota-enforced, 302 redirect to temporary S3 URL, supports HEAD for link verifiers)
 	if rateLimitEnabled {
 		api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", middleware.RateLimitMiddleware(authLimiter), s.DownloadTimesheetByToken)
@@ -314,6 +317,12 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.POST("/users/change-password", s.ChangePassword)
 		authed.POST("/profile/change", s.SubmitProfileChange)
 		authed.GET("/profile/changes", s.MyProfileChanges)
+
+		// DocuSeal e-signature specimen self-service management.
+		authed.GET("/profile/signature", s.GetMySignature)
+		authed.POST("/profile/signature/session", s.CreateSignatureSession)
+		authed.POST("/profile/signature/sync", s.SyncMySignature)
+		authed.DELETE("/profile/signature", s.DeleteMySignature)
 
 		// Passkey registration + self-service management for the logged-in user.
 		authed.POST("/passkey/register/begin", s.BeginPasskeyRegistration)

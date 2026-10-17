@@ -33,6 +33,10 @@ func (m *mockStorageService) Upload(ctx context.Context, key string, body io.Rea
 	return nil
 }
 
+func (m *mockStorageService) Download(ctx context.Context, key string) ([]byte, error) {
+	return m.uploadedBytes, nil
+}
+
 func (m *mockStorageService) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	return "https://s3.example.com/timesheets/" + key, nil
 }

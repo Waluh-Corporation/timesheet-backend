@@ -12,6 +12,7 @@ import (
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/services"
+	"timesheet-backend/storage"
 )
 
 // TimesheetService defines business operations for generating timesheets and managing overtime records.
@@ -28,6 +29,8 @@ type timesheetService struct {
 	activityRepo repository.ActivityRepository
 	overtimeRepo repository.OvertimeRepository
 	masterRepo   repository.MasterRepository
+	sigRepo      repository.SignatureRepository
+	storage      storage.StorageService
 	mailer       *mailer.Mailer
 	nowFunc      func() time.Time
 }
@@ -50,9 +53,32 @@ func NewTimesheetService(
 	}
 }
 
+// ConfigureTimesheetSignature attaches a SignatureRepository and StorageService to a TimesheetService instance.
+func ConfigureTimesheetSignature(svc TimesheetService, sigRepo repository.SignatureRepository, storageSvc storage.StorageService) {
+	if ts, ok := svc.(*timesheetService); ok && ts != nil {
+		ts.sigRepo = sigRepo
+		ts.storage = storageSvc
+	}
+}
+
 // SetNowFunc overrides the time provider for testing purposes.
 func (s *timesheetService) SetNowFunc(fn func() time.Time) {
 	s.nowFunc = fn
+}
+
+func (s *timesheetService) fetchUserSignaturePNG(ctx context.Context, userID uint) []byte {
+	if s.sigRepo == nil || s.storage == nil || userID == 0 {
+		return nil
+	}
+	active, err := s.sigRepo.FindActiveByUserID(ctx, userID)
+	if err != nil || active == nil || active.S3SignatureKey == "" {
+		return nil
+	}
+	pngBytes, err := s.storage.Download(ctx, active.S3SignatureKey)
+	if err != nil {
+		return nil
+	}
+	return pngBytes
 }
 
 func sanitizeFilename(s string) string {
@@ -103,14 +129,15 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 	}
 
 	out, err := services.GenerateFromTemplate(services.GenerationInput{
-		CompanyCode: companyCode,
-		User:        user,
-		Month:       month,
-		Year:        year,
-		Activities:  activities,
-		Overtimes:   overtimes,
-		Approvers:   s.fetchActiveApprovers(ctx),
-		Holidays:    s.fetchHolidaysMap(ctx, year, month),
+		CompanyCode:      companyCode,
+		User:             user,
+		Month:            month,
+		Year:             year,
+		Activities:       activities,
+		Overtimes:        overtimes,
+		Approvers:        s.fetchActiveApprovers(ctx),
+		Holidays:         s.fetchHolidaysMap(ctx, year, month),
+		UserSignaturePNG: s.fetchUserSignaturePNG(ctx, user.ID),
 	})
 	if err != nil {
 		return nil, "", err
@@ -170,14 +197,18 @@ func (s *timesheetService) GenerateBeritaAcara(ctx context.Context, userID uint,
 		empName = user.Username
 	}
 
+	witnessName, witnessUserID := s.resolveWitness(ctx, user.ID, month, year, baActivities)
+
 	payload := services.BeritaAcaraPayload{
-		EmployeeName: empName,
-		NPP:          user.BniID,
-		Department:   deptName,
-		GroupName:    user.GroupName,
-		WitnessName:  s.resolveWitnessName(ctx, user.ID, month, year, baActivities),
-		TeamLeadName: teamLeadName,
-		Items:        buildBeritaAcaraItems(baActivities),
+		EmployeeName:         empName,
+		NPP:                  user.BniID,
+		Department:           deptName,
+		GroupName:            user.GroupName,
+		WitnessName:          witnessName,
+		TeamLeadName:         teamLeadName,
+		Items:                buildBeritaAcaraItems(baActivities),
+		EmployeeSignaturePNG: s.fetchUserSignaturePNG(ctx, user.ID),
+		WitnessSignaturePNG:  s.fetchUserSignaturePNG(ctx, witnessUserID),
 	}
 
 	out, err := services.GenerateBeritaAcaraDocx(payload)
@@ -242,21 +273,21 @@ func (s *timesheetService) fetchActiveApprovers(ctx context.Context) []models.Ap
 	return nil
 }
 
-func (s *timesheetService) resolveWitnessName(ctx context.Context, userID uint, month, year int, baActivities []models.DailyActivity) string {
+func (s *timesheetService) resolveWitness(ctx context.Context, userID uint, month, year int, baActivities []models.DailyActivity) (string, uint) {
 	for _, a := range baActivities {
 		if a.Witness != nil && a.Witness.Name != "" {
-			return a.Witness.Name
+			return a.Witness.Name, a.Witness.ID
 		}
 		if a.WitnessID != nil && *a.WitnessID != 0 {
 			if w, werr := s.activityRepo.FindWitnessByID(ctx, *a.WitnessID); werr == nil && w != nil && w.Name != "" {
-				return w.Name
+				return w.Name, w.ID
 			}
 		}
 	}
 	if w, werr := s.activityRepo.GetMonthlyWitness(ctx, userID, month, year); werr == nil && w != nil {
-		return w.Name
+		return w.Name, w.ID
 	}
-	return ""
+	return "", 0
 }
 
 func buildBeritaAcaraItems(baActivities []models.DailyActivity) []services.BeritaAcaraItem {

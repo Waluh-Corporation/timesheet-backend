@@ -651,6 +651,26 @@ func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, cells S
 	}
 }
 
+// WriteSignatureImage embeds a transparent PNG signature specimen into the specified Excel cell
+// with proportional scaling so it fits cleanly inside the employee signature box.
+func WriteSignatureImage(f *excelize.File, sheet, targetCell string, pngBytes []byte) {
+	if f == nil || sheet == "" || targetCell == "" || len(pngBytes) == 0 {
+		return
+	}
+	_ = f.AddPictureFromBytes(sheet, targetCell, &excelize.Picture{
+		Extension: ".png",
+		File:      pngBytes,
+		Format: &excelize.GraphicOptions{
+			ScaleX:          0.32,
+			ScaleY:          0.32,
+			OffsetX:         8,
+			OffsetY:         4,
+			Positioning:     "oneCell",
+			LockAspectRatio: true,
+		},
+	})
+}
+
 // SummaryFormulaItem defines a column formula and pre-calculated value for summary rows.
 type SummaryFormulaItem struct {
 	Formula string

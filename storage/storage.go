@@ -20,6 +20,7 @@ import (
 // StorageService provides high-level object storage operations for generated artifacts.
 type StorageService interface {
 	Upload(ctx context.Context, key string, body io.Reader, contentType string) error
+	Download(ctx context.Context, key string) ([]byte, error)
 	GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error)
 	GetPresignedDownloadURLWithFilename(ctx context.Context, key string, filename string, expiry time.Duration) (string, error)
 	Delete(ctx context.Context, key string) error
@@ -96,6 +97,28 @@ func (s *S3StorageService) Upload(ctx context.Context, key string, body io.Reade
 		return fmt.Errorf("failed to upload object %s to bucket %s: %w", key, s.bucket, err)
 	}
 	return nil
+}
+
+// Download retrieves the raw byte content of an object from S3.
+func (s *S3StorageService) Download(ctx context.Context, key string) ([]byte, error) {
+	if strings.TrimSpace(key) == "" {
+		return nil, fmt.Errorf("object key cannot be empty")
+	}
+	input := &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(key),
+	}
+	out, err := s.client.GetObject(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download object %s from bucket %s: %w", key, s.bucket, err)
+	}
+	defer func() { _ = out.Body.Close() }()
+
+	data, err := io.ReadAll(io.LimitReader(out.Body, 10<<20))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read object body for %s: %w", key, err)
+	}
+	return data, nil
 }
 
 // GetPresignedDownloadURL generates a presigned GET URL valid for the given duration.

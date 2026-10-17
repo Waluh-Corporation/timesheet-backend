@@ -77,6 +77,7 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 	_ = f.SetCellValue(sheet, "C52", sddNamePrefix+userName)
 	_ = f.SetCellValue(sheet, "H52", sddNamePrefix+tlName)
 	_ = f.SetCellValue(sheet, "L52", sddNamePrefix+dhName)
+	WriteSignatureImage(f, sheet, "C48", in.UserSignaturePNG)
 
 	return WriteWorkbookToBuffer(f, "sdd")
 }

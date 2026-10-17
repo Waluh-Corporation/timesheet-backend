@@ -17,6 +17,8 @@ type GenerationInput struct {
 	Approvers   []models.Approver
 	// Holidays maps day-of-month to a public-holiday name for the month.
 	Holidays map[int]string
+	// UserSignaturePNG holds the optional normalized transparent PNG signature specimen of the employee.
+	UserSignaturePNG []byte
 }
 
 // MIIAppImpactedOptions lists the valid client options for MII's "Aplikasi

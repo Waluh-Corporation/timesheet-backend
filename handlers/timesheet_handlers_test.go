@@ -23,14 +23,18 @@ import (
 )
 
 type mockStorageService struct {
-	existsResult bool
-	existsErr    error
-	downloadURL  string
-	downloadErr  error
+	existsResult  bool
+	existsErr     error
+	downloadURL   string
+	downloadErr   error
+	downloadBytes []byte
 }
 
 func (m *mockStorageService) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
 	return nil
+}
+func (m *mockStorageService) Download(ctx context.Context, key string) ([]byte, error) {
+	return m.downloadBytes, m.downloadErr
 }
 func (m *mockStorageService) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	return m.downloadURL, m.downloadErr
