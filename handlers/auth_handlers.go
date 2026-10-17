@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -238,36 +239,49 @@ func (s *Server) Logout(c *gin.Context) {
 	var req request.LogoutRequest
 	_ = c.ShouldBindJSON(&req)
 
-	// 1. Blacklist active access token in Redis if Bearer token is provided
-	header := c.GetHeader("Authorization")
-	if strings.HasPrefix(header, "Bearer ") {
-		rawToken := strings.TrimPrefix(header, "Bearer ")
-		if claims, err := s.Auth.ParseToken(rawToken); err == nil && claims != nil {
-			rdb := s.getRedisClient()
-			if rdb != nil && claims.ID != "" && claims.ExpiresAt != nil {
-				remaining := time.Until(claims.ExpiresAt.Time)
-				if remaining > 0 {
-					blacklistKey := fmt.Sprintf("jwt:blacklist:%s", claims.ID)
-					_ = rdb.Set(c.Request.Context(), blacklistKey, "revoked", remaining).Err()
-					slog.Info("access token blacklisted in redis", "jti", claims.ID, "user_id", claims.UserID)
-				}
-			}
-		}
-	}
-
-	// 2. Revoke Refresh Token
-	if req.RefreshToken != "" {
-		tokenRepo := s.getTokenRepository()
-		if tokenRepo != nil {
-			hash := auth.HashToken(req.RefreshToken)
-			if tokenRecord, err := tokenRepo.FindRefreshTokenByHash(c.Request.Context(), hash); err == nil && tokenRecord != nil {
-				_ = tokenRepo.RevokeRefreshToken(c.Request.Context(), tokenRecord.ID, time.Now())
-				slog.Info("refresh token revoked on logout", "token_id", tokenRecord.ID, "user_id", tokenRecord.UserID, "ip", c.ClientIP())
-			}
-		}
-	}
+	s.blacklistAccessToken(c.Request.Context(), c.GetHeader("Authorization"))
+	s.revokeRefreshTokenOnLogout(c.Request.Context(), req.RefreshToken, c.ClientIP())
 
 	RespondMessage(c, http.StatusOK, "logged out successfully")
+}
+
+func (s *Server) blacklistAccessToken(ctx context.Context, authHeader string) {
+	if !strings.HasPrefix(authHeader, "Bearer ") || s.Auth == nil {
+		return
+	}
+	rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+	claims, err := s.Auth.ParseToken(rawToken)
+	if err != nil || claims == nil || claims.ID == "" || claims.ExpiresAt == nil {
+		return
+	}
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		return
+	}
+	remaining := time.Until(claims.ExpiresAt.Time)
+	if remaining <= 0 {
+		return
+	}
+	blacklistKey := fmt.Sprintf("jwt:blacklist:%s", claims.ID)
+	_ = rdb.Set(ctx, blacklistKey, "revoked", remaining).Err()
+	slog.Info("access token blacklisted in redis", "jti", claims.ID, "user_id", claims.UserID)
+}
+
+func (s *Server) revokeRefreshTokenOnLogout(ctx context.Context, refreshToken, clientIP string) {
+	if refreshToken == "" {
+		return
+	}
+	tokenRepo := s.getTokenRepository()
+	if tokenRepo == nil {
+		return
+	}
+	hash := auth.HashToken(refreshToken)
+	tokenRecord, err := tokenRepo.FindRefreshTokenByHash(ctx, hash)
+	if err != nil || tokenRecord == nil {
+		return
+	}
+	_ = tokenRepo.RevokeRefreshToken(ctx, tokenRecord.ID, time.Now())
+	slog.Info("refresh token revoked on logout", "token_id", tokenRecord.ID, "user_id", tokenRecord.UserID, "ip", clientIP)
 }
 
 // Me godoc

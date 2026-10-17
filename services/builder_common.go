@@ -41,6 +41,16 @@ func CalculateTimeDurationFrac(startStr, endStr string) float64 {
 	return dur
 }
 
+// WorkingHoursConfig encapsulates column layout, row, formula, and numeric options for daily working hours.
+type WorkingHoursConfig struct {
+	StartCol       string
+	EndCol         string
+	TotalCol       string
+	RowStr         string
+	FormulaFmt     string
+	IsDecimalTotal bool
+}
+
 // WriteWorkingHoursRow writes Start, End, and Total Hour cells according to activity or standard defaults.
 // - If has activity: writes activity Start, End, calculated total duration, formula, and timeStyle.
 // - If holiday/weekend without activity: clears Start, End, Total Hour cells and applies timeStyle.
@@ -48,72 +58,106 @@ func CalculateTimeDurationFrac(startStr, endStr string) float64 {
 func WriteWorkingHoursRow(
 	f *excelize.File,
 	sheet string,
-	startCol, endCol, totalCol, rs string,
-	formulaFmt string,
-	isDecimalTotal bool,
+	cfg WorkingHoursConfig,
 	dsc DayStyleContext,
 ) {
-	startCell := startCol + rs
-	endCell := endCol + rs
-	totalCell := totalCol + rs
-
 	totalStyle := dsc.TimeStyle
-	if isDecimalTotal {
+	if cfg.IsDecimalTotal {
 		totalStyle = dsc.DecimalStyle
 	}
 
 	if dsc.HasActivity {
-		start := strings.TrimSpace(dsc.Activity.StartTime)
-		end := strings.TrimSpace(dsc.Activity.EndTime)
-		if start == "" {
-			start = DefaultStartTime
-		}
-		if end == "" {
-			end = DefaultEndTime
-		}
-		WriteTimeCells(f, sheet, startCell, endCell, start, end, dsc.TimeStyle)
-		dur := CalculateTimeDurationFrac(start, end)
-		if isDecimalTotal {
-			_ = f.SetCellValue(sheet, totalCell, dur*24.0)
-		} else {
-			_ = f.SetCellValue(sheet, totalCell, dur)
-		}
-		if formulaFmt != "" {
-			form := strings.ReplaceAll(formulaFmt, "{row}", rs)
-			if strings.Contains(form, "%s") {
-				form = fmt.Sprintf(form, rs, rs)
-			}
-			_ = f.SetCellFormula(sheet, totalCell, form)
-		}
-		_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
-	} else if dsc.IsHolidayOrWeekend {
-		_ = f.SetCellValue(sheet, startCell, "")
-		_ = f.SetCellValue(sheet, endCell, "")
-		_ = f.SetCellValue(sheet, totalCell, "")
-		_ = f.SetCellStyle(sheet, startCell, startCell, dsc.TimeStyle)
-		_ = f.SetCellStyle(sheet, endCell, endCell, dsc.TimeStyle)
-		_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
-	} else {
-		// Working day without activity: default 08:00 and 17:00
-		_ = f.SetCellValue(sheet, startCell, defaultStartFrac)
-		_ = f.SetCellValue(sheet, endCell, defaultEndFrac)
-		_ = f.SetCellStyle(sheet, startCell, startCell, dsc.TimeStyle)
-		_ = f.SetCellStyle(sheet, endCell, endCell, dsc.TimeStyle)
-
-		if isDecimalTotal {
-			_ = f.SetCellValue(sheet, totalCell, defaultTotalFrac*24.0)
-		} else {
-			_ = f.SetCellValue(sheet, totalCell, defaultTotalFrac)
-		}
-		if formulaFmt != "" {
-			form := strings.ReplaceAll(formulaFmt, "{row}", rs)
-			if strings.Contains(form, "%s") {
-				form = fmt.Sprintf(form, rs, rs)
-			}
-			_ = f.SetCellFormula(sheet, totalCell, form)
-		}
-		_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+		writeActivityWorkingHours(f, sheet, cfg, totalStyle, dsc)
+		return
 	}
+	if dsc.IsHolidayOrWeekend {
+		writeHolidayWorkingHours(f, sheet, cfg, totalStyle, dsc.TimeStyle)
+		return
+	}
+	writeDefaultWorkingHours(f, sheet, cfg, totalStyle, dsc.TimeStyle)
+}
+
+func writeActivityWorkingHours(
+	f *excelize.File,
+	sheet string,
+	cfg WorkingHoursConfig,
+	totalStyle int,
+	dsc DayStyleContext,
+) {
+	startCell := cfg.StartCol + cfg.RowStr
+	endCell := cfg.EndCol + cfg.RowStr
+	totalCell := cfg.TotalCol + cfg.RowStr
+
+	start := strings.TrimSpace(dsc.Activity.StartTime)
+	end := strings.TrimSpace(dsc.Activity.EndTime)
+	if start == "" {
+		start = DefaultStartTime
+	}
+	if end == "" {
+		end = DefaultEndTime
+	}
+	WriteTimeCells(f, sheet, startCell, endCell, start, end, dsc.TimeStyle)
+	dur := CalculateTimeDurationFrac(start, end)
+	if cfg.IsDecimalTotal {
+		_ = f.SetCellValue(sheet, totalCell, dur*24.0)
+	} else {
+		_ = f.SetCellValue(sheet, totalCell, dur)
+	}
+	applyHoursFormula(f, sheet, totalCell, cfg.FormulaFmt, cfg.RowStr)
+	_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+}
+
+func writeHolidayWorkingHours(
+	f *excelize.File,
+	sheet string,
+	cfg WorkingHoursConfig,
+	totalStyle, timeStyle int,
+) {
+	startCell := cfg.StartCol + cfg.RowStr
+	endCell := cfg.EndCol + cfg.RowStr
+	totalCell := cfg.TotalCol + cfg.RowStr
+
+	_ = f.SetCellValue(sheet, startCell, "")
+	_ = f.SetCellValue(sheet, endCell, "")
+	_ = f.SetCellValue(sheet, totalCell, "")
+	_ = f.SetCellStyle(sheet, startCell, startCell, timeStyle)
+	_ = f.SetCellStyle(sheet, endCell, endCell, timeStyle)
+	_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+}
+
+func writeDefaultWorkingHours(
+	f *excelize.File,
+	sheet string,
+	cfg WorkingHoursConfig,
+	totalStyle, timeStyle int,
+) {
+	startCell := cfg.StartCol + cfg.RowStr
+	endCell := cfg.EndCol + cfg.RowStr
+	totalCell := cfg.TotalCol + cfg.RowStr
+
+	_ = f.SetCellValue(sheet, startCell, defaultStartFrac)
+	_ = f.SetCellValue(sheet, endCell, defaultEndFrac)
+	_ = f.SetCellStyle(sheet, startCell, startCell, timeStyle)
+	_ = f.SetCellStyle(sheet, endCell, endCell, timeStyle)
+
+	if cfg.IsDecimalTotal {
+		_ = f.SetCellValue(sheet, totalCell, defaultTotalFrac*24.0)
+	} else {
+		_ = f.SetCellValue(sheet, totalCell, defaultTotalFrac)
+	}
+	applyHoursFormula(f, sheet, totalCell, cfg.FormulaFmt, cfg.RowStr)
+	_ = f.SetCellStyle(sheet, totalCell, totalCell, totalStyle)
+}
+
+func applyHoursFormula(f *excelize.File, sheet, cell, formulaFmt, rs string) {
+	if formulaFmt == "" {
+		return
+	}
+	form := strings.ReplaceAll(formulaFmt, "{row}", rs)
+	if strings.Contains(form, "%s") {
+		form = fmt.Sprintf(form, rs, rs)
+	}
+	_ = f.SetCellFormula(sheet, cell, form)
 }
 
 // CleanWorkbookBuffer strips erroneous t="str" attributes from formula cells across all worksheet XMLs,
@@ -435,13 +479,22 @@ func ResolveEmployeeID(u *models.User) string {
 	return u.BniID
 }
 
+// ActivityProjectInfo groups activity description and project metadata for timesheet row rendering.
+type ActivityProjectInfo struct {
+	Activity    string
+	ProjectName string
+	ProjectCode string
+	AppImpacted string
+}
+
 // WriteActivityProjectCells populates activity and project fields (cols K, L, M, N) and sets calculated row height.
-func WriteActivityProjectCells(f *excelize.File, sheet, rs string, row int, activity, projName, projCode, appImpacted string) {
-	_ = f.SetCellValue(sheet, "K"+rs, activity)
-	_ = f.SetCellValue(sheet, "L"+rs, projName)
-	_ = f.SetCellValue(sheet, "M"+rs, projCode)
-	_ = f.SetCellValue(sheet, "N"+rs, appImpacted)
-	h := calculateRowHeight(activity, projName, projCode, appImpacted, "", "")
+func WriteActivityProjectCells(f *excelize.File, sheet string, row int, info ActivityProjectInfo) {
+	rs := fmt.Sprintf("%d", row)
+	_ = f.SetCellValue(sheet, "K"+rs, info.Activity)
+	_ = f.SetCellValue(sheet, "L"+rs, info.ProjectName)
+	_ = f.SetCellValue(sheet, "M"+rs, info.ProjectCode)
+	_ = f.SetCellValue(sheet, "N"+rs, info.AppImpacted)
+	h := calculateRowHeight(info.Activity, info.ProjectName, info.ProjectCode, info.AppImpacted, "", "")
 	_ = f.SetRowHeight(sheet, row, h)
 }
 
@@ -454,37 +507,42 @@ func WriteColumnFormulas(f *excelize.File, sheet, targetRow string, formulas map
 	}
 }
 
+// DailyRowsConfig encapsulates options for generating the 31-day timesheet grid.
+type DailyRowsConfig struct {
+	StartRow int
+	AllCols  []string
+	WrapCols []string
+	Styles   *BuilderStyles
+	WriteAct func(rs string, row int, dsc DayStyleContext)
+}
+
 // WriteBuilderDailyRows writes all 31 days for timesheet builders, handling padding, styles, and activities.
 func WriteBuilderDailyRows(
 	f *excelize.File,
 	sheet string,
 	in GenerationInput,
-	startRow int,
-	allCols []string,
-	wrapCols []string,
-	st *BuilderStyles,
-	writeAct func(rs string, row int, dsc DayStyleContext),
+	cfg DailyRowsConfig,
 ) {
 	byDay := BuildByDayMap(in.Activities)
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 
 	for day := 1; day <= 31; day++ {
-		row := startRow + (day - 1)
+		row := cfg.StartRow + (day - 1)
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
+			ApplyBlankPaddingRow(f, sheet, row, cfg.AllCols, cfg.WrapCols, cfg.Styles)
 			continue
 		}
 
-		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "A", rs, allCols, wrapCols, dsc)
+		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, cfg.Styles)
+		ApplyDayRowStyles(f, sheet, "A", rs, cfg.AllCols, cfg.WrapCols, dsc)
 
 		status := ""
 		if dsc.HasActivity {
 			status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
-			if writeAct != nil {
-				writeAct(rs, row, dsc)
+			if cfg.WriteAct != nil {
+				cfg.WriteAct(rs, row, dsc)
 			}
 		} else if dsc.IsHolidayOrWeekend {
 			WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
@@ -552,32 +610,43 @@ func MonthNameIndonesian(month int) string {
 	return fmt.Sprintf("Bulan %d", month)
 }
 
+// SignatureCells specifies the target cell coordinates and formatting for timesheet sign-offs.
+type SignatureCells struct {
+	UserCell     string
+	TLCell       string
+	DHCell       string
+	UserDateCell string
+	TLDateCell   string
+	DHDateCell   string
+	DatePrefix   string
+}
+
 // WriteSignatures writes the user, team leader, department head names, and date stamp into signature cells.
-func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, userCell, tlCell, dhCell, userDateCell, tlDateCell, dhDateCell, datePrefix string) {
+func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, cells SignatureCells) {
 	tlName, dhName := ResolveApprovers(in)
 	userName := ""
 	if in.User != nil {
 		userName = in.User.Name
 	}
-	if userName != "" && userCell != "" {
-		_ = f.SetCellValue(sheet, userCell, userName)
+	if userName != "" && cells.UserCell != "" {
+		_ = f.SetCellValue(sheet, cells.UserCell, userName)
 	}
-	if tlName != "" && tlCell != "" {
-		_ = f.SetCellValue(sheet, tlCell, tlName)
+	if tlName != "" && cells.TLCell != "" {
+		_ = f.SetCellValue(sheet, cells.TLCell, tlName)
 	}
-	if dhName != "" && dhCell != "" {
-		_ = f.SetCellValue(sheet, dhCell, dhName)
+	if dhName != "" && cells.DHCell != "" {
+		_ = f.SetCellValue(sheet, cells.DHCell, dhName)
 	}
-	if datePrefix != "" {
-		dateStr := datePrefix + CurrentDateFormatted()
-		if userDateCell != "" {
-			_ = f.SetCellValue(sheet, userDateCell, dateStr)
+	if cells.DatePrefix != "" {
+		dateStr := cells.DatePrefix + CurrentDateFormatted()
+		if cells.UserDateCell != "" {
+			_ = f.SetCellValue(sheet, cells.UserDateCell, dateStr)
 		}
-		if tlDateCell != "" {
-			_ = f.SetCellValue(sheet, tlDateCell, dateStr)
+		if cells.TLDateCell != "" {
+			_ = f.SetCellValue(sheet, cells.TLDateCell, dateStr)
 		}
-		if dhDateCell != "" {
-			_ = f.SetCellValue(sheet, dhDateCell, dateStr)
+		if cells.DHDateCell != "" {
+			_ = f.SetCellValue(sheet, cells.DHDateCell, dateStr)
 		}
 	}
 }

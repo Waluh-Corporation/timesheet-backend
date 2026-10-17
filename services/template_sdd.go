@@ -8,6 +8,7 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"timesheet-backend/assets"
+	"timesheet-backend/models"
 )
 
 const sddNamePrefix = "Nama : "
@@ -61,6 +62,32 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 	_ = f.SetCellValue(sheet, "F7", fmt.Sprintf(": %s %d", MonthNameIndonesian(in.Month), in.Year))
 
 	byDay := BuildByDayMap(in.Activities)
+	statusCounts := renderSDDDailyRows(f, sheet, in, byDay, st)
+
+	sddSummary := map[string]SummaryFormulaItem{
+		"F": {Formula: `COUNTIF(F12:F42,"H")`, Value: statusCounts["F"]},
+		"G": {Formula: `COUNTIF(G12:G42,"C")`, Value: statusCounts["G"]},
+		"H": {Formula: `COUNTIF(H12:H42,"I")`, Value: statusCounts["H"]},
+		"I": {Formula: `COUNTIF(I12:I42,"S")`, Value: statusCounts["I"]},
+		"J": {Formula: `COUNTIF(J12:J42,"L")`, Value: statusCounts["J"]},
+	}
+	WriteSummaryRowWithValues(f, sheet, "43", sddSummary, st.BoldCenterStyle)
+
+	tlName, dhName := ResolveApprovers(in)
+	_ = f.SetCellValue(sheet, "C52", sddNamePrefix+userName)
+	_ = f.SetCellValue(sheet, "H52", sddNamePrefix+tlName)
+	_ = f.SetCellValue(sheet, "L52", sddNamePrefix+dhName)
+
+	return WriteWorkbookToBuffer(f, "sdd")
+}
+
+func renderSDDDailyRows(
+	f *excelize.File,
+	sheet string,
+	in GenerationInput,
+	byDay map[int]models.DailyActivity,
+	st *BuilderStyles,
+) map[string]int {
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
 	statusCounts := make(map[string]int)
@@ -83,51 +110,55 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 			_ = f.SetCellValue(sheet, col+rs, "")
 		}
 
-		WriteWorkingHoursRow(f, sheet, "C", "D", "E", rs, "D%s-C%s", false, dsc)
+		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
+			StartCol: "C", EndCol: "D", TotalCol: "E", RowStr: rs, FormulaFmt: "D%s-C%s",
+		}, dsc)
 
-		if dsc.HasActivity {
-			var col, mark string
-			switch strings.ToUpper(strings.TrimSpace(dsc.Activity.Status)) {
-			case "H", "P", "HADIR", "PRESENT":
-				col, mark = "F", "H"
-			case "C", "CUTI", "V", "VACATION":
-				col, mark = "G", "C"
-			case "I", "IZIN", "PM", "PERMIT":
-				col, mark = "H", "I"
-			case "S", "SAKIT", "SICK":
-				col, mark = "I", "S"
-			case "L", "LEMBUR":
-				col, mark = "J", "L"
-			}
-			if col != "" {
-				_ = f.SetCellValue(sheet, col+rs, mark)
-				statusCounts[col]++
-			}
+		renderSDDDayActivity(f, sheet, rs, row, dsc, statusCounts)
+	}
+	return statusCounts
+}
 
-			_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.GetProjectName())
-			_ = f.SetCellValue(sheet, "L"+rs, dsc.Activity.GetProjectCode())
-			_ = f.SetCellValue(sheet, "N"+rs, dsc.Activity.Activity)
-
-			h := calculateRowHeight(dsc.Activity.Activity, dsc.Activity.GetProjectName(), dsc.Activity.GetProjectCode(), "", "", "")
-			_ = f.SetRowHeight(sheet, row, h)
-		} else if dsc.IsHolidayOrWeekend {
-			WriteHolidayRemarkRow(f, sheet, "N", rs, row, dsc.Holiday)
+func renderSDDDayActivity(
+	f *excelize.File,
+	sheet, rs string,
+	row int,
+	dsc DayStyleContext,
+	statusCounts map[string]int,
+) {
+	if dsc.HasActivity {
+		col, mark := resolveSDDStatusMark(dsc.Activity.Status)
+		if col != "" {
+			_ = f.SetCellValue(sheet, col+rs, mark)
+			statusCounts[col]++
 		}
+
+		_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.GetProjectName())
+		_ = f.SetCellValue(sheet, "L"+rs, dsc.Activity.GetProjectCode())
+		_ = f.SetCellValue(sheet, "N"+rs, dsc.Activity.Activity)
+
+		h := calculateRowHeight(dsc.Activity.Activity, dsc.Activity.GetProjectName(), dsc.Activity.GetProjectCode(), "", "", "")
+		_ = f.SetRowHeight(sheet, row, h)
+		return
 	}
-
-	sddSummary := map[string]SummaryFormulaItem{
-		"F": {Formula: `COUNTIF(F12:F42,"H")`, Value: statusCounts["F"]},
-		"G": {Formula: `COUNTIF(G12:G42,"C")`, Value: statusCounts["G"]},
-		"H": {Formula: `COUNTIF(H12:H42,"I")`, Value: statusCounts["H"]},
-		"I": {Formula: `COUNTIF(I12:I42,"S")`, Value: statusCounts["I"]},
-		"J": {Formula: `COUNTIF(J12:J42,"L")`, Value: statusCounts["J"]},
+	if dsc.IsHolidayOrWeekend {
+		WriteHolidayRemarkRow(f, sheet, "N", rs, row, dsc.Holiday)
 	}
-	WriteSummaryRowWithValues(f, sheet, "43", sddSummary, st.BoldCenterStyle)
+}
 
-	tlName, dhName := ResolveApprovers(in)
-	_ = f.SetCellValue(sheet, "C52", sddNamePrefix+userName)
-	_ = f.SetCellValue(sheet, "H52", sddNamePrefix+tlName)
-	_ = f.SetCellValue(sheet, "L52", sddNamePrefix+dhName)
-
-	return WriteWorkbookToBuffer(f, "sdd")
+func resolveSDDStatusMark(status string) (col, mark string) {
+	switch strings.ToUpper(strings.TrimSpace(status)) {
+	case "H", "P", "HADIR", "PRESENT":
+		return "F", "H"
+	case "C", "CUTI", "V", "VACATION":
+		return "G", "C"
+	case "I", "IZIN", "PM", "PERMIT":
+		return "H", "I"
+	case "S", "SAKIT", "SICK":
+		return "I", "S"
+	case "L", "LEMBUR":
+		return "J", "L"
+	default:
+		return "", ""
+	}
 }
