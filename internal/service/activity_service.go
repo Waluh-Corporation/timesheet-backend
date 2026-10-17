@@ -238,6 +238,30 @@ func toWitnessResponse(w *models.User) *response.WitnessResponse {
 	}
 }
 
+func toDailyActivityResponse(a *models.DailyActivity) *response.DailyActivityResponse {
+	if a == nil {
+		return nil
+	}
+	return &response.DailyActivityResponse{
+		ID:               a.ID,
+		Date:             a.Date,
+		StartTime:        a.StartTime,
+		EndTime:          a.EndTime,
+		Activity:         a.Activity,
+		ProjectName:      a.GetProjectName(),
+		ProjectID:        a.GetProjectCode(),
+		Status:           a.Status,
+		AppImpacted:      a.GetAppImpacted(),
+		ProjectRefID:     a.ProjectRefID,
+		ProjectRef:       a.ProjectRef,
+		StatusRef:        a.StatusRef,
+		IsBeritaAcara:    a.IsBeritaAcara,
+		WitnessID:        a.WitnessID,
+		Witness:          toWitnessResponse(a.Witness),
+		BeritaAcaraNotes: a.BeritaAcaraNotes,
+	}
+}
+
 func (s *activityService) GetDailyActivity(ctx context.Context, userID uint, id uint) (*response.DailyActivityResponse, error) {
 	activity, err := s.repo.FindActiveByID(ctx, id)
 	if err != nil || activity == nil {
@@ -248,24 +272,7 @@ func (s *activityService) GetDailyActivity(ctx context.Context, userID uint, id 
 		return nil, domain.NewUserError(domain.ErrForbidden, "Forbidden: you do not have access to this activity")
 	}
 
-	return &response.DailyActivityResponse{
-		ID:               activity.ID,
-		Date:             activity.Date,
-		StartTime:        activity.StartTime,
-		EndTime:          activity.EndTime,
-		Activity:         activity.Activity,
-		ProjectName:      activity.GetProjectName(),
-		ProjectID:        activity.GetProjectCode(),
-		Status:           activity.Status,
-		AppImpacted:      activity.GetAppImpacted(),
-		ProjectRefID:     activity.ProjectRefID,
-		ProjectRef:       activity.ProjectRef,
-		StatusRef:        activity.StatusRef,
-		IsBeritaAcara:    activity.IsBeritaAcara,
-		WitnessID:        activity.WitnessID,
-		Witness:          toWitnessResponse(activity.Witness),
-		BeritaAcaraNotes: activity.BeritaAcaraNotes,
-	}, nil
+	return toDailyActivityResponse(activity), nil
 }
 
 func (s *activityService) ListActivities(ctx context.Context, userID uint, filter repository.ActivityFilter) ([]response.DailyActivityResponse, response.PaginationMeta, error) {
@@ -275,25 +282,8 @@ func (s *activityService) ListActivities(ctx context.Context, userID uint, filte
 	}
 
 	respList := make([]response.DailyActivityResponse, len(activities))
-	for i, a := range activities {
-		respList[i] = response.DailyActivityResponse{
-			ID:               a.ID,
-			Date:             a.Date,
-			StartTime:        a.StartTime,
-			EndTime:          a.EndTime,
-			Activity:         a.Activity,
-			ProjectName:      a.GetProjectName(),
-			ProjectID:        a.GetProjectCode(),
-			Status:           a.Status,
-			AppImpacted:      a.GetAppImpacted(),
-			ProjectRefID:     a.ProjectRefID,
-			ProjectRef:       a.ProjectRef,
-			StatusRef:        a.StatusRef,
-			IsBeritaAcara:    a.IsBeritaAcara,
-			WitnessID:        a.WitnessID,
-			Witness:          toWitnessResponse(a.Witness),
-			BeritaAcaraNotes: a.BeritaAcaraNotes,
-		}
+	for i := range activities {
+		respList[i] = *toDailyActivityResponse(&activities[i])
 	}
 
 	limit := filter.Limit
@@ -359,24 +349,7 @@ func (s *activityService) GetPreviousDailyActivity(ctx context.Context, userID u
 		return nil, domain.NewUserError(domain.ErrNotFound, "No previous activity found")
 	}
 
-	return &response.DailyActivityResponse{
-		ID:               activity.ID,
-		Date:             activity.Date,
-		StartTime:        activity.StartTime,
-		EndTime:          activity.EndTime,
-		Activity:         activity.Activity,
-		ProjectName:      activity.GetProjectName(),
-		ProjectID:        activity.GetProjectCode(),
-		Status:           activity.Status,
-		AppImpacted:      activity.GetAppImpacted(),
-		ProjectRefID:     activity.ProjectRefID,
-		ProjectRef:       activity.ProjectRef,
-		StatusRef:        activity.StatusRef,
-		IsBeritaAcara:    activity.IsBeritaAcara,
-		WitnessID:        activity.WitnessID,
-		Witness:          toWitnessResponse(activity.Witness),
-		BeritaAcaraNotes: activity.BeritaAcaraNotes,
-	}, nil
+	return toDailyActivityResponse(activity), nil
 }
 
 func (s *activityService) GetEligibleWitnesses(ctx context.Context, currentUserID uint) ([]response.WitnessResponse, error) {

@@ -235,30 +235,8 @@ func (s *Server) DeleteUser(c *gin.Context) {
 	}
 
 	callerID := currentUserID(c)
-	if err := svc.AdminDeleteUser(c.Request.Context(), uint(id), callerID); err != nil {
-		if errors.Is(err, domain.ErrForbidden) {
-			RespondError(c, http.StatusForbidden, err.Error())
-			return
-		}
-		if errors.Is(err, domain.ErrNotFound) {
-			RespondError(c, http.StatusNotFound, errUserNotFound)
-			return
-		}
-		RespondError(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if rdb := s.getRedisClient(); rdb != nil {
-		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
-	}
-	s.recordAuditLog(c.Request.Context(), AuditLogParams{
-		ActorID:      &callerID,
-		Action:       "USER_DEACTIVATED",
-		ResourceType: "user",
-		ResourceID:   strconv.FormatUint(id, 10),
-		IP:           c.ClientIP(),
-		UserAgent:    c.Request.UserAgent(),
-	})
-	RespondMessage(c, http.StatusOK, "user deactivated successfully")
+	err = svc.AdminDeleteUser(c.Request.Context(), uint(id), callerID)
+	s.finalizeAdminUserLifecycleMutation(c, id, callerID, err, "USER_DEACTIVATED", "user deactivated successfully")
 }
 
 // AnonymizeUser godoc
@@ -292,7 +270,12 @@ func (s *Server) AnonymizeUser(c *gin.Context) {
 	}
 
 	callerID := currentUserID(c)
-	if err := svc.AdminAnonymizeUser(c.Request.Context(), uint(id), callerID); err != nil {
+	err = svc.AdminAnonymizeUser(c.Request.Context(), uint(id), callerID)
+	s.finalizeAdminUserLifecycleMutation(c, id, callerID, err, "USER_ANONYMIZED", "user personal data anonymized successfully")
+}
+
+func (s *Server) finalizeAdminUserLifecycleMutation(c *gin.Context, id uint64, callerID uint, err error, action, successMessage string) {
+	if err != nil {
 		if errors.Is(err, domain.ErrForbidden) {
 			RespondError(c, http.StatusForbidden, err.Error())
 			return
@@ -309,11 +292,11 @@ func (s *Server) AnonymizeUser(c *gin.Context) {
 	}
 	s.recordAuditLog(c.Request.Context(), AuditLogParams{
 		ActorID:      &callerID,
-		Action:       "USER_ANONYMIZED",
+		Action:       action,
 		ResourceType: "user",
 		ResourceID:   strconv.FormatUint(id, 10),
 		IP:           c.ClientIP(),
 		UserAgent:    c.Request.UserAgent(),
 	})
-	RespondMessage(c, http.StatusOK, "user personal data anonymized successfully")
+	RespondMessage(c, http.StatusOK, successMessage)
 }

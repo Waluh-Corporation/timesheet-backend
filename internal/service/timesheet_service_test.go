@@ -70,6 +70,9 @@ func TestTimesheetService_OvertimeAndWorkbook(t *testing.T) {
 	t.Run("Workbook_Generation", func(t *testing.T) {
 		testWorkbookGenerationSuccess(t, svc, tx, ctx, user.ID)
 	})
+	t.Run("BeritaAcara_Generation", func(t *testing.T) {
+		testBeritaAcaraGeneration(t, svc, tx, ctx, user.ID)
+	})
 }
 
 func testOvertimeValidation(t *testing.T, svc service.TimesheetService, ctx context.Context, userID uint) {
@@ -167,5 +170,63 @@ func testWorkbookGenerationSuccess(t *testing.T, svc service.TimesheetService, t
 	}
 	if len(wb) == 0 || filename == "" {
 		t.Fatalf("expected non-empty workbook and filename, got len %d, filename %s", len(wb), filename)
+	}
+}
+
+func testBeritaAcaraGeneration(t *testing.T, svc service.TimesheetService, tx *gorm.DB, ctx context.Context, userID uint) {
+	t.Helper()
+
+	// 1. Invalid input validation
+	if _, _, err := svc.GenerateBeritaAcara(ctx, 999999, 6, 2026); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for non-existent user, got %v", err)
+	}
+	if _, _, err := svc.GenerateBeritaAcara(ctx, userID, 13, 2026); !errors.Is(err, domain.ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput for month 13, got %v", err)
+	}
+
+	// 2. User with no Berita Acara activities returns nil, "", nil
+	doc, fname, err := svc.GenerateBeritaAcara(ctx, userID, 6, 2026)
+	if err != nil {
+		t.Fatalf("unexpected error when no BA activities: %v", err)
+	}
+	if doc != nil || fname != "" {
+		t.Fatalf("expected nil doc and empty fname when no BA activities, got len %d, fname %s", len(doc), fname)
+	}
+
+	// 3. User with a Berita Acara activity generates docx successfully
+	witness := &models.User{
+		Username: "ba_witness_user",
+		Email:    "witness@example.com",
+		Role:     models.RoleUser,
+		Name:     "Saksi Berita Acara",
+		Company:  "sdd",
+		IsActive: true,
+	}
+	if err := tx.Create(witness).Error; err != nil {
+		t.Fatalf("failed to create witness: %v", err)
+	}
+
+	baAct := &models.DailyActivity{
+		UserID:           userID,
+		Date:             time.Date(2026, 6, 16, 0, 0, 0, 0, time.UTC),
+		StartTime:        "08:00",
+		EndTime:          "17:00",
+		Status:           "P",
+		Activity:         "Critical hotfix deployment",
+		IsActive:         true,
+		IsBeritaAcara:    true,
+		WitnessID:        &witness.ID,
+		BeritaAcaraNotes: "Deployment went smoothly without downtime",
+	}
+	if err := tx.Create(baAct).Error; err != nil {
+		t.Fatalf("failed to create BA activity: %v", err)
+	}
+
+	doc, fname, err = svc.GenerateBeritaAcara(ctx, userID, 6, 2026)
+	if err != nil {
+		t.Fatalf("GenerateBeritaAcara failed: %v", err)
+	}
+	if len(doc) == 0 || fname == "" {
+		t.Fatalf("expected non-empty doc and filename, got len %d, filename %s", len(doc), fname)
 	}
 }
