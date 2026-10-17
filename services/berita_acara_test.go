@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"timesheet-backend/assets"
 	"timesheet-backend/services"
 )
 
@@ -200,4 +201,70 @@ func TestGenerateBeritaAcaraDocx_EmptyItems(t *testing.T) {
 	require.NotEmpty(t, docXML)
 	assert.Contains(t, docXML, "Budi Santoso")
 	assert.False(t, strings.Contains(docXML, "{{TANGGAL}}"))
+}
+
+func TestGenerateBeritaAcaraDocx_MissingTemplate(t *testing.T) {
+	orig := assets.BeritaAcaraTemplate
+	assets.BeritaAcaraTemplate = nil
+	defer func() { assets.BeritaAcaraTemplate = orig }()
+
+	payload := services.BeritaAcaraPayload{
+		EmployeeName: "Test User",
+	}
+	bytes, err := services.GenerateBeritaAcaraDocx(payload)
+	assert.Error(t, err)
+	assert.Nil(t, bytes)
+	assert.Contains(t, err.Error(), "template is not loaded or empty")
+}
+
+func TestGenerateBeritaAcaraDocx_AutoDayComputationAndEmptyDate(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	require.NoError(t, err)
+
+	date := time.Date(2026, 11, 4, 0, 0, 0, 0, loc) // Wednesday -> Rabu
+
+	payload := services.BeritaAcaraPayload{
+		EmployeeName: "Auto Day User",
+		Items: []services.BeritaAcaraItem{
+			{
+				Date:      date,
+				Day:       "", // should auto-compute Rabu
+				StartTime: "08:30",
+				EndTime:   "17:30",
+				Notes:     "Auto computed day",
+			},
+			{
+				Date:      time.Time{}, // zero date
+				Day:       "ManualDay",
+				StartTime: "09:00",
+				EndTime:   "18:00",
+				Notes:     "Zero date item",
+			},
+		},
+	}
+
+	docxBytes, err := services.GenerateBeritaAcaraDocx(payload)
+	require.NoError(t, err)
+	require.NotEmpty(t, docxBytes)
+
+	zipReader, err := zip.NewReader(bytes.NewReader(docxBytes), int64(len(docxBytes)))
+	require.NoError(t, err)
+
+	var docXML string
+	for _, f := range zipReader.File {
+		if f.Name == "word/document.xml" {
+			rc, err := f.Open()
+			require.NoError(t, err)
+			b, err := io.ReadAll(rc)
+			require.NoError(t, err)
+			_ = rc.Close()
+			docXML = string(b)
+			break
+		}
+	}
+
+	require.NotEmpty(t, docXML)
+	assert.Contains(t, docXML, "Rabu")
+	assert.Contains(t, docXML, "ManualDay")
+	assert.Contains(t, docXML, "04/11/2026")
 }
