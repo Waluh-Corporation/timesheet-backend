@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strconv"
 	"time"
@@ -217,7 +218,7 @@ func (r *activityRepository) FindActiveProjectByCodeOrName(ctx context.Context, 
 func (r *activityRepository) GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error) {
 	startDate := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	endDate := startDate.AddDate(0, 1, 0)
-	var latest *time.Time
+	var latest sql.NullTime
 	err := r.db.WithContext(ctx).Model(&models.DailyActivity{}).
 		Where("user_id = ? AND date >= ? AND date < ? AND is_active = true", userID, startDate, endDate).
 		Select("MAX(updated_at)").
@@ -225,10 +226,10 @@ func (r *activityRepository) GetLatestActivityUpdateTime(ctx context.Context, us
 	if err != nil {
 		return time.Time{}, err
 	}
-	if latest == nil {
+	if !latest.Valid {
 		return time.Time{}, nil
 	}
-	return *latest, nil
+	return latest.Time, nil
 }
 
 func (r *activityRepository) GetMonthlyWitness(ctx context.Context, userID uint, month, year int) (*models.User, error) {
