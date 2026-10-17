@@ -250,7 +250,7 @@ type DailyActivity struct {
 	UpdatedAt time.Time `json:"updated_at"`
 
 	UserID uint `gorm:"not null;index:idx_daily_activities_user_date" json:"user_id"`
-	// Date is normalised to midnight in Asia/Jakarta.
+	// Date is normalised to midnight in the configured application timezone (default UTC).
 	Date time.Time `gorm:"index:idx_daily_activities_user_date;index:idx_daily_activities_date;not null;type:date" json:"date"`
 
 	StartTime string `gorm:"size:8" json:"start_time"`

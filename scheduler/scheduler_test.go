@@ -29,6 +29,12 @@ func TestScheduler_NewAndStop(t *testing.T) {
 		t.Errorf("expected fallback to UTC, got %v", sUTC.loc)
 	}
 
+	// Empty timezone defaults to UTC
+	sEmpty := New(nil, nil, "")
+	if sEmpty.loc != time.UTC {
+		t.Errorf("expected empty timezone to default to UTC, got %v", sEmpty.loc)
+	}
+
 	// Start, execute handlers, and Stop
 	s.Start()
 	s.sendDailyReminders()
@@ -127,6 +133,12 @@ func TestGetScheduleInfo(t *testing.T) {
 	infoInvalidTZ := GetScheduleInfo("Invalid/Zone", "0 17 * * *")
 	if infoInvalidTZ.Timezone != "UTC" {
 		t.Errorf("expected fallback to UTC, got %s", infoInvalidTZ.Timezone)
+	}
+
+	// Empty timezone defaults to UTC
+	infoEmptyTZ := GetScheduleInfo("", "0 17 * * *")
+	if infoEmptyTZ.Timezone != "UTC" {
+		t.Errorf("expected empty timezone to default to UTC, got %s", infoEmptyTZ.Timezone)
 	}
 
 	// Invalid cron expression fallback

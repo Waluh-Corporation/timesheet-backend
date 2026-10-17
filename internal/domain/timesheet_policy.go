@@ -32,7 +32,7 @@ func IsAdminFromContext(ctx context.Context) bool {
 // of the current month 23:59:59.999999999.
 func AllowedTimesheetDateRange(ref time.Time, loc *time.Location) (time.Time, time.Time) {
 	if loc == nil {
-		loc = time.Local
+		loc = time.UTC
 	}
 	r := ref.In(loc)
 	startOfPrevMonth := time.Date(r.Year(), r.Month()-1, 1, 0, 0, 0, 0, loc)
@@ -45,7 +45,7 @@ func AllowedTimesheetDateRange(ref time.Time, loc *time.Location) (time.Time, ti
 // (from 1st of previous month up to the end of the current month).
 func ValidateTimesheetDate(t time.Time, ref time.Time, loc *time.Location) error {
 	if loc == nil {
-		loc = time.Local
+		loc = time.UTC
 	}
 	startOfPrevMonth, endOfCurrentMonth := AllowedTimesheetDateRange(ref, loc)
 	target := t.In(loc)
@@ -63,7 +63,7 @@ func ValidateTimesheetDate(t time.Time, ref time.Time, loc *time.Location) error
 // or the previous month (maximum 1 month back).
 func ValidateTimesheetPeriod(month, year int, ref time.Time, loc *time.Location) error {
 	if loc == nil {
-		loc = time.Local
+		loc = time.UTC
 	}
 	r := ref.In(loc)
 	currMonthStart := time.Date(r.Year(), r.Month(), 1, 0, 0, 0, 0, loc)

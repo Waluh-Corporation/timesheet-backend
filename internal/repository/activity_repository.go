@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"timesheet-backend/config"
 	"timesheet-backend/models"
 )
 
@@ -89,12 +90,12 @@ func (r *activityRepository) Update(ctx context.Context, activity *models.DailyA
 	return r.db.WithContext(ctx).Omit(clause.Associations).Save(activity).Error
 }
 
+func appLocation() *time.Location {
+	return config.AppLocation()
+}
+
 func jakartaLocation() *time.Location {
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		return time.FixedZone("WIB", 7*3600)
-	}
-	return loc
+	return appLocation()
 }
 
 const (

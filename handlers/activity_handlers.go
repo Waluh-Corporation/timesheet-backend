@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"timesheet-backend/config"
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
@@ -29,13 +30,14 @@ const (
 	errActivityServiceNotInitialized = "activity service not initialized"
 )
 
-// jakarta returns the Asia/Jakarta location, falling back to a fixed +07:00.
+// appLocation returns the configured application location from config, defaulting to UTC.
+func appLocation() *time.Location {
+	return config.AppLocation()
+}
+
+// jakarta returns the configured application location, defaulting to UTC.
 func jakarta() *time.Location {
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		return time.FixedZone("WIB", 7*3600)
-	}
-	return loc
+	return appLocation()
 }
 
 func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {

@@ -27,7 +27,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM alpine:3.21
 
 # ca-certificates for outbound HTTPS/SMTP TLS connections
-# tzdata for Asia/Jakarta timezone support in cron scheduler
+# tzdata for timezone support in cron scheduler and application
 # wget is built-in to Busybox for container HEALTHCHECK
 RUN apk --no-cache add ca-certificates tzdata && \
     addgroup -g 10001 -S appgroup && \
@@ -53,7 +53,7 @@ EXPOSE 8080
 # Environment defaults
 ENV PORT=8080 \
     GIN_MODE=release \
-    TZ=Asia/Jakarta
+    TZ=UTC
 
 # Container healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

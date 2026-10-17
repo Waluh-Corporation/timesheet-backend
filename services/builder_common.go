@@ -11,6 +11,7 @@ import (
 
 	"github.com/xuri/excelize/v2"
 
+	"timesheet-backend/config"
 	"timesheet-backend/models"
 )
 
@@ -493,13 +494,9 @@ func WriteBuilderDailyRows(
 	}
 }
 
-// CurrentDateFormatted returns the current date in Asia/Jakarta timezone formatted as "02-Jan-2006".
+// CurrentDateFormatted returns the current date in the configured application timezone formatted as "02-Jan-2006".
 func CurrentDateFormatted() string {
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		loc = time.FixedZone("WIB", 7*3600)
-	}
-	return time.Now().In(loc).Format("02-Jan-2006")
+	return time.Now().In(config.AppLocation()).Format("02-Jan-2006")
 }
 
 // DatePrefixUpper is the standard uppercase prefix used in timesheet signature blocks.

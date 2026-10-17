@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	_ "time/tzdata"
 )
 
 // Config aggregates all runtime configuration, sourced from environment
@@ -229,7 +230,8 @@ func loadDotEnv(filenames ...string) {
 func Load() *Config {
 	loadDotEnv(".env", "../.env", "../../.env")
 
-	defaultDBURL := "host=" + getEnv("DB_HOST", "localhost") + " user=" + getEnv("DB_USER", "timesheet") + " dbname=" + getEnv("DB_NAME", "timesheet") + " port=" + getEnv("DB_PORT", "5432") + " sslmode=disable TimeZone=Asia/Jakarta"
+	tz := getEnv("TZ", getEnv("SCHEDULER_TZ", "UTC"))
+	defaultDBURL := "host=" + getEnv("DB_HOST", "localhost") + " user=" + getEnv("DB_USER", "timesheet") + " dbname=" + getEnv("DB_NAME", "timesheet") + " port=" + getEnv("DB_PORT", "5432") + " sslmode=disable TimeZone=" + tz
 
 	appName := getEnv("APP_NAME", "Timesheet Portal")
 
@@ -284,7 +286,7 @@ func Load() *Config {
 
 		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:3000"),
 		AppBaseURL:   strings.TrimRight(getEnv("APP_BASE_URL", getEnv("API_BASE_URL", "http://localhost:"+getEnv("PORT", "8080"))), "/"),
-		Timezone:     getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
+		Timezone:     tz,
 		ReminderCron: getEnv("SCHEDULER_REMINDER_CRON", getEnv("SCHEDULER_CRON", "0 17 * * *")),
 		CleanupCron:  getEnv("SCHEDULER_CLEANUP_CRON", "0 2 * * *"),
 
@@ -339,6 +341,36 @@ func Load() *Config {
 
 	cfg.validateSecrets()
 	return cfg
+}
+
+// Location returns the loaded *time.Location corresponding to Timezone,
+// falling back to time.UTC if empty, invalid, or "UTC".
+func (c *Config) Location() *time.Location {
+	if c == nil || strings.TrimSpace(c.Timezone) == "" || strings.EqualFold(c.Timezone, "UTC") {
+		return time.UTC
+	}
+	loc, err := time.LoadLocation(c.Timezone)
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}
+
+// AppLocation returns the *time.Location configured via the TZ or SCHEDULER_TZ
+// environment variable, falling back to time.UTC if unset or invalid.
+func AppLocation() *time.Location {
+	tz := strings.TrimSpace(os.Getenv("TZ"))
+	if tz == "" {
+		tz = strings.TrimSpace(os.Getenv("SCHEDULER_TZ"))
+	}
+	if tz == "" || strings.EqualFold(tz, "UTC") {
+		return time.UTC
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return time.UTC
+	}
+	return loc
 }
 
 // isRelease reports whether the process is running in Gin's release mode.

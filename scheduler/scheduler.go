@@ -58,7 +58,7 @@ func GetScheduleInfo(tz, cronExpr string) ScheduleInfo {
 		cronExpr = DefaultReminderCron
 	}
 	if strings.TrimSpace(tz) == "" {
-		tz = "Asia/Jakarta"
+		tz = "UTC"
 	}
 
 	loc, err := time.LoadLocation(tz)
@@ -118,11 +118,14 @@ func IsJobDisabled(expr string) bool {
 	return val == "disabled" || val == "off" || val == "false" || val == "none"
 }
 
-// New builds a Scheduler pinned to the given IANA timezone (Asia/Jakarta for
-// WIB) and optional cron expressions for reminders and token housekeeping.
+// New builds a Scheduler pinned to the given IANA timezone (defaulting to UTC)
+// and optional cron expressions for reminders and token housekeeping.
 // If crons are omitted or empty, DefaultReminderCron ("0 17 * * *") and
 // DefaultCleanupCron ("0 2 * * *") are used.
 func New(db *gorm.DB, pushSvc *push.Service, tz string, crons ...string) *Scheduler {
+	if strings.TrimSpace(tz) == "" {
+		tz = "UTC"
+	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
 		log.Printf("[scheduler] could not load timezone %q, falling back to UTC: %v", tz, err)

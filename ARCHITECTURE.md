@@ -141,8 +141,8 @@ each rendered by a dedicated strict-typed generator keyed off `Template.Builtin`
 - **VAPID**: `push.Service` uses configured keys or generates a pair at boot
   (logged for pinning). Public key served at `/api/v1/push/vapid-public-key`.
 - **Subscription**: `/api/v1/push/subscribe` persists the browser subscription.
-- **Scheduler**: `robfig/cron/v3` with `cron.WithLocation(Asia/Jakarta)` fires
-  `0 17 * * *` — **17:00 WIB daily** — and pushes
+- **Scheduler**: `robfig/cron/v3` with configurable timezone location (`TZ` or `SCHEDULER_TZ`, defaulting to `UTC`) fires
+  `0 17 * * *` — **17:00 daily** — and pushes
   "Waktunya isi timesheet hari ini!" to every active user with no entry for the
   day, via `SherClockHolmes/webpush-go`.
 - **Service worker** (`frontend/public/sw.js`): handles `push` and

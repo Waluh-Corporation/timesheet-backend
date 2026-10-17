@@ -10,6 +10,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"timesheet-backend/config"
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
@@ -50,12 +51,12 @@ func (s *activityService) SetNowFunc(fn func() time.Time) {
 	s.nowFunc = fn
 }
 
+func appLocation() *time.Location {
+	return config.AppLocation()
+}
+
 func jakartaLocation() *time.Location {
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		return time.FixedZone("WIB", 7*3600)
-	}
-	return loc
+	return appLocation()
 }
 
 func (s *activityService) resolveProject(ctx context.Context, req *request.DailyActivityRequest, activity *models.DailyActivity) error {
