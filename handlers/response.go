@@ -1,10 +1,40 @@
 package handlers
 
 import (
+	"log/slog"
 	"math"
+	"net/http"
+	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
+
+const sanitizedInternalErrorMessage = "An internal server error occurred. Please contact the administrator if the issue persists."
+
+func isReleaseMode() bool {
+	return gin.Mode() == gin.ReleaseMode || strings.EqualFold(os.Getenv("GIN_MODE"), "release")
+}
+
+func sanitizeErrorMessage(c *gin.Context, code int, message string) string {
+	if code >= http.StatusInternalServerError && isReleaseMode() {
+		if c != nil && c.Request != nil && c.Request.URL != nil {
+			slog.Error("internal server error encountered",
+				slog.String("path", c.Request.URL.Path),
+				slog.String("method", c.Request.Method),
+				slog.Int("status", code),
+				slog.String("error", message),
+			)
+		} else {
+			slog.Error("internal server error encountered",
+				slog.Int("status", code),
+				slog.String("error", message),
+			)
+		}
+		return sanitizedInternalErrorMessage
+	}
+	return message
+}
 
 // RespondSuccess sends a 2xx JSON response wrapped in the unified envelope.
 func RespondSuccess(c *gin.Context, code int, data interface{}) {
@@ -35,21 +65,23 @@ func RespondDelete(c *gin.Context, code int) {
 
 // RespondError sends a 4xx/5xx JSON error response with status code and error message.
 func RespondError(c *gin.Context, code int, message string) {
+	userMsg := sanitizeErrorMessage(c, code, message)
 	c.JSON(code, gin.H{
 		"code":    code,
 		"status":  "error",
-		"error":   message,
-		"message": message,
+		"error":   userMsg,
+		"message": userMsg,
 	})
 }
 
 // RespondAbortError aborts the context with a 4xx/5xx JSON error response.
 func RespondAbortError(c *gin.Context, code int, message string) {
+	userMsg := sanitizeErrorMessage(c, code, message)
 	c.AbortWithStatusJSON(code, gin.H{
 		"code":    code,
 		"status":  "error",
-		"error":   message,
-		"message": message,
+		"error":   userMsg,
+		"message": userMsg,
 	})
 }
 

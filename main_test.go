@@ -132,3 +132,72 @@ func TestRegisterRoutes_ActivityPrevious(t *testing.T) {
 		t.Errorf("expected 401 for unauthenticated request to /api/v1/activities/previous, got %d", w.Code)
 	}
 }
+
+func TestRegisterRoutes_SwaggerGuard(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("swagger disabled returns 404", func(t *testing.T) {
+		r := gin.New()
+		cfg := &config.Config{
+			SwaggerEnabled: false,
+		}
+		srv := &handlers.Server{Cfg: cfg}
+		registerRoutes(r, srv)
+
+		req := httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusNotFound {
+			t.Errorf("expected 404 when swagger is disabled, got %d", w.Code)
+		}
+	})
+
+	t.Run("swagger enabled mounts handler", func(t *testing.T) {
+		r := gin.New()
+		cfg := &config.Config{
+			SwaggerEnabled: true,
+		}
+		srv := &handlers.Server{Cfg: cfg}
+		registerRoutes(r, srv)
+
+		req := httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200 when swagger is enabled, got %d", w.Code)
+		}
+	})
+}
+
+func TestRegisterRoutes_DownloadsRateLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("rate limit applies to timesheet downloads", func(t *testing.T) {
+		r := gin.New()
+		cfg := &config.Config{
+			RateLimitEnabled:  true,
+			RateLimitRequests: 1,
+			RateLimitWindow:   1 * time.Minute,
+		}
+		srv := &handlers.Server{Cfg: cfg}
+		registerRoutes(r, srv)
+
+		// First request passes through rate limiter (returns 400 since token is invalid or job repo is nil)
+		req1 := httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/token123", nil)
+		w1 := httptest.NewRecorder()
+		r.ServeHTTP(w1, req1)
+		if w1.Code == http.StatusTooManyRequests {
+			t.Errorf("first download request should not be rate limited")
+		}
+
+		// Second request should be blocked by rate limiter (429)
+		req2 := httptest.NewRequest(http.MethodGet, "/api/v1/timesheet/downloads/token123", nil)
+		w2 := httptest.NewRecorder()
+		r.ServeHTTP(w2, req2)
+		if w2.Code != http.StatusTooManyRequests {
+			t.Errorf("expected second download request to be 429 Too Many Requests, got %d", w2.Code)
+		}
+	})
+}

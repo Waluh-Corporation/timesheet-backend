@@ -71,6 +71,10 @@ type Config struct {
 	// Defaults to false so starting the server (e.g. go run .) does not run DDLs.
 	RunMigrations bool
 
+	// SwaggerEnabled controls whether Swagger interactive documentation UI is mounted.
+	// Defaults to false when GIN_MODE=release, and true in development/test.
+	SwaggerEnabled bool
+
 	// Rate limiting configuration for public auth routes.
 	RateLimitEnabled  bool
 	RateLimitRequests int
@@ -294,7 +298,8 @@ func Load() *Config {
 		AdminUsername: getEnv("BOOTSTRAP_ADMIN_USERNAME", "admin"),
 		AdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", ""),
 
-		RunMigrations: getEnvBool("RUN_MIGRATIONS", false),
+		RunMigrations:  getEnvBool("RUN_MIGRATIONS", false),
+		SwaggerEnabled: getEnvBool("SWAGGER_ENABLED", !isRelease()),
 
 		RateLimitEnabled:  rateLimitEnabled,
 		RateLimitRequests: rateLimitRequests,

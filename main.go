@@ -237,11 +237,17 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	docs.SwaggerInfo.Host = ""
 	docs.SwaggerInfo.Schemes = []string{}
 
-	// Swagger documentation UI
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	r.GET("/swagger", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
-	})
+	// Swagger documentation UI (guarded in production)
+	swaggerEnabled := true
+	if s != nil && s.Cfg != nil {
+		swaggerEnabled = s.Cfg.SwaggerEnabled
+	}
+	if swaggerEnabled {
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+		r.GET("/swagger", func(c *gin.Context) {
+			c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+		})
+	}
 
 	api := r.Group("/api/v1")
 
@@ -268,8 +274,9 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		}
 	}
 
+	var authLimiter *middleware.IPRateLimiter
 	if rateLimitEnabled {
-		authLimiter := middleware.NewIPRateLimiter(rateLimitRequests, rateLimitWindow)
+		authLimiter = middleware.NewIPRateLimiter(rateLimitRequests, rateLimitWindow)
 		authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
 	}
 	{
@@ -288,7 +295,11 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	api.GET("/push/vapid-public-key", s.GetVAPIDKey)
 
 	// Public magic download token endpoint (quota-enforced, 302 redirect to temporary S3 URL, supports HEAD for link verifiers)
-	api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", s.DownloadTimesheetByToken)
+	if rateLimitEnabled {
+		api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", middleware.RateLimitMiddleware(authLimiter), s.DownloadTimesheetByToken)
+	} else {
+		api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", s.DownloadTimesheetByToken)
+	}
 
 	// WebAuthn Related Origin Requests document, served at the well-known path
 	// so passkeys registered under one relying party can be used across the
@@ -321,7 +332,11 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.POST("/overtimes", s.UpsertOvertime)
 		authed.GET("/overtimes", s.ListMonthlyOvertimes)
 		authed.DELETE("/overtimes/:id", s.DeleteOvertime)
-		authed.POST("/timesheet/generate", s.GenerateTimesheet)
+		if rateLimitEnabled {
+			authed.POST("/timesheet/generate", middleware.RateLimitMiddleware(authLimiter), s.GenerateTimesheet)
+		} else {
+			authed.POST("/timesheet/generate", s.GenerateTimesheet)
+		}
 		authed.GET("/timesheet/jobs/:id", s.GetTimesheetJob)
 		authed.GET("/timesheet/jobs", s.ListTimesheetJobs)
 		authed.GET("/holidays", s.GetHolidays)

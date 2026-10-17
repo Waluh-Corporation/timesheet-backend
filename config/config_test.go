@@ -459,3 +459,34 @@ func TestLoad_TimesheetDownloadMaxQuotaConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestLoad_SwaggerConfig(t *testing.T) {
+	t.Run("defaults to true in debug mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "debug")
+		t.Setenv("SWAGGER_ENABLED", "")
+		cfg := Load()
+		if !cfg.SwaggerEnabled {
+			t.Errorf("expected SwaggerEnabled to default to true in debug mode, got false")
+		}
+	})
+
+	t.Run("defaults to false in release mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
+		t.Setenv("SWAGGER_ENABLED", "")
+		cfg := Load()
+		if cfg.SwaggerEnabled {
+			t.Errorf("expected SwaggerEnabled to default to false in release mode, got true")
+		}
+	})
+
+	t.Run("explicit override in release mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
+		t.Setenv("SWAGGER_ENABLED", "true")
+		cfg := Load()
+		if !cfg.SwaggerEnabled {
+			t.Errorf("expected SwaggerEnabled to be true when explicitly set, got false")
+		}
+	})
+}

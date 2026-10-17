@@ -2,11 +2,14 @@ package services
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ConvertExcelToPDF converts spreadsheet bytes to PDF locally using LibreOffice
@@ -30,12 +33,18 @@ func ConvertExcelToPDF(excelBytes []byte, _ string) ([]byte, error) {
 		binPath = "libreoffice"
 	}
 
-	// Run LibreOffice headless conversion
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Run LibreOffice headless conversion with bounded execution timeout
 	//nolint:gosec // G204: binary is looked up and paths are within isolated temp dir
-	cmd := exec.Command(binPath, "--headless", "--convert-to", "pdf", "--outdir", tmpDir, inputPath)
+	cmd := exec.CommandContext(ctx, binPath, "--headless", "--convert-to", "pdf", "--outdir", tmpDir, inputPath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, fmt.Errorf("libreoffice headless conversion timed out after 30 seconds: %w", ctx.Err())
+		}
 		return nil, fmt.Errorf("libreoffice headless conversion failed: %w, stderr: %s", err, stderr.String())
 	}
 
