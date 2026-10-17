@@ -989,6 +989,80 @@ func TestUserService_ProfileChanges_Workflow(t *testing.T) {
 	})
 }
 
+func TestUserService_AdminAnonymizeUser(t *testing.T) {
+	ctx := context.Background()
+	repo := newMockUserRepo()
+	repo.users[1] = &models.User{ID: 1, Name: "Admin User", Role: models.RoleAdmin, IsActive: true}
+	repo.users[2] = &models.User{ID: 2, Name: "Target User", Role: models.RoleUser, IsActive: true}
+	svc := NewUserService(repo, nil, nil)
+
+	// 1. Cannot anonymize self -> ErrForbidden
+	err := svc.AdminAnonymizeUser(ctx, 1, 1)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("expected ErrForbidden when caller equals target, got %v", err)
+	}
+
+	// 2. Target not found -> ErrNotFound
+	err = svc.AdminAnonymizeUser(ctx, 999, 1)
+	if !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound for non-existent user, got %v", err)
+	}
+
+	// 3. Successful anonymize
+	err = svc.AdminAnonymizeUser(ctx, 2, 1)
+	if err != nil {
+		t.Fatalf("expected successful anonymize, got %v", err)
+	}
+	if repo.users[2].IsActive {
+		t.Errorf("expected target user to be deactivated")
+	}
+}
+
+func TestUserService_ReviewProfileChange_WithRelationalIDs(t *testing.T) {
+	ctx := context.Background()
+	repo := newMockUserRepo()
+	master := newMockMasterRepoForUser()
+
+	deptID := uint(10)
+	master.departments[deptID] = &models.Department{ID: deptID, Name: "Engineering", Division: "Tech", IsActive: true}
+	compID := uint(20)
+	master.companies[compID] = &models.Company{ID: compID, Name: "Acme Corp", IsActive: true}
+
+	repo.users[1] = &models.User{ID: 1, Name: "Standard User", Role: models.RoleUser, IsActive: true}
+	svc := NewUserService(repo, nil, nil, master)
+
+	divID := uint(1)
+	siteID := uint(2)
+	req := &request.ProfileChangeRequestDTO{
+		DivisionID:   &divID,
+		Division:     "Tech",
+		SiteID:       &siteID,
+		Site:         "HQ",
+		DepartmentID: &deptID,
+		CompanyID:    &compID,
+	}
+	err := svc.SubmitProfileChange(ctx, 1, req)
+	if err != nil {
+		t.Fatalf("SubmitProfileChange failed: %v", err)
+	}
+
+	err = svc.ReviewProfileChange(ctx, 1, 99, "approve")
+	if err != nil {
+		t.Fatalf("ReviewProfileChange approve failed: %v", err)
+	}
+
+	updated := repo.users[1]
+	if updated.DivisionID == nil || *updated.DivisionID != divID {
+		t.Errorf("expected DivisionID to be updated")
+	}
+	if updated.Department != "Engineering" {
+		t.Errorf("expected Department to be Engineering, got %s", updated.Department)
+	}
+	if updated.Company != "Acme Corp" {
+		t.Errorf("expected Company to be Acme Corp, got %s", updated.Company)
+	}
+}
+
 func uintPtr(u uint) *uint {
 	return &u
 }

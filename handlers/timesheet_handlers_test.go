@@ -606,3 +606,73 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		assertResponseCode(t, wAdmin, http.StatusOK)
 	})
 }
+
+func TestExtractAttachmentFilename(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"with underscore prefix", "timesheets/12345_Timesheet_John.xlsx", "Timesheet_John.xlsx"},
+		{"without underscore", "timesheets/Timesheet.xlsx", "Timesheet.xlsx"},
+		{"empty string", "", "timesheet.xlsx"},
+		{"dot string", ".", "timesheet.xlsx"},
+		{"trailing underscore", "timesheets/_", "_"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extractAttachmentFilename(tc.input)
+			if got != tc.expected {
+				t.Errorf("extractAttachmentFilename(%q) = %q, want %q", tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestHasUserCompany_Variations(t *testing.T) {
+	cid := uint(5)
+	userWithCid := &models.User{CompanyID: &cid}
+	if !hasUserCompany(userWithCid) {
+		t.Errorf("expected hasUserCompany to return true with CompanyID")
+	}
+
+	userWithoutComp := &models.User{}
+	if hasUserCompany(userWithoutComp) {
+		t.Errorf("expected hasUserCompany to return false when no company is set")
+	}
+}
+
+func TestIsJobCacheValid_EdgeCases(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now()
+	jobTime := now.Add(-1 * time.Hour)
+
+	user := &models.User{
+		ID:        1,
+		UpdatedAt: now, // updated after job -> invalid
+	}
+
+	job := &models.TimesheetJob{
+		CreatedAt: jobTime,
+		FileKey:   "timesheets/test.xlsx",
+	}
+
+	// 1. User updated after job
+	if isJobCacheValid(ctx, job, user, nil, nil, 6, 2026) {
+		t.Errorf("expected false when user updated after job")
+	}
+
+	// 2. User updated before job, storage file does not exist
+	user.UpdatedAt = jobTime.Add(-10 * time.Minute)
+	storageSvc := &mockStorageService{existsResult: false}
+	if isJobCacheValid(ctx, job, user, nil, storageSvc, 6, 2026) {
+		t.Errorf("expected false when file does not exist in storage")
+	}
+
+	// 3. User updated before job, storage file exists
+	storageSvc.existsResult = true
+	if !isJobCacheValid(ctx, job, user, nil, storageSvc, 6, 2026) {
+		t.Errorf("expected true when cache is valid and storage file exists")
+	}
+}

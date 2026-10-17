@@ -16,7 +16,9 @@ import (
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/repository"
+	"timesheet-backend/mailer"
 	"timesheet-backend/models"
+	"timesheet-backend/push"
 )
 
 type mockStorageService struct {
@@ -355,4 +357,29 @@ func TestWorkerServer_ProcessTaskDirect_WithBeritaAcara(t *testing.T) {
 	filenames := []string{zipReader.File[0].Name, zipReader.File[1].Name}
 	assert.Contains(t, filenames, "Timesheet_john_07_2026.xlsx")
 	assert.Contains(t, filenames, "Berita_Acara_john_doe_07_2026.docx")
+}
+
+func TestWorkerServer_DispatchNotifications(t *testing.T) {
+	cfg := &config.Config{
+		S3Bucket:               "test-timesheets",
+		S3RetentionDays:        7,
+		ExcelMaxConcurrentJobs: 5,
+		RedisTLSEnabled:        true,
+		RedisTLSSkipVerify:     true,
+	}
+
+	jobRepo := &mockJobRepository{}
+	userRepo := &mockUserRepo{}
+	storageSvc := &mockStorageService{}
+	tsSvc := &mockTimesheetService{}
+
+	m := mailer.New(cfg)
+	pushSvc := push.New(cfg, nil)
+
+	worker := NewWorkerServer(cfg, jobRepo, userRepo, tsSvc, storageSvc, m, pushSvc)
+	require.NotNil(t, worker)
+	worker.SetRedisClient(nil)
+
+	ctx := context.Background()
+	worker.dispatchNotifications(ctx, 1, 7, 2026, "https://example.com/download", "Timesheet_07_2026.xlsx", time.Now().Add(24*time.Hour))
 }
