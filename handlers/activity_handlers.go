@@ -10,7 +10,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"timesheet-backend/config"
 	"timesheet-backend/dto/request"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
@@ -28,13 +30,14 @@ const (
 	errActivityServiceNotInitialized = "activity service not initialized"
 )
 
-// jakarta returns the Asia/Jakarta location, falling back to a fixed +07:00.
+// appLocation returns the configured application location from config, defaulting to UTC.
+func appLocation() *time.Location {
+	return config.AppLocation()
+}
+
+// jakarta returns the configured application location, defaulting to UTC.
 func jakarta() *time.Location {
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		return time.FixedZone("WIB", 7*3600)
-	}
-	return loc
+	return appLocation()
 }
 
 func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
@@ -50,7 +53,11 @@ func (s *Server) findProjectByRefID(refID uint) (*models.Project, error) {
 
 func reqContext(c *gin.Context) context.Context {
 	if c != nil && c.Request != nil && c.Request.Context() != nil {
-		return c.Request.Context()
+		ctx := c.Request.Context()
+		if role := currentUserRole(c); role != "" {
+			ctx = domain.WithUserRole(ctx, string(role))
+		}
+		return ctx
 	}
 	return context.Background()
 }
@@ -134,6 +141,45 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 		}
 		if errors.Is(err, domain.ErrForbidden) {
 			RespondError(c, http.StatusForbidden, "you are not authorized to access another user's activity")
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondSuccess(c, http.StatusOK, *resp)
+}
+
+// GetPreviousDailyActivity godoc
+// @Summary Get previous day activity
+// @Description Retrieves the most recent active daily activity strictly before the specified reference date (default: today in WIB) to allow copying/autofilling activity descriptions.
+// @Tags Activity
+// @Security BearerAuth
+// @Produce json
+// @Param date query string false "Reference date (YYYY-MM-DD, default: today)"
+// @Success 200 {object} response.DailyActivityResponse
+// @Failure 400 {object} response.ErrorResponse "Invalid date format"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 404 {object} response.ErrorResponse "No previous activity found"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/activities/previous [get]
+func (s *Server) GetPreviousDailyActivity(c *gin.Context) {
+	svc := s.getActivityService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
+		return
+	}
+
+	dateParam := c.Query("date")
+	resp, err := svc.GetPreviousDailyActivity(reqContext(c), currentUserID(c), dateParam)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, "no previous activity found")
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			msg := strings.TrimPrefix(err.Error(), domain.ErrInvalidInput.Error()+": ")
+			RespondError(c, http.StatusBadRequest, msg)
 			return
 		}
 		RespondError(c, http.StatusInternalServerError, err.Error())
@@ -244,10 +290,101 @@ func (s *Server) ListActivities(c *gin.Context) {
 		return
 	}
 
-	RespondPaginated(c, http.StatusOK, respItems, meta.Page, meta.Limit, meta.TotalRows)
+	var monthlyWitness *response.WitnessResponse
+	if filter.Month != nil && filter.Year != nil {
+		monthlyWitness, _ = svc.GetMonthlyWitness(reqContext(c), uid, *filter.Month, *filter.Year)
+	}
+
+	extra := make(map[string]interface{})
+	if monthlyWitness != nil {
+		extra["monthly_witness"] = monthlyWitness
+	}
+
+	RespondPaginatedWithMeta(c, http.StatusOK, respItems, meta.Page, meta.Limit, meta.TotalRows, extra)
 }
 
 // ListMonthlyActivities delegates to ListActivities for backwards-compatibility.
 func (s *Server) ListMonthlyActivities(c *gin.Context) {
 	s.ListActivities(c)
+}
+
+// ListWitnesses godoc
+// @Summary List eligible witnesses for Berita Acara
+// @Description Returns active users with role 'user' eligible to be chosen as a witness (excluding current user)
+// @Tags Activity
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} response.APIResponse{data=[]response.WitnessResponse}
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/users/witnesses [get]
+func (s *Server) ListWitnesses(c *gin.Context) {
+	uid := currentUserID(c)
+	svc := s.getActivityService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
+		return
+	}
+
+	witnesses, err := svc.GetEligibleWitnesses(reqContext(c), uid)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondSuccess(c, http.StatusOK, witnesses)
+}
+
+// UpdateMonthlyWitness godoc
+// @Summary Update witness for all Berita Acara entries in a given month
+// @Description Updates the witness ID for all Berita Acara daily activities in the specified month and year
+// @Tags Activity
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param body body request.UpdateMonthlyWitnessRequest true "Update witness payload"
+// @Success 200 {object} response.APIResponse
+// @Failure 400 {object} response.ErrorResponse "Bad request"
+// @Failure 401 {object} response.ErrorResponse "Unauthorized"
+// @Failure 500 {object} response.ErrorResponse "Internal server error"
+// @Router /api/v1/activities/witness [put]
+func (s *Server) UpdateMonthlyWitness(c *gin.Context) {
+	uid := currentUserID(c)
+	svc := s.getActivityService()
+	if svc == nil {
+		RespondError(c, http.StatusInternalServerError, errActivityServiceNotInitialized)
+		return
+	}
+
+	var req request.UpdateMonthlyWitnessRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		RespondError(c, http.StatusBadRequest, "Invalid request payload: "+err.Error())
+		return
+	}
+
+	count, witness, err := svc.UpdateMonthlyWitness(reqContext(c), uid, req.Month, req.Year, req.WitnessID)
+	if err != nil {
+		var userErr *domain.UserError
+		if errors.As(err, &userErr) {
+			status := domain.MapErrorToHTTPStatus(userErr.Err)
+			RespondError(c, status, userErr.Msg)
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var witResp *response.WitnessResponse
+	if witness != nil {
+		witResp = &response.WitnessResponse{
+			ID:   witness.ID,
+			Name: witness.Name,
+		}
+	}
+
+	RespondSuccess(c, http.StatusOK, gin.H{
+		"message":       "Monthly witness updated successfully for all Berita Acara records in this period",
+		"updated_count": count,
+		"witness":       witResp,
+	})
 }

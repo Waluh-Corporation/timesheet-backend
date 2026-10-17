@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -12,6 +13,12 @@ import (
 
 // UserRepository is re-exported from domain.UserRepository for clean architecture consistency.
 type UserRepository = domain.UserRepository
+
+const (
+	queryID        = "id = ?"
+	queryUserID    = "user_id = ?"
+	orderCreatedAt = "created_at desc"
+)
 
 type userRepository struct {
 	db *gorm.DB
@@ -24,7 +31,7 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 
 func (r *userRepository) FindByID(ctx context.Context, id uint) (*models.User, error) {
 	var u models.User
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&u).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(queryID, id).First(&u).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -37,7 +44,7 @@ func (r *userRepository) FindByIDWithDetails(ctx context.Context, id uint) (*mod
 		Preload("SiteRel").
 		Preload("DepartmentRel").
 		Preload("DivisionRel").
-		Where("id = ?", id).First(&u).Error; err != nil {
+		Where(queryID, id).First(&u).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -45,7 +52,7 @@ func (r *userRepository) FindByIDWithDetails(ctx context.Context, id uint) (*mod
 
 func (r *userRepository) FindByIDWithCredentials(ctx context.Context, id uint) (*models.User, error) {
 	var u models.User
-	if err := r.db.WithContext(ctx).Preload("Credentials").Where("id = ?", id).First(&u).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Credentials").Where(queryID, id).First(&u).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
@@ -93,7 +100,7 @@ func (r *userRepository) Update(ctx context.Context, user *models.User) error {
 }
 
 func (r *userRepository) UpdatePassword(ctx context.Context, id uint, passwordHash string, updatedAt time.Time) error {
-	return r.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", id).Updates(map[string]interface{}{
+	return r.db.WithContext(ctx).Model(&models.User{}).Where(queryID, id).Updates(map[string]interface{}{
 		"password_hash": passwordHash,
 		"updated_at":    updatedAt,
 	}).Error
@@ -106,9 +113,48 @@ func (r *userRepository) SoftDelete(ctx context.Context, id uint) error {
 	}).Error
 }
 
+func (r *userRepository) Anonymize(ctx context.Context, id uint) error {
+	redactedName := fmt.Sprintf("ANONYMIZED_USER_%d", id)
+	redactedEmail := fmt.Sprintf("deleted_%d@timesheet.local", id)
+	redactedUsername := fmt.Sprintf("deleted_user_%d", id)
+
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		updates := map[string]interface{}{
+			"name":          redactedName,
+			"username":      redactedUsername,
+			"email":         redactedEmail,
+			"bni_id":        "",
+			"employee_id":   "",
+			"password_hash": "",
+			"is_active":     false,
+			"is_anonymized": true,
+			"updated_at":    time.Now(),
+		}
+
+		if err := tx.Model(&models.User{}).Where(queryID, id).Updates(updates).Error; err != nil {
+			return err
+		}
+		if err := tx.Where(queryUserID, id).Delete(&models.WebAuthnCredential{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where(queryUserID, id).Delete(&models.PushSubscription{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.ProfileChangeRequest{}).
+			Where("user_id = ? AND status = ?", id, models.ProfilePending).
+			Updates(map[string]interface{}{
+				"status": "rejected",
+				"notes":  "account anonymized",
+			}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
 func (r *userRepository) ListUsers(ctx context.Context, isActive *bool) ([]models.User, error) {
 	var users []models.User
-	query := r.db.WithContext(ctx).Order("created_at desc")
+	query := r.db.WithContext(ctx).Order(orderCreatedAt)
 	if isActive != nil {
 		query = query.Where("is_active = ?", *isActive)
 	}
@@ -122,9 +168,9 @@ func (r *userRepository) CreateProfileChange(ctx context.Context, change *models
 
 func (r *userRepository) ListProfileChanges(ctx context.Context, userID *uint, status string) ([]models.ProfileChangeRequest, error) {
 	var changes []models.ProfileChangeRequest
-	q := r.db.WithContext(ctx).Preload("User").Preload("Reviewer").Preload("CompanyRel", models.ActiveOnly).Preload("DepartmentRel", models.ActiveOnly).Order("created_at desc")
+	q := r.db.WithContext(ctx).Preload("User").Preload("Reviewer").Preload("CompanyRel", models.ActiveOnly).Preload("DepartmentRel", models.ActiveOnly).Order(orderCreatedAt)
 	if userID != nil {
-		q = q.Where("user_id = ?", *userID)
+		q = q.Where(queryUserID, *userID)
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -135,7 +181,7 @@ func (r *userRepository) ListProfileChanges(ctx context.Context, userID *uint, s
 
 func (r *userRepository) FindProfileChangeByID(ctx context.Context, id uint) (*models.ProfileChangeRequest, error) {
 	var change models.ProfileChangeRequest
-	if err := r.db.WithContext(ctx).Where("id = ?", id).First(&change).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where(queryID, id).First(&change).Error; err != nil {
 		return nil, err
 	}
 	return &change, nil
@@ -160,8 +206,8 @@ func (r *userRepository) UpdatePasskeySignCount(ctx context.Context, credID []by
 
 func (r *userRepository) ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error) {
 	var creds []models.WebAuthnCredential
-	if err := r.db.WithContext(ctx).Preload("Authenticator").Where("user_id = ?", userID).
-		Order("created_at desc").Find(&creds).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("Authenticator").Where(queryUserID, userID).
+		Order(orderCreatedAt).Find(&creds).Error; err != nil {
 		return nil, err
 	}
 	for i := range creds {
@@ -175,9 +221,9 @@ func (r *userRepository) ListPasskeysByUserID(ctx context.Context, userID uint) 
 }
 
 func (r *userRepository) DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error) {
-	query := r.db.WithContext(ctx).Where("id = ?", id)
+	query := r.db.WithContext(ctx).Where(queryID, id)
 	if userID != nil {
-		query = query.Where("user_id = ?", *userID)
+		query = query.Where(queryUserID, *userID)
 	}
 	res := query.Delete(&models.WebAuthnCredential{})
 	if res.Error != nil {
@@ -187,9 +233,9 @@ func (r *userRepository) DeletePasskey(ctx context.Context, id uint, userID *uin
 }
 
 func (r *userRepository) UpdatePasskeyName(ctx context.Context, id uint, userID *uint, name string) (bool, error) {
-	query := r.db.WithContext(ctx).Model(&models.WebAuthnCredential{}).Where("id = ?", id)
+	query := r.db.WithContext(ctx).Model(&models.WebAuthnCredential{}).Where(queryID, id)
 	if userID != nil {
-		query = query.Where("user_id = ?", *userID)
+		query = query.Where(queryUserID, *userID)
 	}
 	res := query.Update("friendly_name", name)
 	if res.Error != nil {

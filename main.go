@@ -2,14 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -109,19 +108,7 @@ func registerHealthRoutes(r *gin.Engine, db *gorm.DB) {
 	})
 }
 
-func registerStaticRoutes(r *gin.Engine, logger *slog.Logger) {
-	staticPath := filepath.Clean(os.Getenv("STATIC_FILES_PATH"))
-	if staticPath == "" || staticPath == "." {
-		staticPath = "./static"
-	}
-	//nolint:gosec // G703: staticPath is loaded from server environment variable configuration
-	if _, err := os.Stat(staticPath); err == nil {
-		r.NoRoute(spaHandler(staticPath))
-		logger.Info("serving static frontend", slog.String("path", staticPath))
-	}
-}
-
-func setupRouter(db *gorm.DB, srv *handlers.Server, logger *slog.Logger) *gin.Engine {
+func setupRouter(db *gorm.DB, srv *handlers.Server) *gin.Engine {
 	r := gin.New()
 	r.Use(middleware.RequestID())
 	r.Use(middleware.StructuredRecovery())
@@ -131,7 +118,6 @@ func setupRouter(db *gorm.DB, srv *handlers.Server, logger *slog.Logger) *gin.En
 
 	registerHealthRoutes(r, db)
 	registerRoutes(r, srv)
-	registerStaticRoutes(r, logger)
 	return r
 }
 
@@ -178,7 +164,11 @@ func main() {
 		return
 	}
 
-	authSvc := auth.NewService(cfg.JWTSecret, cfg.JWTExpiry)
+	tokenExpiry := cfg.AccessTokenExpiry
+	if tokenExpiry <= 0 {
+		tokenExpiry = 15 * time.Minute
+	}
+	authSvc := auth.NewService(cfg.JWTSecret, tokenExpiry)
 	mailSvc := mailer.New(cfg)
 	pushSvc := push.New(cfg, db)
 
@@ -187,25 +177,8 @@ func main() {
 		logger.Warn("s3 storage service not configured or failed to initialize", slog.Any("error", err))
 	}
 
-	var redisClient *redis.Client
-	if cfg.RedisAddr != "" {
-		redisClient = redis.NewClient(&redis.Options{
-			Addr:         cfg.RedisAddr,
-			Password:     cfg.RedisPassword,
-			DB:           cfg.RedisDB,
-			DialTimeout:  2 * time.Second,
-			ReadTimeout:  1 * time.Second,
-			WriteTimeout: 1 * time.Second,
-			PoolSize:     20,
-			MinIdleConns: 5,
-		})
-		pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
-		if err := redisClient.Ping(pingCtx).Err(); err != nil {
-			logger.Warn("redis client failed to ping, continuing with graceful degradation", slog.Any("error", err))
-		} else {
-			logger.Info("connected to redis successfully", slog.String("addr", cfg.RedisAddr))
-		}
-		pingCancel()
+	redisClient := initRedisClient(cfg, logger)
+	if redisClient != nil {
 		defer func() { _ = redisClient.Close() }()
 	}
 
@@ -225,16 +198,9 @@ func main() {
 	srv.QueueClient = queueClient
 	srv.RedisClient = redisClient
 
-	if queueClient != nil && storageSvc != nil {
-		workerServer := queue.NewWorkerServer(cfg, srv.JobRepo, srv.UserRepo, srv.TimesheetSvc, storageSvc, mailSvc, pushSvc)
-		if redisClient != nil {
-			workerServer.SetRedisClient(redisClient)
-		}
-		if werr := workerServer.Start(); werr != nil {
-			logger.Error("failed to start queue worker server", slog.Any("error", werr))
-		} else {
-			defer workerServer.Shutdown()
-		}
+	workerServer := startWorkerServer(cfg, srv, storageSvc, mailSvc, pushSvc, redisClient, logger)
+	if workerServer != nil {
+		defer workerServer.Shutdown()
 	}
 
 	sched := scheduler.New(db, pushSvc, cfg.Timezone, cfg.ReminderCron, cfg.CleanupCron)
@@ -244,7 +210,7 @@ func main() {
 	sched.Start()
 	defer sched.Stop()
 
-	r := setupRouter(db, srv, logger)
+	r := setupRouter(db, srv)
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -271,11 +237,17 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	docs.SwaggerInfo.Host = ""
 	docs.SwaggerInfo.Schemes = []string{}
 
-	// Swagger documentation UI
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	r.GET("/swagger", func(c *gin.Context) {
-		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
-	})
+	// Swagger documentation UI (guarded in production)
+	swaggerEnabled := true
+	if s != nil && s.Cfg != nil {
+		swaggerEnabled = s.Cfg.SwaggerEnabled
+	}
+	if swaggerEnabled {
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+		r.GET("/swagger", func(c *gin.Context) {
+			c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+		})
+	}
 
 	api := r.Group("/api/v1")
 
@@ -302,8 +274,9 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		}
 	}
 
+	var authLimiter *middleware.IPRateLimiter
 	if rateLimitEnabled {
-		authLimiter := middleware.NewIPRateLimiter(rateLimitRequests, rateLimitWindow)
+		authLimiter = middleware.NewIPRateLimiter(rateLimitRequests, rateLimitWindow)
 		authGroup.Use(middleware.RateLimitMiddleware(authLimiter))
 	}
 	{
@@ -322,7 +295,11 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	api.GET("/push/vapid-public-key", s.GetVAPIDKey)
 
 	// Public magic download token endpoint (quota-enforced, 302 redirect to temporary S3 URL, supports HEAD for link verifiers)
-	api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", s.DownloadTimesheetByToken)
+	if rateLimitEnabled {
+		api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", middleware.RateLimitMiddleware(authLimiter), s.DownloadTimesheetByToken)
+	} else {
+		api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", s.DownloadTimesheetByToken)
+	}
 
 	// WebAuthn Related Origin Requests document, served at the well-known path
 	// so passkeys registered under one relying party can be used across the
@@ -348,11 +325,18 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		// Daily activity entry + list + detail + generation.
 		authed.POST("/activities", s.UpsertDailyActivity)
 		authed.GET("/activities", s.ListActivities)
+		authed.GET("/activities/previous", s.GetPreviousDailyActivity)
 		authed.GET("/activities/:id", s.GetDailyActivity)
+		authed.GET("/users/witnesses", s.ListWitnesses)
+		authed.PUT("/activities/witness", s.UpdateMonthlyWitness)
 		authed.POST("/overtimes", s.UpsertOvertime)
 		authed.GET("/overtimes", s.ListMonthlyOvertimes)
 		authed.DELETE("/overtimes/:id", s.DeleteOvertime)
-		authed.POST("/timesheet/generate", s.GenerateTimesheet)
+		if rateLimitEnabled {
+			authed.POST("/timesheet/generate", middleware.RateLimitMiddleware(authLimiter), s.GenerateTimesheet)
+		} else {
+			authed.POST("/timesheet/generate", s.GenerateTimesheet)
+		}
 		authed.GET("/timesheet/jobs/:id", s.GetTimesheetJob)
 		authed.GET("/timesheet/jobs", s.ListTimesheetJobs)
 		authed.GET("/holidays", s.GetHolidays)
@@ -382,6 +366,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.POST("/users", s.CreateUser)
 		admin.PATCH("/users/:id", s.UpdateUser)
 		admin.DELETE("/users/:id", s.DeleteUser)
+		admin.POST("/users/:id/anonymize", s.AnonymizeUser)
 		admin.GET("/users/:id/passkeys", s.AdminListPasskeys)
 		admin.PATCH("/users/:id/passkeys/:pid", s.AdminUpdatePasskey)
 		admin.DELETE("/users/:id/passkeys/:pid", s.AdminDeletePasskey)
@@ -419,59 +404,48 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	}
 }
 
-const errNotFoundMsg = "not found"
-
-// tryFiles returns the first existing, non-directory candidate.
-func tryFiles(candidates ...string) (string, bool) {
-	for _, c := range candidates {
-		if info, err := os.Stat(c); err == nil && !info.IsDir() {
-			return c, true
+func initRedisClient(cfg *config.Config, logger *slog.Logger) *redis.Client {
+	if cfg.RedisAddr == "" {
+		return nil
+	}
+	redisOpts := &redis.Options{
+		Addr:         cfg.RedisAddr,
+		Username:     cfg.RedisUsername,
+		Password:     cfg.RedisPassword,
+		DB:           cfg.RedisDB,
+		DialTimeout:  cfg.RedisDialTimeout,
+		ReadTimeout:  cfg.RedisReadTimeout,
+		WriteTimeout: cfg.RedisWriteTimeout,
+		PoolSize:     cfg.RedisPoolSize,
+		MinIdleConns: cfg.RedisMinIdleConns,
+	}
+	if cfg.RedisTLSEnabled {
+		redisOpts.TLSConfig = &tls.Config{
+			InsecureSkipVerify: cfg.RedisTLSSkipVerify, //nolint:gosec // configurable for internal TLS
 		}
 	}
-	return "", false
-}
-
-// isPathWithinRoot checks whether target is contained within the root directory.
-func isPathWithinRoot(root, target string) bool {
-	return target == root || strings.HasPrefix(target, root+string(os.PathSeparator))
-}
-
-// spaHandler serves the statically-exported Next.js site (Next `output: export`)
-// from the Go binary. It resolves a request path to an on-disk file, trying the
-// exact file, then "<path>.html" (Next exports routes like /login -> login.html),
-// then "<path>/index.html", and finally falls back to the root index.html so
-// client-side routing still works. Unmatched /api/* paths return a JSON 404
-// rather than HTML.
-func spaHandler(staticRoot string) gin.HandlerFunc {
-	root := filepath.Clean(staticRoot)
-
-	return func(c *gin.Context) {
-		// Never serve HTML for an unmatched API or Swagger route.
-		if strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.HasPrefix(c.Request.URL.Path, "/swagger/") {
-			c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
-			return
-		}
-
-		// filepath.Clean on a "/"-prefixed path strips any "../" traversal; the
-		// subsequent prefix check is defense-in-depth against escaping the root.
-		rel := filepath.Clean("/" + c.Request.URL.Path)
-		target := filepath.Join(root, filepath.FromSlash(rel))
-		if !isPathWithinRoot(root, target) {
-			c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
-			return
-		}
-
-		if file, ok := tryFiles(target, target+".html", filepath.Join(target, "index.html")); ok {
-			c.File(file)
-			return
-		}
-
-		// SPA fallback: hand back the root document and let the client router
-		// resolve the route (or render its own 404).
-		if index, ok := tryFiles(filepath.Join(root, "index.html")); ok {
-			c.File(index)
-			return
-		}
-		c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
+	client := redis.NewClient(redisOpts)
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer pingCancel()
+	if err := client.Ping(pingCtx).Err(); err != nil {
+		logger.Warn("redis client failed to ping, continuing with graceful degradation", slog.Any("error", err))
+	} else {
+		logger.Info("connected to redis successfully", slog.String("addr", cfg.RedisAddr))
 	}
+	return client
+}
+
+func startWorkerServer(cfg *config.Config, srv *handlers.Server, storageSvc storage.StorageService, mailSvc *mailer.Mailer, pushSvc *push.Service, redisClient *redis.Client, logger *slog.Logger) *queue.WorkerServer {
+	if srv.QueueClient == nil || storageSvc == nil {
+		return nil
+	}
+	workerServer := queue.NewWorkerServer(cfg, srv.JobRepo, srv.UserRepo, srv.TimesheetSvc, storageSvc, mailSvc, pushSvc)
+	if redisClient != nil {
+		workerServer.SetRedisClient(redisClient)
+	}
+	if err := workerServer.Start(); err != nil {
+		logger.Error("failed to start queue worker server", slog.Any("error", err))
+		return nil
+	}
+	return workerServer
 }

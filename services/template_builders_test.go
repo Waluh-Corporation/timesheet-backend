@@ -268,20 +268,20 @@ func TestBuildAdidataWorkbook(t *testing.T) {
 	}
 
 	// 2. Check SPL sheet created for overtime
-	splSheet := "SPL-1"
-	valTitle, _ := f.GetCellValue(splSheet, "B2")
+	splSheet := "SPL"
+	valTitle, _ := f.GetCellValue(splSheet, "C4")
 	if valTitle != "SURAT PERINTAH LEMBUR" {
-		t.Errorf("SPL B2 = %q, want 'SURAT PERINTAH LEMBUR'", valTitle)
+		t.Errorf("SPL C4 = %q, want 'SURAT PERINTAH LEMBUR'", valTitle)
 	}
 
-	valNPP, _ := f.GetCellValue(splSheet, "E4")
-	if valNPP != ": EMP-0001" {
-		t.Errorf("SPL E4 = %q, want ': EMP-0001'", valNPP)
+	valNPP, _ := f.GetCellValue(splSheet, "C7")
+	if valNPP != "NPP                                          : EMP-0001" {
+		t.Errorf("SPL C7 = %q, want 'NPP                                          : EMP-0001'", valNPP)
 	}
 
-	valTask, _ := f.GetCellValue(splSheet, "H12")
+	valTask, _ := f.GetCellValue(splSheet, "I15")
 	if valTask != "WIT BNIdirect bisnis - SME FINANCING" {
-		t.Errorf("SPL H12 = %q, want 'WIT BNIdirect bisnis - SME FINANCING'", valTask)
+		t.Errorf("SPL I15 = %q, want 'WIT BNIdirect bisnis - SME FINANCING'", valTask)
 	}
 }
 
@@ -318,22 +318,132 @@ func TestWriteAdidataSingleSPL(t *testing.T) {
 	_, _ = f.NewSheet(splSheet)
 	writeAdidataSingleSPL(f, splSheet, in, ot, "ADI-777", st)
 
-	valTitle, _ := f.GetCellValue(splSheet, "B2")
+	valTitle, _ := f.GetCellValue(splSheet, "C4")
 	if valTitle != "SURAT PERINTAH LEMBUR" {
-		t.Errorf("B2 = %q, want 'SURAT PERINTAH LEMBUR'", valTitle)
+		t.Errorf("C4 = %q, want 'SURAT PERINTAH LEMBUR'", valTitle)
 	}
-	valNPP, _ := f.GetCellValue(splSheet, "E4")
-	if valNPP != ": ADI-777" {
-		t.Errorf("E4 = %q, want ': ADI-777'", valNPP)
+	valNPP, _ := f.GetCellValue(splSheet, "C7")
+	if valNPP != "NPP                                          : ADI-777" {
+		t.Errorf("C7 = %q, want 'NPP                                          : ADI-777'", valNPP)
 	}
-	valName, _ := f.GetCellValue(splSheet, "E5")
-	if valName != ": Adidata Employee" {
-		t.Errorf("E5 = %q, want ': Adidata Employee'", valName)
+	valName, _ := f.GetCellValue(splSheet, "C8")
+	if valName != "NAMA                                     : Adidata Employee" {
+		t.Errorf("C8 = %q, want 'NAMA                                     : Adidata Employee'", valName)
 	}
-	valSign, _ := f.GetCellValue(splSheet, "C21")
+	valSign, _ := f.GetCellValue(splSheet, "B26")
 	if valSign != "( Adidata Employee )" {
-		t.Errorf("C21 = %q, want '( Adidata Employee )'", valSign)
+		t.Errorf("B26 = %q, want '( Adidata Employee )'", valSign)
 	}
+}
+
+func TestAdidataMultiRowSPL_Scenarios(t *testing.T) {
+	t.Run("zero overtime removes SPL_TEMPLATE", func(t *testing.T) {
+		in := GenerationInput{
+			CompanyCode: "adidata",
+			Year:        2026,
+			Month:       6,
+			User: &models.User{
+				Name:       "No OT User",
+				EmployeeID: "ADI-000",
+			},
+			Activities: []models.DailyActivity{
+				{Date: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), Status: "P", StartTime: "08:00", EndTime: "17:00"},
+			},
+			Overtimes: nil,
+		}
+		raw, err := GenerateFromTemplate(in)
+		if err != nil {
+			t.Fatalf("GenerateFromTemplate: %v", err)
+		}
+		f, err := excelize.OpenReader(bytes.NewReader(raw))
+		if err != nil {
+			t.Fatalf("OpenReader: %v", err)
+		}
+		defer func() { _ = f.Close() }()
+
+		for _, sh := range f.GetSheetList() {
+			if strings.Contains(strings.ToUpper(sh), "SPL") {
+				t.Errorf("unexpected SPL sheet found: %s", sh)
+			}
+		}
+	})
+
+	t.Run("dynamic row expansion for more than 3 overtimes", func(t *testing.T) {
+		tl := models.Approver{Name: "Leader Alpha"}
+		dh := models.Approver{Name: "Head Beta"}
+		ots := []models.OvertimeEntry{
+			{Date: time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC), StartTime: "17:00", EndTime: "20:00", TaskDescription: "Task 1", TeamLeader: &tl, DepartmentHead: &dh},
+			{Date: time.Date(2026, 6, 4, 0, 0, 0, 0, time.UTC), StartTime: "17:00", EndTime: "19:00", TaskDescription: "Task 2", TeamLeader: &tl, DepartmentHead: &dh},
+			{Date: time.Date(2026, 6, 8, 0, 0, 0, 0, time.UTC), StartTime: "18:00", EndTime: "21:00", TaskDescription: "Task 3", TeamLeader: &tl, DepartmentHead: &dh},
+			{Date: time.Date(2026, 6, 12, 0, 0, 0, 0, time.UTC), StartTime: "17:00", EndTime: "21:00", TaskDescription: "Task 4", TeamLeader: &tl, DepartmentHead: &dh},
+			{Date: time.Date(2026, 6, 16, 0, 0, 0, 0, time.UTC), StartTime: "18:00", EndTime: "20:30", TaskDescription: "Task 5", TeamLeader: &tl, DepartmentHead: &dh},
+		}
+
+		in := GenerationInput{
+			CompanyCode: "adidata",
+			Year:        2026,
+			Month:       6,
+			User: &models.User{
+				Name:       "Adidata Multi User",
+				EmployeeID: "ADI-999",
+				Position:   "Senior Specialist",
+				Department: "IT",
+				Division:   "Fintech",
+			},
+			Activities: []models.DailyActivity{
+				{Date: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), Status: "P", StartTime: "08:00", EndTime: "17:00"},
+			},
+			Overtimes: ots,
+		}
+
+		raw, err := GenerateFromTemplate(in)
+		if err != nil {
+			t.Fatalf("GenerateFromTemplate: %v", err)
+		}
+		f, err := excelize.OpenReader(bytes.NewReader(raw))
+		if err != nil {
+			t.Fatalf("OpenReader: %v", err)
+		}
+		defer func() { _ = f.Close() }()
+
+		splSheet := "SPL"
+		// 5 rows -> rows 15, 16, 17, 18, 19
+		task5, _ := f.GetCellValue(splSheet, "I19")
+		if task5 != "Task 5" {
+			t.Errorf("I19 = %q, want 'Task 5'", task5)
+		}
+
+		// Total row is row 20
+		totalVal, _ := f.GetCellValue(splSheet, "H20")
+		// Durations: 3 + 2 + 3 + 4 + 2.5 = 14.5
+		if totalVal != "14.5" {
+			t.Errorf("H20 total hours = %q, want '14.5'", totalVal)
+		}
+
+		// Total label
+		totalLabel, _ := f.GetCellValue(splSheet, "C20")
+		if totalLabel != "Total Keseluruhan Jam Lembur" {
+			t.Errorf("C20 label = %q, want 'Total Keseluruhan Jam Lembur'", totalLabel)
+		}
+
+		// Signature row: 20 + 8 = 28
+		sigUser, _ := f.GetCellValue(splSheet, "B28")
+		if sigUser != "( Adidata Multi User )" {
+			t.Errorf("B28 = %q, want '( Adidata Multi User )'", sigUser)
+		}
+		sigPos, _ := f.GetCellValue(splSheet, "B29")
+		if sigPos != "Senior Specialist" {
+			t.Errorf("B29 = %q, want 'Senior Specialist'", sigPos)
+		}
+		sigTL, _ := f.GetCellValue(splSheet, "G28")
+		if sigTL != "( Leader Alpha )" {
+			t.Errorf("G28 = %q, want '( Leader Alpha )'", sigTL)
+		}
+		sigDH, _ := f.GetCellValue(splSheet, "M28")
+		if sigDH != "( Head Beta )" {
+			t.Errorf("M28 = %q, want '( Head Beta )'", sigDH)
+		}
+	})
 }
 
 func TestBuildNTTWorkbook(t *testing.T) {

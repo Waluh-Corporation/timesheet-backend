@@ -2,15 +2,18 @@ package services
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ConvertExcelToPDF converts spreadsheet bytes to PDF locally using LibreOffice
-func ConvertExcelToPDF(excelBytes []byte, filename string) ([]byte, error) {
+func ConvertExcelToPDF(excelBytes []byte, _ string) ([]byte, error) {
 	// Create a secure temporary directory
 	tmpDir, err := os.MkdirTemp("", "pdfconvert-*")
 	if err != nil {
@@ -18,14 +21,9 @@ func ConvertExcelToPDF(excelBytes []byte, filename string) ([]byte, error) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	// Sanitize filename to prevent directory traversal
-	cleanName := filepath.Base(filename)
-	if cleanName == "" || cleanName == "." || cleanName == "/" || cleanName == "\\" {
-		cleanName = "timesheet.xlsx"
-	}
-
-	// Write Excel bytes to temporary file
-	inputPath := filepath.Join(tmpDir, cleanName)
+	// Fixed internal filename eliminates CLI argument injection and traversal
+	const inputFileName = "document.xlsx"
+	inputPath := filepath.Join(tmpDir, inputFileName)
 	if err := os.WriteFile(inputPath, excelBytes, 0600); err != nil {
 		return nil, fmt.Errorf("failed to write excel bytes to temp file: %w", err)
 	}
@@ -35,21 +33,30 @@ func ConvertExcelToPDF(excelBytes []byte, filename string) ([]byte, error) {
 		binPath = "libreoffice"
 	}
 
-	// Run LibreOffice headless conversion
-	// Command: libreoffice --headless --convert-to pdf --outdir <tmpDir> <inputPath>
-	//nolint:gosec // G204: inputPath is within isolated temporary directory
-	cmd := exec.Command(binPath, "--headless", "--convert-to", "pdf", "--outdir", tmpDir, inputPath)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Run LibreOffice headless conversion with bounded execution timeout
+	//nolint:gosec // G204: binary is looked up and paths are within isolated temp dir
+	cmd := exec.CommandContext(ctx, binPath, "--headless", "--convert-to", "pdf", "--outdir", tmpDir, inputPath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, fmt.Errorf("libreoffice headless conversion timed out after 30 seconds: %w", ctx.Err())
+		}
 		return nil, fmt.Errorf("libreoffice headless conversion failed: %w, stderr: %s", err, stderr.String())
 	}
 
-	// Locate the generated PDF
-	baseName := strings.TrimSuffix(cleanName, filepath.Ext(cleanName))
-	outputPath := filepath.Join(tmpDir, baseName+".pdf")
+	// Locate the generated PDF deterministically and verify directory boundary
+	outputPath := filepath.Join(tmpDir, "document.pdf")
+	cleanOutput := filepath.Clean(outputPath)
+	cleanTmpDir := filepath.Clean(tmpDir)
+	if !strings.HasPrefix(cleanOutput, cleanTmpDir+string(filepath.Separator)) {
+		return nil, fmt.Errorf("security violation: output path escaped temporary directory")
+	}
 
-	pdfBytes, err := os.ReadFile(outputPath)
+	pdfBytes, err := os.ReadFile(cleanOutput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read converted PDF output: %w", err)
 	}

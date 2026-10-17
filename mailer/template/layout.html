@@ -15,16 +15,27 @@
 
     a[x-apple-data-detectors],
     #MessageViewBody a,
+    u + #body a,
     a[href^="tel"],
     a[href^="sms"] {
       color: inherit !important;
       text-decoration: none !important;
       font-weight: inherit !important;
+      font-size: inherit !important;
+      font-family: inherit !important;
+      line-height: inherit !important;
     }
 
+    /* Fluid Responsive Breakpoints */
     @media only screen and (max-width: 620px) {
       .email-shell {
         width: 100% !important;
+      }
+      .outer-td {
+        padding-top: 20px !important;
+        padding-bottom: 20px !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
       }
       .content-cell {
         padding-left: 20px !important;
@@ -32,13 +43,60 @@
         padding-top: 24px !important;
         padding-bottom: 24px !important;
       }
+      .btn-shell {
+        width: 100% !important;
+      }
+      .btn-shell td {
+        width: 100% !important;
+      }
       .btn-block {
         display: block !important;
         width: 100% !important;
         box-sizing: border-box !important;
+        white-space: normal !important;
+        padding-left: 14px !important;
+        padding-right: 14px !important;
       }
     }
 
+    @media only screen and (max-width: 480px) {
+      .outer-td {
+        padding: 12px 6px !important;
+      }
+      .content-cell {
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+        padding-top: 20px !important;
+        padding-bottom: 20px !important;
+      }
+      .stack-row > td {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+      }
+      .stack-row > .details-label {
+        padding-top: 6px !important;
+        padding-bottom: 2px !important;
+        width: 100% !important;
+      }
+      .stack-row > .details-value {
+        padding-top: 0 !important;
+        padding-bottom: 8px !important;
+        width: 100% !important;
+      }
+      .brand-header-td {
+        display: block !important;
+        width: 100% !important;
+      }
+      .badge-header-td {
+        display: block !important;
+        width: 100% !important;
+        text-align: left !important;
+        padding-top: 8px !important;
+      }
+    }
+
+    /* Dark Mode Styling */
     @media (prefers-color-scheme: dark) {
       body, .email-bg {
         background-color: #0b0f19 !important;
@@ -73,16 +131,83 @@
       .url-fallback-box a {
         color: #a5b4fc !important;
       }
+      .callout-danger {
+        background-color: #2a1215 !important;
+        border-left-color: #f87171 !important;
+      }
+      .callout-danger-title {
+        color: #fca5a5 !important;
+      }
+      .callout-danger-text {
+        color: #fecaca !important;
+      }
+      .callout-warning {
+        background-color: #2b1d0c !important;
+        border-left-color: #fbbf24 !important;
+      }
+      .callout-warning-title {
+        color: #fde68a !important;
+      }
+      .callout-warning-text {
+        color: #fef3c7 !important;
+      }
+      .callout-info {
+        background-color: #0c2135 !important;
+        border-left-color: #38bdf8 !important;
+      }
+      .callout-info-title {
+        color: #7dd3fc !important;
+      }
+      .callout-info-text {
+        color: #bae6fd !important;
+      }
+      .callout-success {
+        background-color: #0b241b !important;
+        border-left-color: #34d399 !important;
+      }
+      .callout-success-title {
+        color: #6ee7b7 !important;
+      }
+      .callout-success-text {
+        color: #a7f3d0 !important;
+      }
+      .callout-indigo {
+        background-color: #1a1b3a !important;
+        border-left-color: #818cf8 !important;
+      }
+      .callout-indigo-title {
+        color: #a5b4fc !important;
+      }
+      .callout-indigo-text {
+        color: #c7d2fe !important;
+      }
     }
 
-    [data-ogsc] body, [data-ogsc] .email-bg { background-color: #0b0f19 !important; }
-    [data-ogsc] .email-card { background-color: #111827 !important; border-color: #1f2937 !important; }
+    /* Outlook.com / Office 365 Web Dark Mode Support */
+    [data-ogsc] body, [data-ogsc] .email-bg, [data-ogsb] .email-bg { background-color: #0b0f19 !important; }
+    [data-ogsc] .email-card, [data-ogsb] .email-card { background-color: #111827 !important; border-color: #1f2937 !important; }
     [data-ogsc] .brand-title, [data-ogsc] .heading-title, [data-ogsc] .details-value { color: #f9fafb !important; }
     [data-ogsc] .content-text { color: #d1d5db !important; }
-    [data-ogsc] .details-card { background-color: #1f2937 !important; border-color: #374151 !important; }
+    [data-ogsc] .details-card, [data-ogsb] .details-card { background-color: #1f2937 !important; border-color: #374151 !important; }
     [data-ogsc] .details-label { color: #9ca3af !important; }
     [data-ogsc] .divider-line { background-color: #374151 !important; }
     [data-ogsc] .footer-text { color: #9ca3af !important; }
+    [data-ogsc] .url-fallback-box, [data-ogsb] .url-fallback-box { background-color: #1f2937 !important; }
+    [data-ogsc] .callout-danger, [data-ogsb] .callout-danger { background-color: #2a1215 !important; border-left-color: #f87171 !important; }
+    [data-ogsc] .callout-danger-title { color: #fca5a5 !important; }
+    [data-ogsc] .callout-danger-text { color: #fecaca !important; }
+    [data-ogsc] .callout-warning, [data-ogsb] .callout-warning { background-color: #2b1d0c !important; border-left-color: #fbbf24 !important; }
+    [data-ogsc] .callout-warning-title { color: #fde68a !important; }
+    [data-ogsc] .callout-warning-text { color: #fef3c7 !important; }
+    [data-ogsc] .callout-info, [data-ogsb] .callout-info { background-color: #0c2135 !important; border-left-color: #38bdf8 !important; }
+    [data-ogsc] .callout-info-title { color: #7dd3fc !important; }
+    [data-ogsc] .callout-info-text { color: #bae6fd !important; }
+    [data-ogsc] .callout-success, [data-ogsb] .callout-success { background-color: #0b241b !important; border-left-color: #34d399 !important; }
+    [data-ogsc] .callout-success-title { color: #6ee7b7 !important; }
+    [data-ogsc] .callout-success-text { color: #a7f3d0 !important; }
+    [data-ogsc] .callout-indigo, [data-ogsb] .callout-indigo { background-color: #1a1b3a !important; border-left-color: #818cf8 !important; }
+    [data-ogsc] .callout-indigo-title { color: #a5b4fc !important; }
+    [data-ogsc] .callout-indigo-text { color: #c7d2fe !important; }
   </style>
   <!--[if mso]>
   <style type="text/css">
@@ -106,6 +231,8 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     -webkit-text-size-adjust: 100%;
     -ms-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   "
   bgcolor="#f3f4f6"
 >
@@ -139,10 +266,11 @@
       <td
         width="100%"
         align="center"
+        class="outer-td"
         style="width: 100%; padding: 40px 16px"
       >
         <!--[if mso]>
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" align="center">
           <tr>
             <td>
         <![endif]-->
@@ -171,7 +299,7 @@
               <!-- BRAND HEADER -->
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 16px;">
                 <tr>
-                  <td style="vertical-align: middle;">
+                  <td class="brand-header-td" style="vertical-align: middle;">
                     <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td style="width: 36px; height: 36px; background-color: #4f46e5; border-radius: 8px; text-align: center; vertical-align: middle; color: #ffffff; font-weight: 800; font-size: 18px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 36px;" bgcolor="#4f46e5">
@@ -186,8 +314,8 @@
                     </table>
                   </td>
                   {{if .BadgeText}}
-                  <td align="right" style="vertical-align: middle;">
-                    <span style="display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 9999px; background-color: {{.BadgeBgColor}}; color: {{.BadgeTextColor}}; border: 1px solid {{.BadgeBorderColor}}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                  <td class="badge-header-td" align="right" style="vertical-align: middle;">
+                    <span style="display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 9999px; white-space: nowrap; background-color: {{.BadgeBgColor}}; color: {{.BadgeTextColor}}; border: 1px solid {{.BadgeBorderColor}}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
                       {{.BadgeText}}
                     </span>
                   </td>
@@ -220,11 +348,16 @@
         <![endif]-->
 
         <!-- EXTERNAL FOOTER -->
+        <!--[if mso]>
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" align="center">
+          <tr>
+            <td>
+        <![endif]-->
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; margin: 0 auto;">
           <tr>
             <td style="padding: 24px 16px 0; text-align: center;">
               <p class="footer-text" style="margin: 0 0 6px 0; font-size: 12px; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.5;">
-                {{if .SystemNotice}}{{.SystemNotice}}{{else}}Email ini dikirimkan secara otomatis oleh sistem <strong>{{.AppName}}</strong>. Mohon untuk tidak membalas email ini secara langsung.{{end}}
+                {{if .SystemNotice}}{{.SystemNotice}}{{else}}Email ini dikirimkan secara otomatis oleh <strong>{{.AppName}}</strong>. Mohon untuk tidak membalas email ini.{{end}}
               </p>
               {{if .SupportEmail}}
               <p class="footer-text" style="margin: 0 0 8px 0; font-size: 12px; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
@@ -232,7 +365,7 @@
               </p>
               {{end}}
               <p class="footer-text" style="margin: 0 0 8px 0; font-size: 11px; color: #9ca3af; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.4;">
-                Keamanan &amp; Privasi: Sistem kami tidak pernah meminta kata sandi Anda melalui email atau pesan pribadi.
+                Kami tidak pernah meminta kata sandi Anda melalui email atau pesan pribadi.
               </p>
               <p class="footer-text" style="margin: 0; font-size: 11px; color: #9ca3af; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
                 &copy; {{.CurrentYear}} {{.AppName}}. All rights reserved.
@@ -240,6 +373,11 @@
             </td>
           </tr>
         </table>
+        <!--[if mso]>
+            </td>
+          </tr>
+        </table>
+        <![endif]-->
 
       </td>
     </tr>

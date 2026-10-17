@@ -11,22 +11,21 @@ It is specifically designed for a high-velocity team of **2–4 engineers**, bal
 ┌────────────────────────────────────────────────────────────────────────┐
 │ [Production] branch: main                                              │
 │ (Stable release code, protected branch, build triggered by tag: v*.*.*)│
-└───────────────────────────┬──────────────────────────────────▲─────────┘
-                            │                                  │
-                  1. Branch off (Base)                         │ 4. Release PR
-                            │                                  │    (Staging -> Prod)
-                            ▼                                  │
-┌──────────────────────────────────────┐                       │
-│ [Work in Progress] feat/* or fix/*   │                       │
-│ (Developed locally by engineers)     │                       │
-└──────────────────┬───────────────────┘                       │
-                   │                                           │
-                   │ 2. Pull Request & CI Gates                │
-                   ▼                                           │
-┌──────────────────────────────────────────────────────────────┴─────────┐
+└──────────────────────────────────────────────────────────────────▲─────┘
+                                                                   │ 3. Release PR
+                                                                   │    (Staging -> Prod, --no-ff)
+┌──────────────────────────────────────────────────────────────────┴─────┐
 │ [Development / Staging] branch: development                            │
 │ (Auto-build Docker image tag: development & dev-<sha>)                 │
 │ (Shared integration and staging environment for team verification)     │
+└─────────────┬────────────────────────────────────────────────────▲─────┘
+              │                                                    │
+    1. Branch off (Base)                                           │ 2. Pull Request & CI Gates
+              │                                                    │    (Merge Commit, --no-ff)
+              ▼                                                    │
+┌──────────────────────────────────────────────────────────────────┴─────┐
+│ [Work in Progress] feat/* or fix/*                                     │
+│ (Developed locally by engineers, branched off development)             │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -35,20 +34,21 @@ It is specifically designed for a high-velocity team of **2–4 engineers**, bal
 | Branch | Role | Base Branch on Creation | Target PR | CI/CD Triggers |
 | :--- | :--- | :--- | :--- | :--- |
 | **`main`** | Production-ready, highly stable codebase. | - | Only via Release PR from `development` (or emergency hotfixes) | **Push Tag `v*.*.*`** → Builds & publishes Docker tags `latest` & `v*.*.*`, creates GitHub Release. |
-| **`development`** | Shared staging and integration branch. | `main` | From feature (`feat/*`) or bugfix (`fix/*`) branches | **Push/Merge** → Auto-builds Docker tags `development` & `dev-<short-sha>`. |
-| **`feat/*` / `fix/*`** | Feature development or bug fixing. | **`main`** | **`development`** | PR triggers Gitleaks, linters, vulnerability audit, unit tests with race detector, and SonarQube. |
+| **`development`** | Shared staging and integration branch. | `main` (initial) | From feature (`feat/*`) or bugfix (`fix/*`) branches | **Push/Merge** → Auto-builds Docker tags `development` & `dev-<short-sha>`. |
+| **`feat/*` / `fix/*`** | Feature development or bug fixing. | **`development`** | **`development`** | PR triggers Gitleaks, linters, vulnerability audit, unit tests with race detector, and SonarQube. |
+| **`hotfix/*`** | Emergency critical bug fixes in production. | **`main`** | **`main`** | PR triggers CI gates; merge triggers tag release & auto-sync PR back to `development`. |
 
 ---
 
 ## 2. Complete Development Lifecycle (Step-by-Step)
 
 ### Phase 1: Starting a New Feature or Fix
-Every new feature or bugfix must be branched off the latest stable `main`.
+Every new feature or bugfix must be branched off the latest `development` branch.
 
 ```bash
-# 1. Switch to main and pull the latest changes
-git checkout main
-git pull origin main
+# 1. Switch to development and pull the latest changes
+git checkout development
+git pull origin development
 
 # 2. Create your working branch following naming conventions
 git checkout -b feat/profile-notes
@@ -116,9 +116,9 @@ git commit -m "feat(profile): add notes field to profile change request dto"
    - **SonarQube Quality Gate**: Assesses code duplication, security hotspots, and code smells.
    - **Semantic PR Title**: Validates that PR title adheres to Conventional Commits.
 
-4. **Peer Review**:
+4. **Peer Review & Merge**:
    - Requires at least **1 approval** from another team member.
-   - Once CI is green and approved, perform **Merge pull request** into `development`.
+   - Once CI is green and approved, perform **"Create a merge commit" (`--no-ff`)** into `development` to preserve every atomic commit in history.
 
 ---
 
@@ -144,7 +144,7 @@ Once features integrated into `development` are thoroughly validated and ready f
    - Update `CHANGELOG.md` following the [Keep a Changelog](https://keepachangelog.com/) standard.
 
 2. **Merge into `main`**:
-   - Wait for CI checks to pass on the release PR and merge into `main`.
+   - Wait for CI checks to pass on the release PR and merge into `main` using **"Create a merge commit" (`--no-ff`)**.
 
 3. **Create & Push Semantic Version Git Tag**:
    ```bash
@@ -203,8 +203,8 @@ main (v1.10.0) ──●──────────────● (v1.10.1)
 
 ```bash
 # === STARTING WORK / NEW FEATURE ===
-git checkout main
-git pull origin main
+git checkout development
+git pull origin development
 git checkout -b feat/my-feature
 
 # === DURING DEVELOPMENT ===
@@ -213,9 +213,9 @@ git status                            # Check changed files
 git add <file>                        # Stage atomic changes
 git commit -m "feat(scope): message"  # Commit with Conventional Commits
 
-# === BEFORE CREATING A PR (SYNC WITH MAIN) ===
+# === BEFORE CREATING A PR (SYNC WITH DEVELOPMENT) ===
 git fetch origin
-git rebase origin/main                # Keep branch linear and avoid conflicts early
+git rebase origin/development         # Keep branch linear and avoid conflicts early
 git push -u origin feat/my-feature
 
 # === AFTER MERGING PR TO DEVELOPMENT ===

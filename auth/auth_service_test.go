@@ -44,11 +44,34 @@ func TestAuthService_GenerateAndParseToken(t *testing.T) {
 		t.Errorf("expected Subject %s, got %s", user.Username, claims.Subject)
 	}
 
+	if claims.Issuer != auth.TokenIssuer {
+		t.Errorf("expected Issuer %s, got %s", auth.TokenIssuer, claims.Issuer)
+	}
+	if claims.ID == "" {
+		t.Error("expected non-empty token ID (jti)")
+	}
+
 	// 3. Reject Tampered Token
 	tampered := tokenStr + "tampered"
 	_, err = svc.ParseToken(tampered)
 	if err == nil {
 		t.Errorf("expected error parsing tampered token")
+	}
+
+	// Reject Invalid Issuer
+	badIssuerClaims := auth.Claims{
+		UserID: user.ID,
+		Role:   user.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "malicious-issuer",
+			Subject:   user.Username,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	}
+	badToken := jwt.NewWithClaims(jwt.SigningMethodHS256, badIssuerClaims)
+	badTokenStr, _ := badToken.SignedString([]byte("super-secret-key-for-unit-testing-32b"))
+	if _, err := svc.ParseToken(badTokenStr); err == nil {
+		t.Error("expected error parsing token with malicious issuer")
 	}
 
 	// 4. Reject Expired Token

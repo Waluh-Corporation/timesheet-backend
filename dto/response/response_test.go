@@ -63,8 +63,8 @@ func TestResponseDTOs(t *testing.T) {
 		t.Errorf("OvertimeResponse mismatch: %+v", otResp)
 	}
 
-	adminUserResp := AdminUserResponse{ID: 1, Username: "admin", Role: models.RoleAdmin}
-	if adminUserResp.Username != "admin" || adminUserResp.Role != models.RoleAdmin {
+	adminUserResp := AdminUserResponse{ID: 1, Username: "admin", Role: models.RoleAdmin, IsAnonymized: false}
+	if adminUserResp.Username != "admin" || adminUserResp.Role != models.RoleAdmin || adminUserResp.IsAnonymized {
 		t.Errorf("AdminUserResponse mismatch: %+v", adminUserResp)
 	}
 
@@ -100,16 +100,17 @@ func TestResponseDTOs(t *testing.T) {
 
 func TestUserResponseDTOs(t *testing.T) {
 	u := &models.User{
-		Username: "alice",
-		Email:    "alice@example.com",
-		Role:     models.RoleUser,
-		Name:     "Alice Wonderland",
-		IsActive: true,
+		Username:     "alice",
+		Email:        "alice@example.com",
+		Role:         models.RoleUser,
+		Name:         "Alice Wonderland",
+		IsActive:     true,
+		IsAnonymized: false,
 	}
 	u.ID = 42
 
 	userResp := ToUserResponse(u)
-	if userResp.ID != 42 || userResp.Username != "alice" || userResp.Email != "alice@example.com" {
+	if userResp.ID != 42 || userResp.Username != "alice" || userResp.Email != "alice@example.com" || userResp.IsAnonymized {
 		t.Fatalf("ToUserResponse mismatch: %+v", userResp)
 	}
 

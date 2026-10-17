@@ -330,7 +330,7 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, response.LoginResponse{
 		Token:        token,
 		RefreshToken: rawRefreshToken,
-		User:         *user,
+		User:         response.ToUserResponse(user),
 	})
 }
 

@@ -12,11 +12,12 @@ services:
       PORT: "8080"
       GIN_MODE: "${GIN_MODE:-debug}"
       RUN_MIGRATIONS: "${RUN_MIGRATIONS:-true}"
-      DATABASE_URL: "host=postgres user=${POSTGRES_USER:-timesheet} password=${POSTGRES_PASSWORD:-timesheet} dbname=${POSTGRES_DB:-timesheet} port=5432 sslmode=disable TimeZone=Asia/Jakarta"
+      DATABASE_URL: "host=postgres user=${POSTGRES_USER:-timesheet} password=${POSTGRES_PASSWORD:-timesheet} dbname=${POSTGRES_DB:-timesheet} port=5432 sslmode=disable TimeZone=${TZ:-UTC}"
       JWT_SECRET: "${JWT_SECRET:-}"
       JWT_EXPIRY_HOURS: "${JWT_EXPIRY_HOURS:-24}"
       RESET_TOKEN_TTL_MINUTES: "${RESET_TOKEN_TTL_MINUTES:-60}"
-      SCHEDULER_TZ: "Asia/Jakarta"
+      TZ: "${TZ:-UTC}"
+      SCHEDULER_TZ: "${SCHEDULER_TZ:-${TZ:-UTC}}"
       SCHEDULER_REMINDER_CRON: "${SCHEDULER_REMINDER_CRON:-0 17 * * *}"
       SCHEDULER_CLEANUP_CRON: "${SCHEDULER_CLEANUP_CRON:-0 2 * * *}"
       # SMTP Configuration (External SMTP Server)
@@ -70,12 +71,20 @@ services:
   redis:
     image: redis:7-alpine
     container_name: timesheet_redis
+    environment:
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+    command: >
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then
+        exec redis-server --requirepass "$$REDIS_PASSWORD"
+      else
+        exec redis-server
+      fi'
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -93,9 +102,9 @@ services:
       POSTGRES_USER: "${POSTGRES_USER:-timesheet}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-timesheet}"
       POSTGRES_DB: "${POSTGRES_DB:-timesheet}"
-      TZ: Asia/Jakarta
+      TZ: "${TZ:-UTC}"
     ports:
-      - "5432:5432" # Direct access for DBeaver / psql / Navicat
+      - "127.0.0.1:5432:5432" # Direct access for DBeaver / psql / Navicat (localhost only)
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

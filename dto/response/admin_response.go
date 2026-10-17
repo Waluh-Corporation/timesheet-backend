@@ -24,6 +24,7 @@ type AdminUserResponse struct {
 	Company      string      `json:"company"`
 	CompanyID    *uint       `json:"company_id,omitempty"`
 	IsActive     bool        `json:"is_active"`
+	IsAnonymized bool        `json:"is_anonymized"`
 }
 
 // AdminProfileChangeResponse represents a concise profile change request for review by administrators.

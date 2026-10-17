@@ -40,6 +40,7 @@ type User struct {
 	PasswordHash string `gorm:"size:255" json:"-"`
 	Role         Role   `gorm:"size:16;not null;default:user;index:idx_users_role_active,priority:1;check:role IN ('admin', 'user')" json:"role"`
 	IsActive     bool   `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_users_role_active,priority:2" json:"is_active"`
+	IsAnonymized bool   `gorm:"column:is_anonymized;type:boolean;default:false;not null;index:idx_users_is_anonymized" json:"is_anonymized"`
 
 	// Profile fields (the "approved" / live values).
 	Name          string      `gorm:"size:255" json:"name"`
@@ -250,7 +251,7 @@ type DailyActivity struct {
 	UpdatedAt time.Time `json:"updated_at"`
 
 	UserID uint `gorm:"not null;index:idx_daily_activities_user_date" json:"user_id"`
-	// Date is normalised to midnight in Asia/Jakarta.
+	// Date is normalised to midnight in the configured application timezone (default UTC).
 	Date time.Time `gorm:"index:idx_daily_activities_user_date;index:idx_daily_activities_date;not null;type:date" json:"date"`
 
 	StartTime string `gorm:"size:8" json:"start_time"`
@@ -263,6 +264,11 @@ type DailyActivity struct {
 	ProjectRef   *Project        `gorm:"foreignKey:ProjectRefID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"project_ref,omitempty"`
 	StatusRef    *ActivityStatus `gorm:"foreignKey:Status;references:Code;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT" json:"status_ref,omitempty"`
 	User         *User           `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user,omitempty"`
+
+	IsBeritaAcara    bool   `gorm:"column:is_berita_acara;type:boolean;default:false;not null;index:idx_daily_activities_berita_acara" json:"is_berita_acara"`
+	WitnessID        *uint  `gorm:"index;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"witness_id,omitempty"`
+	Witness          *User  `gorm:"foreignKey:WitnessID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"witness,omitempty"`
+	BeritaAcaraNotes string `gorm:"column:berita_acara_notes;type:text" json:"berita_acara_notes,omitempty"`
 }
 
 // GetProjectCode returns the canonical project code from the referenced Project,

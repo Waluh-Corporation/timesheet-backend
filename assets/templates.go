@@ -21,3 +21,8 @@ var AdidataTemplate []byte
 //
 //go:embed templates/NTT_master_template.xlsx
 var NTTTemplate []byte
+
+// BeritaAcaraTemplate holds the embedded Word template for Berita Acara.
+//
+//go:embed templates/Berita_Acara-Template.docx
+var BeritaAcaraTemplate []byte
