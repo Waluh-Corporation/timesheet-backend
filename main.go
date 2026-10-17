@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
@@ -110,19 +108,7 @@ func registerHealthRoutes(r *gin.Engine, db *gorm.DB) {
 	})
 }
 
-func registerStaticRoutes(r *gin.Engine, logger *slog.Logger) {
-	staticPath := filepath.Clean(os.Getenv("STATIC_FILES_PATH"))
-	if staticPath == "" || staticPath == "." {
-		staticPath = "./static"
-	}
-	//nolint:gosec // G703: staticPath is loaded from server environment variable configuration
-	if _, err := os.Stat(staticPath); err == nil {
-		r.NoRoute(spaHandler(staticPath))
-		logger.Info("serving static frontend", slog.String("path", staticPath))
-	}
-}
-
-func setupRouter(db *gorm.DB, srv *handlers.Server, logger *slog.Logger) *gin.Engine {
+func setupRouter(db *gorm.DB, srv *handlers.Server) *gin.Engine {
 	r := gin.New()
 	r.Use(middleware.RequestID())
 	r.Use(middleware.StructuredRecovery())
@@ -132,7 +118,6 @@ func setupRouter(db *gorm.DB, srv *handlers.Server, logger *slog.Logger) *gin.En
 
 	registerHealthRoutes(r, db)
 	registerRoutes(r, srv)
-	registerStaticRoutes(r, logger)
 	return r
 }
 
@@ -225,7 +210,7 @@ func main() {
 	sched.Start()
 	defer sched.Stop()
 
-	r := setupRouter(db, srv, logger)
+	r := setupRouter(db, srv)
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -401,63 +386,6 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.POST(routeDepartments, s.CreateDepartment)
 		admin.PATCH("/departments/:id", s.UpdateDepartment)
 		admin.DELETE("/departments/:id", s.DeleteDepartment)
-	}
-}
-
-const errNotFoundMsg = "not found"
-
-// tryFiles returns the first existing, non-directory candidate.
-func tryFiles(candidates ...string) (string, bool) {
-	for _, c := range candidates {
-		if info, err := os.Stat(c); err == nil && !info.IsDir() {
-			return c, true
-		}
-	}
-	return "", false
-}
-
-// isPathWithinRoot checks whether target is contained within the root directory.
-func isPathWithinRoot(root, target string) bool {
-	return target == root || strings.HasPrefix(target, root+string(os.PathSeparator))
-}
-
-// spaHandler serves the statically-exported Next.js site (Next `output: export`)
-// from the Go binary. It resolves a request path to an on-disk file, trying the
-// exact file, then "<path>.html" (Next exports routes like /login -> login.html),
-// then "<path>/index.html", and finally falls back to the root index.html so
-// client-side routing still works. Unmatched /api/* paths return a JSON 404
-// rather than HTML.
-func spaHandler(staticRoot string) gin.HandlerFunc {
-	root := filepath.Clean(staticRoot)
-
-	return func(c *gin.Context) {
-		// Never serve HTML for an unmatched API or Swagger route.
-		if strings.HasPrefix(c.Request.URL.Path, "/api/") || strings.HasPrefix(c.Request.URL.Path, "/swagger/") {
-			c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
-			return
-		}
-
-		// filepath.Clean on a "/"-prefixed path strips any "../" traversal; the
-		// subsequent prefix check is defense-in-depth against escaping the root.
-		rel := filepath.Clean("/" + c.Request.URL.Path)
-		target := filepath.Join(root, filepath.FromSlash(rel))
-		if !isPathWithinRoot(root, target) {
-			c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
-			return
-		}
-
-		if file, ok := tryFiles(target, target+".html", filepath.Join(target, "index.html")); ok {
-			c.File(file)
-			return
-		}
-
-		// SPA fallback: hand back the root document and let the client router
-		// resolve the route (or render its own 404).
-		if index, ok := tryFiles(filepath.Join(root, "index.html")); ok {
-			c.File(index)
-			return
-		}
-		c.JSON(http.StatusNotFound, gin.H{"error": errNotFoundMsg})
 	}
 }
 
