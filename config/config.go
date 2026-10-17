@@ -198,35 +198,48 @@ func parseOrigins(v string) []string {
 	return origins
 }
 
+func parseEnvValue(raw string) string {
+	v := strings.TrimSpace(raw)
+	if strings.HasPrefix(v, `"`) || strings.HasPrefix(v, `'`) {
+		return strings.Trim(v, `"'`)
+	}
+	if idx := strings.Index(v, " #"); idx != -1 {
+		v = strings.TrimSpace(v[:idx])
+	} else if idx := strings.Index(v, "\t#"); idx != -1 {
+		v = strings.TrimSpace(v[:idx])
+	}
+	return strings.Trim(v, `"'`)
+}
+
+func parseAndSetEnvLine(line string) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return
+	}
+	k, v, ok := strings.Cut(line, "=")
+	if !ok {
+		return
+	}
+	k = strings.TrimSpace(k)
+	if _, exists := os.LookupEnv(k); exists {
+		return
+	}
+	_ = os.Setenv(k, parseEnvValue(v))
+}
+
+func loadDotEnvFile(filename string) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		parseAndSetEnvLine(line)
+	}
+}
+
 func loadDotEnv(filenames ...string) {
 	for _, fn := range filenames {
-		data, err := os.ReadFile(fn)
-		if err != nil {
-			continue
-		}
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				k := strings.TrimSpace(parts[0])
-				v := strings.TrimSpace(parts[1])
-				if !strings.HasPrefix(v, `"`) && !strings.HasPrefix(v, `'`) {
-					if idx := strings.Index(v, " #"); idx != -1 {
-						v = strings.TrimSpace(v[:idx])
-					} else if idx := strings.Index(v, "\t#"); idx != -1 {
-						v = strings.TrimSpace(v[:idx])
-					}
-				}
-				v = strings.Trim(v, `"'`)
-				if _, exists := os.LookupEnv(k); !exists {
-					_ = os.Setenv(k, v)
-				}
-			}
-		}
+		loadDotEnvFile(fn)
 	}
 }
 

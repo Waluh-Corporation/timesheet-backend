@@ -18,6 +18,9 @@ import (
 const (
 	errUserNotFound           = "user not found"
 	errCannotModifyAnonymized = "cannot modify an anonymized account"
+	errCompanyDeptNotFound    = "Company or Department not found or inactive"
+	errSiteNotFound           = "Site not found or inactive"
+	errDivisionNotFound       = "Division not found or inactive"
 )
 
 // UserService defines user account management and password credential operations.
@@ -68,6 +71,120 @@ func (s *userService) ListUsers(ctx context.Context, isActive *bool) ([]models.U
 	return s.repo.ListUsers(ctx, isActive)
 }
 
+func (s *userService) resolveCreateCompany(ctx context.Context, req *request.CreateUserRequest, user *models.User) error {
+	if user.Role == models.RoleAdmin {
+		user.Company = ""
+		user.CompanyID = nil
+		return nil
+	}
+	if req.CompanyID != nil && *req.CompanyID != 0 {
+		comp, err := s.master.FindCompanyByID(ctx, *req.CompanyID)
+		if err != nil || comp == nil || !comp.IsActive {
+			return domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+		}
+		user.CompanyID = &comp.ID
+		user.Company = comp.Name
+		return nil
+	}
+	if req.Company != "" {
+		comp, err := s.master.FindActiveCompanyByCodeOrName(ctx, req.Company)
+		if err != nil || comp == nil {
+			return domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+		}
+		user.CompanyID = &comp.ID
+		user.Company = comp.Name
+	}
+	return nil
+}
+
+func (s *userService) resolveCreateDepartment(ctx context.Context, req *request.CreateUserRequest, user *models.User) error {
+	if req.DepartmentID != nil && *req.DepartmentID != 0 {
+		dept, err := s.master.FindDepartmentByID(ctx, *req.DepartmentID)
+		if err != nil || dept == nil || !dept.IsActive {
+			return domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+		}
+		user.DepartmentID = &dept.ID
+		user.Department = dept.Name
+		if user.Division == "" {
+			user.Division = dept.Division
+			user.DivisionID = dept.DivisionID
+		}
+		return nil
+	}
+	if req.Department != "" {
+		dept, err := s.master.FindActiveDepartmentByCodeOrName(ctx, req.Department)
+		if err == nil && dept != nil {
+			user.DepartmentID = &dept.ID
+			user.Department = dept.Name
+			if user.Division == "" {
+				user.Division = dept.Division
+				user.DivisionID = dept.DivisionID
+			}
+		}
+	}
+	return nil
+}
+
+func (s *userService) resolveCreateSite(ctx context.Context, req *request.CreateUserRequest, user *models.User) error {
+	if req.SiteID != nil && *req.SiteID != 0 {
+		site, err := s.master.FindSiteByID(ctx, *req.SiteID)
+		if err != nil || site == nil || !site.IsActive {
+			return domain.NewUserError(domain.ErrInvalidInput, errSiteNotFound)
+		}
+		user.SiteID = &site.ID
+		user.Site = site.Name
+		return nil
+	}
+	if req.Site != "" {
+		site, err := s.master.FindActiveSiteByCodeOrName(ctx, req.Site)
+		if err == nil && site != nil {
+			user.SiteID = &site.ID
+			user.Site = site.Name
+		}
+	}
+	return nil
+}
+
+func (s *userService) resolveCreateDivision(ctx context.Context, req *request.CreateUserRequest, user *models.User) error {
+	if req.DivisionID != nil && *req.DivisionID != 0 {
+		div, err := s.master.FindDivisionByID(ctx, *req.DivisionID)
+		if err != nil || div == nil || !div.IsActive {
+			return domain.NewUserError(domain.ErrInvalidInput, errDivisionNotFound)
+		}
+		user.DivisionID = &div.ID
+		user.Division = div.Name
+		return nil
+	}
+	if req.Division != "" {
+		div, err := s.master.FindActiveDivisionByCodeOrName(ctx, req.Division)
+		if err == nil && div != nil {
+			user.DivisionID = &div.ID
+			user.Division = div.Name
+		}
+	}
+	return nil
+}
+
+func (s *userService) resolveCreateMasterData(ctx context.Context, req *request.CreateUserRequest, user *models.User) error {
+	if s.master == nil {
+		if user.Role == models.RoleAdmin {
+			user.Company = ""
+			user.CompanyID = nil
+		}
+		return nil
+	}
+	if err := s.resolveCreateCompany(ctx, req, user); err != nil {
+		return err
+	}
+	if err := s.resolveCreateDepartment(ctx, req, user); err != nil {
+		return err
+	}
+	if err := s.resolveCreateSite(ctx, req, user); err != nil {
+		return err
+	}
+	return s.resolveCreateDivision(ctx, req, user)
+}
+
 func (s *userService) AdminCreateUser(ctx context.Context, req *request.CreateUserRequest, loginBaseURL string) (*models.User, string, error) {
 	user := models.User{
 		Username:     req.Username,
@@ -87,82 +204,8 @@ func (s *userService) AdminCreateUser(ctx context.Context, req *request.CreateUs
 		IsActive:     true,
 	}
 
-	if user.Role == models.RoleAdmin {
-		user.Company = ""
-		user.CompanyID = nil
-	} else if s.master != nil {
-		// Resolve company
-		if req.CompanyID != nil && *req.CompanyID != 0 {
-			comp, err := s.master.FindCompanyByID(ctx, *req.CompanyID)
-			if err != nil || comp == nil || !comp.IsActive {
-				return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Company or Department not found or inactive")
-			}
-			user.CompanyID = &comp.ID
-			user.Company = comp.Name
-		} else if req.Company != "" {
-			comp, err := s.master.FindActiveCompanyByCodeOrName(ctx, req.Company)
-			if err != nil || comp == nil {
-				return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Company or Department not found or inactive")
-			}
-			user.CompanyID = &comp.ID
-			user.Company = comp.Name
-		}
-
-		// Resolve department
-		if req.DepartmentID != nil && *req.DepartmentID != 0 {
-			dept, err := s.master.FindDepartmentByID(ctx, *req.DepartmentID)
-			if err != nil || dept == nil || !dept.IsActive {
-				return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Company or Department not found or inactive")
-			}
-			user.DepartmentID = &dept.ID
-			user.Department = dept.Name
-			if user.Division == "" {
-				user.Division = dept.Division
-				user.DivisionID = dept.DivisionID
-			}
-		} else if req.Department != "" {
-			dept, err := s.master.FindActiveDepartmentByCodeOrName(ctx, req.Department)
-			if err == nil && dept != nil {
-				user.DepartmentID = &dept.ID
-				user.Department = dept.Name
-				if user.Division == "" {
-					user.Division = dept.Division
-					user.DivisionID = dept.DivisionID
-				}
-			}
-		}
-
-		// Resolve site
-		if req.SiteID != nil && *req.SiteID != 0 {
-			site, err := s.master.FindSiteByID(ctx, *req.SiteID)
-			if err != nil || site == nil || !site.IsActive {
-				return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Site not found or inactive")
-			}
-			user.SiteID = &site.ID
-			user.Site = site.Name
-		} else if req.Site != "" {
-			site, err := s.master.FindActiveSiteByCodeOrName(ctx, req.Site)
-			if err == nil && site != nil {
-				user.SiteID = &site.ID
-				user.Site = site.Name
-			}
-		}
-
-		// Resolve division
-		if req.DivisionID != nil && *req.DivisionID != 0 {
-			div, err := s.master.FindDivisionByID(ctx, *req.DivisionID)
-			if err != nil || div == nil || !div.IsActive {
-				return nil, "", domain.NewUserError(domain.ErrInvalidInput, "Division not found or inactive")
-			}
-			user.DivisionID = &div.ID
-			user.Division = div.Name
-		} else if req.Division != "" {
-			div, err := s.master.FindActiveDivisionByCodeOrName(ctx, req.Division)
-			if err == nil && div != nil {
-				user.DivisionID = &div.ID
-				user.Division = div.Name
-			}
-		}
+	if err := s.resolveCreateMasterData(ctx, req, &user); err != nil {
+		return nil, "", err
 	}
 
 	plainPass, err := s.CreateUserByAdmin(ctx, &user, loginBaseURL+"/login")
@@ -172,36 +215,32 @@ func (s *userService) AdminCreateUser(ctx context.Context, req *request.CreateUs
 	return &user, plainPass, nil
 }
 
-func (s *userService) AdminUpdateUser(ctx context.Context, id uint, callerID uint, req *request.UpdateUserRequest) error {
-	if id == callerID {
-		if req.IsActive != nil && !*req.IsActive {
-			return domain.NewUserError(domain.ErrForbidden, "you cannot deactivate your own account")
-		}
-		if req.Role != nil && *req.Role != models.RoleAdmin {
-			return domain.NewUserError(domain.ErrForbidden, "you cannot remove your own admin role")
-		}
+func validateSelfUpdate(id, callerID uint, req *request.UpdateUserRequest) error {
+	if id != callerID {
+		return nil
 	}
+	if req.IsActive != nil && !*req.IsActive {
+		return domain.NewUserError(domain.ErrForbidden, "you cannot deactivate your own account")
+	}
+	if req.Role != nil && *req.Role != models.RoleAdmin {
+		return domain.NewUserError(domain.ErrForbidden, "you cannot remove your own admin role")
+	}
+	return nil
+}
 
-	user, err := s.repo.FindByID(ctx, id)
+func validateUpdatableUser(user *models.User, err error) error {
 	if err != nil || user == nil {
 		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
 		return domain.NewUserError(domain.ErrForbidden, errCannotModifyAnonymized)
 	}
+	return nil
+}
 
+func applyBasicUserUpdates(req *request.UpdateUserRequest, user *models.User) {
 	if req.Role != nil {
 		user.Role = *req.Role
-	}
-	if req.Email != nil {
-		newEmail := strings.TrimSpace(*req.Email)
-		if newEmail != "" && newEmail != user.Email {
-			existing, err := s.repo.FindByEmailExcludingUser(ctx, newEmail, user.ID)
-			if err == nil && existing != nil {
-				return domain.NewUserError(domain.ErrInvalidInput, "email is already registered")
-			}
-			user.Email = newEmail
-		}
 	}
 	if req.IsActive != nil {
 		user.IsActive = *req.IsActive
@@ -221,94 +260,155 @@ func (s *userService) AdminUpdateUser(ctx context.Context, id uint, callerID uin
 	if req.Site != nil {
 		user.Site = *req.Site
 	}
+}
+
+func (s *userService) applyEmailUpdate(ctx context.Context, newEmail *string, user *models.User) error {
+	if newEmail == nil {
+		return nil
+	}
+	email := strings.TrimSpace(*newEmail)
+	if email == "" || email == user.Email {
+		return nil
+	}
+	existing, err := s.repo.FindByEmailExcludingUser(ctx, email, user.ID)
+	if err == nil && existing != nil {
+		return domain.NewUserError(domain.ErrInvalidInput, "email is already registered")
+	}
+	user.Email = email
+	return nil
+}
+
+func (s *userService) applyDepartmentUpdate(ctx context.Context, req *request.UpdateUserRequest, user *models.User) error {
+	if req.DepartmentID != nil {
+		if *req.DepartmentID != 0 {
+			dept, err := s.master.FindDepartmentByID(ctx, *req.DepartmentID)
+			if err != nil || dept == nil || !dept.IsActive {
+				return domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+			}
+			user.DepartmentID = &dept.ID
+			user.Department = dept.Name
+			if user.Division == "" {
+				user.Division = dept.Division
+			}
+		} else {
+			user.DepartmentID = nil
+		}
+	} else if req.Department != nil {
+		user.Department = *req.Department
+	}
+	return nil
+}
+
+func (s *userService) applyCompanyUpdate(ctx context.Context, req *request.UpdateUserRequest, user *models.User) error {
+	if req.CompanyID != nil {
+		if *req.CompanyID != 0 {
+			comp, err := s.master.FindCompanyByID(ctx, *req.CompanyID)
+			if err != nil || comp == nil || !comp.IsActive {
+				return domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+			}
+			user.CompanyID = &comp.ID
+			user.Company = comp.Name
+		} else {
+			user.CompanyID = nil
+			user.Company = ""
+		}
+	} else if req.Company != nil {
+		if *req.Company != "" {
+			comp, err := s.master.FindActiveCompanyByCodeOrName(ctx, *req.Company)
+			if err != nil || comp == nil {
+				return domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+			}
+			user.CompanyID = &comp.ID
+			user.Company = comp.Name
+		} else {
+			user.CompanyID = nil
+			user.Company = ""
+		}
+	}
+	return nil
+}
+
+func (s *userService) applySiteUpdate(ctx context.Context, req *request.UpdateUserRequest, user *models.User) error {
+	if req.SiteID != nil {
+		if *req.SiteID != 0 {
+			site, err := s.master.FindSiteByID(ctx, *req.SiteID)
+			if err != nil || site == nil || !site.IsActive {
+				return domain.NewUserError(domain.ErrInvalidInput, errSiteNotFound)
+			}
+			user.SiteID = &site.ID
+			user.Site = site.Name
+		} else {
+			user.SiteID = nil
+			user.Site = ""
+		}
+	} else if req.Site != nil && *req.Site != "" {
+		site, err := s.master.FindActiveSiteByCodeOrName(ctx, *req.Site)
+		if err == nil && site != nil {
+			user.SiteID = &site.ID
+			user.Site = site.Name
+		} else {
+			user.SiteID = nil
+		}
+	}
+	return nil
+}
+
+func (s *userService) applyDivisionUpdate(ctx context.Context, req *request.UpdateUserRequest, user *models.User) error {
+	if req.DivisionID != nil {
+		if *req.DivisionID != 0 {
+			div, err := s.master.FindDivisionByID(ctx, *req.DivisionID)
+			if err != nil || div == nil || !div.IsActive {
+				return domain.NewUserError(domain.ErrInvalidInput, errDivisionNotFound)
+			}
+			user.DivisionID = &div.ID
+			user.Division = div.Name
+		} else {
+			user.DivisionID = nil
+			user.Division = ""
+		}
+	} else if req.Division != nil && *req.Division != "" {
+		div, err := s.master.FindActiveDivisionByCodeOrName(ctx, *req.Division)
+		if err == nil && div != nil {
+			user.DivisionID = &div.ID
+			user.Division = div.Name
+		} else {
+			user.DivisionID = nil
+		}
+	}
+	return nil
+}
+
+func (s *userService) applyMasterDataUpdates(ctx context.Context, req *request.UpdateUserRequest, user *models.User) error {
+	if err := s.applyDepartmentUpdate(ctx, req, user); err != nil {
+		return err
+	}
+	if err := s.applyCompanyUpdate(ctx, req, user); err != nil {
+		return err
+	}
+	if err := s.applySiteUpdate(ctx, req, user); err != nil {
+		return err
+	}
+	return s.applyDivisionUpdate(ctx, req, user)
+}
+
+func (s *userService) AdminUpdateUser(ctx context.Context, id uint, callerID uint, req *request.UpdateUserRequest) error {
+	if err := validateSelfUpdate(id, callerID, req); err != nil {
+		return err
+	}
+
+	user, err := s.repo.FindByID(ctx, id)
+	if err := validateUpdatableUser(user, err); err != nil {
+		return err
+	}
+
+	applyBasicUserUpdates(req, user)
+	if err := s.applyEmailUpdate(ctx, req.Email, user); err != nil {
+		return err
+	}
 
 	if s.master != nil {
-		if req.DepartmentID != nil {
-			if *req.DepartmentID != 0 {
-				dept, err := s.master.FindDepartmentByID(ctx, *req.DepartmentID)
-				if err != nil || dept == nil || !dept.IsActive {
-					return domain.NewUserError(domain.ErrInvalidInput, "Company or Department not found or inactive")
-				}
-				user.DepartmentID = &dept.ID
-				user.Department = dept.Name
-				if user.Division == "" {
-					user.Division = dept.Division
-				}
-			} else {
-				user.DepartmentID = nil
-			}
-		} else if req.Department != nil {
-			user.Department = *req.Department
-		}
-
-		if req.CompanyID != nil {
-			if *req.CompanyID != 0 {
-				comp, err := s.master.FindCompanyByID(ctx, *req.CompanyID)
-				if err != nil || comp == nil || !comp.IsActive {
-					return domain.NewUserError(domain.ErrInvalidInput, "Company or Department not found or inactive")
-				}
-				user.CompanyID = &comp.ID
-				user.Company = comp.Name
-			} else {
-				user.CompanyID = nil
-				user.Company = ""
-			}
-		} else if req.Company != nil {
-			if *req.Company != "" {
-				comp, err := s.master.FindActiveCompanyByCodeOrName(ctx, *req.Company)
-				if err != nil || comp == nil {
-					return domain.NewUserError(domain.ErrInvalidInput, "Company or Department not found or inactive")
-				}
-				user.CompanyID = &comp.ID
-				user.Company = comp.Name
-			} else {
-				user.CompanyID = nil
-				user.Company = ""
-			}
-		}
-
-		if req.SiteID != nil {
-			if *req.SiteID != 0 {
-				site, err := s.master.FindSiteByID(ctx, *req.SiteID)
-				if err != nil || site == nil || !site.IsActive {
-					return domain.NewUserError(domain.ErrInvalidInput, "Site not found or inactive")
-				}
-				user.SiteID = &site.ID
-				user.Site = site.Name
-			} else {
-				user.SiteID = nil
-				user.Site = ""
-			}
-		} else if req.Site != nil && *req.Site != "" {
-			site, err := s.master.FindActiveSiteByCodeOrName(ctx, *req.Site)
-			if err == nil && site != nil {
-				user.SiteID = &site.ID
-				user.Site = site.Name
-			} else {
-				user.SiteID = nil
-			}
-		}
-
-		if req.DivisionID != nil {
-			if *req.DivisionID != 0 {
-				div, err := s.master.FindDivisionByID(ctx, *req.DivisionID)
-				if err != nil || div == nil || !div.IsActive {
-					return domain.NewUserError(domain.ErrInvalidInput, "Division not found or inactive")
-				}
-				user.DivisionID = &div.ID
-				user.Division = div.Name
-			} else {
-				user.DivisionID = nil
-				user.Division = ""
-			}
-		} else if req.Division != nil && *req.Division != "" {
-			div, err := s.master.FindActiveDivisionByCodeOrName(ctx, *req.Division)
-			if err == nil && div != nil {
-				user.DivisionID = &div.ID
-				user.Division = div.Name
-			} else {
-				user.DivisionID = nil
-			}
+		if err := s.applyMasterDataUpdates(ctx, req, user); err != nil {
+			return err
 		}
 	}
 
@@ -508,27 +608,20 @@ func (s *userService) ChangePassword(ctx context.Context, userID uint, oldPasswo
 	return nil
 }
 
-// ApplyApprovedProfileChange updates a user entity based on the approved profile change request.
-func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error {
-	if change == nil {
-		return domain.NewUserError(domain.ErrInvalidInput, "Profile change request is required")
+func (s *userService) applyChangeEmail(ctx context.Context, newEmail string, user *models.User) error {
+	if newEmail == "" || newEmail == user.Email {
+		return nil
 	}
-	user, err := s.repo.FindByID(ctx, change.UserID)
-	if err != nil || user == nil {
-		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
+	existing, err := s.repo.FindByEmail(ctx, newEmail)
+	if err == nil && existing != nil && existing.ID != user.ID {
+		return domain.NewUserError(domain.ErrEmailConflict, "email already in use")
 	}
-	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
-		return domain.NewUserError(domain.ErrForbidden, errCannotModifyAnonymized)
-	}
+	user.Email = newEmail
+	return nil
+}
 
+func applyChangeBasicFields(change *models.ProfileChangeRequest, user *models.User) {
 	user.Name = change.Name
-	if change.Email != "" && change.Email != user.Email {
-		existing, err := s.repo.FindByEmail(ctx, change.Email)
-		if err == nil && existing != nil && existing.ID != user.ID {
-			return domain.NewUserError(domain.ErrEmailConflict, "email already in use")
-		}
-		user.Email = change.Email
-	}
 	user.BniID = change.BniID
 	if change.EmployeeID != "" {
 		user.EmployeeID = change.EmployeeID
@@ -541,7 +634,9 @@ func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *mo
 	if change.SiteID != nil && *change.SiteID != 0 {
 		user.SiteID = change.SiteID
 	}
+}
 
+func (s *userService) applyChangeDepartment(ctx context.Context, change *models.ProfileChangeRequest, user *models.User) {
 	if change.DepartmentID != nil && *change.DepartmentID != 0 {
 		if s.master != nil {
 			dept, err := s.master.FindDepartmentByID(ctx, *change.DepartmentID)
@@ -556,19 +651,39 @@ func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *mo
 	} else if change.Department != "" {
 		user.Department = change.Department
 	}
+}
 
+func (s *userService) applyChangeCompany(ctx context.Context, change *models.ProfileChangeRequest, user *models.User) {
 	if user.Role == models.RoleAdmin {
 		user.CompanyID = nil
 		user.Company = ""
-	} else if change.CompanyID != nil && *change.CompanyID != 0 {
-		if s.master != nil {
-			comp, err := s.master.FindCompanyByID(ctx, *change.CompanyID)
-			if err == nil && comp != nil && comp.IsActive {
-				user.CompanyID = &comp.ID
-				user.Company = comp.Name
-			}
+		return
+	}
+	if change.CompanyID != nil && *change.CompanyID != 0 && s.master != nil {
+		comp, err := s.master.FindCompanyByID(ctx, *change.CompanyID)
+		if err == nil && comp != nil && comp.IsActive {
+			user.CompanyID = &comp.ID
+			user.Company = comp.Name
 		}
 	}
+}
+
+// ApplyApprovedProfileChange updates a user entity based on the approved profile change request.
+func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error {
+	if change == nil {
+		return domain.NewUserError(domain.ErrInvalidInput, "Profile change request is required")
+	}
+	user, err := s.repo.FindByID(ctx, change.UserID)
+	if err := validateUpdatableUser(user, err); err != nil {
+		return err
+	}
+
+	if err := s.applyChangeEmail(ctx, change.Email, user); err != nil {
+		return err
+	}
+	applyChangeBasicFields(change, user)
+	s.applyChangeDepartment(ctx, change, user)
+	s.applyChangeCompany(ctx, change, user)
 
 	return s.repo.Update(ctx, user)
 }
