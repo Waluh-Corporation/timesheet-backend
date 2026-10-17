@@ -174,13 +174,18 @@ func (c *docusealHTTPClient) CreateSpecimenSubmission(ctx context.Context, userI
 		return nil, fmt.Errorf("docuseal integration is not enabled or template ID is not configured")
 	}
 
+	shortName := FormatSignatureShortName(name)
+	if shortName == "" {
+		shortName = name
+	}
+
 	sendEmail := false
 	reqPayload := CreateSubmissionReq{
 		TemplateID: c.specimenTemplateID,
 		SendEmail:  false,
 		Submitters: []CreateSubmissionSubmitterReq{
 			{
-				Name:       name,
+				Name:       shortName,
 				Email:      email,
 				ExternalID: fmt.Sprintf("user-%d", userID),
 				SendEmail:  &sendEmail,
