@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Optimized Daily Reminder Scheduler**: Replaced repetitive user database queries in the reminder scheduler with an efficient single-pass query, improving scheduler throughput and database responsiveness.
 
 ### Fixed
+- **Berita Acara DOCX Template OpenXML Compatibility**: Resolved XML namespace corruption in the master Word template (`Berita_Acara-Template.docx`) caused by invalid relationship and paragraph namespace attributes (`ns3:id` and `ns2:paraId`). Generated Word documents now open cleanly in Microsoft Word without unreadable content or recovery prompts.
 - **Anonymized Account Immutability & Modification Guards**: Prevented modifications to company, department, site, or profile details (`PATCH /api/v1/admin/users/:id`), redundant deactivations (`DELETE /api/v1/admin/users/:id`), and re-anonymization on already anonymized accounts, returning `403 Forbidden`. Enhanced anonymization to transactionally revoke passkeys, push subscriptions, and pending profile change requests, and exposed explicit `is_anonymized` status in user listings.
 
 ### Removed
