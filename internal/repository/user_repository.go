@@ -14,6 +14,8 @@ import (
 // UserRepository is re-exported from domain.UserRepository for clean architecture consistency.
 type UserRepository = domain.UserRepository
 
+const queryUserID = "user_id = ?"
+
 type userRepository struct {
 	db *gorm.DB
 }
@@ -128,10 +130,10 @@ func (r *userRepository) Anonymize(ctx context.Context, id uint) error {
 		if err := tx.Model(&models.User{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("user_id = ?", id).Delete(&models.WebAuthnCredential{}).Error; err != nil {
+		if err := tx.Where(queryUserID, id).Delete(&models.WebAuthnCredential{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("user_id = ?", id).Delete(&models.PushSubscription{}).Error; err != nil {
+		if err := tx.Where(queryUserID, id).Delete(&models.PushSubscription{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Model(&models.ProfileChangeRequest{}).
@@ -164,7 +166,7 @@ func (r *userRepository) ListProfileChanges(ctx context.Context, userID *uint, s
 	var changes []models.ProfileChangeRequest
 	q := r.db.WithContext(ctx).Preload("User").Preload("Reviewer").Preload("CompanyRel", models.ActiveOnly).Preload("DepartmentRel", models.ActiveOnly).Order("created_at desc")
 	if userID != nil {
-		q = q.Where("user_id = ?", *userID)
+		q = q.Where(queryUserID, *userID)
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
@@ -200,7 +202,7 @@ func (r *userRepository) UpdatePasskeySignCount(ctx context.Context, credID []by
 
 func (r *userRepository) ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error) {
 	var creds []models.WebAuthnCredential
-	if err := r.db.WithContext(ctx).Preload("Authenticator").Where("user_id = ?", userID).
+	if err := r.db.WithContext(ctx).Preload("Authenticator").Where(queryUserID, userID).
 		Order("created_at desc").Find(&creds).Error; err != nil {
 		return nil, err
 	}
@@ -217,7 +219,7 @@ func (r *userRepository) ListPasskeysByUserID(ctx context.Context, userID uint) 
 func (r *userRepository) DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error) {
 	query := r.db.WithContext(ctx).Where("id = ?", id)
 	if userID != nil {
-		query = query.Where("user_id = ?", *userID)
+		query = query.Where(queryUserID, *userID)
 	}
 	res := query.Delete(&models.WebAuthnCredential{})
 	if res.Error != nil {
@@ -229,7 +231,7 @@ func (r *userRepository) DeletePasskey(ctx context.Context, id uint, userID *uin
 func (r *userRepository) UpdatePasskeyName(ctx context.Context, id uint, userID *uint, name string) (bool, error) {
 	query := r.db.WithContext(ctx).Model(&models.WebAuthnCredential{}).Where("id = ?", id)
 	if userID != nil {
-		query = query.Where("user_id = ?", *userID)
+		query = query.Where(queryUserID, *userID)
 	}
 	res := query.Update("friendly_name", name)
 	if res.Error != nil {

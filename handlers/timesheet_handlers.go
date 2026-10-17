@@ -219,7 +219,7 @@ func (s *Server) reissueCachedJob(c *gin.Context, jobRepo repository.JobReposito
 	}
 	tokenExpiry := time.Now().Add(time.Duration(retentionDays) * 24 * time.Hour)
 
-	if rerr := jobRepo.RenewDownloadToken(reqContext(c), activeJob.ID, newToken, maxDownloads, tokenExpiry); rerr != nil {
+	if jobRepo.RenewDownloadToken(reqContext(c), activeJob.ID, newToken, maxDownloads, tokenExpiry) != nil {
 		return false
 	}
 

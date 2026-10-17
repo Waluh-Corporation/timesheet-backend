@@ -15,6 +15,11 @@ import (
 	"timesheet-backend/models"
 )
 
+const (
+	errUserNotFound           = "user not found"
+	errCannotModifyAnonymized = "cannot modify an anonymized account"
+)
+
 // UserService defines user account management and password credential operations.
 type UserService interface {
 	CreateUserByAdmin(ctx context.Context, user *models.User, loginURL string) (initialPassword string, err error)
@@ -179,10 +184,10 @@ func (s *userService) AdminUpdateUser(ctx context.Context, id uint, callerID uin
 
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil || user == nil {
-		return domain.NewUserError(domain.ErrNotFound, "user not found")
+		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
-		return domain.NewUserError(domain.ErrForbidden, "cannot modify an anonymized account")
+		return domain.NewUserError(domain.ErrForbidden, errCannotModifyAnonymized)
 	}
 
 	if req.Role != nil {
@@ -324,7 +329,7 @@ func (s *userService) AdminDeleteUser(ctx context.Context, id uint, callerID uin
 	}
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil || user == nil {
-		return domain.NewUserError(domain.ErrNotFound, "user not found")
+		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
 		return domain.NewUserError(domain.ErrForbidden, "cannot deactivate an anonymized account")
@@ -338,7 +343,7 @@ func (s *userService) AdminAnonymizeUser(ctx context.Context, id uint, callerID 
 	}
 	user, err := s.repo.FindByID(ctx, id)
 	if err != nil || user == nil {
-		return domain.NewUserError(domain.ErrNotFound, "user not found")
+		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
 		return domain.NewUserError(domain.ErrForbidden, "user is already anonymized")
@@ -352,10 +357,10 @@ func (s *userService) AdminAnonymizeUser(ctx context.Context, id uint, callerID 
 func (s *userService) SubmitProfileChange(ctx context.Context, userID uint, req *request.ProfileChangeRequestDTO) error {
 	user, err := s.repo.FindByID(ctx, userID)
 	if err != nil || user == nil {
-		return domain.NewUserError(domain.ErrNotFound, "user not found")
+		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
-		return domain.NewUserError(domain.ErrForbidden, "cannot modify an anonymized account")
+		return domain.NewUserError(domain.ErrForbidden, errCannotModifyAnonymized)
 	}
 
 	if req.Email != "" {
@@ -510,10 +515,10 @@ func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *mo
 	}
 	user, err := s.repo.FindByID(ctx, change.UserID)
 	if err != nil || user == nil {
-		return domain.NewUserError(domain.ErrNotFound, "User not found")
+		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
-		return domain.NewUserError(domain.ErrForbidden, "cannot modify an anonymized account")
+		return domain.NewUserError(domain.ErrForbidden, errCannotModifyAnonymized)
 	}
 
 	user.Name = change.Name

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	_ "time/tzdata"
+	_ "time/tzdata" // Embed IANA timezone database so Asia/Jakarta and other zones load correctly in minimal container environments.
 )
 
 // Config aggregates all runtime configuration, sourced from environment
