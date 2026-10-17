@@ -14,7 +14,10 @@ import (
 	"timesheet-backend/models"
 )
 
-const errUserServiceUnavailable = "user service unavailable"
+const (
+	errUserServiceUnavailable = "user service unavailable"
+	errInvalidUserID          = "invalid user ID, expected positive integer"
+)
 
 // ListUsers godoc
 // @Summary List all users (Admin)
@@ -115,7 +118,15 @@ func (s *Server) CreateUser(c *gin.Context) {
 	}
 
 	cid := currentUserID(c)
-	s.recordAuditLog(c.Request.Context(), &cid, "USER_CREATED", "user", strconv.FormatUint(uint64(user.ID), 10), c.ClientIP(), c.Request.UserAgent(), gin.H{"username": user.Username, "email": user.Email, "role": user.Role})
+	s.recordAuditLog(c.Request.Context(), AuditLogParams{
+		ActorID:      &cid,
+		Action:       "USER_CREATED",
+		ResourceType: "user",
+		ResourceID:   strconv.FormatUint(uint64(user.ID), 10),
+		IP:           c.ClientIP(),
+		UserAgent:    c.Request.UserAgent(),
+		Details:      gin.H{"username": user.Username, "email": user.Email, "role": user.Role},
+	})
 
 	RespondSuccess(c, http.StatusCreated, response.CreateUserData{
 		Message: "user created successfully",
@@ -141,7 +152,7 @@ func (s *Server) CreateUser(c *gin.Context) {
 func (s *Server) UpdateUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
+		RespondError(c, http.StatusBadRequest, errInvalidUserID)
 		return
 	}
 
@@ -182,7 +193,15 @@ func (s *Server) UpdateUser(c *gin.Context) {
 	if rdb := s.getRedisClient(); rdb != nil {
 		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
 	}
-	s.recordAuditLog(c.Request.Context(), &callerID, "USER_UPDATED", "user", strconv.FormatUint(id, 10), c.ClientIP(), c.Request.UserAgent(), req)
+	s.recordAuditLog(c.Request.Context(), AuditLogParams{
+		ActorID:      &callerID,
+		Action:       "USER_UPDATED",
+		ResourceType: "user",
+		ResourceID:   strconv.FormatUint(id, 10),
+		IP:           c.ClientIP(),
+		UserAgent:    c.Request.UserAgent(),
+		Details:      req,
+	})
 	RespondMessage(c, http.StatusOK, "user updated successfully")
 }
 
@@ -202,7 +221,7 @@ func (s *Server) UpdateUser(c *gin.Context) {
 func (s *Server) DeleteUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
+		RespondError(c, http.StatusBadRequest, errInvalidUserID)
 		return
 	}
 	if isSelf(c, uint(id)) {
@@ -231,7 +250,14 @@ func (s *Server) DeleteUser(c *gin.Context) {
 	if rdb := s.getRedisClient(); rdb != nil {
 		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
 	}
-	s.recordAuditLog(c.Request.Context(), &callerID, "USER_DEACTIVATED", "user", strconv.FormatUint(id, 10), c.ClientIP(), c.Request.UserAgent(), nil)
+	s.recordAuditLog(c.Request.Context(), AuditLogParams{
+		ActorID:      &callerID,
+		Action:       "USER_DEACTIVATED",
+		ResourceType: "user",
+		ResourceID:   strconv.FormatUint(id, 10),
+		IP:           c.ClientIP(),
+		UserAgent:    c.Request.UserAgent(),
+	})
 	RespondMessage(c, http.StatusOK, "user deactivated successfully")
 }
 
@@ -252,7 +278,7 @@ func (s *Server) DeleteUser(c *gin.Context) {
 func (s *Server) AnonymizeUser(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
-		RespondError(c, http.StatusBadRequest, "invalid user ID, expected positive integer")
+		RespondError(c, http.StatusBadRequest, errInvalidUserID)
 		return
 	}
 	if isSelf(c, uint(id)) {
@@ -281,6 +307,13 @@ func (s *Server) AnonymizeUser(c *gin.Context) {
 	if rdb := s.getRedisClient(); rdb != nil {
 		_ = rdb.Del(c.Request.Context(), fmt.Sprintf("user:active:%d", id)).Err()
 	}
-	s.recordAuditLog(c.Request.Context(), &callerID, "USER_ANONYMIZED", "user", strconv.FormatUint(id, 10), c.ClientIP(), c.Request.UserAgent(), nil)
+	s.recordAuditLog(c.Request.Context(), AuditLogParams{
+		ActorID:      &callerID,
+		Action:       "USER_ANONYMIZED",
+		ResourceType: "user",
+		ResourceID:   strconv.FormatUint(id, 10),
+		IP:           c.ClientIP(),
+		UserAgent:    c.Request.UserAgent(),
+	})
 	RespondMessage(c, http.StatusOK, "user personal data anonymized successfully")
 }

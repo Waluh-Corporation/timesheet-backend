@@ -116,7 +116,15 @@ func (s *Server) ReviewProfileChange(c *gin.Context) {
 	if action == "reject" {
 		auditAction = "PROFILE_CHANGE_REJECTED"
 	}
-	s.recordAuditLog(c.Request.Context(), &reviewer, auditAction, "profile_change", strconv.FormatUint(id, 10), c.ClientIP(), c.Request.UserAgent(), map[string]string{"action": action})
+	s.recordAuditLog(c.Request.Context(), AuditLogParams{
+		ActorID:      &reviewer,
+		Action:       auditAction,
+		ResourceType: "profile_change",
+		ResourceID:   strconv.FormatUint(id, 10),
+		IP:           c.ClientIP(),
+		UserAgent:    c.Request.UserAgent(),
+		Details:      map[string]string{"action": action},
+	})
 
 	RespondMessage(c, http.StatusOK, "profile change request "+action+"d")
 }
