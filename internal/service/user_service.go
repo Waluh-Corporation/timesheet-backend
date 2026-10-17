@@ -278,12 +278,52 @@ func (s *userService) applyEmailUpdate(ctx context.Context, newEmail *string, us
 	return nil
 }
 
+func (s *userService) findDepartmentByIDForUpdate(ctx context.Context, id uint) (*models.Department, error) {
+	dept, err := s.master.FindDepartmentByID(ctx, id)
+	if err != nil || dept == nil || !dept.IsActive {
+		return nil, domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+	}
+	return dept, nil
+}
+
+func (s *userService) findCompanyByIDForUpdate(ctx context.Context, id uint) (*models.Company, error) {
+	comp, err := s.master.FindCompanyByID(ctx, id)
+	if err != nil || comp == nil || !comp.IsActive {
+		return nil, domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+	}
+	return comp, nil
+}
+
+func (s *userService) findCompanyByNameForUpdate(ctx context.Context, name string) (*models.Company, error) {
+	comp, err := s.master.FindActiveCompanyByCodeOrName(ctx, name)
+	if err != nil || comp == nil {
+		return nil, domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+	}
+	return comp, nil
+}
+
+func (s *userService) findSiteByIDForUpdate(ctx context.Context, id uint) (*models.Site, error) {
+	site, err := s.master.FindSiteByID(ctx, id)
+	if err != nil || site == nil || !site.IsActive {
+		return nil, domain.NewUserError(domain.ErrInvalidInput, errSiteNotFound)
+	}
+	return site, nil
+}
+
+func (s *userService) findDivisionByIDForUpdate(ctx context.Context, id uint) (*models.Division, error) {
+	div, err := s.master.FindDivisionByID(ctx, id)
+	if err != nil || div == nil || !div.IsActive {
+		return nil, domain.NewUserError(domain.ErrInvalidInput, errDivisionNotFound)
+	}
+	return div, nil
+}
+
 func (s *userService) applyDepartmentUpdate(ctx context.Context, req *request.UpdateUserRequest, user *models.User) error {
 	if req.DepartmentID != nil {
 		if *req.DepartmentID != 0 {
-			dept, err := s.master.FindDepartmentByID(ctx, *req.DepartmentID)
-			if err != nil || dept == nil || !dept.IsActive {
-				return domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
+			dept, err := s.findDepartmentByIDForUpdate(ctx, *req.DepartmentID)
+			if err != nil {
+				return err
 			}
 			user.DepartmentID = &dept.ID
 			user.Department = dept.Name
@@ -301,29 +341,32 @@ func (s *userService) applyDepartmentUpdate(ctx context.Context, req *request.Up
 
 func (s *userService) applyCompanyUpdate(ctx context.Context, req *request.UpdateUserRequest, user *models.User) error {
 	if req.CompanyID != nil {
-		if *req.CompanyID != 0 {
-			comp, err := s.master.FindCompanyByID(ctx, *req.CompanyID)
-			if err != nil || comp == nil || !comp.IsActive {
-				return domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
-			}
-			user.CompanyID = &comp.ID
-			user.Company = comp.Name
-		} else {
+		if *req.CompanyID == 0 {
 			user.CompanyID = nil
 			user.Company = ""
+			return nil
 		}
-	} else if req.Company != nil {
-		if *req.Company != "" {
-			comp, err := s.master.FindActiveCompanyByCodeOrName(ctx, *req.Company)
-			if err != nil || comp == nil {
-				return domain.NewUserError(domain.ErrInvalidInput, errCompanyDeptNotFound)
-			}
-			user.CompanyID = &comp.ID
-			user.Company = comp.Name
-		} else {
+		comp, err := s.findCompanyByIDForUpdate(ctx, *req.CompanyID)
+		if err != nil {
+			return err
+		}
+		user.CompanyID = &comp.ID
+		user.Company = comp.Name
+		return nil
+	}
+
+	if req.Company != nil {
+		if *req.Company == "" {
 			user.CompanyID = nil
 			user.Company = ""
+			return nil
 		}
+		comp, err := s.findCompanyByNameForUpdate(ctx, *req.Company)
+		if err != nil {
+			return err
+		}
+		user.CompanyID = &comp.ID
+		user.Company = comp.Name
 	}
 	return nil
 }
@@ -331,9 +374,9 @@ func (s *userService) applyCompanyUpdate(ctx context.Context, req *request.Updat
 func (s *userService) applySiteUpdate(ctx context.Context, req *request.UpdateUserRequest, user *models.User) error {
 	if req.SiteID != nil {
 		if *req.SiteID != 0 {
-			site, err := s.master.FindSiteByID(ctx, *req.SiteID)
-			if err != nil || site == nil || !site.IsActive {
-				return domain.NewUserError(domain.ErrInvalidInput, errSiteNotFound)
+			site, err := s.findSiteByIDForUpdate(ctx, *req.SiteID)
+			if err != nil {
+				return err
 			}
 			user.SiteID = &site.ID
 			user.Site = site.Name
@@ -356,9 +399,9 @@ func (s *userService) applySiteUpdate(ctx context.Context, req *request.UpdateUs
 func (s *userService) applyDivisionUpdate(ctx context.Context, req *request.UpdateUserRequest, user *models.User) error {
 	if req.DivisionID != nil {
 		if *req.DivisionID != 0 {
-			div, err := s.master.FindDivisionByID(ctx, *req.DivisionID)
-			if err != nil || div == nil || !div.IsActive {
-				return domain.NewUserError(domain.ErrInvalidInput, errDivisionNotFound)
+			div, err := s.findDivisionByIDForUpdate(ctx, *req.DivisionID)
+			if err != nil {
+				return err
 			}
 			user.DivisionID = &div.ID
 			user.Division = div.Name
