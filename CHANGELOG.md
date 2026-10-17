@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Atomic Quota Counters**: Upgraded timesheet download quota counters to execute atomically via Redis Lua scripts, eliminating race conditions during concurrent download requests.
 - **Optimized Daily Reminder Scheduler**: Replaced repetitive user database queries in the reminder scheduler with an efficient single-pass query, improving scheduler throughput and database responsiveness.
 
+### Removed
+- **Embedded Frontend / SPA Static File Serving**: Removed embedded SPA static file serving, route fallback handlers (`spaHandler`), and static path helpers (`tryFiles`, `isPathWithinRoot`) to maintain a pure, dedicated backend REST API architecture.
+
 ## [1.13.0] - 2026-09-27
 
 ### Added

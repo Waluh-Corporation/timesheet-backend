@@ -151,18 +151,9 @@ each rendered by a dedicated strict-typed generator keyed off `Template.Builtin`
 
 ## 7. Deployment
 
-- **Single unified image (production)**: the multi-stage root `Dockerfile`
-  builds the Next.js static export (`output: export`) and the Go binary into one
-  Alpine image. The Go server serves the API under `/api/v1/*` **and** the exported
-  frontend from the same origin — a `NoRoute` SPA handler resolves routes to the
-  exported `login.html` / `dashboard.html` / … documents (with safe path
-  handling), so no separate web server or second container is needed.
-  `docker-compose.prod.yml` runs just this image + PostgreSQL.
-- **Dev stack** (`docker-compose.yml`): PostgreSQL (DBeaver can also
-  attach on 5432) and the Go backend service.
-- `deploy_and_commit.sh`: validates a Conventional Commit, commits + pushes,
-  SSHes to `192.168.0.2:222`, **scans upward from port 2000** for a free port on
-  the host, and brings the stack up there.
+- **Pure Backend API Container**: The multi-stage `Dockerfile` compiles the Go binary into a minimal, rootless Alpine image. The Go service exposes REST APIs under `/api/v1/*`, health checks under `/health` and `/ready`, and interactive Swagger documentation under `/swagger/*`. Frontend applications (e.g. Next.js) run independently and communicate via CORS and configured origins (`FRONTEND_URL`, `CORS_ALLOWED_ORIGINS`).
+- **Compose Stack** (`docker-compose.yml`): Orchestrates PostgreSQL 16, Redis, MinIO (S3 mock for local dev), and the Go backend API.
+- `deploy_and_commit.sh`: Validates a Conventional Commit, commits + pushes, SSHes to deployment targets, and manages container lifecycle.
 
 ## API surface & Swagger Documentation
 
