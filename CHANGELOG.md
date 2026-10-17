@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Atomic Quota Counters**: Upgraded timesheet download quota counters to execute atomically via Redis Lua scripts, eliminating race conditions during concurrent download requests.
 - **Optimized Daily Reminder Scheduler**: Replaced repetitive user database queries in the reminder scheduler with an efficient single-pass query, improving scheduler throughput and database responsiveness.
 
+### Fixed
+- **Anonymized Account Immutability & Modification Guards**: Prevented modifications to company, department, site, or profile details (`PATCH /api/v1/admin/users/:id`), redundant deactivations (`DELETE /api/v1/admin/users/:id`), and re-anonymization on already anonymized accounts, returning `403 Forbidden`. Enhanced anonymization to transactionally revoke passkeys, push subscriptions, and pending profile change requests, and exposed explicit `is_anonymized` status in user listings.
+
 ### Removed
 - **Embedded Frontend / SPA Static File Serving**: Removed embedded SPA static file serving, route fallback handlers (`spaHandler`), and static path helpers (`tryFiles`, `isPathWithinRoot`) to maintain a pure, dedicated backend REST API architecture.
 

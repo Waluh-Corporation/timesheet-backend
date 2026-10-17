@@ -332,7 +332,7 @@ func TestUserRepository(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repo.FindByID failed after Anonymize: %v", err)
 	}
-	if anonymized.IsActive || anonymized.PasswordHash != "" {
-		t.Fatalf("expected anonymized user to have empty password and inactive, got isActive=%v", anonymized.IsActive)
+	if anonymized.IsActive || anonymized.PasswordHash != "" || !anonymized.IsAnonymized {
+		t.Fatalf("expected anonymized user to have empty password, inactive, and is_anonymized=true, got isActive=%v isAnonymized=%v", anonymized.IsActive, anonymized.IsAnonymized)
 	}
 }

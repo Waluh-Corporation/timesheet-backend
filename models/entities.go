@@ -40,6 +40,7 @@ type User struct {
 	PasswordHash string `gorm:"size:255" json:"-"`
 	Role         Role   `gorm:"size:16;not null;default:user;index:idx_users_role_active,priority:1;check:role IN ('admin', 'user')" json:"role"`
 	IsActive     bool   `gorm:"column:is_active;type:boolean;default:true;not null;index:idx_users_role_active,priority:2" json:"is_active"`
+	IsAnonymized bool   `gorm:"column:is_anonymized;type:boolean;default:false;not null;index:idx_users_is_anonymized" json:"is_anonymized"`
 
 	// Profile fields (the "approved" / live values).
 	Name          string      `gorm:"size:255" json:"name"`

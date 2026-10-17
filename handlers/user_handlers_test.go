@@ -382,6 +382,98 @@ func TestUserHandlers_UserCRUDIntegration(t *testing.T) {
 			t.Errorf("expected promoted admin company to be empty, got %q", reloaded.Company)
 		}
 	})
+
+	t.Run("AnonymizeUser lifecycle and protection against update and deactivation", func(t *testing.T) {
+		anonTarget := models.User{
+			Username: "user_to_anonymize",
+			Email:    "to_anonymize@example.com",
+			Role:     models.RoleUser,
+			Name:     "User To Anonymize",
+			Company:  "Some Company",
+			IsActive: true,
+		}
+		if err := tx.Create(&anonTarget).Error; err != nil {
+			t.Fatalf("failed to create user: %v", err)
+		}
+		anonIDStr := fmt.Sprintf("%d", anonTarget.ID)
+
+		// 1. Successfully anonymize user
+		wAnon := httptest.NewRecorder()
+		cAnon, _ := gin.CreateTestContext(wAnon)
+		cAnon.Set(ctxUserID, adminUser.ID)
+		cAnon.Params = gin.Params{{Key: "id", Value: anonIDStr}}
+		cAnon.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+anonIDStr+"/anonymize", nil)
+
+		srv.AnonymizeUser(cAnon)
+		assertFatalCode(t, wAnon, http.StatusOK)
+
+		var anonymizedUser models.User
+		if err := tx.Where("id = ?", anonTarget.ID).First(&anonymizedUser).Error; err != nil {
+			t.Fatalf("failed to reload anonymized user: %v", err)
+		}
+		if !anonymizedUser.IsAnonymized || anonymizedUser.IsActive {
+			t.Errorf("expected user to be anonymized and inactive, got is_anonymized=%v, is_active=%v", anonymizedUser.IsAnonymized, anonymizedUser.IsActive)
+		}
+
+		// 2. Reject UpdateUser (company and account details) on anonymized user
+		wUpd := httptest.NewRecorder()
+		cUpd, _ := gin.CreateTestContext(wUpd)
+		cUpd.Set(ctxUserID, adminUser.ID)
+		cUpd.Params = gin.Params{{Key: "id", Value: anonIDStr}}
+		updatePayload := `{"name": "Attempt Hack", "company": "New Comp", "is_active": true}`
+		cUpd.Request = httptest.NewRequest(http.MethodPatch, "/api/v1/admin/users/"+anonIDStr, bytes.NewReader([]byte(updatePayload)))
+		cUpd.Request.Header.Set("Content-Type", "application/json")
+
+		srv.UpdateUser(cUpd)
+		assertFatalCode(t, wUpd, http.StatusForbidden)
+
+		// 3. Reject DeleteUser (deactivation) on anonymized user
+		wDel := httptest.NewRecorder()
+		cDel, _ := gin.CreateTestContext(wDel)
+		cDel.Set(ctxUserID, adminUser.ID)
+		cDel.Params = gin.Params{{Key: "id", Value: anonIDStr}}
+		cDel.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/admin/users/"+anonIDStr, nil)
+
+		srv.DeleteUser(cDel)
+		assertFatalCode(t, wDel, http.StatusForbidden)
+
+		// 4. Reject AnonymizeUser on already anonymized user
+		wReAnon := httptest.NewRecorder()
+		cReAnon, _ := gin.CreateTestContext(wReAnon)
+		cReAnon.Set(ctxUserID, adminUser.ID)
+		cReAnon.Params = gin.Params{{Key: "id", Value: anonIDStr}}
+		cReAnon.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+anonIDStr+"/anonymize", nil)
+
+		srv.AnonymizeUser(cReAnon)
+		assertFatalCode(t, wReAnon, http.StatusForbidden)
+
+		// 5. ListUsers returns is_anonymized = true
+		wList := httptest.NewRecorder()
+		cList, _ := gin.CreateTestContext(wList)
+		cList.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/users", nil)
+
+		srv.ListUsers(cList)
+		assertFatalCode(t, wList, http.StatusOK)
+
+		var respList response.APIResponse
+		_ = json.Unmarshal(wList.Body.Bytes(), &respList)
+		rawUsers, _ := json.Marshal(respList.Data)
+		var userList []response.AdminUserResponse
+		_ = json.Unmarshal(rawUsers, &userList)
+
+		foundAnon := false
+		for _, u := range userList {
+			if u.ID == anonTarget.ID {
+				foundAnon = true
+				if !u.IsAnonymized {
+					t.Errorf("expected is_anonymized = true in ListUsers for anonymized account")
+				}
+			}
+		}
+		if !foundAnon {
+			t.Errorf("expected anonymized user to appear in ListUsers")
+		}
+	})
 }
 
 func TestUserHandlers_ProfileChangeIntegration(t *testing.T) {

@@ -124,6 +124,7 @@ func (m *mockUserRepo) Anonymize(ctx context.Context, id uint) error {
 	if u, ok := m.users[id]; ok {
 		u.Name = "ANONYMIZED_USER"
 		u.IsActive = false
+		u.IsAnonymized = true
 		return nil
 	}
 	return domain.ErrNotFound
@@ -1016,6 +1017,60 @@ func TestUserService_AdminAnonymizeUser(t *testing.T) {
 	if repo.users[2].IsActive {
 		t.Errorf("expected target user to be deactivated")
 	}
+	if !repo.users[2].IsAnonymized {
+		t.Errorf("expected target user to have IsAnonymized = true")
+	}
+
+	// 4. Cannot anonymize already anonymized user -> ErrForbidden
+	err = svc.AdminAnonymizeUser(ctx, 2, 1)
+	if !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("expected ErrForbidden when user is already anonymized, got %v", err)
+	}
+}
+
+func TestUserService_AnonymizedAccountGuards(t *testing.T) {
+	ctx := context.Background()
+	repo := newMockUserRepo()
+	repo.users[1] = &models.User{ID: 1, Name: "Admin User", Role: models.RoleAdmin, IsActive: true}
+	repo.users[2] = &models.User{
+		ID:           2,
+		Username:     "deleted_user_2",
+		Name:         "ANONYMIZED_USER_2",
+		Email:        "deleted_2@timesheet.local",
+		Role:         models.RoleUser,
+		IsActive:     false,
+		IsAnonymized: true,
+	}
+	svc := NewUserService(repo, nil, nil)
+
+	t.Run("AdminUpdateUser rejects editing anonymized user", func(t *testing.T) {
+		newName := "Should Not Update"
+		err := svc.AdminUpdateUser(ctx, 2, 1, &request.UpdateUserRequest{Name: &newName})
+		if !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("expected ErrForbidden when updating anonymized user, got %v", err)
+		}
+	})
+
+	t.Run("AdminDeleteUser rejects deactivating anonymized user", func(t *testing.T) {
+		err := svc.AdminDeleteUser(ctx, 2, 1)
+		if !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("expected ErrForbidden when deactivating anonymized user, got %v", err)
+		}
+	})
+
+	t.Run("SubmitProfileChange rejects anonymized user", func(t *testing.T) {
+		err := svc.SubmitProfileChange(ctx, 2, &request.ProfileChangeRequestDTO{Name: "New Name"})
+		if !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("expected ErrForbidden when submitting profile change for anonymized user, got %v", err)
+		}
+	})
+
+	t.Run("ApplyApprovedProfileChange rejects anonymized user", func(t *testing.T) {
+		err := svc.ApplyApprovedProfileChange(ctx, &models.ProfileChangeRequest{UserID: 2, Name: "New Name"})
+		if !errors.Is(err, domain.ErrForbidden) {
+			t.Fatalf("expected ErrForbidden when applying profile change for anonymized user, got %v", err)
+		}
+	})
 }
 
 func TestUserService_ReviewProfileChange_WithRelationalIDs(t *testing.T) {

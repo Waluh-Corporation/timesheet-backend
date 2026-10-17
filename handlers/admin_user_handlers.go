@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -70,6 +71,7 @@ func (s *Server) ListUsers(c *gin.Context) {
 			Company:      u.Company,
 			CompanyID:    u.CompanyID,
 			IsActive:     u.IsActive,
+			IsAnonymized: u.IsAnonymized || strings.HasPrefix(u.Username, "deleted_user_") || strings.HasPrefix(u.Name, "ANONYMIZED_USER_"),
 		}
 	}
 	RespondSuccess(c, http.StatusOK, resp)

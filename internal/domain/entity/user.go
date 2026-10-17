@@ -29,6 +29,7 @@ type User struct {
 	PasswordHash string
 	Role         Role
 	IsActive     bool
+	IsAnonymized bool
 	Name         string
 	BniID        string
 	EmployeeID   string

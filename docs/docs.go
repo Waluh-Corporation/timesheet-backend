@@ -4914,6 +4914,9 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "is_anonymized": {
+                    "type": "boolean"
+                },
                 "name": {
                     "description": "Profile fields (the \"approved\" / live values).",
                     "type": "string"
@@ -5694,6 +5697,9 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "is_anonymized": {
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -6262,6 +6268,9 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean",
                     "example": true
+                },
+                "is_anonymized": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string",

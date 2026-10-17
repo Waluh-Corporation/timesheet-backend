@@ -112,18 +112,38 @@ func (r *userRepository) Anonymize(ctx context.Context, id uint) error {
 	redactedEmail := fmt.Sprintf("deleted_%d@timesheet.local", id)
 	redactedUsername := fmt.Sprintf("deleted_user_%d", id)
 
-	updates := map[string]interface{}{
-		"name":          redactedName,
-		"username":      redactedUsername,
-		"email":         redactedEmail,
-		"bni_id":        "",
-		"employee_id":   "",
-		"password_hash": "",
-		"is_active":     false,
-		"updated_at":    time.Now(),
-	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		updates := map[string]interface{}{
+			"name":          redactedName,
+			"username":      redactedUsername,
+			"email":         redactedEmail,
+			"bni_id":        "",
+			"employee_id":   "",
+			"password_hash": "",
+			"is_active":     false,
+			"is_anonymized": true,
+			"updated_at":    time.Now(),
+		}
 
-	return r.db.WithContext(ctx).Model(&models.User{}).Where("id = ?", id).Updates(updates).Error
+		if err := tx.Model(&models.User{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", id).Delete(&models.WebAuthnCredential{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", id).Delete(&models.PushSubscription{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.ProfileChangeRequest{}).
+			Where("user_id = ? AND status = ?", id, models.ProfilePending).
+			Updates(map[string]interface{}{
+				"status": "rejected",
+				"notes":  "account anonymized",
+			}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (r *userRepository) ListUsers(ctx context.Context, isActive *bool) ([]models.User, error) {

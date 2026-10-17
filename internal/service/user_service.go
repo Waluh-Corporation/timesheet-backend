@@ -181,6 +181,9 @@ func (s *userService) AdminUpdateUser(ctx context.Context, id uint, callerID uin
 	if err != nil || user == nil {
 		return domain.NewUserError(domain.ErrNotFound, "user not found")
 	}
+	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
+		return domain.NewUserError(domain.ErrForbidden, "cannot modify an anonymized account")
+	}
 
 	if req.Role != nil {
 		user.Role = *req.Role
@@ -323,6 +326,9 @@ func (s *userService) AdminDeleteUser(ctx context.Context, id uint, callerID uin
 	if err != nil || user == nil {
 		return domain.NewUserError(domain.ErrNotFound, "user not found")
 	}
+	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
+		return domain.NewUserError(domain.ErrForbidden, "cannot deactivate an anonymized account")
+	}
 	return s.repo.SoftDelete(ctx, id)
 }
 
@@ -334,6 +340,9 @@ func (s *userService) AdminAnonymizeUser(ctx context.Context, id uint, callerID 
 	if err != nil || user == nil {
 		return domain.NewUserError(domain.ErrNotFound, "user not found")
 	}
+	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
+		return domain.NewUserError(domain.ErrForbidden, "user is already anonymized")
+	}
 	if err := s.repo.Anonymize(ctx, id); err != nil {
 		return fmt.Errorf("failed to anonymize user data: %w", err)
 	}
@@ -341,6 +350,14 @@ func (s *userService) AdminAnonymizeUser(ctx context.Context, id uint, callerID 
 }
 
 func (s *userService) SubmitProfileChange(ctx context.Context, userID uint, req *request.ProfileChangeRequestDTO) error {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil || user == nil {
+		return domain.NewUserError(domain.ErrNotFound, "user not found")
+	}
+	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
+		return domain.NewUserError(domain.ErrForbidden, "cannot modify an anonymized account")
+	}
+
 	if req.Email != "" {
 		existing, err := s.repo.FindByEmailExcludingUser(ctx, req.Email, userID)
 		if err == nil && existing != nil {
@@ -494,6 +511,9 @@ func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *mo
 	user, err := s.repo.FindByID(ctx, change.UserID)
 	if err != nil || user == nil {
 		return domain.NewUserError(domain.ErrNotFound, "User not found")
+	}
+	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
+		return domain.NewUserError(domain.ErrForbidden, "cannot modify an anonymized account")
 	}
 
 	user.Name = change.Name

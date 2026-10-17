@@ -28,6 +28,7 @@ type UserResponse struct {
 	SiteID       *uint       `json:"site_id,omitempty" example:"1"`
 	Company      string      `json:"company" example:"MII"`
 	CompanyID    *uint       `json:"company_id,omitempty" example:"1"`
+	IsAnonymized bool        `json:"is_anonymized"`
 }
 
 // ToUserResponse maps a models.User entity to a safe UserResponse DTO.
@@ -40,6 +41,7 @@ func ToUserResponse(u *models.User) UserResponse {
 		Email:        u.Email,
 		Role:         u.Role,
 		IsActive:     u.IsActive,
+		IsAnonymized: u.IsAnonymized,
 		Name:         u.Name,
 		BniID:        u.BniID,
 		EmployeeID:   u.EmployeeID,
