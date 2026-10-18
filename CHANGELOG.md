@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-18
+
 ### Added
 - **Berita Acara (Official Word Document Generation)**: Implemented automated Berita Acara document generation (`.docx`) utilizing Go native archive streaming and XML templating based on the corporate `Berita_Acara-Template.docx` format. Captures employee identity, department, group, team lead approver, and dynamically generates rows with Indonesian day names, dates, working hours, and activity explanations for entries marked as Berita Acara.
 - **Monthly Single-Witness Locking & Integrity Protection**: Enforced strict business rules ensuring each employee has exactly one consistent witness per month for all Berita Acara records. The initial Berita Acara entry in a calendar month requires and locks the chosen colleague (`witness_id`). Subsequent entries in the same month automatically inherit the locked witness when omitted, while attempts to specify a different witness without an explicit change request are rejected. Selecting oneself, inactive accounts, or non-user roles as a witness is strictly prohibited.
@@ -108,18 +110,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Single Active Reset Token Policy**: Enabled atomic revocation of previous active reset tokens in a single database transaction upon issuing a new reset request. Only the most recently issued link remains valid, immediately invalidating older links to prevent unauthorized reuse.
 - **Strict Anti-Enumeration Protections**: Unified API responses on the forgot-password endpoint to return consistent generic messages, ensuring external parties cannot probe or determine whether an email account is registered.
 
----
-
-## [1.9.1] - 2026-09-20
-
-### Fixed
-- **Seamless Passkey Device Recognition**: Resolved an issue where newly added passkeys did not remember how they connect to your device (such as built-in fingerprint, face unlock, or security keys). The system now reliably remembers your device setup so your browser immediately opens the right sign-in prompt—like Touch ID, Windows Hello, or your security key—without extra steps or delays.
-
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.10.0...v1.11.0
-[1.10.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.1...v1.10.0
-[1.9.1]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.9.1
-
-
+[1.10.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.10.0
