@@ -1,11 +1,15 @@
 package queue
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,8 +52,14 @@ func NewWorkerServer(
 ) *WorkerServer {
 	redisOpt := asynq.RedisClientOpt{
 		Addr:     cfg.RedisAddr,
+		Username: cfg.RedisUsername,
 		Password: cfg.RedisPassword,
 		DB:       cfg.RedisDB,
+	}
+	if cfg.RedisTLSEnabled {
+		redisOpt.TLSConfig = &tls.Config{
+			InsecureSkipVerify: cfg.RedisTLSSkipVerify, //nolint:gosec // configurable for internal TLS
+		}
 	}
 
 	concurrency := cfg.MailerWorkerCount
@@ -128,15 +138,12 @@ func (w *WorkerServer) handleTimesheetGenerate(ctx context.Context, t *asynq.Tas
 	// 1. Mark job as processing
 	_ = w.jobRepo.UpdateStatus(ctx, p.JobID, models.JobStatusProcessing, "", "", "", nil)
 
-	// 2. Acquire semaphore to throttle CPU & RAM intensive Excelize generation
-	select {
-	case w.sem <- struct{}{}:
-		defer func() { <-w.sem }()
-	case <-ctx.Done():
-		errMsg := "context canceled waiting for generator slot"
-		_ = w.jobRepo.UpdateStatus(ctx, p.JobID, models.JobStatusFailed, "", "", errMsg, nil)
-		return ctx.Err()
+	// 2. Acquire semaphore to throttle CPU & RAM intensive generation
+	release, err := w.acquireSlot(ctx, p.JobID)
+	if err != nil {
+		return err
 	}
+	defer release()
 
 	// 3. Generate workbook
 	out, filename, err := w.tsSvc.GenerateWorkbook(ctx, p.UserID, p.Month, p.Year)
@@ -146,16 +153,71 @@ func (w *WorkerServer) handleTimesheetGenerate(ctx context.Context, t *asynq.Tas
 		return err
 	}
 
+	// 3b. Package timesheet and optional Berita Acara
+	finalBytes, finalFilename, contentType := w.packageTimesheetOutput(ctx, p.UserID, p.Month, p.Year, out, filename)
+
 	// 4. Upload to S3
-	fileKey := fmt.Sprintf("timesheets/%d/%s_%s", p.UserID, p.JobID, filename)
-	contentType := "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	if err := w.storage.Upload(ctx, fileKey, bytes.NewReader(out), contentType); err != nil {
+	fileKey := fmt.Sprintf("timesheets/%d/%s_%s", p.UserID, p.JobID, finalFilename)
+	if err := w.storage.Upload(ctx, fileKey, bytes.NewReader(finalBytes), contentType); err != nil {
 		errMsg := fmt.Sprintf("s3 upload error: %v", err)
 		_ = w.jobRepo.UpdateStatus(ctx, p.JobID, models.JobStatusFailed, "", "", errMsg, nil)
 		return err
 	}
 
-	// 5. Generate magic download token with retention period expiration and configurable max downloads
+	// 5. Generate magic download token and update job
+	downloadToken, maxDownloads, expiresAt, downloadURL := w.resolveDownloadParams(ctx)
+	if err := w.jobRepo.UpdateStatusWithToken(ctx, p.JobID, models.JobStatusCompleted, fileKey, downloadURL, "", &expiresAt, downloadToken, maxDownloads, &expiresAt); err != nil {
+		log.Printf("[worker] failed to update job %s to completed: %v", p.JobID, err)
+	}
+
+	// 6. Dispatch notifications
+	w.dispatchNotifications(ctx, p.UserID, p.Month, p.Year, downloadURL, finalFilename, expiresAt)
+	return nil
+}
+
+func (w *WorkerServer) acquireSlot(ctx context.Context, jobID string) (func(), error) {
+	select {
+	case w.sem <- struct{}{}:
+		return func() { <-w.sem }, nil
+	case <-ctx.Done():
+		errMsg := "context canceled waiting for generator slot"
+		_ = w.jobRepo.UpdateStatus(ctx, jobID, models.JobStatusFailed, "", "", errMsg, nil)
+		return nil, ctx.Err()
+	}
+}
+
+func (w *WorkerServer) packageTimesheetOutput(ctx context.Context, userID uint, month, year int, out []byte, filename string) ([]byte, string, string) {
+	finalBytes := out
+	finalFilename := filename
+	contentType := "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+	baBytes, baFilename, baErr := w.tsSvc.GenerateBeritaAcara(ctx, userID, month, year)
+	if baErr != nil {
+		log.Printf("[worker] error checking/generating berita acara for user %d: %v", userID, baErr)
+	}
+
+	if len(baBytes) == 0 {
+		return finalBytes, finalFilename, contentType
+	}
+
+	var zipBuf bytes.Buffer
+	zw := zip.NewWriter(&zipBuf)
+	if fw1, err := zw.Create(filename); err == nil {
+		_, _ = fw1.Write(out)
+	}
+	if fw2, err := zw.Create(baFilename); err == nil {
+		_, _ = fw2.Write(baBytes)
+	}
+	if err := zw.Close(); err == nil {
+		finalBytes = zipBuf.Bytes()
+		baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
+		finalFilename = fmt.Sprintf("%s_and_Berita_Acara.zip", baseName)
+		contentType = "application/zip"
+	}
+	return finalBytes, finalFilename, contentType
+}
+
+func (w *WorkerServer) resolveDownloadParams(ctx context.Context) (string, int, time.Time, string) {
 	downloadToken := uuid.New().String()
 	maxDownloads := 3
 	if w.cfg != nil && w.cfg.TimesheetDownloadMaxQuota > 0 {
@@ -174,44 +236,35 @@ func (w *WorkerServer) handleTimesheetGenerate(ctx context.Context, t *asynq.Tas
 	}
 	downloadURL := fmt.Sprintf("%s/api/v1/timesheet/downloads/%s", baseURL, downloadToken)
 
-	// Initialize fast-path counter in Redis
 	if w.redisClient != nil {
 		tokenKey := fmt.Sprintf("timesheet:token:%s:count", downloadToken)
 		_ = w.redisClient.Set(ctx, tokenKey, 0, expiryDuration).Err()
 	}
+	return downloadToken, maxDownloads, expiresAt, downloadURL
+}
 
-	// 6. Update job status to completed with magic download token
-	if err := w.jobRepo.UpdateStatusWithToken(ctx, p.JobID, models.JobStatusCompleted, fileKey, downloadURL, "", &expiresAt, downloadToken, maxDownloads, &expiresAt); err != nil {
-		log.Printf("[worker] failed to update job %s to completed: %v", p.JobID, err)
-	}
-
-	// 7. Dispatch Web Push notification
+func (w *WorkerServer) dispatchNotifications(ctx context.Context, userID uint, month, year int, downloadURL, finalFilename string, expiresAt time.Time) {
 	if w.pushSvc != nil {
-		pushTitle := "Timesheet Telah Siap"
-		pushBody := fmt.Sprintf("Timesheet periode %02d/%04d Anda telah selesai diproses dan siap diunduh.", p.Month, p.Year)
-		w.pushSvc.SendToUser(p.UserID, push.Payload{
-			Title: pushTitle,
-			Body:  pushBody,
+		w.pushSvc.SendToUser(userID, push.Payload{
+			Title: "Timesheet Telah Siap",
+			Body:  fmt.Sprintf("Timesheet periode %02d/%04d Anda telah selesai diproses dan siap diunduh.", month, year),
 			URL:   downloadURL,
 		})
 	}
 
-	// 8. Dispatch Email with presigned download link
-	if w.mailer != nil {
-		user, uerr := w.userRepo.FindByIDWithDetails(ctx, p.UserID)
-		if uerr == nil && user != nil && user.Email != "" {
-			compName := ""
-			if user.CompanyRel != nil {
-				compName = user.CompanyRel.Name
-			} else {
-				compName = user.Company
-			}
-			period := mailer.FormatMonthYearIndonesian(p.Month, p.Year)
-			if mErr := w.mailer.SendTimesheetReadyEmail(user.Email, user.Username, compName, period, filename, downloadURL, expiresAt); mErr != nil {
-				log.Printf("[worker] failed to send timesheet ready email to %s: %v", user.Email, mErr)
-			}
-		}
+	if w.mailer == nil {
+		return
 	}
-
-	return nil
+	user, uerr := w.userRepo.FindByIDWithDetails(ctx, userID)
+	if uerr != nil || user == nil || user.Email == "" {
+		return
+	}
+	compName := user.Company
+	if user.CompanyRel != nil {
+		compName = user.CompanyRel.Name
+	}
+	period := mailer.FormatMonthYearIndonesian(month, year)
+	if mErr := w.mailer.SendTimesheetReadyEmail(user.Email, user.Username, compName, period, finalFilename, downloadURL, expiresAt); mErr != nil {
+		log.Printf("[worker] failed to send timesheet ready email to %s: %v", user.Email, mErr)
+	}
 }

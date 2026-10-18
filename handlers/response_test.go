@@ -115,4 +115,62 @@ func TestResponseHelpers(t *testing.T) {
 			t.Errorf("unexpected delete response: %+v", resp)
 		}
 	})
+
+	t.Run("RespondError 500 in release mode masks internal error", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		gin.SetMode(gin.ReleaseMode)
+		defer gin.SetMode(gin.TestMode)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/test/internal", nil)
+
+		RespondError(c, http.StatusInternalServerError, "pq: database connection terminated unexpectedly")
+
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("expected status 500, got %d", w.Code)
+		}
+
+		var resp struct {
+			Code    int    `json:"code"`
+			Status  string `json:"status"`
+			Error   string `json:"error"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if resp.Error != sanitizedInternalErrorMessage || resp.Message != sanitizedInternalErrorMessage {
+			t.Errorf("expected sanitized error, got %+v", resp)
+		}
+	})
+
+	t.Run("RespondAbortError 500 in release mode masks internal error", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		gin.SetMode(gin.ReleaseMode)
+		defer gin.SetMode(gin.TestMode)
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/test/internal-abort", nil)
+
+		RespondAbortError(c, http.StatusInternalServerError, "pq: fatal disk corruption")
+
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("expected status 500, got %d", w.Code)
+		}
+
+		var resp struct {
+			Code    int    `json:"code"`
+			Status  string `json:"status"`
+			Error   string `json:"error"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if resp.Error != sanitizedInternalErrorMessage {
+			t.Errorf("expected sanitized error, got %+v", resp)
+		}
+	})
 }

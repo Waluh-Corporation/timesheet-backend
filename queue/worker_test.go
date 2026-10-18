@@ -1,6 +1,8 @@
 package queue
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"io"
 	"testing"
@@ -14,7 +16,9 @@ import (
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/repository"
+	"timesheet-backend/mailer"
 	"timesheet-backend/models"
+	"timesheet-backend/push"
 )
 
 type mockStorageService struct {
@@ -90,7 +94,10 @@ func (m *mockJobRepository) UpdateStatus(ctx context.Context, id string, status 
 	return nil
 }
 
-func (m *mockJobRepository) UpdateStatusWithToken(ctx context.Context, id string, status models.TimesheetJobStatus, fileKey, downloadURL, errMsg string, expiresAt *time.Time, downloadToken string, maxDownloads int, tokenExpiresAt *time.Time) error {
+// UpdateStatusWithToken mocks the repository method.
+//
+//nolint:revive // implements repository.JobRepository interface
+func (m *mockJobRepository) UpdateStatusWithToken(ctx context.Context, id string, status models.TimesheetJobStatus, fileKey, downloadURL, errMsg string, expiresAt *time.Time, downloadToken string, maxDownloads int, tokenExpiresAt *time.Time) error { // NOSONAR
 	m.lastStatus = status
 	m.lastURL = downloadURL
 	if m.createdJob != nil {
@@ -149,10 +156,18 @@ func (m *mockJobRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-type mockTimesheetService struct{}
+type mockTimesheetService struct {
+	baBytes    []byte
+	baFilename string
+	baErr      error
+}
 
 func (m *mockTimesheetService) GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
 	return []byte("PK-mock-excel-binary"), "Timesheet_john_07_2026.xlsx", nil
+}
+
+func (m *mockTimesheetService) GenerateBeritaAcara(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	return m.baBytes, m.baFilename, m.baErr
 }
 
 func (m *mockTimesheetService) UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error {
@@ -292,4 +307,79 @@ func TestWorkerServer_ErrorBranches(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		<-worker.sem
 	}
+}
+
+func TestWorkerServer_ProcessTaskDirect_WithBeritaAcara(t *testing.T) {
+	cfg := &config.Config{
+		S3Bucket:               "test-timesheets",
+		S3RetentionDays:        7,
+		ExcelMaxConcurrentJobs: 5,
+	}
+
+	jobRepo := &mockJobRepository{
+		createdJob: &models.TimesheetJob{
+			ID:     "job-ba-123",
+			UserID: 1,
+			Month:  7,
+			Year:   2026,
+			Status: models.JobStatusQueued,
+		},
+	}
+	storageSvc := &mockStorageService{}
+	tsSvc := &mockTimesheetService{
+		baBytes:    []byte("PK-mock-ba-docx-binary"),
+		baFilename: "Berita_Acara_john_doe_07_2026.docx",
+	}
+	userRepo := &mockUserRepo{}
+
+	worker := NewWorkerServer(cfg, jobRepo, userRepo, tsSvc, storageSvc, nil, nil)
+	require.NotNil(t, worker)
+
+	ctx := context.Background()
+	payload := GenerateTimesheetPayload{
+		JobID:  "job-ba-123",
+		UserID: 1,
+		Month:  7,
+		Year:   2026,
+	}
+
+	err := worker.ProcessTaskDirect(ctx, payload)
+	require.NoError(t, err)
+
+	assert.Equal(t, models.JobStatusCompleted, jobRepo.lastStatus)
+	assert.Contains(t, storageSvc.uploadedKey, "Timesheet_john_07_2026_and_Berita_Acara.zip")
+
+	// Verify zip contents
+	zipReader, err := zip.NewReader(bytes.NewReader(storageSvc.uploadedBytes), int64(len(storageSvc.uploadedBytes)))
+	require.NoError(t, err)
+	require.Len(t, zipReader.File, 2)
+
+	filenames := []string{zipReader.File[0].Name, zipReader.File[1].Name}
+	assert.Contains(t, filenames, "Timesheet_john_07_2026.xlsx")
+	assert.Contains(t, filenames, "Berita_Acara_john_doe_07_2026.docx")
+}
+
+func TestWorkerServer_DispatchNotifications(t *testing.T) {
+	cfg := &config.Config{
+		S3Bucket:               "test-timesheets",
+		S3RetentionDays:        7,
+		ExcelMaxConcurrentJobs: 5,
+		RedisTLSEnabled:        true,
+		RedisTLSSkipVerify:     true,
+	}
+
+	jobRepo := &mockJobRepository{}
+	userRepo := &mockUserRepo{}
+	storageSvc := &mockStorageService{}
+	tsSvc := &mockTimesheetService{}
+
+	m := mailer.New(cfg)
+	pushSvc := push.New(cfg, nil)
+
+	worker := NewWorkerServer(cfg, jobRepo, userRepo, tsSvc, storageSvc, m, pushSvc)
+	require.NotNil(t, worker)
+	worker.SetRedisClient(nil)
+
+	ctx := context.Background()
+	worker.dispatchNotifications(ctx, 1, 7, 2026, "https://example.com/download", "Timesheet_07_2026.xlsx", time.Now().Add(24*time.Hour))
 }

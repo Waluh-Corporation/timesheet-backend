@@ -216,4 +216,134 @@ func TestActivityRepository(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for non-existent user and date, got nil")
 	}
+
+	// 11. FindPreviousActiveByUserAndDate
+	// 11a. Should find the activity created above when querying a later date
+	prevAct, err := repo.FindPreviousActiveByUserAndDate(ctx, user.ID, date.AddDate(0, 0, 1))
+	if err != nil {
+		t.Fatalf("expected to find previous activity, got err: %v", err)
+	}
+	if prevAct.ID != act.ID {
+		t.Errorf("expected previous activity ID %d, got %d", act.ID, prevAct.ID)
+	}
+
+	// 11b. When querying the exact same date (strictly before), it should not match
+	_, err = repo.FindPreviousActiveByUserAndDate(ctx, user.ID, date)
+	if err == nil {
+		t.Error("expected error when querying with same date, got nil")
+	}
+
+	// 11c. Non-existent user
+	_, err = repo.FindPreviousActiveByUserAndDate(ctx, 999999, date.AddDate(0, 0, 1))
+	if err == nil {
+		t.Error("expected error for non-existent user, got nil")
+	}
+
+	// 12. GetLatestActivityUpdateTime
+	tUpdate, err := repo.GetLatestActivityUpdateTime(ctx, user.ID, int(date.Month()), date.Year())
+	if err != nil {
+		t.Fatalf("repo.GetLatestActivityUpdateTime failed: %v", err)
+	}
+	if tUpdate.IsZero() {
+		t.Error("expected non-zero latest update time")
+	}
+	tUpdateEmpty, err := repo.GetLatestActivityUpdateTime(ctx, 999999, 1, 2026)
+	if err != nil || !tUpdateEmpty.IsZero() {
+		t.Errorf("expected zero update time for empty period, got %v, err: %v", tUpdateEmpty, err)
+	}
+
+	// 13. Witness setup and FindWitnessByID
+	witnessUser := &models.User{
+		Username:     "witness_repo_unique",
+		Email:        "witness_repo@example.com",
+		Name:         "Witness Repo User",
+		Role:         models.RoleUser,
+		PasswordHash: "dummyhash",
+		IsActive:     true,
+	}
+	if err := tx.Create(witnessUser).Error; err != nil {
+		t.Fatalf("failed to create witness user: %v", err)
+	}
+	wFound, err := repo.FindWitnessByID(ctx, witnessUser.ID)
+	if err != nil || wFound.ID != witnessUser.ID {
+		t.Fatalf("repo.FindWitnessByID failed: %v", err)
+	}
+	_, err = repo.FindWitnessByID(ctx, 999999)
+	if err == nil {
+		t.Error("expected error for non-existent witness ID, got nil")
+	}
+
+	// 14. GetEligibleWitnesses
+	eligible, err := repo.GetEligibleWitnesses(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("repo.GetEligibleWitnesses failed: %v", err)
+	}
+	foundWitnessInEligible := false
+	for _, u := range eligible {
+		if u.ID == witnessUser.ID {
+			foundWitnessInEligible = true
+		}
+		if u.ID == user.ID {
+			t.Errorf("expected excluded user %d not to be in eligible list", user.ID)
+		}
+	}
+	if !foundWitnessInEligible {
+		t.Error("expected witnessUser to be in eligible witnesses list")
+	}
+
+	// 15. GetMonthlyWitness (initially nil when no BA activities)
+	mWitness, err := repo.GetMonthlyWitness(ctx, user.ID, int(date.Month()), date.Year())
+	if err != nil || mWitness != nil {
+		t.Errorf("expected nil monthly witness before BA activity, got %v, err: %v", mWitness, err)
+	}
+
+	// 16. UpdateMonthlyWitness and GetMonthlyWitness
+	// Create BA activity
+	baDate := date.AddDate(0, 0, 2)
+	baAct := &models.DailyActivity{
+		UserID:           user.ID,
+		Date:             baDate,
+		StartTime:        "09:00",
+		EndTime:          "18:00",
+		Status:           "P",
+		Activity:         "BA test activity",
+		IsActive:         true,
+		IsBeritaAcara:    true,
+		WitnessID:        &witnessUser.ID,
+		BeritaAcaraNotes: "Notes",
+	}
+	if err := repo.Create(ctx, baAct); err != nil {
+		t.Fatalf("failed to create BA activity: %v", err)
+	}
+
+	// Query monthly witness now
+	mWitnessAfter, err := repo.GetMonthlyWitness(ctx, user.ID, int(date.Month()), date.Year())
+	if err != nil || mWitnessAfter == nil || mWitnessAfter.ID != witnessUser.ID {
+		t.Fatalf("expected monthly witness %d, got %v, err: %v", witnessUser.ID, mWitnessAfter, err)
+	}
+
+	// Update monthly witness to another witness
+	anotherWitness := &models.User{
+		Username:     "another_witness_unique",
+		Email:        "another_witness@example.com",
+		Name:         "Another Witness User",
+		Role:         models.RoleUser,
+		PasswordHash: "dummyhash",
+		IsActive:     true,
+	}
+	if err := tx.Create(anotherWitness).Error; err != nil {
+		t.Fatalf("failed to create another witness: %v", err)
+	}
+	rowsAffected, err := repo.UpdateMonthlyWitness(ctx, user.ID, int(date.Month()), date.Year(), anotherWitness.ID)
+	if err != nil {
+		t.Fatalf("repo.UpdateMonthlyWitness failed: %v", err)
+	}
+	if rowsAffected < 1 {
+		t.Errorf("expected at least 1 row affected, got %d", rowsAffected)
+	}
+
+	mWitnessUpdated, err := repo.GetMonthlyWitness(ctx, user.ID, int(date.Month()), date.Year())
+	if err != nil || mWitnessUpdated == nil || mWitnessUpdated.ID != anotherWitness.ID {
+		t.Fatalf("expected updated monthly witness %d, got %v, err: %v", anotherWitness.ID, mWitnessUpdated, err)
+	}
 }

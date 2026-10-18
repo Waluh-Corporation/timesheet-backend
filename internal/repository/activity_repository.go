@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strconv"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"timesheet-backend/config"
 	"timesheet-backend/models"
 )
 
@@ -30,6 +32,7 @@ type ActivityFilter struct {
 type ActivityRepository interface {
 	FindActiveByID(ctx context.Context, id uint) (*models.DailyActivity, error)
 	FindActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error)
+	FindPreviousActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error)
 	Create(ctx context.Context, activity *models.DailyActivity) error
 	Update(ctx context.Context, activity *models.DailyActivity) error
 	ListActiveByUser(ctx context.Context, userID uint, filter ActivityFilter) ([]models.DailyActivity, int64, error)
@@ -37,6 +40,10 @@ type ActivityRepository interface {
 	FindActiveProjectByRefID(ctx context.Context, refID uint) (*models.Project, error)
 	FindActiveProjectByCodeOrName(ctx context.Context, projectID, projectName string) (*models.Project, error)
 	GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error)
+	GetMonthlyWitness(ctx context.Context, userID uint, month, year int) (*models.User, error)
+	UpdateMonthlyWitness(ctx context.Context, userID uint, month, year int, newWitnessID uint) (int64, error)
+	GetEligibleWitnesses(ctx context.Context, excludeUserID uint) ([]models.User, error)
+	FindWitnessByID(ctx context.Context, id uint) (*models.User, error)
 }
 
 type activityRepository struct {
@@ -50,7 +57,7 @@ func NewActivityRepository(db *gorm.DB) ActivityRepository {
 
 func (r *activityRepository) FindActiveByID(ctx context.Context, id uint) (*models.DailyActivity, error) {
 	var activity models.DailyActivity
-	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Where("id = ? AND is_active = true", id).First(&activity).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Preload("Witness").Where("id = ? AND is_active = true", id).First(&activity).Error; err != nil {
 		return nil, err
 	}
 	return &activity, nil
@@ -58,7 +65,18 @@ func (r *activityRepository) FindActiveByID(ctx context.Context, id uint) (*mode
 
 func (r *activityRepository) FindActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error) {
 	var activity models.DailyActivity
-	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Where("user_id = ? AND date = ? AND is_active = true", userID, date).First(&activity).Error; err != nil {
+	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Preload("Witness").Where("user_id = ? AND date = ? AND is_active = true", userID, date).First(&activity).Error; err != nil {
+		return nil, err
+	}
+	return &activity, nil
+}
+
+func (r *activityRepository) FindPreviousActiveByUserAndDate(ctx context.Context, userID uint, date time.Time) (*models.DailyActivity, error) {
+	var activity models.DailyActivity
+	if err := r.db.WithContext(ctx).Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Preload("Witness").
+		Where("user_id = ? AND date < ? AND is_active = true", userID, date).
+		Order("date desc").
+		First(&activity).Error; err != nil {
 		return nil, err
 	}
 	return &activity, nil
@@ -72,12 +90,12 @@ func (r *activityRepository) Update(ctx context.Context, activity *models.DailyA
 	return r.db.WithContext(ctx).Omit(clause.Associations).Save(activity).Error
 }
 
+func appLocation() *time.Location {
+	return config.AppLocation()
+}
+
 func jakartaLocation() *time.Location {
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		return time.FixedZone("WIB", 7*3600)
-	}
-	return loc
+	return appLocation()
 }
 
 const (
@@ -143,7 +161,7 @@ func (r *activityRepository) ListActiveByUser(ctx context.Context, userID uint, 
 	}
 
 	activities := make([]models.DailyActivity, 0)
-	if err := dataQuery.Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Find(&activities).Error; err != nil {
+	if err := dataQuery.Preload("ProjectRef", models.ActiveOnly).Preload("StatusRef").Preload("Witness").Find(&activities).Error; err != nil {
 		return nil, 0, err
 	}
 
@@ -201,7 +219,7 @@ func (r *activityRepository) FindActiveProjectByCodeOrName(ctx context.Context, 
 func (r *activityRepository) GetLatestActivityUpdateTime(ctx context.Context, userID uint, month, year int) (time.Time, error) {
 	startDate := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	endDate := startDate.AddDate(0, 1, 0)
-	var latest *time.Time
+	var latest sql.NullTime
 	err := r.db.WithContext(ctx).Model(&models.DailyActivity{}).
 		Where("user_id = ? AND date >= ? AND date < ? AND is_active = true", userID, startDate, endDate).
 		Select("MAX(updated_at)").
@@ -209,8 +227,60 @@ func (r *activityRepository) GetLatestActivityUpdateTime(ctx context.Context, us
 	if err != nil {
 		return time.Time{}, err
 	}
-	if latest == nil {
+	if !latest.Valid {
 		return time.Time{}, nil
 	}
-	return *latest, nil
+	return latest.Time, nil
+}
+
+func (r *activityRepository) GetMonthlyWitness(ctx context.Context, userID uint, month, year int) (*models.User, error) {
+	loc := jakartaLocation()
+	startOfMonth := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
+	startOfNextMonth := startOfMonth.AddDate(0, 1, 0)
+
+	var activity models.DailyActivity
+	err := r.db.WithContext(ctx).
+		Preload("Witness.DepartmentRel").
+		Where("user_id = ? AND is_active = true AND is_berita_acara = true AND witness_id IS NOT NULL", userID).
+		Where(queryDateBetween, startOfMonth, startOfNextMonth).
+		Order("date asc").
+		First(&activity).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return activity.Witness, nil
+}
+
+func (r *activityRepository) UpdateMonthlyWitness(ctx context.Context, userID uint, month, year int, newWitnessID uint) (int64, error) {
+	loc := jakartaLocation()
+	startOfMonth := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
+	startOfNextMonth := startOfMonth.AddDate(0, 1, 0)
+
+	res := r.db.WithContext(ctx).
+		Model(&models.DailyActivity{}).
+		Where("user_id = ? AND is_active = true AND is_berita_acara = true", userID).
+		Where(queryDateBetween, startOfMonth, startOfNextMonth).
+		Update("witness_id", newWitnessID)
+	return res.RowsAffected, res.Error
+}
+
+func (r *activityRepository) GetEligibleWitnesses(ctx context.Context, excludeUserID uint) ([]models.User, error) {
+	var users []models.User
+	err := r.db.WithContext(ctx).
+		Preload("DepartmentRel").
+		Where("id != ? AND is_active = true AND role = ?", excludeUserID, models.RoleUser).
+		Order("name asc").
+		Find(&users).Error
+	return users, err
+}
+
+func (r *activityRepository) FindWitnessByID(ctx context.Context, id uint) (*models.User, error) {
+	var u models.User
+	if err := r.db.WithContext(ctx).Preload("DepartmentRel").Where("id = ? AND is_active = true", id).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
 }

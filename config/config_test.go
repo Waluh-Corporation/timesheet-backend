@@ -310,6 +310,80 @@ func TestLoad_SchedulerCronConfig(t *testing.T) {
 	})
 }
 
+func TestLoad_TimezoneConfig(t *testing.T) {
+	t.Run("default to UTC when unset", func(t *testing.T) {
+		t.Setenv("TZ", "")
+		t.Setenv("SCHEDULER_TZ", "")
+		cfg := Load()
+		if cfg.Timezone != "UTC" {
+			t.Errorf("expected default Timezone to be 'UTC', got %q", cfg.Timezone)
+		}
+		if cfg.Location() != time.UTC {
+			t.Errorf("expected Location() to return time.UTC, got %v", cfg.Location())
+		}
+	})
+
+	t.Run("configured via TZ", func(t *testing.T) {
+		t.Setenv("TZ", "Asia/Jakarta")
+		t.Setenv("SCHEDULER_TZ", "")
+		cfg := Load()
+		if cfg.Timezone != "Asia/Jakarta" {
+			t.Errorf("expected Timezone to be 'Asia/Jakarta', got %q", cfg.Timezone)
+		}
+		if cfg.Location().String() != "Asia/Jakarta" {
+			t.Errorf("expected Location() to be 'Asia/Jakarta', got %s", cfg.Location().String())
+		}
+	})
+
+	t.Run("fallback to SCHEDULER_TZ when TZ unset", func(t *testing.T) {
+		t.Setenv("TZ", "")
+		t.Setenv("SCHEDULER_TZ", "Asia/Tokyo")
+		cfg := Load()
+		if cfg.Timezone != "Asia/Tokyo" {
+			t.Errorf("expected Timezone to fallback to 'Asia/Tokyo', got %q", cfg.Timezone)
+		}
+		if cfg.Location().String() != "Asia/Tokyo" {
+			t.Errorf("expected Location() to be 'Asia/Tokyo', got %s", cfg.Location().String())
+		}
+	})
+}
+
+func TestLocationAndAppLocation(t *testing.T) {
+	t.Run("nil config returns UTC", func(t *testing.T) {
+		var nilCfg *Config
+		if loc := nilCfg.Location(); loc != time.UTC {
+			t.Errorf("expected time.UTC for nil config, got %v", loc)
+		}
+	})
+
+	t.Run("invalid timezone returns UTC", func(t *testing.T) {
+		cfg := &Config{Timezone: "Invalid/Not_A_Real_Timezone"}
+		if loc := cfg.Location(); loc != time.UTC {
+			t.Errorf("expected time.UTC for invalid timezone, got %v", loc)
+		}
+	})
+
+	t.Run("AppLocation returns UTC when unset or invalid", func(t *testing.T) {
+		t.Setenv("TZ", "")
+		t.Setenv("SCHEDULER_TZ", "")
+		if loc := AppLocation(); loc != time.UTC {
+			t.Errorf("expected AppLocation() = UTC when unset, got %v", loc)
+		}
+
+		t.Setenv("TZ", "Invalid/Timezone")
+		if loc := AppLocation(); loc != time.UTC {
+			t.Errorf("expected AppLocation() = UTC when invalid, got %v", loc)
+		}
+	})
+
+	t.Run("AppLocation resolves valid TZ", func(t *testing.T) {
+		t.Setenv("TZ", "Asia/Jakarta")
+		if loc := AppLocation(); loc.String() != "Asia/Jakarta" {
+			t.Errorf("expected AppLocation() = Asia/Jakarta, got %s", loc.String())
+		}
+	})
+}
+
 func TestLoad_CORSAllowedOriginsConfig(t *testing.T) {
 	t.Run("empty by default", func(t *testing.T) {
 		t.Setenv("CORS_ALLOWED_ORIGINS", "")
@@ -382,6 +456,37 @@ func TestLoad_TimesheetDownloadMaxQuotaConfig(t *testing.T) {
 		cfg := Load()
 		if cfg.TimesheetDownloadMaxQuota != 3 {
 			t.Errorf("expected fallback 3 when quota is invalid, got %d", cfg.TimesheetDownloadMaxQuota)
+		}
+	})
+}
+
+func TestLoad_SwaggerConfig(t *testing.T) {
+	t.Run("defaults to true in debug mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "debug")
+		t.Setenv("SWAGGER_ENABLED", "")
+		cfg := Load()
+		if !cfg.SwaggerEnabled {
+			t.Errorf("expected SwaggerEnabled to default to true in debug mode, got false")
+		}
+	})
+
+	t.Run("defaults to false in release mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
+		t.Setenv("SWAGGER_ENABLED", "")
+		cfg := Load()
+		if cfg.SwaggerEnabled {
+			t.Errorf("expected SwaggerEnabled to default to false in release mode, got true")
+		}
+	})
+
+	t.Run("explicit override in release mode", func(t *testing.T) {
+		t.Setenv("GIN_MODE", "release")
+		t.Setenv("JWT_SECRET", "super-strong-production-secret-token-32-chars")
+		t.Setenv("SWAGGER_ENABLED", "true")
+		cfg := Load()
+		if !cfg.SwaggerEnabled {
+			t.Errorf("expected SwaggerEnabled to be true when explicitly set, got false")
 		}
 	})
 }

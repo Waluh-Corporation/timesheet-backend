@@ -36,7 +36,7 @@ func BenchmarkBuildMIIWorkbook(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := services.GenerateFromTemplate(in)
 		if err != nil {
 			b.Fatalf("generation failed: %v", err)
@@ -49,7 +49,7 @@ func BenchmarkBuildNTTWorkbook(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := services.GenerateFromTemplate(in)
 		if err != nil {
 			b.Fatalf("generation failed: %v", err)

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	_ "time/tzdata" // Embed IANA timezone database so Asia/Jakarta and other zones load correctly in minimal container environments.
 )
 
 // Config aggregates all runtime configuration, sourced from environment
@@ -70,6 +71,10 @@ type Config struct {
 	// Defaults to false so starting the server (e.g. go run .) does not run DDLs.
 	RunMigrations bool
 
+	// SwaggerEnabled controls whether Swagger interactive documentation UI is mounted.
+	// Defaults to false when GIN_MODE=release, and true in development/test.
+	SwaggerEnabled bool
+
 	// Rate limiting configuration for public auth routes.
 	RateLimitEnabled  bool
 	RateLimitRequests int
@@ -80,9 +85,17 @@ type Config struct {
 	CORSAllowedOrigins []string
 
 	// Redis task queue configuration.
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
+	RedisAddr          string
+	RedisPassword      string
+	RedisDB            int
+	RedisTLSEnabled    bool
+	RedisTLSSkipVerify bool
+	RedisUsername      string
+	RedisPoolSize      int
+	RedisMinIdleConns  int
+	RedisDialTimeout   time.Duration
+	RedisReadTimeout   time.Duration
+	RedisWriteTimeout  time.Duration
 
 	// S3-compatible object storage configuration.
 	S3Endpoint      string
@@ -185,35 +198,48 @@ func parseOrigins(v string) []string {
 	return origins
 }
 
+func parseEnvValue(raw string) string {
+	v := strings.TrimSpace(raw)
+	if strings.HasPrefix(v, `"`) || strings.HasPrefix(v, `'`) {
+		return strings.Trim(v, `"'`)
+	}
+	if idx := strings.Index(v, " #"); idx != -1 {
+		v = strings.TrimSpace(v[:idx])
+	} else if idx := strings.Index(v, "\t#"); idx != -1 {
+		v = strings.TrimSpace(v[:idx])
+	}
+	return strings.Trim(v, `"'`)
+}
+
+func parseAndSetEnvLine(line string) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return
+	}
+	k, v, ok := strings.Cut(line, "=")
+	if !ok {
+		return
+	}
+	k = strings.TrimSpace(k)
+	if _, exists := os.LookupEnv(k); exists {
+		return
+	}
+	_ = os.Setenv(k, parseEnvValue(v))
+}
+
+func loadDotEnvFile(filename string) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		parseAndSetEnvLine(line)
+	}
+}
+
 func loadDotEnv(filenames ...string) {
 	for _, fn := range filenames {
-		data, err := os.ReadFile(fn)
-		if err != nil {
-			continue
-		}
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				k := strings.TrimSpace(parts[0])
-				v := strings.TrimSpace(parts[1])
-				if !strings.HasPrefix(v, `"`) && !strings.HasPrefix(v, `'`) {
-					if idx := strings.Index(v, " #"); idx != -1 {
-						v = strings.TrimSpace(v[:idx])
-					} else if idx := strings.Index(v, "\t#"); idx != -1 {
-						v = strings.TrimSpace(v[:idx])
-					}
-				}
-				v = strings.Trim(v, `"'`)
-				if _, exists := os.LookupEnv(k); !exists {
-					_ = os.Setenv(k, v)
-				}
-			}
-		}
+		loadDotEnvFile(fn)
 	}
 }
 
@@ -221,7 +247,8 @@ func loadDotEnv(filenames ...string) {
 func Load() *Config {
 	loadDotEnv(".env", "../.env", "../../.env")
 
-	defaultDBURL := "host=" + getEnv("DB_HOST", "localhost") + " user=" + getEnv("DB_USER", "timesheet") + " dbname=" + getEnv("DB_NAME", "timesheet") + " port=" + getEnv("DB_PORT", "5432") + " sslmode=disable TimeZone=Asia/Jakarta"
+	tz := getEnv("TZ", getEnv("SCHEDULER_TZ", "UTC"))
+	defaultDBURL := "host=" + getEnv("DB_HOST", "localhost") + " user=" + getEnv("DB_USER", "timesheet") + " dbname=" + getEnv("DB_NAME", "timesheet") + " port=" + getEnv("DB_PORT", "5432") + " sslmode=disable TimeZone=" + tz
 
 	appName := getEnv("APP_NAME", "Timesheet Portal")
 
@@ -276,7 +303,7 @@ func Load() *Config {
 
 		FrontendURL:  getEnv("FRONTEND_URL", "http://localhost:3000"),
 		AppBaseURL:   strings.TrimRight(getEnv("APP_BASE_URL", getEnv("API_BASE_URL", "http://localhost:"+getEnv("PORT", "8080"))), "/"),
-		Timezone:     getEnv("SCHEDULER_TZ", "Asia/Jakarta"),
+		Timezone:     tz,
 		ReminderCron: getEnv("SCHEDULER_REMINDER_CRON", getEnv("SCHEDULER_CRON", "0 17 * * *")),
 		CleanupCron:  getEnv("SCHEDULER_CLEANUP_CRON", "0 2 * * *"),
 
@@ -284,7 +311,8 @@ func Load() *Config {
 		AdminUsername: getEnv("BOOTSTRAP_ADMIN_USERNAME", "admin"),
 		AdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", ""),
 
-		RunMigrations: getEnvBool("RUN_MIGRATIONS", false),
+		RunMigrations:  getEnvBool("RUN_MIGRATIONS", false),
+		SwaggerEnabled: getEnvBool("SWAGGER_ENABLED", !isRelease()),
 
 		RateLimitEnabled:  rateLimitEnabled,
 		RateLimitRequests: rateLimitRequests,
@@ -292,9 +320,17 @@ func Load() *Config {
 
 		CORSAllowedOrigins: parseOrigins(getEnv("CORS_ALLOWED_ORIGINS", "")),
 
-		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword: getEnv("REDIS_PASSWORD", ""),
-		RedisDB:       getEnvInt("REDIS_DB", 0),
+		RedisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:      getEnv("REDIS_PASSWORD", ""),
+		RedisDB:            getEnvInt("REDIS_DB", 0),
+		RedisTLSEnabled:    getEnvBool("REDIS_TLS_ENABLED", false),
+		RedisTLSSkipVerify: getEnvBool("REDIS_TLS_SKIP_VERIFY", false),
+		RedisUsername:      getEnv("REDIS_USERNAME", ""),
+		RedisPoolSize:      getEnvInt("REDIS_POOL_SIZE", 20),
+		RedisMinIdleConns:  getEnvInt("REDIS_MIN_IDLE_CONNS", 5),
+		RedisDialTimeout:   time.Duration(getEnvInt("REDIS_DIAL_TIMEOUT_MS", 2000)) * time.Millisecond,
+		RedisReadTimeout:   time.Duration(getEnvInt("REDIS_READ_TIMEOUT_MS", 1000)) * time.Millisecond,
+		RedisWriteTimeout:  time.Duration(getEnvInt("REDIS_WRITE_TIMEOUT_MS", 1000)) * time.Millisecond,
 
 		S3Endpoint:      getEnv("S3_ENDPOINT", ""),
 		S3Region:        getEnv("S3_REGION", "us-east-1"),
@@ -323,6 +359,36 @@ func Load() *Config {
 
 	cfg.validateSecrets()
 	return cfg
+}
+
+// Location returns the loaded *time.Location corresponding to Timezone,
+// falling back to time.UTC if empty, invalid, or "UTC".
+func (c *Config) Location() *time.Location {
+	if c == nil || strings.TrimSpace(c.Timezone) == "" || strings.EqualFold(c.Timezone, "UTC") {
+		return time.UTC
+	}
+	loc, err := time.LoadLocation(c.Timezone)
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}
+
+// AppLocation returns the *time.Location configured via the TZ or SCHEDULER_TZ
+// environment variable, falling back to time.UTC if unset or invalid.
+func AppLocation() *time.Location {
+	tz := strings.TrimSpace(os.Getenv("TZ"))
+	if tz == "" {
+		tz = strings.TrimSpace(os.Getenv("SCHEDULER_TZ"))
+	}
+	if tz == "" || strings.EqualFold(tz, "UTC") {
+		return time.UTC
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return time.UTC
+	}
+	return loc
 }
 
 // isRelease reports whether the process is running in Gin's release mode.

@@ -483,6 +483,8 @@ definitions:
         type: integer
       is_active:
         type: boolean
+      is_anonymized:
+        type: boolean
       name:
         description: Profile fields (the "approved" / live values).
         type: string
@@ -596,12 +598,17 @@ definitions:
       app_impacted:
         example: BNI Mobile
         type: string
+      berita_acara_notes:
+        example: Lupa tap absen masuk
+        type: string
       date:
         example: "2026-09-01"
         type: string
       end_time:
         example: "17:00"
         type: string
+      is_berita_acara:
+        type: boolean
       project_id:
         example: P24015
         type: string
@@ -617,6 +624,9 @@ definitions:
       status:
         example: P
         type: string
+      witness_id:
+        example: 2
+        type: integer
     required:
     - date
     type: object
@@ -845,6 +855,25 @@ definitions:
         example: https://fcm.googleapis.com/fcm/send/...
         type: string
     type: object
+  request.UpdateMonthlyWitnessRequest:
+    properties:
+      month:
+        example: 11
+        maximum: 12
+        minimum: 1
+        type: integer
+      witness_id:
+        example: 2
+        type: integer
+      year:
+        example: 2026
+        minimum: 2000
+        type: integer
+    required:
+    - month
+    - witness_id
+    - year
+    type: object
   request.UpdatePasskeyRequest:
     properties:
       name:
@@ -907,6 +936,19 @@ definitions:
         type: string
     required:
     - token
+    type: object
+  response.APIResponse:
+    properties:
+      code:
+        example: 200
+        type: integer
+      data: {}
+      message:
+        example: operation successful
+        type: string
+      status:
+        example: success
+        type: string
     type: object
   response.AdminPasskeyResponse:
     properties:
@@ -989,6 +1031,8 @@ definitions:
       id:
         type: integer
       is_active:
+        type: boolean
+      is_anonymized:
         type: boolean
       name:
         type: string
@@ -1076,12 +1120,16 @@ definitions:
         type: string
       app_impacted:
         type: string
+      berita_acara_notes:
+        type: string
       date:
         type: string
       end_time:
         type: string
       id:
         type: integer
+      is_berita_acara:
+        type: boolean
       project_id:
         type: string
       project_name:
@@ -1096,6 +1144,10 @@ definitions:
         type: string
       status_ref:
         $ref: '#/definitions/models.ActivityStatus'
+      witness:
+        $ref: '#/definitions/response.WitnessResponse'
+      witness_id:
+        type: integer
     type: object
   response.DeleteResponse:
     properties:
@@ -1133,7 +1185,7 @@ definitions:
         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         type: string
       user:
-        $ref: '#/definitions/models.User'
+        $ref: '#/definitions/response.UserResponse'
     type: object
   response.MessageResponse:
     properties:
@@ -1372,6 +1424,8 @@ definitions:
       is_active:
         example: true
         type: boolean
+      is_anonymized:
+        type: boolean
       name:
         example: John Doe
         type: string
@@ -1417,6 +1471,13 @@ definitions:
       valid:
         example: true
         type: boolean
+    type: object
+  response.WitnessResponse:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
     type: object
 info:
   contact:
@@ -1573,6 +1634,81 @@ paths:
       security:
       - BearerAuth: []
       summary: Get daily activity detail
+      tags:
+      - Activity
+  /api/v1/activities/previous:
+    get:
+      description: 'Retrieves the most recent active daily activity strictly before
+        the specified reference date (default: today in WIB) to allow copying/autofilling
+        activity descriptions.'
+      parameters:
+      - description: 'Reference date (YYYY-MM-DD, default: today)'
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.DailyActivityResponse'
+        "400":
+          description: Invalid date format
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: No previous activity found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get previous day activity
+      tags:
+      - Activity
+  /api/v1/activities/witness:
+    put:
+      consumes:
+      - application/json
+      description: Updates the witness ID for all Berita Acara daily activities in
+        the specified month and year
+      parameters:
+      - description: Update witness payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/request.UpdateMonthlyWitnessRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.APIResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update witness for all Berita Acara entries in a given month
       tags:
       - Activity
   /api/v1/activity-statuses:
@@ -2690,6 +2826,48 @@ paths:
       summary: Update user (Admin)
       tags:
       - Admin
+  /api/v1/admin/users/{id}/anonymize:
+    post:
+      description: Scrubs PII from user account, tokens, passkeys, and profile change
+        requests while preserving anonymized activity records for compliance.
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.MessageResponse'
+        "400":
+          description: Invalid user ID
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Admin only or self-anonymization forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Anonymize user personal data (UU PDP / Right to be Forgotten)
+      tags:
+      - Admin
   /api/v1/admin/users/{id}/passkeys:
     get:
       description: Retrieves all registered passkeys for the specified user (admin
@@ -3295,7 +3473,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.User'
+            $ref: '#/definitions/response.UserResponse'
         "401":
           description: Unauthorized
           schema:
@@ -4012,6 +4190,37 @@ paths:
       summary: Change password
       tags:
       - User
+  /api/v1/users/witnesses:
+    get:
+      description: Returns active users with role 'user' eligible to be chosen as
+        a witness (excluding current user)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/response.APIResponse'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/response.WitnessResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List eligible witnesses for Berita Acara
+      tags:
+      - Activity
 securityDefinitions:
   BearerAuth:
     description: Enter JWT token with format "Bearer {token}".

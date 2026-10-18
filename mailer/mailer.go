@@ -132,15 +132,10 @@ func (m *Mailer) supportEmail() string {
 }
 
 func (m *Mailer) timeLocation() *time.Location {
-	if m.cfg != nil && m.cfg.Timezone != "" {
-		if loc, err := time.LoadLocation(m.cfg.Timezone); err == nil {
-			return loc
-		}
+	if m != nil && m.cfg != nil {
+		return m.cfg.Location()
 	}
-	if loc, err := time.LoadLocation("Asia/Jakarta"); err == nil {
-		return loc
-	}
-	return time.FixedZone("WIB", 7*3600)
+	return config.AppLocation()
 }
 
 func (m *Mailer) setMessageContent(msg *gomail.Message, htmlBody, textBody string) {

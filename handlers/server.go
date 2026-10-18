@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -9,6 +11,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/redis/go-redis/v9"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"timesheet-backend/auth"
@@ -58,6 +61,7 @@ type Server struct {
 	AuthenticatorSvc  service.AuthenticatorService
 	SetupRepo         repository.SetupRepository
 	SetupSvc          service.SetupService
+	AuditRepo         repository.AuditRepository
 	QueueClient       queue.QueueClient
 	Storage           storage.StorageService
 	RedisClient       *redis.Client
@@ -112,6 +116,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	var authenticatorSvc service.AuthenticatorService
 	var setupRepo repository.SetupRepository
 	var setupSvc service.SetupService
+	var auditRepo repository.AuditRepository
 
 	if db != nil {
 		userRepo = repository.NewUserRepository(db)
@@ -130,6 +135,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		authenticatorSvc = service.NewAuthenticatorService(authRepo)
 		setupRepo = repository.NewSetupRepository(db)
 		setupSvc = service.NewSetupService(setupRepo, authSvc)
+		auditRepo = repository.NewAuditRepository(db)
 
 		_ = database.SyncAuthenticatorAAGUIDs(db)
 	}
@@ -157,6 +163,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		AuthenticatorSvc:  authenticatorSvc,
 		SetupRepo:         setupRepo,
 		SetupSvc:          setupSvc,
+		AuditRepo:         auditRepo,
 		GeoIP:             geoSvc,
 		webAuthnSessions:  make(map[string]*webAuthnSessionEntry),
 		resetCooldowns:    make(map[string]time.Time),
@@ -179,8 +186,24 @@ func (s *Server) checkAndRecordResetCooldown(email, ip string, cooldown time.Dur
 	}
 
 	now := time.Now()
+	s.cleanupExpiredCooldowns(now, cooldown)
 
-	// Proactively clean up expired entries older than 2 * cooldown
+	normEmail := strings.ToLower(strings.TrimSpace(email))
+	cleanIP := strings.TrimSpace(ip)
+
+	if s.isEmailInCooldown(normEmail, now, cooldown) || s.isIPRateLimited(cleanIP, now, cooldown) {
+		return false
+	}
+
+	if normEmail != "" {
+		s.resetCooldowns[normEmail] = now
+	}
+	s.recordIPCooldown(cleanIP, now, cooldown)
+
+	return true
+}
+
+func (s *Server) cleanupExpiredCooldowns(now time.Time, cooldown time.Duration) {
 	cutoff := now.Add(-2 * cooldown)
 	for k, v := range s.resetCooldowns {
 		if v.Before(cutoff) {
@@ -192,41 +215,34 @@ func (s *Server) checkAndRecordResetCooldown(email, ip string, cooldown time.Dur
 			delete(s.ipCooldowns, k)
 		}
 	}
+}
 
-	normEmail := strings.ToLower(strings.TrimSpace(email))
-	cleanIP := strings.TrimSpace(ip)
-
-	// 1. Check email cooldown: strictly 1 request per cooldown duration to prevent email bombing
-	if normEmail != "" {
-		if last, exists := s.resetCooldowns[normEmail]; exists && now.Sub(last) < cooldown {
-			return false
-		}
+func (s *Server) isEmailInCooldown(email string, now time.Time, cooldown time.Duration) bool {
+	if email == "" {
+		return false
 	}
+	last, exists := s.resetCooldowns[email]
+	return exists && now.Sub(last) < cooldown
+}
 
-	// 2. Check IP rate limit: allow up to 5 requests per cooldown duration per IP to prevent spamming
-	// while supporting multiple legitimate users behind shared corporate NAT / proxy.
+func (s *Server) isIPRateLimited(ip string, now time.Time, cooldown time.Duration) bool {
 	const maxIPRequestsPerWindow = 5
-	if cleanIP != "" {
-		if rec, exists := s.ipCooldowns[cleanIP]; exists && now.Sub(rec.windowStart) < cooldown {
-			if rec.count >= maxIPRequestsPerWindow {
-				return false
-			}
-		}
+	if ip == "" {
+		return false
 	}
+	rec, exists := s.ipCooldowns[ip]
+	return exists && now.Sub(rec.windowStart) < cooldown && rec.count >= maxIPRequestsPerWindow
+}
 
-	// Record timestamps and counts
-	if normEmail != "" {
-		s.resetCooldowns[normEmail] = now
+func (s *Server) recordIPCooldown(ip string, now time.Time, cooldown time.Duration) {
+	if ip == "" {
+		return
 	}
-	if cleanIP != "" {
-		if rec, exists := s.ipCooldowns[cleanIP]; exists && now.Sub(rec.windowStart) < cooldown {
-			rec.count++
-		} else {
-			s.ipCooldowns[cleanIP] = &clientCooldownRecord{windowStart: now, count: 1}
-		}
+	if rec, exists := s.ipCooldowns[ip]; exists && now.Sub(rec.windowStart) < cooldown {
+		rec.count++
+	} else {
+		s.ipCooldowns[ip] = &clientCooldownRecord{windowStart: now, count: 1}
 	}
-
-	return true
 }
 
 func (s *Server) dispatchResetEmail(toEmail, username, resetLink, clientIP, location string) {
@@ -343,4 +359,56 @@ func (s *Server) getAuthenticatorService() service.AuthenticatorService {
 
 func (s *Server) getSetupService() service.SetupService {
 	return s.SetupSvc
+}
+
+func (s *Server) getAuditRepository() repository.AuditRepository {
+	if s == nil {
+		return nil
+	}
+	return s.AuditRepo
+}
+
+// AuditLogParams encapsulates parameters for recording an administrative audit event.
+type AuditLogParams struct {
+	ActorID      *uint
+	Action       string
+	ResourceType string
+	ResourceID   string
+	IP           string
+	UserAgent    string
+	Details      interface{}
+}
+
+func (s *Server) recordAuditLog(ctx context.Context, p AuditLogParams) {
+	repo := s.getAuditRepository()
+	if repo == nil {
+		return
+	}
+	actorID := p.ActorID
+	if actorID != nil && *actorID == 0 {
+		actorID = nil
+	}
+	actorUsername := ""
+	if actorID != nil && s != nil && s.UserRepo != nil {
+		if u, err := s.UserRepo.FindByID(ctx, *actorID); err == nil && u != nil {
+			actorUsername = u.Username
+		}
+	}
+	var detailsBytes datatypes.JSON
+	if p.Details != nil {
+		if b, err := json.Marshal(p.Details); err == nil {
+			detailsBytes = datatypes.JSON(b)
+		}
+	}
+	entry := &models.AuditLog{
+		ActorID:       actorID,
+		ActorUsername: actorUsername,
+		Action:        p.Action,
+		ResourceType:  p.ResourceType,
+		ResourceID:    p.ResourceID,
+		IPAddress:     p.IP,
+		UserAgent:     p.UserAgent,
+		Details:       detailsBytes,
+	}
+	_ = repo.Create(ctx, entry)
 }

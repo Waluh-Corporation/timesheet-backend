@@ -292,7 +292,12 @@ func TestBuilderCommon_NewHelpers(t *testing.T) {
 	}
 
 	// WriteActivityProjectCells
-	WriteActivityProjectCells(f, sheet, "10", 10, "Dev Task", "Proj A", "P01", "App X")
+	WriteActivityProjectCells(f, sheet, 10, ActivityProjectInfo{
+		Activity:    "Dev Task",
+		ProjectName: "Proj A",
+		ProjectCode: "P01",
+		AppImpacted: "App X",
+	})
 	vK, _ := f.GetCellValue(sheet, "K10")
 	vL, _ := f.GetCellValue(sheet, "L10")
 	if vK != "Dev Task" || vL != "Proj A" {
@@ -319,6 +324,57 @@ func TestBuilderCommon_NewHelpers(t *testing.T) {
 		t.Errorf("WriteSignaturesLayout failed, got title=%q name=%q pos=%q", title, name, pos)
 	}
 
+	// WriteSignatures
+	WriteSignatures(f, sheet, GenerationInput{
+		User: &models.User{Name: "Tester"},
+	}, SignatureCells{
+		UserCell:     "A52",
+		TLCell:       "D52",
+		DHCell:       "G52",
+		UserDateCell: "A53",
+		TLDateCell:   "D53",
+		DHDateCell:   "G53",
+		DatePrefix:   "DATE : ",
+	})
+	sigUser, _ := f.GetCellValue(sheet, "A52")
+	if sigUser != "Tester" {
+		t.Errorf("expected signature user 'Tester', got %q", sigUser)
+	}
+
+	// WriteWorkingHoursRow
+	dscActivity := DayStyleContext{
+		HasActivity: true,
+		Activity:    models.DailyActivity{StartTime: "08:30", EndTime: "17:30"},
+		TimeStyle:   st.TimeStyle,
+	}
+	WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
+		StartCol: "B", EndCol: "C", TotalCol: "D", RowStr: "60", FormulaFmt: "C%s-B%s",
+	}, dscActivity)
+	startVal, _ := f.GetCellValue(sheet, "B60")
+	if startVal == "" {
+		t.Errorf("expected start time cell to be populated")
+	}
+
+	dscHoliday := DayStyleContext{
+		IsHolidayOrWeekend: true,
+		TimeStyle:          st.TimeStyle,
+	}
+	WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
+		StartCol: "B", EndCol: "C", TotalCol: "D", RowStr: "61",
+	}, dscHoliday)
+	holidayStart, _ := f.GetCellValue(sheet, "B61")
+	if holidayStart != "" {
+		t.Errorf("expected holiday cell to be empty, got %q", holidayStart)
+	}
+
+	dscDefaultWorkday := DayStyleContext{
+		TimeStyle:    st.TimeStyle,
+		DecimalStyle: st.DecimalStyle,
+	}
+	WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
+		StartCol: "B", EndCol: "C", TotalCol: "D", RowStr: "62", FormulaFmt: "(C{row}-B{row})*24", IsDecimalTotal: true,
+	}, dscDefaultWorkday)
+
 	// WriteBuilderDailyRows
 	in := GenerationInput{
 		Year:  2026,
@@ -333,9 +389,15 @@ func TestBuilderCommon_NewHelpers(t *testing.T) {
 	}
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
 	called := false
-	WriteBuilderDailyRows(f, sheet, in, 10, allCols, []string{"K"}, st, func(rs string, row int, dsc DayStyleContext) {
-		called = true
-		_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
+	WriteBuilderDailyRows(f, sheet, in, DailyRowsConfig{
+		StartRow: 10,
+		AllCols:  allCols,
+		WrapCols: []string{"K"},
+		Styles:   st,
+		WriteAct: func(rs string, row int, dsc DayStyleContext) {
+			called = true
+			_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
+		},
 	})
 	if !called {
 		t.Errorf("expected writeAct to be called for day 1")

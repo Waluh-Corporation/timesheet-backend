@@ -314,4 +314,25 @@ func TestUserRepository(t *testing.T) {
 	if err := repo.UpdateProfileChange(ctx, pChange); err != nil {
 		t.Fatalf("repo.UpdateProfileChange failed: %v", err)
 	}
+
+	// SoftDelete
+	if err := repo.SoftDelete(ctx, user.ID); err != nil {
+		t.Fatalf("repo.SoftDelete failed: %v", err)
+	}
+	softDeleted, err := repo.FindByID(ctx, user.ID)
+	if err != nil || softDeleted.IsActive {
+		t.Fatalf("expected user to be inactive after SoftDelete, got isActive=%v", softDeleted.IsActive)
+	}
+
+	// Anonymize
+	if err := repo.Anonymize(ctx, user.ID); err != nil {
+		t.Fatalf("repo.Anonymize failed: %v", err)
+	}
+	anonymized, err := repo.FindByID(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("repo.FindByID failed after Anonymize: %v", err)
+	}
+	if anonymized.IsActive || anonymized.PasswordHash != "" || !anonymized.IsAnonymized {
+		t.Fatalf("expected anonymized user to have empty password, inactive, and is_anonymized=true, got isActive=%v isAnonymized=%v", anonymized.IsActive, anonymized.IsAnonymized)
+	}
 }

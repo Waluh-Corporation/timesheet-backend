@@ -21,6 +21,7 @@ type UserRepository interface {
 	Update(ctx context.Context, user *models.User) error
 	UpdatePassword(ctx context.Context, id uint, passwordHash string, updatedAt time.Time) error
 	SoftDelete(ctx context.Context, id uint) error
+	Anonymize(ctx context.Context, id uint) error
 	ListUsers(ctx context.Context, isActive *bool) ([]models.User, error)
 
 	// Profile Change Requests

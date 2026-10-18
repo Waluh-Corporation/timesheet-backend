@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -23,32 +26,84 @@ const (
 // exists and is currently active (is_active = true) in the database.
 func (s *Server) AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if header == "" || !strings.HasPrefix(header, "Bearer ") {
+		token, ok := extractBearerToken(c.GetHeader("Authorization"))
+		if !ok {
 			RespondAbortError(c, http.StatusUnauthorized, "missing bearer token")
 			return
 		}
-		token := strings.TrimPrefix(header, "Bearer ")
+
 		claims, err := s.Auth.ParseToken(token)
 		if err != nil {
 			RespondAbortError(c, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
 
-		// Immediate Account Revocation: Validate that the user account exists and is active
-		userRepo := s.getUserRepository()
-		if userRepo != nil {
-			user, uerr := userRepo.FindByID(c.Request.Context(), claims.UserID)
-			if uerr != nil || user == nil || !user.IsActive {
-				RespondAbortError(c, http.StatusUnauthorized, "account is deactivated or suspended")
-				return
-			}
+		ctx := c.Request.Context()
+		if s.isTokenBlacklisted(ctx, claims.ID) {
+			RespondAbortError(c, http.StatusUnauthorized, "token has been revoked")
+			return
+		}
+
+		if !s.isAccountActive(ctx, claims.UserID) {
+			RespondAbortError(c, http.StatusUnauthorized, "account is deactivated or suspended")
+			return
 		}
 
 		c.Set(ctxUserID, claims.UserID)
 		c.Set(ctxRole, claims.Role)
 		c.Next()
 	}
+}
+
+func extractBearerToken(header string) (string, bool) {
+	if header == "" || !strings.HasPrefix(header, "Bearer ") {
+		return "", false
+	}
+	return strings.TrimPrefix(header, "Bearer "), true
+}
+
+func (s *Server) isTokenBlacklisted(ctx context.Context, tokenID string) bool {
+	if tokenID == "" {
+		return false
+	}
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		return false
+	}
+	blacklistKey := fmt.Sprintf("jwt:blacklist:%s", tokenID)
+	exists, err := rdb.Exists(ctx, blacklistKey).Result()
+	return err == nil && exists > 0
+}
+
+func (s *Server) isAccountActive(ctx context.Context, userID uint) bool {
+	activeKey := fmt.Sprintf("user:active:%d", userID)
+	if s.isUserActiveInCache(ctx, activeKey) {
+		return true
+	}
+
+	userRepo := s.getUserRepository()
+	if userRepo == nil {
+		return true
+	}
+
+	user, err := userRepo.FindByID(ctx, userID)
+	if err != nil || user == nil || !user.IsActive {
+		return false
+	}
+
+	if rdb := s.getRedisClient(); rdb != nil {
+		_ = rdb.Set(ctx, activeKey, "1", 2*time.Minute).Err()
+	}
+	return true
+}
+
+func (s *Server) isUserActiveInCache(ctx context.Context, activeKey string) bool {
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		return false
+	}
+	val, err := rdb.Get(ctx, activeKey).Result()
+	return err == nil && val == "1"
 }
 
 // AdminOnly rejects non-admin callers. Must run after AuthMiddleware.
@@ -68,6 +123,26 @@ func currentUserID(c *gin.Context) uint {
 	v, _ := c.Get(ctxUserID)
 	id, _ := v.(uint)
 	return id
+}
+
+// currentUserRole returns the authenticated user role from context.
+// It safely handles both models.Role and string types stored in ctxRole.
+func currentUserRole(c *gin.Context) models.Role {
+	if c == nil {
+		return ""
+	}
+	v, ok := c.Get(ctxRole)
+	if !ok || v == nil {
+		return ""
+	}
+	switch r := v.(type) {
+	case models.Role:
+		return r
+	case string:
+		return models.Role(r)
+	default:
+		return ""
+	}
 }
 
 // matchHostOrURL checks whether host matches target or target's host.

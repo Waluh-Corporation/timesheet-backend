@@ -177,6 +177,120 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/activities/previous": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves the most recent active daily activity strictly before the specified reference date (default: today in WIB) to allow copying/autofilling activity descriptions.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Activity"
+                ],
+                "summary": "Get previous day activity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Reference date (YYYY-MM-DD, default: today)",
+                        "name": "date",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.DailyActivityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid date format",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No previous activity found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/activities/witness": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates the witness ID for all Berita Acara daily activities in the specified month and year",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Activity"
+                ],
+                "summary": "Update witness for all Berita Acara entries in a given month",
+                "parameters": [
+                    {
+                        "description": "Update witness payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.UpdateMonthlyWitnessRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.APIResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/activities/{id}": {
             "get": {
                 "security": [
@@ -1970,6 +2084,70 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/admin/users/{id}/anonymize": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Scrubs PII from user account, tokens, passkeys, and profile change requests while preserving anonymized activity records for compliance.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Anonymize user personal data (UU PDP / Right to be Forgotten)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid user ID",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Admin only or self-anonymization forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/users/{id}/passkeys": {
             "get": {
                 "security": [
@@ -2895,7 +3073,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/response.UserResponse"
                         }
                     },
                     "401": {
@@ -3987,6 +4165,58 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/api/v1/users/witnesses": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns active users with role 'user' eligible to be chosen as a witness (excluding current user)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Activity"
+                ],
+                "summary": "List eligible witnesses for Berita Acara",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/response.APIResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/response.WitnessResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -4684,6 +4914,9 @@ const docTemplate = `{
                 "is_active": {
                     "type": "boolean"
                 },
+                "is_anonymized": {
+                    "type": "boolean"
+                },
                 "name": {
                     "description": "Profile fields (the \"approved\" / live values).",
                     "type": "string"
@@ -4848,6 +5081,10 @@ const docTemplate = `{
                     "type": "string",
                     "example": "BNI Mobile"
                 },
+                "berita_acara_notes": {
+                    "type": "string",
+                    "example": "Lupa tap absen masuk"
+                },
                 "date": {
                     "type": "string",
                     "example": "2026-09-01"
@@ -4855,6 +5092,9 @@ const docTemplate = `{
                 "end_time": {
                     "type": "string",
                     "example": "17:00"
+                },
+                "is_berita_acara": {
+                    "type": "boolean"
                 },
                 "project_id": {
                     "type": "string",
@@ -4875,6 +5115,10 @@ const docTemplate = `{
                 "status": {
                     "type": "string",
                     "example": "P"
+                },
+                "witness_id": {
+                    "type": "integer",
+                    "example": 2
                 }
             }
         },
@@ -5196,6 +5440,31 @@ const docTemplate = `{
                 }
             }
         },
+        "request.UpdateMonthlyWitnessRequest": {
+            "type": "object",
+            "required": [
+                "month",
+                "witness_id",
+                "year"
+            ],
+            "properties": {
+                "month": {
+                    "type": "integer",
+                    "maximum": 12,
+                    "minimum": 1,
+                    "example": 11
+                },
+                "witness_id": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "year": {
+                    "type": "integer",
+                    "minimum": 2000,
+                    "example": 2026
+                }
+            }
+        },
         "request.UpdatePasskeyRequest": {
             "type": "object",
             "required": [
@@ -5283,6 +5552,24 @@ const docTemplate = `{
                 "token": {
                     "type": "string",
                     "example": "a8f9c0e2b1d3..."
+                }
+            }
+        },
+        "response.APIResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "data": {},
+                "message": {
+                    "type": "string",
+                    "example": "operation successful"
+                },
+                "status": {
+                    "type": "string",
+                    "example": "success"
                 }
             }
         },
@@ -5408,6 +5695,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "is_active": {
+                    "type": "boolean"
+                },
+                "is_anonymized": {
                     "type": "boolean"
                 },
                 "name": {
@@ -5536,6 +5826,9 @@ const docTemplate = `{
                 "app_impacted": {
                     "type": "string"
                 },
+                "berita_acara_notes": {
+                    "type": "string"
+                },
                 "date": {
                     "type": "string"
                 },
@@ -5544,6 +5837,9 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
+                },
+                "is_berita_acara": {
+                    "type": "boolean"
                 },
                 "project_id": {
                     "type": "string"
@@ -5565,6 +5861,12 @@ const docTemplate = `{
                 },
                 "status_ref": {
                     "$ref": "#/definitions/models.ActivityStatus"
+                },
+                "witness": {
+                    "$ref": "#/definitions/response.WitnessResponse"
+                },
+                "witness_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -5618,7 +5920,7 @@ const docTemplate = `{
                     "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                 },
                 "user": {
-                    "$ref": "#/definitions/models.User"
+                    "$ref": "#/definitions/response.UserResponse"
                 }
             }
         },
@@ -5967,6 +6269,9 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": true
                 },
+                "is_anonymized": {
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string",
                     "example": "John Doe"
@@ -6031,6 +6336,17 @@ const docTemplate = `{
                 "valid": {
                     "type": "boolean",
                     "example": true
+                }
+            }
+        },
+        "response.WitnessResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         }

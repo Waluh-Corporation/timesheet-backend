@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-10-18
+
+### Added
+- **Berita Acara (Official Word Document Generation)**: Implemented automated Berita Acara document generation (`.docx`) utilizing Go native archive streaming and XML templating based on the corporate `Berita_Acara-Template.docx` format. Captures employee identity, department, group, team lead approver, and dynamically generates rows with Indonesian day names, dates, working hours, and activity explanations for entries marked as Berita Acara.
+- **Monthly Single-Witness Locking & Integrity Protection**: Enforced strict business rules ensuring each employee has exactly one consistent witness per month for all Berita Acara records. The initial Berita Acara entry in a calendar month requires and locks the chosen colleague (`witness_id`). Subsequent entries in the same month automatically inherit the locked witness when omitted, while attempts to specify a different witness without an explicit change request are rejected. Selecting oneself, inactive accounts, or non-user roles as a witness is strictly prohibited.
+- **Dedicated Witness Discovery & Management APIs**: Added `GET /api/v1/users/witnesses` returning safe public profiles of eligible peer colleagues (`RoleUser`), and `PUT /api/v1/activities/witness` allowing users to atomically reassign their designated monthly witness across all Berita Acara records for a given month in a single operation.
+- **Timesheet & Berita Acara Bundled ZIP Delivery**: Upgraded the asynchronous timesheet export pipeline to check for Berita Acara records. When present, both the `.xlsx` monthly timesheet and the generated `.docx` Berita Acara are automatically bundled into a single `.zip` archive (`Timesheet_and_Berita_Acara_<username>_<MM>_<YYYY>.zip`), uploaded to S3 storage, and delivered seamlessly via secure magic download tokens and push/email alerts.
+- **Previous Day Activity Description Autofill / Retrieval**: Added `GET /api/v1/activities/previous` endpoint allowing authenticated users to fetch their most recently recorded active daily activity details (including activity description, project, working hours, and status) prior to a given reference date (defaulting to today in WIB). This enables one-click copying and autofilling of yesterday's / previous workday's tasks into today's timesheet entry form.
+- **Previous Month Timesheet Access & Entry**: Users can now access, record daily activities, log overtime, and generate timesheet spreadsheets for both the current month and the previous month (maximum 1 month back). Submissions older than the previous month or for future months are strictly validated and rejected for standard users, while administrators maintain unrestricted historical access.
+- **Audit Logging & Activity Trail**: Added comprehensive immutable audit logs for administrative actions (account creation, profile modifications, deactivations, personal data anonymization, and profile change reviews) recording actors, target entities, IP addresses, user agents, and metadata.
+- **UU PDP Right to be Forgotten (Personal Data Anonymization)**: Added secure data anonymization endpoint (`POST /api/v1/admin/users/:id/anonymize`) allowing administrators to scrub personally identifiable information (PII) including name, email, credentials, and passkeys while retaining historical activity records for regulatory compliance.
+- **Redis TLS, ACL & Connection Pool Hardening**: Enhanced Redis integration with TLS encrypted in-flight communication, ACL username authentication, and connection pool controls (pool size, idle connections, timeouts) across the caching layer and background task queue.
+- **Server-Side Token Revocation & Active Session Invalidation**: Added Redis-backed JWT blacklisting (`jti`) upon user logout and active account caching to immediately terminate revoked or deactivated sessions.
+- **Swagger UI Production Guard & Configuration**: Added `SWAGGER_ENABLED` environment variable controlling interactive OpenAPI documentation mounting. Defaults to enabled in development and automatically disabled in production (`GIN_MODE=release`) to mitigate API schema enumeration and attack surface exposure.
+- **Resource Exhaustion & DoS Rate Limiting on Timesheet Downloads and Generation**: Extended IP rate limiting to protect public timesheet download token routes (`/timesheet/downloads/:token`) and resource-intensive generation endpoints against denial-of-service abuse.
+
+### Changed
+- **Adidata Overtime (SPL) Consolidation**: Consolidated the Adidata overtime sheet from multiple per-activity sheets (`SPL-1`, `SPL-2`, etc.) into a unified single sheet (`SPL`) matching the latest corporate template (`SPL_Adidata-Template.xlsx`). All monthly overtime entries are now presented in a single tabular list with dynamic row expansion for more than three overtime activities, formula-based total duration calculation (`=SUM(...)`), and hierarchical approver signature sections.
+- **Internal Server Error Masking & CWE-209 Hardening**: Hardened HTTP 500 error envelopes in `handlers/response.go` to mask raw technical error details in release mode while recording full diagnostic context to internal structured logs, preventing database schema and stack trace leakage to clients.
+- **Subprocess Execution Timeout for PDF Conversion**: Wrapped LibreOffice headless spreadsheet-to-PDF conversion in `services/pdf.go` with a deterministic 30-second context timeout, guarding against hung subprocesses and resource starvation.
+- **Timesheet Builders & Auth Architecture Refactoring**: Streamlined workbook generation logic across Adidata, NTT, SDD, and MII templates to reduce cognitive complexity and parameter counts, replaced duplicate string literals with typed constants, and decoupled logout token blacklisting and session revocation handlers for enhanced code maintainability and SonarCloud compliance.
+- **Configurable Timezone with UTC Default**: Changed the default application and scheduler timezone to `UTC` across the configuration loader, database connections, daily cron scheduler, background mailer, and timesheet period validation services. Added first-class configuration via environment variable `TZ` (with backward-compatible fallback to `SCHEDULER_TZ`) allowing flexible deployment in any IANA timezone.
+- **Responsive Email Template & Cross-Client Compatibility Hardening**: Upgraded all transactional email templates (`layout.html`, `password_changed.html`, `reminder.html`, `reset.html`, `setup.html`, `timesheet.html`) with dual-tier fluid breakpoints (`max-width: 620px` and `max-width: 480px`), centered Microsoft Outlook MSO conditional wrappers for both cards and external footers, full-width responsive action buttons (`.btn-shell` and `.btn-block`), automatic label-value row stacking on narrow smartphone viewports (`.stack-row`), cross-client Outlook font fallbacks, URL break-word wrapping, and dark mode styling across Apple Mail, Gmail, and Outlook.com/Office 365 (`[data-ogsc]` & `[data-ogsb]`).
+- **Access Token Expiry Alignment**: Aligned JWT access token lifespan to 15 minutes (`ACCESS_TOKEN_EXPIRY_MINUTES`) while utilizing refresh tokens for long-lived sessions, reducing exposure windows in accordance with OWASP API security guidelines.
+- **API Response Sanitization**: Sanitized authentication and passkey responses to return dedicated DTOs (`UserResponse`) instead of raw database entities, ensuring internal database fields are never serialized over the wire.
+- **Atomic Quota Counters**: Upgraded timesheet download quota counters to execute atomically via Redis Lua scripts, eliminating race conditions during concurrent download requests.
+- **Optimized Daily Reminder Scheduler**: Replaced repetitive user database queries in the reminder scheduler with an efficient single-pass query, improving scheduler throughput and database responsiveness.
+
+### Fixed
+- **Berita Acara DOCX Template OpenXML Compatibility**: Resolved XML namespace corruption in the master Word template (`Berita_Acara-Template.docx`) caused by invalid relationship and paragraph namespace attributes (`ns3:id` and `ns2:paraId`). Generated Word documents now open cleanly in Microsoft Word without unreadable content or recovery prompts.
+- **Anonymized Account Immutability & Modification Guards**: Prevented modifications to company, department, site, or profile details (`PATCH /api/v1/admin/users/:id`), redundant deactivations (`DELETE /api/v1/admin/users/:id`), and re-anonymization on already anonymized accounts, returning `403 Forbidden`. Enhanced anonymization to transactionally revoke passkeys, push subscriptions, and pending profile change requests, and exposed explicit `is_anonymized` status in user listings.
+- **Code Quality & Architecture Robustness**: Enhanced server middleware by decomposing authentication and token revocation workflows into streamlined modules, standardized internal error definitions and query identifiers across user management services and repositories, documented runtime timezone database embedding for containerized environments, and eliminated redundant evaluation expressions.
+
+### Removed
+- **Embedded Frontend / SPA Static File Serving**: Removed embedded SPA static file serving, route fallback handlers (`spaHandler`), and static path helpers (`tryFiles`, `isPathWithinRoot`) to maintain a pure, dedicated backend REST API architecture.
+
 ## [1.13.0] - 2026-09-27
 
 ### Added
@@ -74,194 +110,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Single Active Reset Token Policy**: Enabled atomic revocation of previous active reset tokens in a single database transaction upon issuing a new reset request. Only the most recently issued link remains valid, immediately invalidating older links to prevent unauthorized reuse.
 - **Strict Anti-Enumeration Protections**: Unified API responses on the forgot-password endpoint to return consistent generic messages, ensuring external parties cannot probe or determine whether an email account is registered.
 
----
-
-## [1.9.1] - 2026-09-20
-
-### Fixed
-- **Seamless Passkey Device Recognition**: Resolved an issue where newly added passkeys did not remember how they connect to your device (such as built-in fingerprint, face unlock, or security keys). The system now reliably remembers your device setup so your browser immediately opens the right sign-in prompt—like Touch ID, Windows Hello, or your security key—without extra steps or delays.
-
----
-
-## [1.9.0] - 2026-09-20
-
-### Added
-- **Official Yubico Hardware Authenticator Support**: Integrated official hardware AAGUID specifications covering 70 production models across the YubiKey 5 Series (NFC, USB-A, USB-C, Nano, Lightning / 5Ci), YubiKey 5 FIPS Series, YubiKey Bio Series (FIDO and Multi-protocol Editions), and Security Key by Yubico. Models are clearly distinguished by edition and profile (Consumer vs Enterprise Profile).
-
-### Improved
-- **Streamlined Passkey Brand Icons**: Simplified passkey icon delivery to a single, unified `icon` field across all credential and authenticator endpoints, reducing API response payload size and eliminating redundant theme-specific duplicates.
-- **Production Hardware Whitelisting**: Strictly filtered out non-production hardware, pre-release identifiers, and preview test keys to ensure only official production hardware keys appear in the authenticator directory.
-- **Updated API Specifications**: Updated Swagger/OpenAPI documentation and client contracts to reflect the unified `icon` property.
-
----
-
-## [1.8.0] - 2026-09-20
-
-### Added
-- **Automatic Passkey Brand & Icon Recognition**: When registering a passkey, the system now automatically recognizes your device or password manager (such as Apple iCloud Keychain, Google Password Manager, Windows Hello, 1Password, or Bitwarden) and displays its official logo in both light and dark themes.
-- **Custom Passkey Nicknames**: You can now rename your registered passkeys at any time (e.g., "Work MacBook", "Personal iPhone") to easily distinguish between multiple devices.
-- **Always Up-to-Date Authenticator Catalog**: Administrators can now synchronize the system's authenticator catalog with the official passkey community registry with a single click, keeping device names and brand logos up to date.
-- **Authenticator Directory Search**: Administrators can easily browse and search through supported passkey authenticators by name to verify device support.
-- **Real-Time Icon Synchronization**: When brand logos are updated in the catalog, your passkeys automatically display the latest icons immediately without requiring any re-registration.
-- **Pre-Check for Password Reset Links**: The password reset screen now immediately verifies whether your reset link is still valid before you type a new password, providing helpful warnings if the link has expired or was already used.
-
-### Security & Privacy
-- **Strict Passkey Privacy Protection**: Passkeys remain strictly personal and private. Administrators cannot view, modify, or delete your passkeys, ensuring full credential ownership and protection against unauthorized account access.
-- **Safe External Catalog Downloads**: Synchronization with the community registry is secured with strict timeouts and size limits to prevent system slowdowns or disruptions.
-
----
-
-## [1.7.1] - 2026-09-19
-
-### Fixed
-- **Instant Password Reset & User Creation Response**: Fixed a delay where requesting a password reset or creating a new user took a long time if email delivery was slow. Requests now complete instantly while confirmation emails are sent smoothly in the background.
-- **Smarter Email Service Check**: Prevented system delays by skipping email sending attempts immediately when email delivery is not configured.
-
----
-
-## [1.7.0] - 2026-09-19
-
-### Added
-- **Seamless Secure Sessions**: Extended login sessions with automatic background renewal so you stay securely logged in without interruptions, while ensuring that old sessions cannot be reused.
-- **True Account Logout**: Logging out now terminates your session across all devices immediately.
-- **Instant Account Deactivation**: Suspended or deactivated accounts lose access immediately across all active sessions.
-- **Automated Public Holiday Sync**: National holidays are now updated weekly in the background, ensuring timesheets always reflect the latest holiday schedule without delays.
-- **System Health Monitoring**: Added real-time health checks to ensure database and service performance remain optimal.
-
-### Improved
-- **Faster Timesheet Generation**: Generating monthly Excel timesheets is now significantly faster and no longer affected by external network slowness.
-- **Clearer, User-Friendly Error Messages**: System messages and validation warnings are now written in clear, polite, and readable sentences without technical error codes.
-- **Cleaner Email Notifications**: Streamlined email notifications for timesheets, reminders, and account alerts with a cleaner, clutter-free design.
-- **Faster Search in Master Data**: Searching for projects, departments, approvers, and companies is now much faster and responsive.
-- **Enhanced System Reliability**: Added safeguards to prevent email or push notification delays from slowing down the rest of the application.
-
-### Security
-- **Enhanced Token Protection**: Hardened login verification to prevent token tampering and replay attacks.
-- **Comprehensive Audit Logging**: Improved activity tracking for logins, logouts, passkey changes, and password updates to ensure platform accountability and security.
-
----
-
-## [1.6.0] - 2026-09-17
-
-### Added
-- **Work Hours Validation**: Added friendly guidance ensuring check-out time is later than check-in time when entering daily activities and overtime.
-- **Empty Timesheet Warning**: Helpful alert when trying to generate a monthly timesheet without any logged activities, reminding you to fill in your work days first.
-- **Restoration of Inactive Records**: Administrators can now inspect and reactivate previously archived companies, departments, sites, or divisions.
-- **Flexible Multi-Domain Access**: Enabled flexible access configuration so teams across different web domains can connect smoothly.
-
-### Fixed
-- **Accurate Administrative Listings**: Ensured archived and active records are consistently visible and filterable in administration management screens.
-- **Request Limiter Improvements**: Prevented unintended access blocks during development and high-traffic periods.
-
-### Security
-- **Hardened Data Queries**: Strengthened backend data handling to safeguard user notification subscriptions against tampering.
-
----
-
-## [1.5.0] - 2026-09-15
-
-### Added
-- **Customizable Reminder & Cleanup Schedules**: Timesheet reminders and routine data maintenance schedules can now be tailored to match company working hours.
-- **Resilient Background Automation**: Improved automated task handling with automatic recovery if a schedule setting is misconfigured.
-
----
-
-## [1.4.0] - 2026-09-15
-
-### Added
-- **Work Locations & Divisions Management**: Added comprehensive support for organizing users and departments by work site (e.g., Citicon, RDTX) and corporate divisions.
-- **Division-Based Department Filtering**: Filter departments conveniently by their parent division when assigning staff or viewing reports.
-- **Company & Approver Directory Management**: Added dedicated views for administrators to manage company profiles and timesheet signers.
-- **Adjustable Traffic Protection**: Protected system responsiveness by allowing administrators to tune access thresholds.
-
-### Improved
-- **Readable User Information**: Account and employee profiles now clearly display full organization names (site, division, department, company) across all screens and exported documents.
-
-### Fixed
-- **Deactivated Users Management**: Deactivated accounts now remain visible in administrative user management for auditing and reactivation.
-
----
-
-## [1.3.0] - 2026-09-14
-
-### Added
-- **Instant Profile Loading on Login**: Your full profile and company details are now loaded immediately upon logging in, making the dashboard feel instant and responsive.
-
-### Improved
-- **Reliable Email Delivery**: Added automatic retries with smart delays to ensure important notification emails arrive reliably even during temporary network interruptions.
-- **Smooth System Shutdowns**: Background tasks now shut down cleanly during maintenance windows without interrupting active user requests.
-
----
-
-## [1.2.0] - 2026-09-13
-
-### Added
-- **Direct User Invitation by Admin**: Administrators can quickly create user accounts with strong generated passwords and automatic welcome emails.
-- **Self-Service Password Change**: Users can securely change their password directly from account settings with email confirmation alerts.
-- **Modern, Mobile-Friendly Email Notifications**: Redesigned all notification emails (account setup, password resets, reminders, and timesheet delivery) with clean mobile-responsive layouts and easy-to-tap buttons.
-- **Automatic Approver Signatures in Timesheets**: Timesheet documents now automatically fill in the correct manager and approver names based on company rules.
-
-### Improved
-- **Cross-Company Departments**: Departments can now span multiple company entities, supporting flexible organizational structures.
-- **Clearer Onboarding Emails**: Welcome emails now display initial credentials clearly with straightforward next steps.
-
-### Security
-- **Next-Generation Password Protection**: Upgraded password encryption to industry-leading standards to safeguard user accounts.
-- **Account Duplication Prevention**: Enforced unique usernames and email addresses to eliminate accidental account collisions.
-
----
-
-## [1.1.0] - 2026-09-12
-
-### Added
-- **Timesheet Author Metadata**: Exported Excel timesheets now automatically record author and company information in document properties.
-- **Detailed Activity View**: View complete details of any logged daily activity, including project assignment and working hours.
-- **Passkey Biometric & Security Key Support**: Full support for logging in password-free using fingerprint, face recognition, or security keys.
-
-### Security
-- **Strict Personal Activity Privacy**: Users can only view and edit their own activities, ensuring private work records cannot be accessed by other users.
-
----
-
-## [1.0.0] - 2026-09-11
-
-### Added
-- **Automated Multi-Company Timesheets**:
-  - Automatically generate professional Excel timesheets tailored to corporate formats (MII, NTT, SDD, and Adidata) with exact formulas, logos, and correct day counts.
-  - Export timesheets directly to print-ready PDF documents.
-- **Password-Free & Secure Logins**:
-  - Sign in quickly using biometric passkeys (fingerprint, face unlock) or strong passwords.
-  - Role-based permissions ensuring users and administrators have appropriate access levels.
-- **Initial Setup Wizard**:
-  - Simple first-time setup process to create the initial administrator account and configure platform settings.
-- **Indonesian National Holidays**:
-  - Automatically loads and synchronizes official Indonesian public holidays and collective leave (cuti bersama) to mark non-working days accurately.
-- **Daily Activity Tracking**:
-  - Log daily tasks with assigned client projects, start times, and end times.
-  - Browse past activity logs with date range and page navigation.
-- **Overtime Tracking (Surat Perintah Lembur)**:
-  - Submit and track overtime hours with designated Team Leader and Department Head approvers.
-- **Company & Organization Directories**:
-  - Centralized management for companies, departments, projects, and work statuses.
-- **Smart Reminders**:
-  - Daily browser push notifications at 17:00 WIB to remind staff to fill out missing timesheet entries.
-  - Email delivery for generated timesheet reports and account setup links.
-
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.10.0...v1.11.0
-[1.10.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.1...v1.10.0
-[1.9.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.9.0...v1.9.1
-[1.9.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.8.0...v1.9.0
-[1.8.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.1...v1.8.0
-[1.7.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.7.0...v1.7.1
-[1.7.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.6.0...v1.7.0
-[1.6.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.5.0...v1.6.0
-[1.5.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.4.0...v1.5.0
-[1.4.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.3.0...v1.4.0
-[1.3.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.2.0...v1.3.0
-[1.2.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.1.0...v1.2.0
-[1.1.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.0.0
-
+[1.10.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.10.0

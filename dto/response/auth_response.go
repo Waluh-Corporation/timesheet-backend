@@ -1,12 +1,10 @@
 package response
 
-import "timesheet-backend/models"
-
 // LoginResponse represents a successful authentication response containing JWT access token, refresh token, and user profile.
 type LoginResponse struct {
-	Token        string      `json:"token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
-	RefreshToken string      `json:"refresh_token,omitempty" example:"8f12c3d4..."`
-	User         models.User `json:"user"`
+	Token        string       `json:"token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+	RefreshToken string       `json:"refresh_token,omitempty" example:"8f12c3d4..."`
+	User         UserResponse `json:"user"`
 }
 
 // RefreshResponse represents a successful refresh token exchange.
