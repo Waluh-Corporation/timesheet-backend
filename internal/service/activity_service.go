@@ -35,13 +35,19 @@ type ActivityService interface {
 
 type activityService struct {
 	repo    repository.ActivityRepository
+	subRepo repository.SubmissionRepository
 	nowFunc func() time.Time
 }
 
 // NewActivityService constructs an ActivityService implementation.
-func NewActivityService(repo repository.ActivityRepository) ActivityService {
+func NewActivityService(repo repository.ActivityRepository, subRepo ...repository.SubmissionRepository) ActivityService {
+	var sRepo repository.SubmissionRepository
+	if len(subRepo) > 0 {
+		sRepo = subRepo[0]
+	}
 	return &activityService{
 		repo:    repo,
+		subRepo: sRepo,
 		nowFunc: time.Now,
 	}
 }
@@ -173,6 +179,19 @@ func (s *activityService) UpsertDailyActivity(ctx context.Context, userID uint, 
 	date, err := s.parseAndValidateDate(ctx, req.Date)
 	if err != nil {
 		return err
+	}
+
+	if s.subRepo != nil {
+		m := int(date.Month())
+		y := date.Year()
+		if tsLocked, _ := s.subRepo.IsTimesheetLocked(ctx, userID, m, y); tsLocked {
+			return domain.NewUserError(domain.ErrLockedPeriod, "Periode timesheet ini telah ditandatangani. Batalkan tanda tangan terlebih dahulu untuk mengubah aktivitas.")
+		}
+		if req.IsBeritaAcara {
+			if baLocked, _ := s.subRepo.IsBeritaAcaraLocked(ctx, userID, m, y); baLocked {
+				return domain.NewUserError(domain.ErrLockedPeriod, "Periode Berita Acara ini telah diajukan/ditandatangani. Batalkan pengajuan terlebih dahulu untuk mengubah aktivitas.")
+			}
+		}
 	}
 
 	// Default status to 'P' if not provided
@@ -389,6 +408,11 @@ func (s *activityService) UpdateMonthlyWitness(ctx context.Context, userID uint,
 	}
 	if witness.Role != models.RoleUser {
 		return 0, nil, domain.NewUserError(domain.ErrInvalidInput, "Witness must be a user with 'user' role")
+	}
+	if s.subRepo != nil {
+		if baLocked, _ := s.subRepo.IsBeritaAcaraLocked(ctx, userID, month, year); baLocked {
+			return 0, nil, domain.NewUserError(domain.ErrLockedPeriod, "Berita Acara bulan ini telah diajukan/ditandatangani. Batalkan pengajuan terlebih dahulu untuk mengubah saksi.")
+		}
 	}
 	rows, err := s.repo.UpdateMonthlyWitness(ctx, userID, month, year, newWitnessID)
 	if err != nil {

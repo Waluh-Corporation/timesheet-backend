@@ -1,0 +1,150 @@
+<p
+  class="content-text"
+  style="
+    margin: 0;
+    color: #4b5563;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  "
+>
+  Halo <strong>{{.EmployeeName}}</strong>, Berita Acara Anda untuk periode <strong>{{.Period}}</strong> telah disetujui dan ditandatangani oleh saksi <strong>{{.WitnessName}}</strong>.
+</p>
+
+<!-- DETAILS BOX -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  class="details-card"
+  style="
+    width: 100%;
+    margin: 24px 0 0;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  "
+>
+  <tr>
+    <td style="padding: 18px 20px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Jenis Dokumen</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Berita Acara</td>
+        </tr>
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Periode</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #047857; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Period}}</td>
+        </tr>
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Saksi Penandatangan</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.WitnessName}}</td>
+        </tr>
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Status</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: bold; color: #047857; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            <span style="display: inline-block; padding: 2px 8px; background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px; color: #047857; font-weight: bold; font-size: 12px; letter-spacing: 0.2px;">Disetujui &amp; Ditandatangani Lengkap</span>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+{{if .DownloadURL}}
+<!-- ACTION BUTTON -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn-shell" style="margin: 26px 0 0;">
+  <tr>
+    <td
+      align="center"
+      bgcolor="#047857"
+      style="
+        background-color: #047857;
+        border-radius: 8px;
+      "
+    >
+      <!--[if mso]>
+      <v:roundrect
+        xmlns:v="urn:schemas-microsoft-com:vml"
+        xmlns:w="urn:schemas-microsoft-com:office:word"
+        href="{{.DownloadURL}}"
+        style="height: 48px; v-text-anchor: middle; width: 260px"
+        arcsize="17%"
+        strokecolor="#047857"
+        fillcolor="#047857"
+      >
+        <w:anchorlock />
+        <center
+          style="
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+          "
+        >
+          Unduh Berita Acara (.docx) &rarr;
+        </center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-->
+      <a
+        href="{{.DownloadURL}}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-link"
+        style="
+          display: inline-block;
+          padding: 13px 28px;
+          color: #ffffff;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.2px;
+          text-decoration: none;
+          text-align: center;
+          line-height: 1;
+        "
+      >
+        Unduh Berita Acara (.docx) &rarr;
+      </a>
+      <!--<![endif]-->
+    </td>
+  </tr>
+</table>
+
+<p
+  class="fallback-link"
+  style="
+    margin: 16px 0 0;
+    color: #9ca3af;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+  "
+>
+  Jika tombol di atas tidak dapat diklik, salin tautan berikut:<br />
+  <a
+    href="{{.DownloadURL}}"
+    target="_blank"
+    rel="noopener noreferrer"
+    style="color: #047857; text-decoration: underline; word-break: break-all;"
+  >
+    {{.DownloadURL}}
+  </a>
+</p>
+{{end}}
+
+<p
+  class="content-text"
+  style="
+    margin: 24px 0 0;
+    color: #6b7280;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+  "
+>
+  Dokumen resmi telah dilengkapi dengan gambar tanda tangan visual dari kedua pihak serta QR Code verifikasi dokumen digital.
+</p>

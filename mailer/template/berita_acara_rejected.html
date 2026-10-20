@@ -1,0 +1,180 @@
+<p
+  class="content-text"
+  style="
+    margin: 0;
+    color: #4b5563;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  "
+>
+  Halo <strong>{{.EmployeeName}}</strong>, pengajuan Berita Acara Anda untuk periode <strong>{{.Period}}</strong> telah ditinjau oleh saksi <strong>{{.WitnessName}}</strong> dan <strong>memerlukan revisi</strong> sebelum dapat disetujui.
+</p>
+
+<!-- REVISION NOTES BOX -->
+{{if .Notes}}
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  style="
+    width: 100%;
+    margin: 20px 0 0;
+    background-color: #fff1f2;
+    border: 1px solid #fecdd3;
+    border-left: 4px solid #e11d48;
+    border-radius: 6px;
+  "
+>
+  <tr>
+    <td style="padding: 14px 18px;">
+      <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; color: #be123c; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+        Catatan Revisi dari Saksi:
+      </p>
+      <p style="margin: 0; font-size: 14px; color: #9f1239; line-height: 1.5; font-style: italic; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+        &ldquo;{{.Notes}}&rdquo;
+      </p>
+    </td>
+  </tr>
+</table>
+{{end}}
+
+<!-- DETAILS BOX -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  class="details-card"
+  style="
+    width: 100%;
+    margin: 20px 0 0;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  "
+>
+  <tr>
+    <td style="padding: 18px 20px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Jenis Dokumen</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Berita Acara</td>
+        </tr>
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Periode</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Period}}</td>
+        </tr>
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Ditinjau Oleh</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.WitnessName}}</td>
+        </tr>
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Status</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: bold; color: #e11d48; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            <span style="display: inline-block; padding: 2px 8px; background-color: #ffe4e6; border: 1px solid #fecdd3; border-radius: 4px; color: #e11d48; font-weight: bold; font-size: 12px; letter-spacing: 0.2px;">Perlu Revisi</span>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+{{if .ActivityURL}}
+<!-- ACTION BUTTON -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn-shell" style="margin: 26px 0 0;">
+  <tr>
+    <td
+      align="center"
+      bgcolor="#e11d48"
+      style="
+        background-color: #e11d48;
+        border-radius: 8px;
+      "
+    >
+      <!--[if mso]>
+      <v:roundrect
+        xmlns:v="urn:schemas-microsoft-com:vml"
+        xmlns:w="urn:schemas-microsoft-com:office:word"
+        href="{{.ActivityURL}}"
+        style="height: 48px; v-text-anchor: middle; width: 260px"
+        arcsize="17%"
+        strokecolor="#e11d48"
+        fillcolor="#e11d48"
+      >
+        <w:anchorlock />
+        <center
+          style="
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+          "
+        >
+          Perbaiki Aktivitas &rarr;
+        </center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-->
+      <a
+        href="{{.ActivityURL}}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-link"
+        style="
+          display: inline-block;
+          padding: 13px 28px;
+          color: #ffffff;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.2px;
+          text-decoration: none;
+          text-align: center;
+          line-height: 1;
+        "
+      >
+        Perbaiki Aktivitas &rarr;
+      </a>
+      <!--<![endif]-->
+    </td>
+  </tr>
+</table>
+
+<p
+  class="fallback-link"
+  style="
+    margin: 16px 0 0;
+    color: #9ca3af;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+  "
+>
+  Jika tombol di atas tidak dapat diklik, salin tautan berikut:<br />
+  <a
+    href="{{.ActivityURL}}"
+    target="_blank"
+    rel="noopener noreferrer"
+    style="color: #e11d48; text-decoration: underline; word-break: break-all;"
+  >
+    {{.ActivityURL}}
+  </a>
+</p>
+{{end}}
+
+<p
+  class="content-text"
+  style="
+    margin: 24px 0 0;
+    color: #6b7280;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+  "
+>
+  Kunci mutasi periode bulan ini telah dibuka kembali secara otomatis agar Anda dapat menyesuaikan catatan aktivitas dan mengajukannya kembali.
+</p>

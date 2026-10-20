@@ -1,0 +1,150 @@
+<p
+  class="content-text"
+  style="
+    margin: 0;
+    color: #4b5563;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  "
+>
+  Halo <strong>{{.WitnessName}}</strong>, rekan Anda <strong>{{.EmployeeName}}</strong> telah mengajukan Berita Acara untuk periode <strong>{{.Period}}</strong> dan memilih Anda sebagai saksi pendamping untuk menandatangani dokumen tersebut.
+</p>
+
+<!-- DETAILS BOX -->
+<table
+  role="presentation"
+  width="100%"
+  cellpadding="0"
+  cellspacing="0"
+  border="0"
+  class="details-card"
+  style="
+    width: 100%;
+    margin: 24px 0 0;
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  "
+>
+  <tr>
+    <td style="padding: 18px 20px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Pemohon</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.EmployeeName}}</td>
+        </tr>
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Periode</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #d97706; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Period}}</td>
+        </tr>
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Peran Anda</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: bold; color: #4f46e5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Saksi Penandatangan</td>
+        </tr>
+        <tr class="stack-row">
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Status</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: bold; color: #d97706; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+            <span style="display: inline-block; padding: 2px 8px; background-color: #fef3c7; border: 1px solid #fde68a; border-radius: 4px; color: #b45309; font-weight: bold; font-size: 12px; letter-spacing: 0.2px;">Menunggu Persetujuan Saksi</span>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+{{if .ReviewURL}}
+<!-- ACTION BUTTON -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn-shell" style="margin: 26px 0 0;">
+  <tr>
+    <td
+      align="center"
+      bgcolor="#d97706"
+      style="
+        background-color: #d97706;
+        border-radius: 8px;
+      "
+    >
+      <!--[if mso]>
+      <v:roundrect
+        xmlns:v="urn:schemas-microsoft-com:vml"
+        xmlns:w="urn:schemas-microsoft-com:office:word"
+        href="{{.ReviewURL}}"
+        style="height: 48px; v-text-anchor: middle; width: 260px"
+        arcsize="17%"
+        strokecolor="#d97706"
+        fillcolor="#d97706"
+      >
+        <w:anchorlock />
+        <center
+          style="
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+          "
+        >
+          Tinjau Berita Acara &rarr;
+        </center>
+      </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-->
+      <a
+        href="{{.ReviewURL}}"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn-link"
+        style="
+          display: inline-block;
+          padding: 13px 28px;
+          color: #ffffff;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: 0.2px;
+          text-decoration: none;
+          text-align: center;
+          line-height: 1;
+        "
+      >
+        Tinjau Berita Acara &rarr;
+      </a>
+      <!--<![endif]-->
+    </td>
+  </tr>
+</table>
+
+<p
+  class="fallback-link"
+  style="
+    margin: 16px 0 0;
+    color: #9ca3af;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+  "
+>
+  Jika tombol di atas tidak dapat diklik, salin dan buka tautan berikut di peramban Anda:<br />
+  <a
+    href="{{.ReviewURL}}"
+    target="_blank"
+    rel="noopener noreferrer"
+    style="color: #d97706; text-decoration: underline; word-break: break-all;"
+  >
+    {{.ReviewURL}}
+  </a>
+</p>
+{{end}}
+
+<p
+  class="content-text"
+  style="
+    margin: 24px 0 0;
+    color: #6b7280;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+  "
+>
+  Anda dapat menyetujui pengajuan ini untuk membubuhkan tanda tangan digital Anda sebagai saksi atau menolaknya dengan memberikan catatan revisi jika terdapat ketidaksesuaian.
+</p>

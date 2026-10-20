@@ -32,6 +32,9 @@ type mockStorageService struct {
 func (m *mockStorageService) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
 	return nil
 }
+func (m *mockStorageService) Download(ctx context.Context, key string) ([]byte, error) {
+	return []byte("fake-bytes"), nil
+}
 func (m *mockStorageService) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	return m.downloadURL, m.downloadErr
 }

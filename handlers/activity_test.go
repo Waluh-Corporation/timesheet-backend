@@ -1328,6 +1328,10 @@ func (s *testActivityMockStorage) Upload(ctx context.Context, key string, body i
 	return nil
 }
 
+func (s *testActivityMockStorage) Download(ctx context.Context, key string) ([]byte, error) {
+	return []byte("dummy-content"), nil
+}
+
 func (s *testActivityMockStorage) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	return "https://s3.example.com/timesheets/" + key, nil
 }

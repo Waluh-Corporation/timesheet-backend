@@ -66,6 +66,8 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 		TLDateCell:   "F56",
 		DHDateCell:   "J56",
 		DatePrefix:   "DATE: ",
+		UserBoxCell:  "B51",
+		QRCell:       "L51",
 	})
 	return WriteWorkbookToBuffer(f, "ntt")
 }

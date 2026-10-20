@@ -87,6 +87,8 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 		TLDateCell:   "E50",
 		DHDateCell:   "I50",
 		DatePrefix:   "DATE : ",
+		UserBoxCell:  "B45",
+		QRCell:       "L45",
 	})
 	_ = f.SetCellValue(sheetTS, "B49", "( "+pos+" )")
 

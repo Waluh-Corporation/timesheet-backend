@@ -16,7 +16,10 @@ type GenerationInput struct {
 	Overtimes   []models.OvertimeEntry
 	Approvers   []models.Approver
 	// Holidays maps day-of-month to a public-holiday name for the month.
-	Holidays map[int]string
+	Holidays       map[int]string
+	SignatureBytes []byte
+	QRCodeBytes    []byte
+	IsSigned       bool
 }
 
 // MIIAppImpactedOptions lists the valid client options for MII's "Aplikasi

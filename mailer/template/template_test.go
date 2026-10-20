@@ -351,3 +351,121 @@ func TestBaseLayoutDataHelpers(t *testing.T) {
 		t.Errorf("AppInitial() on empty = %q, want 'T'", emptyApp.AppInitial())
 	}
 }
+
+func TestRenderWitnessRequestEmail(t *testing.T) {
+	data := WitnessRequestEmailData{
+		AppName:      "Timesheet Portal",
+		WitnessName:  "Jane Witness",
+		EmployeeName: "John Employee",
+		Period:       "Oktober 2026",
+		ReviewURL:    "https://timesheet.example.com/berita-acara/123/review",
+		PortalURL:    "https://timesheet.example.com",
+		SupportEmail: "support@example.com",
+	}
+
+	html, text, err := RenderWitnessRequestEmail(data)
+	if err != nil {
+		t.Fatalf("unexpected error rendering witness request email: %v", err)
+	}
+
+	if !strings.Contains(html, "Jane Witness") {
+		t.Errorf("HTML should contain witness name")
+	}
+	if !strings.Contains(html, "John Employee") {
+		t.Errorf("HTML should contain employee name")
+	}
+	if !strings.Contains(html, "Oktober 2026") {
+		t.Errorf("HTML should contain period")
+	}
+	if !strings.Contains(html, data.ReviewURL) {
+		t.Errorf("HTML should contain review URL")
+	}
+	if !strings.Contains(html, "Permintaan Saksi") {
+		t.Errorf("HTML should contain badge 'Permintaan Saksi'")
+	}
+	if !strings.Contains(text, "Jane Witness") || !strings.Contains(text, "John Employee") {
+		t.Errorf("text should contain witness and employee names")
+	}
+	if !strings.Contains(text, data.ReviewURL) {
+		t.Errorf("text should contain review URL")
+	}
+}
+
+func TestRenderBeritaAcaraApprovedEmail(t *testing.T) {
+	data := BeritaAcaraApprovedEmailData{
+		AppName:      "Timesheet Portal",
+		EmployeeName: "John Employee",
+		WitnessName:  "Jane Witness",
+		Period:       "Oktober 2026",
+		DownloadURL:  "https://timesheet.example.com/downloads/ba-123.docx",
+		PortalURL:    "https://timesheet.example.com",
+		SupportEmail: "support@example.com",
+	}
+
+	html, text, err := RenderBeritaAcaraApprovedEmail(data)
+	if err != nil {
+		t.Fatalf("unexpected error rendering approved email: %v", err)
+	}
+
+	if !strings.Contains(html, "John Employee") {
+		t.Errorf("HTML should contain employee name")
+	}
+	if !strings.Contains(html, "Jane Witness") {
+		t.Errorf("HTML should contain witness name")
+	}
+	if !strings.Contains(html, "Oktober 2026") {
+		t.Errorf("HTML should contain period")
+	}
+	if !strings.Contains(html, data.DownloadURL) {
+		t.Errorf("HTML should contain download URL")
+	}
+	if !strings.Contains(html, "Berita Acara Disetujui") {
+		t.Errorf("HTML should contain badge 'Berita Acara Disetujui'")
+	}
+	if !strings.Contains(text, "John Employee") || !strings.Contains(text, "Jane Witness") {
+		t.Errorf("text should contain names")
+	}
+	if !strings.Contains(text, data.DownloadURL) {
+		t.Errorf("text should contain download URL")
+	}
+}
+
+func TestRenderBeritaAcaraRejectedEmail(t *testing.T) {
+	data := BeritaAcaraRejectedEmailData{
+		AppName:      "Timesheet Portal",
+		EmployeeName: "John Employee",
+		WitnessName:  "Jane Witness",
+		Period:       "Oktober 2026",
+		Notes:        "Jam lembur pada tanggal 12 tidak sesuai dengan approval email",
+		ActivityURL:  "https://timesheet.example.com/activity",
+		PortalURL:    "https://timesheet.example.com",
+		SupportEmail: "support@example.com",
+	}
+
+	html, text, err := RenderBeritaAcaraRejectedEmail(data)
+	if err != nil {
+		t.Fatalf("unexpected error rendering rejected email: %v", err)
+	}
+
+	if !strings.Contains(html, "John Employee") {
+		t.Errorf("HTML should contain employee name")
+	}
+	if !strings.Contains(html, "Jane Witness") {
+		t.Errorf("HTML should contain witness name")
+	}
+	if !strings.Contains(html, data.Notes) {
+		t.Errorf("HTML should contain revision notes")
+	}
+	if !strings.Contains(html, data.ActivityURL) {
+		t.Errorf("HTML should contain activity URL")
+	}
+	if !strings.Contains(html, "Perlu Revisi") {
+		t.Errorf("HTML should contain badge 'Perlu Revisi'")
+	}
+	if !strings.Contains(text, data.Notes) {
+		t.Errorf("text should contain revision notes")
+	}
+	if !strings.Contains(text, data.ActivityURL) {
+		t.Errorf("text should contain activity URL")
+	}
+}

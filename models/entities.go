@@ -43,23 +43,24 @@ type User struct {
 	IsAnonymized bool   `gorm:"column:is_anonymized;type:boolean;default:false;not null;index:idx_users_is_anonymized" json:"is_anonymized"`
 
 	// Profile fields (the "approved" / live values).
-	Name          string      `gorm:"size:255" json:"name"`
-	BniID         string      `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
-	EmployeeID    string      `gorm:"size:64" json:"employee_id"`            // NPP or Vendor ID
-	Division      string      `gorm:"size:255" json:"division"`
-	DivisionID    *uint       `gorm:"index" json:"division_id,omitempty"`
-	DivisionRel   *Division   `gorm:"foreignKey:DivisionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"division_rel,omitempty"`
-	Department    string      `gorm:"size:255" json:"department"`
-	DepartmentID  *uint       `gorm:"index" json:"department_id"`
-	DepartmentRel *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
-	GroupName     string      `gorm:"size:255" json:"group_name"` // Kelompok (SDD)
-	Position      string      `gorm:"size:128" json:"position"`
-	Site          string      `gorm:"size:128" json:"site"`
-	SiteID        *uint       `gorm:"index" json:"site_id,omitempty"`
-	SiteRel       *Site       `gorm:"foreignKey:SiteID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"site_rel,omitempty"`
-	Company       string      `gorm:"size:64" json:"company"`
-	CompanyID     *uint       `gorm:"index" json:"company_id"`
-	CompanyRel    *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
+	Name             string      `gorm:"size:255" json:"name"`
+	BniID            string      `gorm:"size:64;comment:NPP BNI" json:"bni_id"` // NPP BNI
+	EmployeeID       string      `gorm:"size:64" json:"employee_id"`            // NPP or Vendor ID
+	Division         string      `gorm:"size:255" json:"division"`
+	DivisionID       *uint       `gorm:"index" json:"division_id,omitempty"`
+	DivisionRel      *Division   `gorm:"foreignKey:DivisionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"division_rel,omitempty"`
+	Department       string      `gorm:"size:255" json:"department"`
+	DepartmentID     *uint       `gorm:"index" json:"department_id"`
+	DepartmentRel    *Department `gorm:"foreignKey:DepartmentID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"department_rel,omitempty"`
+	GroupName        string      `gorm:"size:255" json:"group_name"` // Kelompok (SDD)
+	Position         string      `gorm:"size:128" json:"position"`
+	Site             string      `gorm:"size:128" json:"site"`
+	SiteID           *uint       `gorm:"index" json:"site_id,omitempty"`
+	SiteRel          *Site       `gorm:"foreignKey:SiteID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"site_rel,omitempty"`
+	Company          string      `gorm:"size:64" json:"company"`
+	CompanyID        *uint       `gorm:"index" json:"company_id"`
+	CompanyRel       *Company    `gorm:"foreignKey:CompanyID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"company_rel,omitempty"`
+	SignatureFileKey string      `gorm:"size:255" json:"signature_file_key,omitempty"`
 
 	// Credential relations.
 	Credentials       []WebAuthnCredential   `gorm:"constraint:OnDelete:CASCADE" json:"-"`
@@ -391,4 +392,60 @@ type AuthenticatorAAGUID struct {
 // TableName returns the explicit table name for AuthenticatorAAGUID.
 func (AuthenticatorAAGUID) TableName() string {
 	return "authenticator_aaguids"
+}
+
+// Submission status constants for Timesheet and Berita Acara.
+const (
+	SubmissionStatusDraft          = "draft"
+	SubmissionStatusSigned         = "signed"
+	SubmissionStatusSubmitted      = "submitted"
+	SubmissionStatusPendingWitness = "pending_witness"
+	SubmissionStatusRejected       = "rejected"
+	SubmissionStatusRevoked        = "revoked"
+)
+
+// TimesheetSubmission tracks the monthly sign-off lifecycle and audit state of an employee's timesheet.
+type TimesheetSubmission struct {
+	ID                string         `gorm:"primaryKey;size:64" json:"id"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	UserID            uint           `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
+	User              *User          `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Month             int            `gorm:"not null" json:"month"`
+	Year              int            `gorm:"not null" json:"year"`
+	Status            string         `gorm:"size:30;not null;default:'draft'" json:"status"`
+	SignedAt          *time.Time     `json:"signed_at,omitempty"`
+	VerificationToken string         `gorm:"size:64;uniqueIndex;not null" json:"verification_token"`
+	DocumentHash      string         `gorm:"size:64;not null" json:"document_hash"`
+	AuditMetadata     datatypes.JSON `gorm:"type:jsonb" json:"audit_metadata,omitempty"`
+}
+
+// TableName returns the table name for TimesheetSubmission.
+func (TimesheetSubmission) TableName() string {
+	return "timesheet_submissions"
+}
+
+// BeritaAcaraSubmission tracks the dual-sign-off lifecycle of an employee and witness for a monthly Berita Acara.
+type BeritaAcaraSubmission struct {
+	ID                    string         `gorm:"primaryKey;size:64" json:"id"`
+	CreatedAt             time.Time      `json:"created_at"`
+	UpdatedAt             time.Time      `json:"updated_at"`
+	UserID                uint           `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"user_id"`
+	User                  *User          `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	WitnessID             uint           `gorm:"index;not null;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"witness_id"`
+	Witness               *User          `gorm:"foreignKey:WitnessID" json:"witness,omitempty"`
+	Month                 int            `gorm:"not null" json:"month"`
+	Year                  int            `gorm:"not null" json:"year"`
+	Status                string         `gorm:"size:30;not null;default:'draft'" json:"status"`
+	EmployeeSignedAt      *time.Time     `json:"employee_signed_at,omitempty"`
+	WitnessSignedAt       *time.Time     `json:"witness_signed_at,omitempty"`
+	WitnessRejectionNotes string         `gorm:"type:text" json:"witness_rejection_notes,omitempty"`
+	VerificationToken     string         `gorm:"size:64;uniqueIndex;not null" json:"verification_token"`
+	DocumentHash          string         `gorm:"size:64" json:"document_hash,omitempty"`
+	AuditMetadata         datatypes.JSON `gorm:"type:jsonb" json:"audit_metadata,omitempty"`
+}
+
+// TableName returns the table name for BeritaAcaraSubmission.
+func (BeritaAcaraSubmission) TableName() string {
+	return "berita_acara_submissions"
 }

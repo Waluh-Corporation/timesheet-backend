@@ -78,6 +78,13 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 	_ = f.SetCellValue(sheet, "H52", sddNamePrefix+tlName)
 	_ = f.SetCellValue(sheet, "L52", sddNamePrefix+dhName)
 
+	if in.IsSigned && len(in.SignatureBytes) > 0 {
+		_ = EmbedPicture(f, sheet, "C46", in.SignatureBytes, 0.4, 0.4)
+	}
+	if in.IsSigned && len(in.QRCodeBytes) > 0 {
+		_ = EmbedPicture(f, sheet, "M46", in.QRCodeBytes, 0.6, 0.6)
+	}
+
 	return WriteWorkbookToBuffer(f, "sdd")
 }
 

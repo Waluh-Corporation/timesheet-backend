@@ -30,13 +30,17 @@ type BeritaAcaraItem struct {
 
 // BeritaAcaraPayload contains all data required to generate the Berita Acara Word document.
 type BeritaAcaraPayload struct {
-	EmployeeName string
-	NPP          string
-	Department   string
-	GroupName    string
-	WitnessName  string
-	TeamLeadName string
-	Items        []BeritaAcaraItem
+	EmployeeName           string
+	NPP                    string
+	Department             string
+	GroupName              string
+	WitnessName            string
+	TeamLeadName           string
+	Items                  []BeritaAcaraItem
+	EmployeeSignatureBytes []byte
+	WitnessSignatureBytes  []byte
+	QRCodeBytes            []byte
+	IsSigned               bool
 }
 
 // IndonesianDayName returns the Indonesian translation of the given weekday.
@@ -149,6 +153,11 @@ func renderTableRows(rowTemplate string, items []BeritaAcaraItem) string {
 	return rowsBuilder.String()
 }
 
+func buildDrawingXML(relID string, docPrID int, cx, cy int64) string {
+	return fmt.Sprintf(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="Signature"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="%d" name="Signature"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+		cx, cy, docPrID, docPrID, relID, cx, cy)
+}
+
 func populateDocumentXML(xmlStr string, payload BeritaAcaraPayload) string {
 	xmlStr = replaceScalarPlaceholders(xmlStr, payload)
 
@@ -158,6 +167,39 @@ func populateDocumentXML(xmlStr string, payload BeritaAcaraPayload) string {
 		renderedRows := renderTableRows(rowTemplate, payload.Items)
 		xmlStr = xmlStr[:rStart] + renderedRows + xmlStr[rEnd:]
 	}
+
+	if payload.IsSigned {
+		var sigRuns strings.Builder
+		if len(payload.WitnessSignatureBytes) > 0 {
+			sigRuns.WriteString(buildDrawingXML("rIdWitSig", 101, 1200000, 600000))
+		}
+		sigRuns.WriteString("<w:r><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/></w:r>")
+		if len(payload.EmployeeSignatureBytes) > 0 {
+			sigRuns.WriteString(buildDrawingXML("rIdEmpSig", 102, 1200000, 600000))
+		}
+
+		witnessPos := strings.Index(xmlStr, "{{WITNESS_NAME}}")
+		if witnessPos != -1 {
+			prevPEnd := strings.LastIndex(xmlStr[:witnessPos], "</w:p>")
+			if prevPEnd != -1 {
+				prevPStart := strings.LastIndex(xmlStr[:prevPEnd], "<w:p")
+				if prevPStart != -1 {
+					sigP := fmt.Sprintf(`<w:p><w:pPr><w:spacing w:line="240" w:lineRule="auto"/><w:contextualSpacing/></w:pPr>%s</w:p>`, sigRuns.String())
+					xmlStr = xmlStr[:prevPStart] + sigP + xmlStr[prevPEnd+len("</w:p>"):]
+				}
+			}
+		}
+
+		if len(payload.QRCodeBytes) > 0 {
+			qrDrawing := buildDrawingXML("rIdDocQR", 103, 900000, 900000)
+			qrP := fmt.Sprintf(`<w:p><w:pPr><w:jc w:val="right"/></w:pPr>%s</w:p>`, qrDrawing)
+			tblPos := strings.Index(xmlStr, "<w:tbl")
+			if tblPos != -1 {
+				xmlStr = xmlStr[:tblPos] + qrP + xmlStr[tblPos:]
+			}
+		}
+	}
+
 	return xmlStr
 }
 
@@ -174,6 +216,40 @@ func processZipEntry(writer *zip.Writer, file *zip.File, payload BeritaAcaraPayl
 	}
 
 	const maxZipEntrySize = 10 * 1024 * 1024 // 10MB limit per entry to prevent decompression bombs
+
+	if file.Name == "[Content_Types].xml" && payload.IsSigned {
+		xmlBytes, rerr := io.ReadAll(io.LimitReader(rc, maxZipEntrySize))
+		if rerr != nil {
+			return fmt.Errorf("failed to read [Content_Types].xml: %w", rerr)
+		}
+		ctStr := string(xmlBytes)
+		if !strings.Contains(ctStr, `Extension="png"`) {
+			ctStr = strings.Replace(ctStr, "</Types>", `<Default Extension="png" ContentType="image/png"/></Types>`, 1)
+		}
+		_, werr := io.WriteString(w, ctStr)
+		return werr
+	}
+
+	if file.Name == "word/_rels/document.xml.rels" && payload.IsSigned {
+		xmlBytes, rerr := io.ReadAll(io.LimitReader(rc, maxZipEntrySize))
+		if rerr != nil {
+			return fmt.Errorf("failed to read document.xml.rels: %w", rerr)
+		}
+		relsStr := string(xmlBytes)
+		var relsBuilder strings.Builder
+		if len(payload.WitnessSignatureBytes) > 0 {
+			relsBuilder.WriteString(`<Relationship Id="rIdWitSig" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/wit_sig.png"/>`)
+		}
+		if len(payload.EmployeeSignatureBytes) > 0 {
+			relsBuilder.WriteString(`<Relationship Id="rIdEmpSig" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/emp_sig.png"/>`)
+		}
+		if len(payload.QRCodeBytes) > 0 {
+			relsBuilder.WriteString(`<Relationship Id="rIdDocQR" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/doc_qr.png"/>`)
+		}
+		relsStr = strings.Replace(relsStr, "</Relationships>", relsBuilder.String()+"</Relationships>", 1)
+		_, werr := io.WriteString(w, relsStr)
+		return werr
+	}
 
 	if file.Name != "word/document.xml" {
 		if _, err := io.Copy(w, io.LimitReader(rc, maxZipEntrySize)); err != nil {
@@ -211,6 +287,36 @@ func GenerateBeritaAcaraDocx(payload BeritaAcaraPayload) ([]byte, error) {
 	for _, file := range reader.File {
 		if err := processZipEntry(writer, file, payload); err != nil {
 			return nil, err
+		}
+	}
+
+	if payload.IsSigned {
+		if len(payload.WitnessSignatureBytes) > 0 {
+			w, err := writer.Create("word/media/wit_sig.png")
+			if err != nil {
+				return nil, fmt.Errorf("failed to create media entry wit_sig: %w", err)
+			}
+			if _, err := w.Write(payload.WitnessSignatureBytes); err != nil {
+				return nil, err
+			}
+		}
+		if len(payload.EmployeeSignatureBytes) > 0 {
+			w, err := writer.Create("word/media/emp_sig.png")
+			if err != nil {
+				return nil, fmt.Errorf("failed to create media entry emp_sig: %w", err)
+			}
+			if _, err := w.Write(payload.EmployeeSignatureBytes); err != nil {
+				return nil, err
+			}
+		}
+		if len(payload.QRCodeBytes) > 0 {
+			w, err := writer.Create("word/media/doc_qr.png")
+			if err != nil {
+				return nil, fmt.Errorf("failed to create media entry doc_qr: %w", err)
+			}
+			if _, err := w.Write(payload.QRCodeBytes); err != nil {
+				return nil, err
+			}
 		}
 	}
 

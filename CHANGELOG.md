@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Digital Signature & Document Verification QR Code System**: Added a comprehensive hybrid signing architecture for Timesheet and Berita Acara documents combining visual signature images with tamper-evident verification QR codes.
+- **User Profile Signature Management**: Users can now upload or draw transparent PNG signatures directly in profile settings (`POST /api/v1/user/signature`), stored securely in object storage (S3/MinIO), with retrieval and deletion endpoints.
+- **Explicit Timesheet Sign-Off & Period Locking**: Added explicit monthly timesheet sign-off (`POST /api/v1/timesheets/sign`) and revocation (`POST /api/v1/timesheets/revoke`). Signing locks daily activity mutations for the month, calculates an immutable SHA-256 document fingerprint, and embeds the employee's visual signature and verification QR code into generated spreadsheets.
+- **Asynchronous Berita Acara Dual-Signature Workflow**: Implemented multi-party signing for Berita Acara. Employees submit their monthly report for witness approval (`POST /api/v1/berita-acara/submit`), dispatching dual alerts (email and web push) to the chosen colleague. The witness reviews pending requests (`GET /api/v1/berita-acara/witness-requests`) and approves (`POST /api/v1/berita-acara/:id/witness-action`) or rejects with revision notes. Fully signed documents embed both employee and witness visual signatures alongside a document verification QR code in OpenXML Word `.docx`.
+- **Dedicated Responsive Email Templates**: Created enterprise HTML and plain-text email templates for the witness workflow (`witness_request`, `berita_acara_approved`, and `berita_acara_rejected`) featuring status badges, period metadata, and direct action buttons.
+- **Public Document Verification API for Frontend**: Added public JSON verification endpoint (`GET /api/v1/verify/doc/:token`), returning cryptographic audit data (validity badge, signer identities, timestamps, and SHA-256 fingerprint) consumed directly by the frontend verification interface.
+
 ## [1.14.0] - 2026-10-18
 
 ### Added

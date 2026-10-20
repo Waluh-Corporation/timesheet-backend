@@ -106,6 +106,13 @@ func (r *userRepository) UpdatePassword(ctx context.Context, id uint, passwordHa
 	}).Error
 }
 
+func (r *userRepository) UpdateSignatureFileKey(ctx context.Context, id uint, fileKey string) error {
+	return r.db.WithContext(ctx).Model(&models.User{}).Where(queryID, id).Updates(map[string]interface{}{
+		"signature_file_key": fileKey,
+		"updated_at":         time.Now(),
+	}).Error
+}
+
 func (r *userRepository) SoftDelete(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Model(&models.User{}).Where("id = ? AND is_active = true", id).Updates(map[string]interface{}{
 		"is_active":  false,
