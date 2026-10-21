@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Timesheet Spreadsheet Font Size & Readability**: Enlarged the font size of timesheet daily table rows and summary totals to 14 pt across all company templates (MII, SDD, Adidata, and NTT), set table column headers to 14 pt (Bold), and adjusted upper metadata headers to 12 pt. Increased base row height to 21 pt with proportional dynamic text wrapping so larger text renders cleanly without vertical clipping.
+
 ## [1.14.0] - 2026-10-18
 
 ### Added

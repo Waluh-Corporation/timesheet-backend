@@ -226,7 +226,7 @@ func WriteHolidayRemarkRow(f *excelize.File, sheet, col, rs string, row int, hol
 	} else {
 		_ = f.SetCellValue(sheet, col+rs, "Weekend")
 	}
-	_ = f.SetRowHeight(sheet, row, 15)
+	_ = f.SetRowHeight(sheet, row, 21)
 }
 
 // WriteAttendanceMatrixStatus writes the standard 6-column matrix attendance status ("E" through "J").
@@ -376,7 +376,7 @@ func ApplyBlankPaddingRow(f *excelize.File, sheet string, row int, cols []string
 	for _, col := range wrapCols {
 		_ = f.SetCellStyle(sheet, col+rs, col+rs, st.DataCenterWrapStyle)
 	}
-	_ = f.SetRowHeight(sheet, row, 15)
+	_ = f.SetRowHeight(sheet, row, 21)
 }
 
 // WriteTotalSummaryRow writes the standard TOTAL row with formula sum and attendance counts.
