@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dedicated Responsive Email Templates**: Created enterprise HTML and plain-text email templates for the witness workflow (`witness_request`, `berita_acara_approved`, and `berita_acara_rejected`) featuring status badges, period metadata, and direct action buttons.
 - **Public Document Verification API for Frontend**: Added public JSON verification endpoint (`GET /api/v1/verify/doc/:token`), returning cryptographic audit data (validity badge, signer identities, timestamps, and SHA-256 fingerprint) consumed directly by the frontend verification interface.
 
+### Changed
+- **Tabler-Inspired Transactional Email Redesign**: Revamped all email templates (`layout.html`, `timesheet.html`, `reminder.html`, `setup.html`, `reset.html`, `password_changed.html`, `berita_acara_approved.html`, `berita_acara_rejected.html`, and `witness_request.html`) to follow the Tabler design system. Features modern typography, Tabler brand colors (`#066fd1` primary blue, clean `#f6f8fb` canvas, `#e6e7e9` borders), datagrid key-value metadata cards, Tabler-styled alert callouts, and tailored Dark Mode support (`#0e1726` canvas and `#182433` card surface) across webmail and desktop clients.
+
 ## [1.14.0] - 2026-10-18
 
 ### Added
