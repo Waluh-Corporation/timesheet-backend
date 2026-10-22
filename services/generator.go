@@ -270,7 +270,7 @@ func writeMasterNonWorkingDay(f *excelize.File, sheet string, r int, d time.Time
 	for _, col := range []string{"K", "L", "M", "N", "O", "P", "Q"} {
 		_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", col, r), "")
 	}
-	return 15.0
+	return 21.0
 }
 
 func writeMasterWorkingDay(f *excelize.File, sheet string, r int, d time.Time, entry *models.DailyEntry, st *masterTemplateStyles) float64 {
@@ -286,7 +286,7 @@ func writeMasterWorkingDay(f *excelize.File, sheet string, r int, d time.Time, e
 		for _, col := range []string{"E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q"} {
 			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", col, r), "")
 		}
-		h = 15.0
+		h = 21.0
 	}
 
 	_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", r), fmt.Sprintf("C%d", r), st.timeStyle)

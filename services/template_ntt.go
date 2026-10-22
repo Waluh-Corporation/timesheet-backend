@@ -79,6 +79,7 @@ func renderNTTDailyRows(
 ) map[string]int {
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
+	wrapCols := []string{"K", "L", "M", "N"}
 	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {
@@ -86,12 +87,12 @@ func renderNTTDailyRows(
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"K"}, st)
+			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
 			continue
 		}
 
 		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "A", rs, allCols, []string{"K"}, dsc)
+		ApplyDayRowStyles(f, sheet, "A", rs, allCols, wrapCols, dsc)
 		_ = f.SetCellValue(sheet, "A"+rs, dsc.Date)
 
 		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{

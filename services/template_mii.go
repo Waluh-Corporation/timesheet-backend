@@ -59,6 +59,7 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 	byDay := BuildByDayMap(in.Activities)
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
+	wrapCols := []string{"K", "L", "M", "N", "O", "P", "Q", "R"}
 	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {
@@ -66,12 +67,12 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, []string{"K", "Q"}, st)
+			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
 			continue
 		}
 
 		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "A", rs, allCols, []string{"K", "Q"}, dsc)
+		ApplyDayRowStyles(f, sheet, "A", rs, allCols, wrapCols, dsc)
 		_ = f.SetCellValue(sheet, "A"+rs, dsc.Date)
 
 		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
