@@ -36,7 +36,7 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 	}
 
 	headerStyle, err := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Size: 10, Family: "Calibri"},
+		Font:      &excelize.Font{Bold: true, Size: 14, Family: "Calibri"},
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#D9E1F2"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
 		Border:    thinBorder,
@@ -46,70 +46,70 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 	}
 
 	headerGreyStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Size: 10, Family: "Calibri"},
+		Font:      &excelize.Font{Bold: true, Size: 14, Family: "Calibri"},
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{"#E7E6E6"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
 		Border:    thinBorder,
 	})
 
 	dataCenterStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:      &excelize.Font{Size: 14, Family: "Calibri"},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:    thinBorder,
 	})
 
 	dataCenterWrapStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:      &excelize.Font{Size: 14, Family: "Calibri"},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
 		Border:    thinBorder,
 	})
 
 	dataLeftStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:      &excelize.Font{Size: 14, Family: "Calibri"},
 		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center", WrapText: true},
 		Border:    thinBorder,
 	})
 
 	dateStyle, _ := f.NewStyle(&excelize.Style{
-		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:         &excelize.Font{Size: 14, Family: "Calibri"},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
 		CustomNumFmt: strPtr("d-mmm-yy"),
 	})
 
 	timeStyle, _ := f.NewStyle(&excelize.Style{
-		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:         &excelize.Font{Size: 14, Family: "Calibri"},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
 		CustomNumFmt: strPtr("hh:mm"),
 	})
 
 	decimalStyle, _ := f.NewStyle(&excelize.Style{
-		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:         &excelize.Font{Size: 14, Family: "Calibri"},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
 		CustomNumFmt: strPtr("0.00"),
 	})
 
 	boldCenterStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Size: 9, Family: "Calibri"},
+		Font:      &excelize.Font{Bold: true, Size: 14, Family: "Calibri"},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:    thinBorder,
 	})
 
 	boldLeftStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Size: 9, Family: "Calibri"},
+		Font:      &excelize.Font{Bold: true, Size: 14, Family: "Calibri"},
 		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
 		Border:    thinBorder,
 	})
 
 	metaLabelStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Size: 10, Family: "Calibri"},
+		Font:      &excelize.Font{Bold: true, Size: 12, Family: "Calibri"},
 		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
 	})
 
 	metaValueStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 10, Family: "Calibri"},
+		Font:      &excelize.Font{Size: 12, Family: "Calibri"},
 		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center", WrapText: false},
 	})
 
@@ -121,7 +121,7 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 	})
 
 	greyDateStyle, _ := f.NewStyle(&excelize.Style{
-		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:         &excelize.Font{Size: 14, Family: "Calibri"},
 		Fill:         excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
@@ -129,21 +129,21 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 	})
 
 	greyCenterStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:      &excelize.Font{Size: 14, Family: "Calibri"},
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:    thinBorder,
 	})
 
 	greyCenterWrapStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:      &excelize.Font{Size: 14, Family: "Calibri"},
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
 		Border:    thinBorder,
 	})
 
 	greyTimeStyle, _ := f.NewStyle(&excelize.Style{
-		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:         &excelize.Font{Size: 14, Family: "Calibri"},
 		Fill:         excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,
@@ -151,7 +151,7 @@ func NewBuilderStyles(f *excelize.File) (*BuilderStyles, error) {
 	})
 
 	greyDecimalStyle, _ := f.NewStyle(&excelize.Style{
-		Font:         &excelize.Font{Size: 9, Family: "Calibri"},
+		Font:         &excelize.Font{Size: 14, Family: "Calibri"},
 		Fill:         excelize.Fill{Type: "pattern", Color: []string{colorGrey}, Pattern: 1},
 		Alignment:    &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 		Border:       thinBorder,

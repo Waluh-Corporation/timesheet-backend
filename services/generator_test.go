@@ -48,13 +48,13 @@ func TestGeneratorHelpers(t *testing.T) {
 
 	// calculateRowHeight
 	h1 := calculateRowHeight("Short", "Project", "P01", "App", "Div", "Dept")
-	if h1 != 15.0 {
-		t.Errorf("expected 15.0 minimum height, got %f", h1)
+	if h1 != 21.0 {
+		t.Errorf("expected 21.0 minimum height, got %f", h1)
 	}
 
 	h2 := calculateRowHeight("A very long activity description that will wrap across multiple lines because it has lots of detail and explanations", "Project", "P01", "App", "Div", "Dept")
-	if h2 < 15.0 {
-		t.Errorf("expected height >= 15.0, got %f", h2)
+	if h2 < 21.0 {
+		t.Errorf("expected height >= 21.0, got %f", h2)
 	}
 }
 

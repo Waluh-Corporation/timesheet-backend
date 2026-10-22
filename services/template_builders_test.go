@@ -854,3 +854,146 @@ func TestTemplateBuilders_TotalAttendanceUpdates(t *testing.T) {
 		})
 	}
 }
+
+func TestTimesheetFontSizesAndRowHeights(t *testing.T) {
+	// 1. Verify NewBuilderStyles definition directly
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+
+	st, err := NewBuilderStyles(f)
+	if err != nil {
+		t.Fatalf("NewBuilderStyles failed: %v", err)
+	}
+
+	styleChecks := []struct {
+		name     string
+		styleID  int
+		wantSize float64
+		wantBold bool
+	}{
+		{"HeaderStyle", st.HeaderStyle, 14, true},
+		{"HeaderGreyStyle", st.HeaderGreyStyle, 14, true},
+		{"DataCenterStyle", st.DataCenterStyle, 14, false},
+		{"DataCenterWrapStyle", st.DataCenterWrapStyle, 14, false},
+		{"DataLeftStyle", st.DataLeftStyle, 14, false},
+		{"DateStyle", st.DateStyle, 14, false},
+		{"TimeStyle", st.TimeStyle, 14, false},
+		{"DecimalStyle", st.DecimalStyle, 14, false},
+		{"BoldCenterStyle", st.BoldCenterStyle, 14, true},
+		{"BoldLeftStyle", st.BoldLeftStyle, 14, true},
+		{"MetaLabelStyle", st.MetaLabelStyle, 12, true},
+		{"MetaValueStyle", st.MetaValueStyle, 12, false},
+		{"GreyDateStyle", st.GreyDateStyle, 14, false},
+		{"GreyCenterStyle", st.GreyCenterStyle, 14, false},
+		{"GreyCenterWrapStyle", st.GreyCenterWrapStyle, 14, false},
+		{"GreyTimeStyle", st.GreyTimeStyle, 14, false},
+		{"GreyDecimalStyle", st.GreyDecimalStyle, 14, false},
+	}
+
+	for _, sc := range styleChecks {
+		s, err := f.GetStyle(sc.styleID)
+		if err != nil {
+			t.Errorf("GetStyle(%s) error: %v", sc.name, err)
+			continue
+		}
+		if s.Font == nil {
+			t.Errorf("Style %s has nil Font", sc.name)
+			continue
+		}
+		if s.Font.Size != sc.wantSize {
+			t.Errorf("Style %s Font.Size = %v, want %v", sc.name, s.Font.Size, sc.wantSize)
+		}
+		if s.Font.Bold != sc.wantBold {
+			t.Errorf("Style %s Font.Bold = %v, want %v", sc.name, s.Font.Bold, sc.wantBold)
+		}
+	}
+
+	// 2. Verify all companies produce 14pt data rows and >= 21 row heights
+	user := &models.User{
+		Name:       "Test Engineer",
+		Division:   "WDL",
+		Department: "WCH",
+		EmployeeID: "EMP-001",
+		Site:       "Jakarta",
+	}
+
+	act := models.DailyActivity{
+		Date:      time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC),
+		StartTime: "08:00",
+		EndTime:   "17:00",
+		Status:    "P",
+		Activity:  "Core service implementation and unit test coverage",
+		ProjectRef: &models.Project{
+			Code: "P24015",
+			Name: "BNI Direct",
+		},
+	}
+
+	companies := []struct {
+		code      string
+		sheetName string
+		dataCell  string // cell in activity row (Day 2)
+		dataRow   int    // Day 2 row
+		blankRow  int    // Day 30 row (Feb has 28 days)
+	}{
+		{code: "mii", sheetName: "Sheet1", dataCell: "K10", dataRow: 10, blankRow: 38},
+		{code: "sdd", sheetName: "Februari", dataCell: "N13", dataRow: 13, blankRow: 41},
+		{code: "adidata", sheetName: "TIMESHEET", dataCell: "L11", dataRow: 11, blankRow: 39},
+		{code: "ntt", sheetName: "Timesheet", dataCell: "K12", dataRow: 12, blankRow: 40},
+	}
+
+	for _, comp := range companies {
+		t.Run(comp.code, func(t *testing.T) {
+			in := GenerationInput{
+				CompanyCode: comp.code,
+				User:        user,
+				Month:       2, // February 2026 (28 days)
+				Year:        2026,
+				Activities:  []models.DailyActivity{act},
+				Holidays:    map[int]string{},
+			}
+
+			raw, err := GenerateFromTemplate(in)
+			if err != nil {
+				t.Fatalf("[%s] GenerateFromTemplate failed: %v", comp.code, err)
+			}
+
+			wb, err := excelize.OpenReader(bytes.NewReader(raw))
+			if err != nil {
+				t.Fatalf("[%s] OpenReader failed: %v", comp.code, err)
+			}
+			defer func() { _ = wb.Close() }()
+
+			// Verify data cell has Font.Size == 14
+			styleID, err := wb.GetCellStyle(comp.sheetName, comp.dataCell)
+			if err != nil {
+				t.Fatalf("[%s] GetCellStyle(%s) error: %v", comp.code, comp.dataCell, err)
+			}
+			s, err := wb.GetStyle(styleID)
+			if err != nil {
+				t.Fatalf("[%s] GetStyle(%d) error: %v", comp.code, styleID, err)
+			}
+			if s.Font == nil || s.Font.Size != 14 {
+				t.Errorf("[%s] Data cell %s Font.Size = %v, want 14", comp.code, comp.dataCell, s.Font.Size)
+			}
+
+			// Verify row height for activity row is >= 21
+			hAct, err := wb.GetRowHeight(comp.sheetName, comp.dataRow)
+			if err != nil {
+				t.Fatalf("[%s] GetRowHeight(%d) error: %v", comp.code, comp.dataRow, err)
+			}
+			if hAct < 21.0 {
+				t.Errorf("[%s] Row %d height = %v, want >= 21.0", comp.code, comp.dataRow, hAct)
+			}
+
+			// Verify blank padding row height is 21
+			hBlank, err := wb.GetRowHeight(comp.sheetName, comp.blankRow)
+			if err != nil {
+				t.Fatalf("[%s] GetRowHeight(%d) error: %v", comp.code, comp.blankRow, err)
+			}
+			if hBlank != 21.0 {
+				t.Errorf("[%s] Blank padding row %d height = %v, want 21.0", comp.code, comp.blankRow, hBlank)
+			}
+		})
+	}
+}
