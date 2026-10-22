@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Tabler-Inspired Transactional Email Redesign**: Revamped all email templates (`layout.html`, `timesheet.html`, `reminder.html`, `setup.html`, `reset.html`, `password_changed.html`, `berita_acara_approved.html`, `berita_acara_rejected.html`, and `witness_request.html`) to follow the Tabler design system. Features modern typography, Tabler brand colors (`#066fd1` primary blue, clean `#f6f8fb` canvas, `#e6e7e9` borders), datagrid key-value metadata cards, Tabler-styled alert callouts, and tailored Dark Mode support (`#0e1726` canvas and `#182433` card surface) across webmail and desktop clients.
 
+## [1.15.0] - 2026-10-22
+
+### Changed
+- **Timesheet Spreadsheet Font Size & Readability**: Enlarged the font size of timesheet daily table rows and summary totals to 14 pt across all company templates (MII, SDD, Adidata, and NTT), set table column headers to 14 pt (Bold), and adjusted upper metadata headers to 12 pt. Increased base row height to 21 pt with proportional dynamic text wrapping so larger text renders cleanly without vertical clipping.
+
+### Security
+- **Security Vulnerability Remediation**: Upgraded Go toolchain to `1.27.3` and `excelize` library to patch known security vulnerabilities in intermediate certificate trust verification (`GO-2026-6809`), spreadsheet stream allocation memory exhaustion (`GO-2026-6689`), array formula recursion stack overflows (`GO-2026-6688`), and malformed OLE/CFB decryption handling (`GO-2026-6684`).
+
+---
+
 ## [1.14.0] - 2026-10-18
 
 ### Added
@@ -107,23 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **For Administrators**: Administrators can now directly update any user's email address from the user management panel to keep account contact details up to date.
   - **For Users**: Users can now request an email address change through the profile update request form, which takes effect once reviewed and approved by an administrator.
 
----
-
-## [1.10.0] - 2026-09-20
-
-### Added
-- **Password Reset Rate Limiting & Cooldown**: Implemented a defense-in-depth throttling mechanism (configurable via `RESET_PASSWORD_COOLDOWN_SECONDS`, default 60 seconds) per email and IP address on the password reset endpoint to prevent email bombing, spamming, and resource exhaustion.
-
-### Improved
-- **Modular Sub-Domain Architecture**: Modularized core API handlers into dedicated domain components (Passkey/WebAuthn, Password Reset, Self-Service Profile, Admin User Operations, and Overtime Tracking), significantly improving code maintainability, isolation of responsibilities, and long-term service stability without any breaking changes to API contracts.
-
-### Security & Privacy
-- **Single Active Reset Token Policy**: Enabled atomic revocation of previous active reset tokens in a single database transaction upon issuing a new reset request. Only the most recently issued link remains valid, immediately invalidating older links to prevent unauthorized reuse.
-- **Strict Anti-Enumeration Protections**: Unified API responses on the forgot-password endpoint to return consistent generic messages, ensuring external parties cannot probe or determine whether an email account is registered.
-
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.11.0...v1.12.0
-[1.11.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.10.0...v1.11.0
-[1.10.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.10.0
+[1.11.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.11.0

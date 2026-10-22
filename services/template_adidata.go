@@ -212,7 +212,7 @@ func expandAdidataSPLRows(f *excelize.File, splSheet string, count int) {
 		_ = f.MergeCell(splSheet, "D"+rStr, "E"+rStr)
 		_ = f.MergeCell(splSheet, "F"+rStr, "G"+rStr)
 		_ = f.MergeCell(splSheet, "I"+rStr, "O"+rStr)
-		_ = f.SetRowHeight(splSheet, r, 14.2)
+		_ = f.SetRowHeight(splSheet, r, 21)
 		for _, col := range cols {
 			styleID, _ := f.GetCellStyle(splSheet, col+"15")
 			_ = f.SetCellStyle(splSheet, col+rStr, col+rStr, styleID)
@@ -383,7 +383,7 @@ func writeAdidataMultiSPL(f *excelize.File, splSheet string, in GenerationInput,
 		_ = f.MergeCell(splSheet, "D"+rStr, "E"+rStr)
 		_ = f.MergeCell(splSheet, "F"+rStr, "G"+rStr)
 		_ = f.MergeCell(splSheet, "I"+rStr, "O"+rStr)
-		_ = f.SetRowHeight(splSheet, r, 14.2)
+		_ = f.SetRowHeight(splSheet, r, 21)
 
 		_ = f.SetCellStyle(splSheet, "C"+rStr, "C"+rStr, st.DataCenterStyle)
 		styleMergedRange(f, splSheet, "D"+rStr, "E"+rStr, st.DataCenterStyle)

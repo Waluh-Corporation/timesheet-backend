@@ -32,8 +32,9 @@ func estimateCellLines(text string, colWidth float64) int {
 	if text == "" {
 		return 1
 	}
-	// Proportional font adjustment factor: assume average character width is slightly larger than the grid units
-	effectiveWidth := int(colWidth * 0.95)
+	// Proportional font adjustment factor for font size 14:
+	// 14pt characters are ~40% wider than standard 10pt characters.
+	effectiveWidth := int(colWidth * 0.70)
 	if effectiveWidth < 5 {
 		effectiveWidth = 5
 	}
@@ -86,9 +87,9 @@ func calculateRowHeight(activity, projectName, projectID, appImpacted, division,
 	}
 
 	if maxLines > 1 {
-		return 15.0 + float64(maxLines-1)*13.0
+		return 21.0 + float64(maxLines-1)*18.0
 	}
-	return 15.0
+	return 21.0
 }
 
 // GenerateExcel processes the master template and returns the filled spreadsheet as a byte array
@@ -108,12 +109,12 @@ func initMasterStyles(f *excelize.File) (*masterTemplateStyles, error) {
 		{Type: "right", Color: "000000", Style: 1},
 		{Type: "bottom", Color: "000000", Style: 1},
 	}
-	fontArial11 := &excelize.Font{Family: "Arial", Size: 11}
+	fontArial14 := &excelize.Font{Family: "Arial", Size: 14}
 	fillGray := excelize.Fill{Type: "pattern", Color: []string{"#D3D3D3"}, Pattern: 1}
 
 	grayStyle, err := f.NewStyle(&excelize.Style{
 		Fill:      fillGray,
-		Font:      fontArial11,
+		Font:      fontArial14,
 		Border:    borderBlack,
 		Alignment: &excelize.Alignment{Vertical: "center", Horizontal: "center", WrapText: true},
 	})
@@ -124,33 +125,33 @@ func initMasterStyles(f *excelize.File) (*masterTemplateStyles, error) {
 	grayDateStyle, _ := f.NewStyle(&excelize.Style{
 		CustomNumFmt: stringPtr("d-m-yy"),
 		Fill:         fillGray,
-		Font:         fontArial11,
+		Font:         fontArial14,
 		Border:       borderBlack,
 		Alignment:    &excelize.Alignment{Vertical: "center", Horizontal: "center"},
 	})
 
 	dateStyle, _ := f.NewStyle(&excelize.Style{
 		CustomNumFmt: stringPtr("d-m-yy"),
-		Font:         fontArial11,
+		Font:         fontArial14,
 		Border:       borderBlack,
 		Alignment:    &excelize.Alignment{Vertical: "center", Horizontal: "center"},
 	})
 
 	timeStyle, _ := f.NewStyle(&excelize.Style{
 		CustomNumFmt: stringPtr("hh:mm"),
-		Font:         fontArial11,
+		Font:         fontArial14,
 		Border:       borderBlack,
 		Alignment:    &excelize.Alignment{Vertical: "center", Horizontal: "center"},
 	})
 
 	activeStyleCenter, _ := f.NewStyle(&excelize.Style{
-		Font:      fontArial11,
+		Font:      fontArial14,
 		Border:    borderBlack,
 		Alignment: &excelize.Alignment{Vertical: "center", Horizontal: "center"},
 	})
 
 	activeStyleLeft, _ := f.NewStyle(&excelize.Style{
-		Font:      fontArial11,
+		Font:      fontArial14,
 		Border:    borderBlack,
 		Alignment: &excelize.Alignment{Vertical: "center", Horizontal: "center", WrapText: true},
 	})
@@ -186,7 +187,7 @@ func writeMasterHeaderMetadata(f *excelize.File, sheet string, req *models.Times
 	_ = f.SetCellValue(sheet, "C6", periodStr)
 
 	headerStyle, err := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{Family: "Arial", Size: 11},
+		Font: &excelize.Font{Family: "Arial", Size: 12},
 	})
 	if err == nil {
 		for i := 1; i <= 6; i++ {
@@ -220,7 +221,7 @@ func trimMasterExcessRows(f *excelize.File, sheet string, daysInMonth int) error
 func writeMasterSignatures(f *excelize.File, sheet string, req *models.TimesheetRequest, daysInMonth int) {
 	finalRow := 12 + daysInMonth
 	sigStyle, err := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{Family: "Arial", Size: 11},
+		Font: &excelize.Font{Family: "Arial", Size: 14},
 		Border: []excelize.Border{
 			{Type: "left", Color: "000000", Style: 1},
 			{Type: "top", Color: "000000", Style: 1},
