@@ -2,6 +2,9 @@ package storage
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +36,17 @@ func TestNewS3StorageService(t *testing.T) {
 		require.NotNil(t, svc)
 		assert.Equal(t, "my-timesheets", svc.bucket)
 	})
+
+	t.Run("empty region bucket and credentials uses defaults", func(t *testing.T) {
+		cfg := &config.Config{
+			S3Region: "",
+			S3Bucket: "",
+		}
+		svc, err := NewS3StorageService(cfg)
+		require.NoError(t, err)
+		require.NotNil(t, svc)
+		assert.Equal(t, "timesheets", svc.bucket)
+	})
 }
 
 func TestS3StorageService_Validation(t *testing.T) {
@@ -50,6 +64,13 @@ func TestS3StorageService_Validation(t *testing.T) {
 	t.Run("empty key for Upload returns error", func(t *testing.T) {
 		err := svc.Upload(ctx, "", strings.NewReader("content"), "text/plain")
 		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "object key cannot be empty")
+	})
+
+	t.Run("empty key for Download returns error", func(t *testing.T) {
+		b, err := svc.Download(ctx, "")
+		assert.Error(t, err)
+		assert.Nil(t, b)
 		assert.Contains(t, err.Error(), "object key cannot be empty")
 	})
 
@@ -92,5 +113,129 @@ func TestS3StorageService_Validation(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotEmpty(t, url)
 		assert.Contains(t, url, "my-timesheet.xlsx")
+	})
+}
+
+func TestS3StorageService_OperationsWithMockServer(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Upload success and failure", func(t *testing.T) {
+		statusCode := http.StatusOK
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(statusCode)
+		}))
+		defer server.Close()
+
+		cfg := &config.Config{
+			S3Region:       "us-east-1",
+			S3Bucket:       "test-bucket",
+			S3Endpoint:     server.URL,
+			S3AccessKey:    "test-key",
+			S3SecretKey:    "test-secret",
+			S3UsePathStyle: true,
+		}
+		svc, err := NewS3StorageService(cfg)
+		require.NoError(t, err)
+
+		err = svc.Upload(ctx, "test-key.txt", strings.NewReader("hello"), "text/plain")
+		assert.NoError(t, err)
+
+		statusCode = http.StatusInternalServerError
+		err = svc.Upload(ctx, "test-key.txt", strings.NewReader("hello"), "text/plain")
+		assert.Error(t, err)
+	})
+
+	t.Run("Download success and failure", func(t *testing.T) {
+		statusCode := http.StatusOK
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if statusCode != http.StatusOK {
+				w.WriteHeader(statusCode)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = io.WriteString(w, "mock-file-content")
+		}))
+		defer server.Close()
+
+		cfg := &config.Config{
+			S3Region:       "us-east-1",
+			S3Bucket:       "test-bucket",
+			S3Endpoint:     server.URL,
+			S3AccessKey:    "test-key",
+			S3SecretKey:    "test-secret",
+			S3UsePathStyle: true,
+		}
+		svc, err := NewS3StorageService(cfg)
+		require.NoError(t, err)
+
+		data, err := svc.Download(ctx, "test-key.txt")
+		assert.NoError(t, err)
+		assert.Equal(t, "mock-file-content", string(data))
+
+		statusCode = http.StatusNotFound
+		_, err = svc.Download(ctx, "nonexistent.txt")
+		assert.Error(t, err)
+	})
+
+	t.Run("Delete success and failure", func(t *testing.T) {
+		statusCode := http.StatusNoContent
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(statusCode)
+		}))
+		defer server.Close()
+
+		cfg := &config.Config{
+			S3Region:       "us-east-1",
+			S3Bucket:       "test-bucket",
+			S3Endpoint:     server.URL,
+			S3AccessKey:    "test-key",
+			S3SecretKey:    "test-secret",
+			S3UsePathStyle: true,
+		}
+		svc, err := NewS3StorageService(cfg)
+		require.NoError(t, err)
+
+		err = svc.Delete(ctx, "test-key.txt")
+		assert.NoError(t, err)
+
+		statusCode = http.StatusInternalServerError
+		err = svc.Delete(ctx, "test-key.txt")
+		assert.Error(t, err)
+	})
+
+	t.Run("FileExists 200, 404, and 500", func(t *testing.T) {
+		statusCode := http.StatusOK
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(statusCode)
+		}))
+		defer server.Close()
+
+		cfg := &config.Config{
+			S3Region:       "us-east-1",
+			S3Bucket:       "test-bucket",
+			S3Endpoint:     server.URL,
+			S3AccessKey:    "test-key",
+			S3SecretKey:    "test-secret",
+			S3UsePathStyle: true,
+		}
+		svc, err := NewS3StorageService(cfg)
+		require.NoError(t, err)
+
+		// 200 OK -> exists
+		exists, err := svc.FileExists(ctx, "test-key.txt")
+		assert.NoError(t, err)
+		assert.True(t, exists)
+
+		// 404 Not Found -> does not exist
+		statusCode = http.StatusNotFound
+		exists, err = svc.FileExists(ctx, "test-key.txt")
+		assert.NoError(t, err)
+		assert.False(t, exists)
+
+		// 500 Internal Server Error -> error
+		statusCode = http.StatusInternalServerError
+		exists, err = svc.FileExists(ctx, "test-key.txt")
+		assert.Error(t, err)
+		assert.False(t, exists)
 	})
 }

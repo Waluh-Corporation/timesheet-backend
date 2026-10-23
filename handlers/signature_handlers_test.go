@@ -329,4 +329,187 @@ func TestSignatureHandlers_BeritaAcaraWorkflow(t *testing.T) {
 	assert.Equal(t, u1.Name, verResp.Data.EmployeeName)
 	assert.Equal(t, u2.Name, verResp.Data.WitnessName)
 	assert.NotEmpty(t, verResp.Data.DocumentHash)
+
+	// 5. Get Berita Acara Status
+	wStat := httptest.NewRecorder()
+	cStat, _ := gin.CreateTestContext(wStat)
+	cStat.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/status?month=10&year=2026", nil)
+	cStat.Set("userID", u1.ID)
+	cStat.Set("role", models.RoleUser)
+
+	srv.GetBeritaAcaraSubmissionStatus(cStat)
+	assert.Equal(t, http.StatusOK, wStat.Code)
+
+	// 6. Revoke Berita Acara
+	wRev := httptest.NewRecorder()
+	cRev, _ := gin.CreateTestContext(wRev)
+	cRev.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/"+submissionID+"/revoke", nil)
+	cRev.Params = gin.Params{{Key: "id", Value: submissionID}}
+	cRev.Set("userID", u1.ID)
+	cRev.Set("role", models.RoleUser)
+
+	srv.RevokeBeritaAcara(cRev)
+	assert.Equal(t, http.StatusOK, wRev.Code)
+}
+
+func TestSignatureHandlers_NilServiceHandling(t *testing.T) {
+	srv := &Server{SignatureSvc: nil}
+
+	runNilTest := func(method, path string, handler func(*gin.Context)) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(method, path, nil)
+		handler(c)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	}
+
+	runNilTest(http.MethodPost, "/api/v1/user/signature", srv.UploadSignature)
+	runNilTest(http.MethodGet, "/api/v1/user/signature", srv.GetSignature)
+	runNilTest(http.MethodDelete, "/api/v1/user/signature", srv.DeleteSignature)
+	runNilTest(http.MethodPost, "/api/v1/timesheets/sign", srv.SignTimesheet)
+	runNilTest(http.MethodPost, "/api/v1/timesheets/revoke", srv.RevokeTimesheet)
+	runNilTest(http.MethodGet, "/api/v1/timesheets/status", srv.GetTimesheetSubmissionStatus)
+	runNilTest(http.MethodPost, "/api/v1/berita-acara/submit", srv.SubmitBeritaAcara)
+	runNilTest(http.MethodPost, "/api/v1/berita-acara/1/witness-action", srv.WitnessAction)
+	runNilTest(http.MethodPost, "/api/v1/berita-acara/1/revoke", srv.RevokeBeritaAcara)
+	runNilTest(http.MethodGet, "/api/v1/berita-acara/status", srv.GetBeritaAcaraSubmissionStatus)
+	runNilTest(http.MethodGet, "/api/v1/berita-acara/witness-requests", srv.ListPendingWitnessRequests)
+	runNilTest(http.MethodGet, "/api/v1/verify/doc/token", srv.VerifyDocument)
+}
+
+func TestSignatureHandlers_ValidationAndErrorBranches(t *testing.T) {
+	srv, tx, u1, u2 := setupSignatureHandlerTest(t)
+	defer tx.Rollback()
+
+	t.Run("UploadSignature bad requests and user errors", func(t *testing.T) {
+		// Invalid JSON
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/user/signature", strings.NewReader(`{invalid}`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("userID", u1.ID)
+		srv.UploadSignature(c)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+
+		// Empty signature base64
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Request = httptest.NewRequest(http.MethodPost, "/api/v1/user/signature", strings.NewReader(`{"signature_base64":""}`))
+		c2.Request.Header.Set("Content-Type", "application/json")
+		c2.Set("userID", u1.ID)
+		srv.UploadSignature(c2)
+		assert.Equal(t, http.StatusBadRequest, w2.Code)
+	})
+
+	t.Run("Timesheet handlers bad requests", func(t *testing.T) {
+		// SignTimesheet invalid JSON
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheets/sign", strings.NewReader(`{invalid}`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("userID", u1.ID)
+		srv.SignTimesheet(c)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+
+		// RevokeTimesheet invalid JSON
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheets/revoke", strings.NewReader(`{invalid}`))
+		c2.Request.Header.Set("Content-Type", "application/json")
+		c2.Set("userID", u1.ID)
+		srv.RevokeTimesheet(c2)
+		assert.Equal(t, http.StatusBadRequest, w2.Code)
+
+		// Status invalid query
+		w3 := httptest.NewRecorder()
+		c3, _ := gin.CreateTestContext(w3)
+		c3.Request = httptest.NewRequest(http.MethodGet, "/api/v1/timesheets/status?month=0&year=2026", nil)
+		c3.Set("userID", u1.ID)
+		srv.GetTimesheetSubmissionStatus(c3)
+		assert.Equal(t, http.StatusBadRequest, w3.Code)
+
+		// SignTimesheet user error (no signature uploaded)
+		uNoSig := models.User{
+			Username: "no_sig_user",
+			Email:    "nosig@example.com",
+			Name:     "No Sig User",
+			Role:     models.RoleUser,
+			IsActive: true,
+		}
+		_ = tx.Create(&uNoSig)
+
+		w4 := httptest.NewRecorder()
+		c4, _ := gin.CreateTestContext(w4)
+		c4.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheets/sign", strings.NewReader(`{"month":10,"year":2026}`))
+		c4.Request.Header.Set("Content-Type", "application/json")
+		c4.Set("userID", uNoSig.ID)
+		srv.SignTimesheet(c4)
+		assert.Equal(t, http.StatusBadRequest, w4.Code)
+
+		// RevokeTimesheet user error (timesheet not signed)
+		w5 := httptest.NewRecorder()
+		c5, _ := gin.CreateTestContext(w5)
+		c5.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheets/revoke", strings.NewReader(`{"month":10,"year":2026}`))
+		c5.Request.Header.Set("Content-Type", "application/json")
+		c5.Set("userID", uNoSig.ID)
+		srv.RevokeTimesheet(c5)
+		assert.Equal(t, http.StatusBadRequest, w5.Code)
+	})
+
+	t.Run("BeritaAcara handlers bad requests and rejection", func(t *testing.T) {
+		// Submit invalid JSON
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/submit", strings.NewReader(`{invalid}`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		c.Set("userID", u1.ID)
+		srv.SubmitBeritaAcara(c)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+
+		// Witness action missing id
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara//witness-action", strings.NewReader(`{"action":"reject","notes":"revisi"}`))
+		c2.Request.Header.Set("Content-Type", "application/json")
+		c2.Params = gin.Params{{Key: "id", Value: ""}}
+		c2.Set("userID", u2.ID)
+		srv.WitnessAction(c2)
+		assert.Equal(t, http.StatusBadRequest, w2.Code)
+
+		// Witness action invalid JSON
+		w3 := httptest.NewRecorder()
+		c3, _ := gin.CreateTestContext(w3)
+		c3.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/123/witness-action", strings.NewReader(`{invalid}`))
+		c3.Request.Header.Set("Content-Type", "application/json")
+		c3.Params = gin.Params{{Key: "id", Value: "123"}}
+		c3.Set("userID", u2.ID)
+		srv.WitnessAction(c3)
+		assert.Equal(t, http.StatusBadRequest, w3.Code)
+
+		// Revoke missing id
+		w4 := httptest.NewRecorder()
+		c4, _ := gin.CreateTestContext(w4)
+		c4.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara//revoke", nil)
+		c4.Params = gin.Params{{Key: "id", Value: ""}}
+		c4.Set("userID", u1.ID)
+		srv.RevokeBeritaAcara(c4)
+		assert.Equal(t, http.StatusBadRequest, w4.Code)
+
+		// Status invalid month/year
+		w5 := httptest.NewRecorder()
+		c5, _ := gin.CreateTestContext(w5)
+		c5.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/status?month=15&year=2026", nil)
+		c5.Set("userID", u1.ID)
+		srv.GetBeritaAcaraSubmissionStatus(c5)
+		assert.Equal(t, http.StatusBadRequest, w5.Code)
+	})
+
+	t.Run("VerifyDocument not found", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/verify/doc/non-existent-token", nil)
+		c.Params = gin.Params{{Key: "token", Value: "non-existent-token"}}
+		srv.VerifyDocument(c)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
 }

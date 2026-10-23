@@ -354,7 +354,7 @@ func TestBaseLayoutDataHelpers(t *testing.T) {
 
 func TestRenderWitnessRequestEmail(t *testing.T) {
 	data := WitnessRequestEmailData{
-		AppName:      "Timesheet Portal",
+		AppName:      "",
 		WitnessName:  "Jane Witness",
 		EmployeeName: "John Employee",
 		Period:       "Oktober 2026",

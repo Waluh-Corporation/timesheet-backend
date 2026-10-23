@@ -187,4 +187,47 @@ func TestSubmissionRepository_BeritaAcara(t *testing.T) {
 	if !locked {
 		t.Fatal("expected BA locked during pending_witness")
 	}
+
+	// 7. FindBeritaAcaraSubmission
+	foundSub, err := repo.FindBeritaAcaraSubmission(ctx, employee.ID, 10, 2026)
+	if err != nil {
+		t.Fatalf("FindBeritaAcaraSubmission failed: %v", err)
+	}
+	if foundSub == nil || foundSub.ID != baID {
+		t.Fatalf("expected BA %s, got %+v", baID, foundSub)
+	}
+
+	// 8. Nil upsert validations
+	if err := repo.UpsertTimesheetSubmission(ctx, nil); err == nil {
+		t.Error("expected error when upserting nil timesheet submission")
+	}
+	if err := repo.UpsertBeritaAcaraSubmission(ctx, nil); err == nil {
+		t.Error("expected error when upserting nil berita acara submission")
+	}
+
+	// 9. RecordNotFound returns nil, nil
+	tsNil, err := repo.FindTimesheetSubmission(ctx, 99999999, 1, 2026)
+	if err != nil || tsNil != nil {
+		t.Errorf("expected nil, nil for non-existent timesheet, got sub: %v, err: %v", tsNil, err)
+	}
+
+	tsTokenNil, err := repo.FindTimesheetByToken(ctx, "non-existent-token-xyz")
+	if err != nil || tsTokenNil != nil {
+		t.Errorf("expected nil, nil for non-existent token, got sub: %v, err: %v", tsTokenNil, err)
+	}
+
+	baSubNil, err := repo.FindBeritaAcaraSubmission(ctx, 99999999, 1, 2026)
+	if err != nil || baSubNil != nil {
+		t.Errorf("expected nil, nil for non-existent BA submission, got sub: %v, err: %v", baSubNil, err)
+	}
+
+	baIDNil, err := repo.FindBeritaAcaraByID(ctx, "non-existent-ba-id-xyz")
+	if err != nil || baIDNil != nil {
+		t.Errorf("expected nil, nil for non-existent BA ID, got sub: %v, err: %v", baIDNil, err)
+	}
+
+	baTokenNil, err := repo.FindBeritaAcaraByToken(ctx, "non-existent-ba-token-xyz")
+	if err != nil || baTokenNil != nil {
+		t.Errorf("expected nil, nil for non-existent BA token, got sub: %v, err: %v", baTokenNil, err)
+	}
 }

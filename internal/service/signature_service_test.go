@@ -442,3 +442,205 @@ func TestSignatureService_BeritaAcaraWorkflow(t *testing.T) {
 	assert.False(t, verifyAfterRevoke.IsValid)
 	assert.Equal(t, "revoked", verifyAfterRevoke.Status)
 }
+
+func TestSignatureService_ValidationErrorsAndEdgeCases(t *testing.T) {
+	ctx := context.Background()
+	userRepo := newMockUserRepo()
+	actRepo := newMockActivityRepo()
+	subRepo := newMockSubmissionRepo()
+	storageSvc := newMockStorageSvc()
+	meta := service.AuditMeta{IP: "127.0.0.1", UserAgent: "EdgeCaseClient"}
+
+	user := &models.User{
+		ID:       10,
+		Username: "edge_user",
+		Email:    "edge@example.com",
+		Name:     "Edge User",
+		IsActive: true,
+	}
+	_ = userRepo.Create(ctx, user)
+
+	witness := &models.User{
+		ID:       20,
+		Username: "edge_witness",
+		Email:    "edge_wit@example.com",
+		Name:     "Edge Witness",
+		IsActive: true,
+	}
+	_ = userRepo.Create(ctx, witness)
+
+	svc := service.NewSignatureService(userRepo, actRepo, subRepo, storageSvc, nil, nil, "")
+	if sigImpl, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+		sigImpl.SetNowFunc(func() time.Time {
+			return time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
+		})
+	}
+
+	t.Run("UploadSignature edge cases", func(t *testing.T) {
+		// Empty base64
+		_, err := svc.UploadSignature(ctx, user.ID, "")
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		_, err = svc.UploadSignature(ctx, user.ID, "data:image/png;base64,   ")
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Non-image text
+		textB64 := base64.StdEncoding.EncodeToString([]byte("just plain text"))
+		_, err = svc.UploadSignature(ctx, user.ID, textB64)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Non-existent user
+		validB64 := generateTestSignatureBase64(60, 40)
+		_, err = svc.UploadSignature(ctx, 99999, validB64)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+	})
+
+	t.Run("Get and Delete signature non-existent user", func(t *testing.T) {
+		_, err := svc.GetSignature(ctx, 99999)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+
+		err = svc.DeleteSignature(ctx, 99999)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+	})
+
+	t.Run("SignTimesheet edge cases", func(t *testing.T) {
+		// Invalid period
+		_, err := svc.SignTimesheet(ctx, user.ID, nil, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		_, err = svc.SignTimesheet(ctx, user.ID, &request.SignTimesheetRequest{Month: 0, Year: 2026}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Non-existent user
+		_, err = svc.SignTimesheet(ctx, 99999, &request.SignTimesheetRequest{Month: 10, Year: 2026}, meta)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+
+		// User without profile signature
+		_, err = svc.SignTimesheet(ctx, user.ID, &request.SignTimesheetRequest{Month: 10, Year: 2026}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Upload signature, but no activities
+		validB64 := generateTestSignatureBase64(60, 40)
+		_, _ = svc.UploadSignature(ctx, user.ID, validB64)
+
+		_, err = svc.SignTimesheet(ctx, user.ID, &request.SignTimesheetRequest{Month: 10, Year: 2026}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+	})
+
+	t.Run("RevokeTimesheet edge cases", func(t *testing.T) {
+		// Invalid period
+		err := svc.RevokeTimesheet(ctx, user.ID, nil, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		err = svc.RevokeTimesheet(ctx, user.ID, &request.RevokeTimesheetRequest{Month: 13, Year: 2026}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Non-existent user
+		err = svc.RevokeTimesheet(ctx, 99999, &request.RevokeTimesheetRequest{Month: 10, Year: 2026}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Non-existent submission
+		err = svc.RevokeTimesheet(ctx, user.ID, &request.RevokeTimesheetRequest{Month: 10, Year: 2026}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+	})
+
+	t.Run("GetTimesheetSubmission draft fallback", func(t *testing.T) {
+		statusResp, err := svc.GetTimesheetSubmission(ctx, user.ID, 1, 2026)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusDraft, statusResp.Status)
+	})
+
+	t.Run("SubmitBeritaAcara edge cases", func(t *testing.T) {
+		// Invalid period
+		_, err := svc.SubmitBeritaAcara(ctx, user.ID, nil, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		_, err = svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 0, Year: 2026}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Non-existent employee
+		_, err = svc.SubmitBeritaAcara(ctx, 99999, &request.SubmitBeritaAcaraRequest{Month: 10, Year: 2026, WitnessID: witness.ID}, meta)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+
+		// Non-existent witness
+		_, err = svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 10, Year: 2026, WitnessID: 88888}, meta)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+
+		// Self-witnessing
+		_, err = svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 10, Year: 2026, WitnessID: user.ID}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Witness has no signature
+		_, err = svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 10, Year: 2026, WitnessID: witness.ID}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+	})
+
+	t.Run("WitnessAction rejection and validation", func(t *testing.T) {
+		validB64 := generateTestSignatureBase64(60, 40)
+		_, _ = svc.UploadSignature(ctx, witness.ID, validB64)
+
+		// Seed BA activity
+		actRepo.activities = []models.DailyActivity{{
+			ID:            101,
+			UserID:        user.ID,
+			Date:          time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC),
+			Activity:      "Deployment issue",
+			IsBeritaAcara: true,
+			IsActive:      true,
+		}}
+
+		subResp, err := svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{
+			Month:     10,
+			Year:      2026,
+			WitnessID: witness.ID,
+		}, meta)
+		require.NoError(t, err)
+
+		// Unknown action
+		_, err = svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{Action: "invalid_action"}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Reject without notes
+		_, err = svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{Action: "reject", Notes: "   "}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Reject successfully with notes
+		rejResp, err := svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{Action: "reject", Notes: "Revisi jam kerja"}, meta)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusRejected, rejResp.Status)
+		assert.Equal(t, "Revisi jam kerja", rejResp.WitnessRejectionNotes)
+
+		// Acting on already rejected submission
+		_, err = svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{Action: "approve"}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Non-existent submission ID
+		_, err = svc.WitnessAction(ctx, witness.ID, "non-existent-sub-id", &request.WitnessActionRequest{Action: "approve"}, meta)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+	})
+
+	t.Run("RevokeBeritaAcara and GetBeritaAcaraSubmission edge cases", func(t *testing.T) {
+		// Non-existent submission ID
+		err := svc.RevokeBeritaAcara(ctx, user.ID, "non-existent-sub", meta)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+
+		// Non-existent user
+		err = svc.RevokeBeritaAcara(ctx, 99999, "any-id", meta)
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+
+		// Draft status when not found
+		baResp, err := svc.GetBeritaAcaraSubmission(ctx, user.ID, 12, 2026)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusDraft, baResp.Status)
+	})
+
+	t.Run("VerifyDocument edge cases", func(t *testing.T) {
+		// Empty token
+		_, err := svc.VerifyDocument(ctx, "")
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Non-existent token -> ErrNotFound
+		_, err = svc.VerifyDocument(ctx, "non-existent-token")
+		assert.ErrorIs(t, err, domain.ErrNotFound)
+	})
+}
