@@ -107,7 +107,7 @@ func renderAdidataDailyRows(
 ) map[string]int {
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
 	allCols := []string{"B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R"}
-	wrapCols := []string{"L", "O", "Q", "R"}
+	wrapCols := []string{"L", "M", "N", "O", "P", "Q", "R"}
 	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {

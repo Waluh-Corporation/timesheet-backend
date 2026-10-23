@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Tabler-Inspired Transactional Email Redesign**: Revamped all email templates (`layout.html`, `timesheet.html`, `reminder.html`, `setup.html`, `reset.html`, `password_changed.html`, `berita_acara_approved.html`, `berita_acara_rejected.html`, and `witness_request.html`) to follow the Tabler design system. Features modern typography, Tabler brand colors (`#066fd1` primary blue, clean `#f6f8fb` canvas, `#e6e7e9` borders), datagrid key-value metadata cards, Tabler-styled alert callouts, and tailored Dark Mode support (`#0e1726` canvas and `#182433` card surface) across webmail and desktop clients.
 
+## [1.15.1] - 2026-10-24
+
+### Fixed
+- **Timesheet Activity to Sub Department Text Wrapping**: Preserved text wrapping across columns Activity/Remark through Sub Department (columns K through R in MII and corresponding activity/project/department columns across all company templates), preventing template wrapping from being overwritten during spreadsheet generation.
+
 ## [1.15.0] - 2026-10-22
 
 ### Changed
@@ -107,19 +112,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Accurate Working Hours and Total Hours Display**: Formatted daily and total working hours as standard time values (`08:00`, `17:00`) instead of decimal numbers.
 - **Accurate App Impacted & Project Selection**: Fixed synchronization issues where project selections and impacted applications were reset upon updates.
 
----
 
-## [1.11.0] - 2026-09-21
-
-### Added
-- **Notes on Profile Change Requests**: Users can now provide a helpful note or explanation (such as moving to a new office site or department transfer) when requesting profile updates. This gives administrators clear context when reviewing submissions.
-- **Email Address Updates**:
-  - **For Administrators**: Administrators can now directly update any user's email address from the user management panel to keep account contact details up to date.
-  - **For Users**: Users can now request an email address change through the profile update request form, which takes effect once reviewed and approved by an administrator.
-
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.1...HEAD
+[1.15.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.11.0...v1.12.0
-[1.11.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.11.0
