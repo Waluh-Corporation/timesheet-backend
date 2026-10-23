@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-10-24
+
+### Fixed
+- **Timesheet Activity to Sub Department Text Wrapping**: Preserved text wrapping across columns Activity/Remark through Sub Department (columns K through R in MII and corresponding activity/project/department columns across all company templates), preventing template wrapping from being overwritten during spreadsheet generation.
+
 ## [1.15.0] - 2026-10-22
 
 ### Changed
@@ -96,19 +101,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Accurate Working Hours and Total Hours Display**: Formatted daily and total working hours as standard time values (`08:00`, `17:00`) instead of decimal numbers.
 - **Accurate App Impacted & Project Selection**: Fixed synchronization issues where project selections and impacted applications were reset upon updates.
 
----
 
-## [1.11.0] - 2026-09-21
-
-### Added
-- **Notes on Profile Change Requests**: Users can now provide a helpful note or explanation (such as moving to a new office site or department transfer) when requesting profile updates. This gives administrators clear context when reviewing submissions.
-- **Email Address Updates**:
-  - **For Administrators**: Administrators can now directly update any user's email address from the user management panel to keep account contact details up to date.
-  - **For Users**: Users can now request an email address change through the profile update request form, which takes effect once reviewed and approved by an administrator.
-
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.1...HEAD
+[1.15.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...v1.13.0
 [1.12.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.11.0...v1.12.0
-[1.11.0]: https://github.com/Waluh-Corporation/timesheet-backend/releases/tag/v1.11.0

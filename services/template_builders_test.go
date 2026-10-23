@@ -997,3 +997,98 @@ func TestTimesheetFontSizesAndRowHeights(t *testing.T) {
 		})
 	}
 }
+
+func TestTimesheetTextWrapping(t *testing.T) {
+	user := &models.User{
+		Name:       "Test User",
+		Division:   "Wholesale Digital Delivery",
+		Department: "Wholesale Channel and Service Delivery",
+		EmployeeID: "EMP-001",
+		Site:       "Jakarta RDTX",
+	}
+
+	act := models.DailyActivity{
+		Date:      time.Date(2026, 6, 2, 0, 0, 0, 0, time.UTC),
+		StartTime: "08:00",
+		EndTime:   "17:00",
+		Status:    "P",
+		Activity:  "A very detailed task description that wraps across multiple lines",
+		ProjectRef: &models.Project{
+			Code: "P24015",
+			Name: "BNI Direct Cash Management",
+		},
+	}
+
+	testCases := []struct {
+		company   string
+		sheetName string
+		dataRow   int
+		wrapCols  []string
+	}{
+		{
+			company:   "mii",
+			sheetName: "Sheet1",
+			dataRow:   10,
+			wrapCols:  []string{"K", "L", "M", "N", "O", "P", "Q", "R"},
+		},
+		{
+			company:   "adidata",
+			sheetName: "TIMESHEET",
+			dataRow:   11,
+			wrapCols:  []string{"L", "M", "N", "O", "P", "Q", "R"},
+		},
+		{
+			company:   "ntt",
+			sheetName: "Timesheet",
+			dataRow:   12,
+			wrapCols:  []string{"K", "L", "M", "N"},
+		},
+		{
+			company:   "sdd",
+			sheetName: "Juni",
+			dataRow:   13,
+			wrapCols:  []string{"K", "L", "M", "N"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.company, func(t *testing.T) {
+			in := GenerationInput{
+				CompanyCode: tc.company,
+				User:        user,
+				Month:       6,
+				Year:        2026,
+				Activities:  []models.DailyActivity{act},
+				Holidays:    map[int]string{},
+			}
+
+			raw, err := GenerateFromTemplate(in)
+			if err != nil {
+				t.Fatalf("[%s] GenerateFromTemplate failed: %v", tc.company, err)
+			}
+
+			wb, err := excelize.OpenReader(bytes.NewReader(raw))
+			if err != nil {
+				t.Fatalf("[%s] OpenReader failed: %v", tc.company, err)
+			}
+			defer func() { _ = wb.Close() }()
+
+			for _, col := range tc.wrapCols {
+				cell := fmt.Sprintf("%s%d", col, tc.dataRow)
+				styleID, err := wb.GetCellStyle(tc.sheetName, cell)
+				if err != nil {
+					t.Errorf("[%s] GetCellStyle(%s) error: %v", tc.company, cell, err)
+					continue
+				}
+				style, err := wb.GetStyle(styleID)
+				if err != nil {
+					t.Errorf("[%s] GetStyle(%d) error: %v", tc.company, styleID, err)
+					continue
+				}
+				if style.Alignment == nil || !style.Alignment.WrapText {
+					t.Errorf("[%s] Cell %s WrapText = false, want true", tc.company, cell)
+				}
+			}
+		})
+	}
+}
