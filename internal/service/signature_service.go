@@ -477,7 +477,8 @@ func (s *signatureService) WitnessAction(ctx context.Context, witnessID uint, su
 	metaMap["witness_ip"] = meta.IP
 	metaMap["witness_user_agent"] = meta.UserAgent
 
-	if req.Action == "approve" {
+	switch req.Action {
+	case "approve":
 		if witness.SignatureFileKey == "" {
 			return nil, domain.NewUserError(domain.ErrInvalidInput, "Silakan unggah tanda tangan profil Anda terlebih dahulu untuk menyetujui sebagai saksi")
 		}
@@ -512,7 +513,7 @@ func (s *signatureService) WitnessAction(ctx context.Context, witnessID uint, su
 				URL:   "/berita-acara",
 			})
 		}
-	} else if req.Action == "reject" {
+	case "reject":
 		notes := strings.TrimSpace(req.Notes)
 		if notes == "" {
 			return nil, domain.NewUserError(domain.ErrInvalidInput, "Catatan penolakan wajib diisi")
@@ -542,7 +543,7 @@ func (s *signatureService) WitnessAction(ctx context.Context, witnessID uint, su
 				URL:   "/berita-acara",
 			})
 		}
-	} else {
+	default:
 		return nil, domain.NewUserError(domain.ErrInvalidInput, "Aksi tidak dikenal")
 	}
 
@@ -704,11 +705,9 @@ func (s *signatureService) VerifyDocument(ctx context.Context, token string) (*r
 			}
 		}
 		isValid := ts.Status == models.SubmissionStatusSigned || ts.Status == models.SubmissionStatusSubmitted
-		statusStr := ts.Status
+		statusStr := "valid"
 		if !isValid {
 			statusStr = "revoked"
-		} else {
-			statusStr = "valid"
 		}
 
 		return &response.PublicDocumentVerificationResponse{
@@ -751,13 +750,11 @@ func (s *signatureService) VerifyDocument(ctx context.Context, token string) (*r
 			}
 		}
 		isValid := ba.Status == models.SubmissionStatusSigned
-		statusStr := ba.Status
+		statusStr := "pending"
 		if isValid {
 			statusStr = "valid"
 		} else if ba.Status == models.SubmissionStatusRevoked || ba.Status == models.SubmissionStatusRejected {
 			statusStr = ba.Status
-		} else {
-			statusStr = "pending"
 		}
 
 		return &response.PublicDocumentVerificationResponse{

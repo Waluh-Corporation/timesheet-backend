@@ -159,8 +159,6 @@ func buildDrawingXML(relID string, docPrID int, cx, cy int64) string {
 }
 
 func populateDocumentXML(xmlStr string, payload BeritaAcaraPayload) string {
-	xmlStr = replaceScalarPlaceholders(xmlStr, payload)
-
 	rStart, rEnd := findTableRowBoundaries(xmlStr)
 	if rStart != -1 && rEnd != -1 {
 		rowTemplate := xmlStr[rStart:rEnd]
@@ -200,6 +198,7 @@ func populateDocumentXML(xmlStr string, payload BeritaAcaraPayload) string {
 		}
 	}
 
+	xmlStr = replaceScalarPlaceholders(xmlStr, payload)
 	return xmlStr
 }
 
