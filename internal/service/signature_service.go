@@ -34,6 +34,12 @@ type AuditMeta struct {
 	UserAgent string `json:"user_agent"`
 }
 
+const (
+	errUserNotFoundMsg  = "Pengguna tidak ditemukan"
+	errInvalidPeriodMsg = "Bulan atau tahun tidak valid"
+	beritaAcaraPath     = "/berita-acara"
+)
+
 // SignatureService provides business operations for profile signature management,
 // document signing lifecycles (Timesheet & Berita Acara), and public verification.
 type SignatureService interface {
@@ -137,7 +143,7 @@ func (s *signatureService) UploadSignature(ctx context.Context, userID uint, bas
 
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil || user == nil {
-		return nil, domain.NewUserError(domain.ErrNotFound, "Pengguna tidak ditemukan")
+		return nil, domain.NewUserError(domain.ErrNotFound, errUserNotFoundMsg)
 	}
 
 	key := fmt.Sprintf("signatures/%d_%d.png", userID, s.nowFunc().Unix())
@@ -167,7 +173,7 @@ func (s *signatureService) UploadSignature(ctx context.Context, userID uint, bas
 func (s *signatureService) GetSignature(ctx context.Context, userID uint) (*response.UserSignatureResponse, error) {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil || user == nil {
-		return nil, domain.NewUserError(domain.ErrNotFound, "Pengguna tidak ditemukan")
+		return nil, domain.NewUserError(domain.ErrNotFound, errUserNotFoundMsg)
 	}
 
 	if user.SignatureFileKey == "" {
@@ -189,7 +195,7 @@ func (s *signatureService) GetSignature(ctx context.Context, userID uint) (*resp
 func (s *signatureService) DeleteSignature(ctx context.Context, userID uint) error {
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil || user == nil {
-		return domain.NewUserError(domain.ErrNotFound, "Pengguna tidak ditemukan")
+		return domain.NewUserError(domain.ErrNotFound, errUserNotFoundMsg)
 	}
 
 	if user.SignatureFileKey != "" && s.storageSvc != nil {
@@ -205,12 +211,12 @@ func (s *signatureService) DeleteSignature(ctx context.Context, userID uint) err
 // SignTimesheet signs the timesheet for the given month/year and locks activities.
 func (s *signatureService) SignTimesheet(ctx context.Context, userID uint, req *request.SignTimesheetRequest, meta AuditMeta) (*response.TimesheetSubmissionResponse, error) {
 	if req == nil || req.Month < 1 || req.Month > 12 || req.Year < 2000 || req.Year > 2100 {
-		return nil, domain.NewUserError(domain.ErrInvalidInput, "Bulan atau tahun tidak valid")
+		return nil, domain.NewUserError(domain.ErrInvalidInput, errInvalidPeriodMsg)
 	}
 
 	user, err := s.userRepo.FindByIDWithDetails(ctx, userID)
 	if err != nil || user == nil {
-		return nil, domain.NewUserError(domain.ErrNotFound, "Pengguna tidak ditemukan")
+		return nil, domain.NewUserError(domain.ErrNotFound, errUserNotFoundMsg)
 	}
 
 	if user.SignatureFileKey == "" {
@@ -281,7 +287,7 @@ func (s *signatureService) SignTimesheet(ctx context.Context, userID uint, req *
 // RevokeTimesheet revokes a timesheet's signature and unlocks the activities.
 func (s *signatureService) RevokeTimesheet(ctx context.Context, userID uint, req *request.RevokeTimesheetRequest, meta AuditMeta) error {
 	if req == nil || req.Month < 1 || req.Month > 12 || req.Year < 2000 || req.Year > 2100 {
-		return domain.NewUserError(domain.ErrInvalidInput, "Bulan atau tahun tidak valid")
+		return domain.NewUserError(domain.ErrInvalidInput, errInvalidPeriodMsg)
 	}
 
 	sub, err := s.submissionRepo.FindTimesheetSubmission(ctx, userID, req.Month, req.Year)
@@ -337,10 +343,42 @@ func (s *signatureService) GetTimesheetSubmission(ctx context.Context, userID ui
 	}, nil
 }
 
+func (s *signatureService) validateBeritaAcaraActivities(ctx context.Context, userID uint, month, year int) error {
+	filter := repository.ActivityFilter{
+		Month: &month,
+		Year:  &year,
+		IsAll: true,
+	}
+	activities, _, err := s.activityRepo.ListActiveByUser(ctx, userID, filter)
+	if err != nil {
+		return fmt.Errorf("list activities: %w", err)
+	}
+	for _, a := range activities {
+		if a.IsBeritaAcara {
+			return nil
+		}
+	}
+	return domain.NewUserError(domain.ErrInvalidInput, "Tidak ada catatan Berita Acara pada bulan ini")
+}
+
+func (s *signatureService) notifyWitnessRequest(witness *models.User, employeeName, periodStr string) {
+	if s.mailer != nil && witness.Email != "" {
+		reviewLink := fmt.Sprintf("%s%s", strings.TrimRight(s.baseURL, "/"), beritaAcaraPath)
+		_ = s.mailer.SendWitnessRequestEmail(witness.Email, witness.Name, employeeName, periodStr, reviewLink)
+	}
+	if s.pushSvc != nil {
+		s.pushSvc.SendToUser(witness.ID, push.Payload{
+			Title: "Permintaan Tanda Tangan Saksi",
+			Body:  fmt.Sprintf("%s meminta Anda menjadi saksi Berita Acara (%s)", employeeName, periodStr),
+			URL:   beritaAcaraPath,
+		})
+	}
+}
+
 // SubmitBeritaAcara submits a Berita Acara for witness review.
 func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, req *request.SubmitBeritaAcaraRequest, meta AuditMeta) (*response.BeritaAcaraSubmissionResponse, error) {
 	if req == nil || req.Month < 1 || req.Month > 12 || req.Year < 2000 || req.Year > 2100 {
-		return nil, domain.NewUserError(domain.ErrInvalidInput, "Bulan atau tahun tidak valid")
+		return nil, domain.NewUserError(domain.ErrInvalidInput, errInvalidPeriodMsg)
 	}
 	if req.WitnessID == userID {
 		return nil, domain.NewUserError(domain.ErrInvalidInput, "Saksi tidak boleh sama dengan pembuat Berita Acara")
@@ -348,7 +386,7 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 
 	user, err := s.userRepo.FindByIDWithDetails(ctx, userID)
 	if err != nil || user == nil {
-		return nil, domain.NewUserError(domain.ErrNotFound, "Pengguna tidak ditemukan")
+		return nil, domain.NewUserError(domain.ErrNotFound, errUserNotFoundMsg)
 	}
 	if user.SignatureFileKey == "" {
 		return nil, domain.NewUserError(domain.ErrInvalidInput, "Silakan unggah tanda tangan profil Anda terlebih dahulu")
@@ -359,24 +397,8 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 		return nil, domain.NewUserError(domain.ErrNotFound, "Saksi yang dipilih tidak ditemukan atau tidak aktif")
 	}
 
-	// Verify BA activities exist
-	filter := repository.ActivityFilter{
-		Month: &req.Month,
-		Year:  &req.Year,
-		IsAll: true,
-	}
-	activities, _, err := s.activityRepo.ListActiveByUser(ctx, userID, filter)
-	if err != nil {
-		return nil, fmt.Errorf("list activities: %w", err)
-	}
-	var baCount int
-	for _, a := range activities {
-		if a.IsBeritaAcara {
-			baCount++
-		}
-	}
-	if baCount == 0 {
-		return nil, domain.NewUserError(domain.ErrInvalidInput, "Tidak ada catatan Berita Acara pada bulan ini")
+	if err := s.validateBeritaAcaraActivities(ctx, userID, req.Month, req.Year); err != nil {
+		return nil, err
 	}
 
 	now := s.nowFunc()
@@ -407,19 +429,8 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 		return nil, fmt.Errorf("save berita acara submission: %w", err)
 	}
 
-	// Notify Witness via Email and WebPush
 	periodStr := fmt.Sprintf("%s %d", services.MonthNameIndonesian(req.Month), req.Year)
-	reviewLink := fmt.Sprintf("%s/berita-acara", strings.TrimRight(s.baseURL, "/"))
-	if s.mailer != nil && witness.Email != "" {
-		_ = s.mailer.SendWitnessRequestEmail(witness.Email, witness.Name, user.Name, periodStr, reviewLink)
-	}
-	if s.pushSvc != nil {
-		s.pushSvc.SendToUser(witness.ID, push.Payload{
-			Title: "Permintaan Tanda Tangan Saksi",
-			Body:  fmt.Sprintf("%s meminta Anda menjadi saksi Berita Acara (%s)", user.Name, periodStr),
-			URL:   "/berita-acara",
-		})
-	}
+	s.notifyWitnessRequest(witness, user.Name, periodStr)
 
 	return &response.BeritaAcaraSubmissionResponse{
 		ID:                sub.ID,
@@ -436,6 +447,98 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 		CreatedAt:         sub.CreatedAt,
 		UpdatedAt:         sub.UpdatedAt,
 	}, nil
+}
+
+func (s *signatureService) approveWitness(
+	ctx context.Context,
+	sub *models.BeritaAcaraSubmission,
+	witness, employee *models.User,
+	meta AuditMeta,
+) error {
+	if witness.SignatureFileKey == "" {
+		return domain.NewUserError(domain.ErrInvalidInput, "Silakan unggah tanda tangan profil Anda terlebih dahulu untuk menyetujui sebagai saksi")
+	}
+
+	now := s.nowFunc()
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "type:berita_acara|uid:%d|wid:%d|month:%d|year:%d|token:%s|time:%d",
+		sub.UserID, sub.WitnessID, sub.Month, sub.Year, sub.VerificationToken, now.Unix())
+	docHash := hex.EncodeToString(h.Sum(nil))
+
+	sub.Status = models.SubmissionStatusSigned
+	sub.WitnessSignedAt = &now
+	sub.DocumentHash = docHash
+	sub.UpdatedAt = now
+
+	metaMap := make(map[string]interface{})
+	_ = json.Unmarshal(sub.AuditMetadata, &metaMap)
+	metaMap["witness_ip"] = meta.IP
+	metaMap["witness_user_agent"] = meta.UserAgent
+	metaMap["approved_at"] = now.Format(time.RFC3339)
+	metaBytes, _ := json.Marshal(metaMap)
+	sub.AuditMetadata = datatypes.JSON(metaBytes)
+
+	if err := s.submissionRepo.UpsertBeritaAcaraSubmission(ctx, sub); err != nil {
+		return fmt.Errorf("save witness approval: %w", err)
+	}
+
+	periodStr := fmt.Sprintf("%s %d", services.MonthNameIndonesian(sub.Month), sub.Year)
+	dlLink := fmt.Sprintf("%s%s", strings.TrimRight(s.baseURL, "/"), beritaAcaraPath)
+	if s.mailer != nil && employee.Email != "" {
+		_ = s.mailer.SendBeritaAcaraApprovedEmail(employee.Email, employee.Name, witness.Name, periodStr, dlLink)
+	}
+	if s.pushSvc != nil {
+		s.pushSvc.SendToUser(employee.ID, push.Payload{
+			Title: "Berita Acara Disetujui",
+			Body:  fmt.Sprintf("Saksi %s telah menandatangani Berita Acara Anda (%s)", witness.Name, periodStr),
+			URL:   beritaAcaraPath,
+		})
+	}
+	return nil
+}
+
+func (s *signatureService) rejectWitness(
+	ctx context.Context,
+	sub *models.BeritaAcaraSubmission,
+	witness, employee *models.User,
+	notes string,
+	meta AuditMeta,
+) error {
+	trimmedNotes := strings.TrimSpace(notes)
+	if trimmedNotes == "" {
+		return domain.NewUserError(domain.ErrInvalidInput, "Catatan penolakan wajib diisi")
+	}
+
+	now := s.nowFunc()
+	sub.Status = models.SubmissionStatusRejected
+	sub.WitnessRejectionNotes = trimmedNotes
+	sub.UpdatedAt = now
+
+	metaMap := make(map[string]interface{})
+	_ = json.Unmarshal(sub.AuditMetadata, &metaMap)
+	metaMap["witness_ip"] = meta.IP
+	metaMap["witness_user_agent"] = meta.UserAgent
+	metaMap["rejected_at"] = now.Format(time.RFC3339)
+	metaMap["rejection_notes"] = trimmedNotes
+	metaBytes, _ := json.Marshal(metaMap)
+	sub.AuditMetadata = datatypes.JSON(metaBytes)
+
+	if err := s.submissionRepo.UpsertBeritaAcaraSubmission(ctx, sub); err != nil {
+		return fmt.Errorf("save witness rejection: %w", err)
+	}
+
+	periodStr := fmt.Sprintf("%s %d", services.MonthNameIndonesian(sub.Month), sub.Year)
+	if s.mailer != nil && employee.Email != "" {
+		_ = s.mailer.SendBeritaAcaraRejectedEmail(employee.Email, employee.Name, witness.Name, periodStr, trimmedNotes)
+	}
+	if s.pushSvc != nil {
+		s.pushSvc.SendToUser(employee.ID, push.Payload{
+			Title: "Berita Acara Ditolak",
+			Body:  fmt.Sprintf("Saksi %s menolak Berita Acara Anda: %s", witness.Name, trimmedNotes),
+			URL:   beritaAcaraPath,
+		})
+	}
+	return nil
 }
 
 // WitnessAction processes witness approval or rejection.
@@ -469,79 +572,14 @@ func (s *signatureService) WitnessAction(ctx context.Context, witnessID uint, su
 		return nil, domain.NewUserError(domain.ErrNotFound, "Pemilik Berita Acara tidak ditemukan")
 	}
 
-	now := s.nowFunc()
-	periodStr := fmt.Sprintf("%s %d", services.MonthNameIndonesian(sub.Month), sub.Year)
-
-	metaMap := make(map[string]interface{})
-	_ = json.Unmarshal(sub.AuditMetadata, &metaMap)
-	metaMap["witness_ip"] = meta.IP
-	metaMap["witness_user_agent"] = meta.UserAgent
-
 	switch req.Action {
 	case "approve":
-		if witness.SignatureFileKey == "" {
-			return nil, domain.NewUserError(domain.ErrInvalidInput, "Silakan unggah tanda tangan profil Anda terlebih dahulu untuk menyetujui sebagai saksi")
-		}
-
-		h := sha256.New()
-		_, _ = fmt.Fprintf(h, "type:berita_acara|uid:%d|wid:%d|month:%d|year:%d|token:%s|time:%d",
-			sub.UserID, sub.WitnessID, sub.Month, sub.Year, sub.VerificationToken, now.Unix())
-		docHash := hex.EncodeToString(h.Sum(nil))
-
-		sub.Status = models.SubmissionStatusSigned
-		sub.WitnessSignedAt = &now
-		sub.DocumentHash = docHash
-		sub.UpdatedAt = now
-
-		metaMap["approved_at"] = now.Format(time.RFC3339)
-		metaBytes, _ := json.Marshal(metaMap)
-		sub.AuditMetadata = datatypes.JSON(metaBytes)
-
-		if err := s.submissionRepo.UpsertBeritaAcaraSubmission(ctx, sub); err != nil {
-			return nil, fmt.Errorf("save witness approval: %w", err)
-		}
-
-		// Notify employee
-		dlLink := fmt.Sprintf("%s/berita-acara", strings.TrimRight(s.baseURL, "/"))
-		if s.mailer != nil && employee.Email != "" {
-			_ = s.mailer.SendBeritaAcaraApprovedEmail(employee.Email, employee.Name, witness.Name, periodStr, dlLink)
-		}
-		if s.pushSvc != nil {
-			s.pushSvc.SendToUser(employee.ID, push.Payload{
-				Title: "Berita Acara Disetujui",
-				Body:  fmt.Sprintf("Saksi %s telah menandatangani Berita Acara Anda (%s)", witness.Name, periodStr),
-				URL:   "/berita-acara",
-			})
+		if err := s.approveWitness(ctx, sub, witness, employee, meta); err != nil {
+			return nil, err
 		}
 	case "reject":
-		notes := strings.TrimSpace(req.Notes)
-		if notes == "" {
-			return nil, domain.NewUserError(domain.ErrInvalidInput, "Catatan penolakan wajib diisi")
-		}
-
-		sub.Status = models.SubmissionStatusRejected
-		sub.WitnessRejectionNotes = notes
-		sub.UpdatedAt = now
-
-		metaMap["rejected_at"] = now.Format(time.RFC3339)
-		metaMap["rejection_notes"] = notes
-		metaBytes, _ := json.Marshal(metaMap)
-		sub.AuditMetadata = datatypes.JSON(metaBytes)
-
-		if err := s.submissionRepo.UpsertBeritaAcaraSubmission(ctx, sub); err != nil {
-			return nil, fmt.Errorf("save witness rejection: %w", err)
-		}
-
-		// Notify employee
-		if s.mailer != nil && employee.Email != "" {
-			_ = s.mailer.SendBeritaAcaraRejectedEmail(employee.Email, employee.Name, witness.Name, periodStr, notes)
-		}
-		if s.pushSvc != nil {
-			s.pushSvc.SendToUser(employee.ID, push.Payload{
-				Title: "Berita Acara Ditolak",
-				Body:  fmt.Sprintf("Saksi %s menolak Berita Acara Anda: %s", witness.Name, notes),
-				URL:   "/berita-acara",
-			})
+		if err := s.rejectWitness(ctx, sub, witness, employee, req.Notes, meta); err != nil {
+			return nil, err
 		}
 	default:
 		return nil, domain.NewUserError(domain.ErrInvalidInput, "Aksi tidak dikenal")
@@ -678,6 +716,96 @@ func (s *signatureService) ListPendingWitnessRequests(ctx context.Context, witne
 	return res, nil
 }
 
+func (s *signatureService) resolveUserNameAndBNI(ctx context.Context, user *models.User, userID uint) (string, string) {
+	if user != nil {
+		return user.Name, user.BniID
+	}
+	if userID > 0 {
+		if u, err := s.userRepo.FindByID(ctx, userID); err == nil && u != nil {
+			return u.Name, u.BniID
+		}
+	}
+	return "", ""
+}
+
+func (s *signatureService) resolveWitnessName(ctx context.Context, witness *models.User, witnessID uint) string {
+	if witness != nil {
+		return witness.Name
+	}
+	if witnessID > 0 {
+		if w, err := s.userRepo.FindByID(ctx, witnessID); err == nil && w != nil {
+			return w.Name
+		}
+	}
+	return ""
+}
+
+func (s *signatureService) verifyTimesheet(ctx context.Context, token string, now time.Time) (*response.PublicDocumentVerificationResponse, error) {
+	ts, err := s.submissionRepo.FindTimesheetByToken(ctx, token)
+	if err != nil {
+		return nil, fmt.Errorf("find timesheet by token: %w", err)
+	}
+	if ts == nil {
+		return nil, nil
+	}
+
+	empName, bniID := s.resolveUserNameAndBNI(ctx, ts.User, ts.UserID)
+	isValid := ts.Status == models.SubmissionStatusSigned || ts.Status == models.SubmissionStatusSubmitted
+	statusStr := "valid"
+	if !isValid {
+		statusStr = "revoked"
+	}
+
+	return &response.PublicDocumentVerificationResponse{
+		DocumentType:     "timesheet",
+		Status:           statusStr,
+		IsValid:          isValid,
+		Month:            ts.Month,
+		Year:             ts.Year,
+		EmployeeName:     empName,
+		EmployeeBNIID:    bniID,
+		EmployeeSignedAt: ts.SignedAt,
+		DocumentHash:     ts.DocumentHash,
+		VerifiedAt:       now,
+	}, nil
+}
+
+func (s *signatureService) verifyBeritaAcara(ctx context.Context, token string, now time.Time) (*response.PublicDocumentVerificationResponse, error) {
+	ba, err := s.submissionRepo.FindBeritaAcaraByToken(ctx, token)
+	if err != nil {
+		return nil, fmt.Errorf("find berita acara by token: %w", err)
+	}
+	if ba == nil {
+		return nil, nil
+	}
+
+	empName, bniID := s.resolveUserNameAndBNI(ctx, ba.User, ba.UserID)
+	witName := s.resolveWitnessName(ctx, ba.Witness, ba.WitnessID)
+
+	isValid := ba.Status == models.SubmissionStatusSigned
+	statusStr := "pending"
+	if isValid {
+		statusStr = "valid"
+	} else if ba.Status == models.SubmissionStatusRevoked || ba.Status == models.SubmissionStatusRejected {
+		statusStr = ba.Status
+	}
+
+	return &response.PublicDocumentVerificationResponse{
+		DocumentType:     "berita_acara",
+		Status:           statusStr,
+		IsValid:          isValid,
+		Month:            ba.Month,
+		Year:             ba.Year,
+		EmployeeName:     empName,
+		EmployeeBNIID:    bniID,
+		EmployeeSignedAt: ba.EmployeeSignedAt,
+		WitnessName:      witName,
+		WitnessSignedAt:  ba.WitnessSignedAt,
+		DocumentHash:     ba.DocumentHash,
+		VerifiedAt:       now,
+	}, nil
+}
+
 // VerifyDocument verifies a document token publicly.
 func (s *signatureService) VerifyDocument(ctx context.Context, token string) (*response.PublicDocumentVerificationResponse, error) {
 	tok := strings.TrimSpace(token)
@@ -688,89 +816,17 @@ func (s *signatureService) VerifyDocument(ctx context.Context, token string) (*r
 	now := s.nowFunc()
 
 	// 1. Check Timesheet Submission
-	ts, err := s.submissionRepo.FindTimesheetByToken(ctx, tok)
-	if err != nil {
-		return nil, fmt.Errorf("find timesheet by token: %w", err)
-	}
-	if ts != nil {
-		empName := ""
-		bniID := ""
-		if ts.User != nil {
-			empName = ts.User.Name
-			bniID = ts.User.BniID
-		} else if ts.UserID > 0 {
-			if u, uErr := s.userRepo.FindByID(ctx, ts.UserID); uErr == nil && u != nil {
-				empName = u.Name
-				bniID = u.BniID
-			}
-		}
-		isValid := ts.Status == models.SubmissionStatusSigned || ts.Status == models.SubmissionStatusSubmitted
-		statusStr := "valid"
-		if !isValid {
-			statusStr = "revoked"
-		}
-
-		return &response.PublicDocumentVerificationResponse{
-			DocumentType:     "timesheet",
-			Status:           statusStr,
-			IsValid:          isValid,
-			Month:            ts.Month,
-			Year:             ts.Year,
-			EmployeeName:     empName,
-			EmployeeBNIID:    bniID,
-			EmployeeSignedAt: ts.SignedAt,
-			DocumentHash:     ts.DocumentHash,
-			VerifiedAt:       now,
-		}, nil
+	if res, err := s.verifyTimesheet(ctx, tok, now); err != nil {
+		return nil, err
+	} else if res != nil {
+		return res, nil
 	}
 
 	// 2. Check Berita Acara Submission
-	ba, err := s.submissionRepo.FindBeritaAcaraByToken(ctx, tok)
-	if err != nil {
-		return nil, fmt.Errorf("find berita acara by token: %w", err)
-	}
-	if ba != nil {
-		empName := ""
-		bniID := ""
-		if ba.User != nil {
-			empName = ba.User.Name
-			bniID = ba.User.BniID
-		} else if ba.UserID > 0 {
-			if u, uErr := s.userRepo.FindByID(ctx, ba.UserID); uErr == nil && u != nil {
-				empName = u.Name
-				bniID = u.BniID
-			}
-		}
-		witName := ""
-		if ba.Witness != nil {
-			witName = ba.Witness.Name
-		} else if ba.WitnessID > 0 {
-			if w, wErr := s.userRepo.FindByID(ctx, ba.WitnessID); wErr == nil && w != nil {
-				witName = w.Name
-			}
-		}
-		isValid := ba.Status == models.SubmissionStatusSigned
-		statusStr := "pending"
-		if isValid {
-			statusStr = "valid"
-		} else if ba.Status == models.SubmissionStatusRevoked || ba.Status == models.SubmissionStatusRejected {
-			statusStr = ba.Status
-		}
-
-		return &response.PublicDocumentVerificationResponse{
-			DocumentType:     "berita_acara",
-			Status:           statusStr,
-			IsValid:          isValid,
-			Month:            ba.Month,
-			Year:             ba.Year,
-			EmployeeName:     empName,
-			EmployeeBNIID:    bniID,
-			EmployeeSignedAt: ba.EmployeeSignedAt,
-			WitnessName:      witName,
-			WitnessSignedAt:  ba.WitnessSignedAt,
-			DocumentHash:     ba.DocumentHash,
-			VerifiedAt:       now,
-		}, nil
+	if res, err := s.verifyBeritaAcara(ctx, tok, now); err != nil {
+		return nil, err
+	} else if res != nil {
+		return res, nil
 	}
 
 	return nil, domain.NewUserError(domain.ErrNotFound, "Dokumen tidak ditemukan atau token tidak valid")
