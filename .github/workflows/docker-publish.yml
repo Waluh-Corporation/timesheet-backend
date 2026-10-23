@@ -45,6 +45,7 @@ jobs:
             type=semver,pattern={{version}}
 
       - name: Build image for container vulnerability scanning
+        if: github.ref == 'refs/heads/development'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
@@ -54,6 +55,7 @@ jobs:
           cache-from: type=gha,scope=docker-publish
 
       - name: Run Trivy container vulnerability scanner
+        if: github.ref == 'refs/heads/development'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: timesheet-backend:scan
@@ -64,8 +66,8 @@ jobs:
           exit-code: '0' # Catat temuan ke SARIF tanpa memblokir jika belum ada perbaikan kritis darurat
 
       - name: Upload Trivy scan results to GitHub Security
+        if: always() && github.ref == 'refs/heads/development' && hashFiles('trivy-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
 
