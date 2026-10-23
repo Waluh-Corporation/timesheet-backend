@@ -23,7 +23,9 @@ import (
 	"gorm.io/gorm"
 
 	"timesheet-backend/auth"
+	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
+	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
 	"timesheet-backend/models"
@@ -512,4 +514,213 @@ func TestSignatureHandlers_ValidationAndErrorBranches(t *testing.T) {
 		srv.VerifyDocument(c)
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
+}
+
+type mockErrSigService struct {
+	errToReturn error
+}
+
+func (m *mockErrSigService) UploadSignature(ctx context.Context, userID uint, base64Str string) (*response.UserSignatureResponse, error) {
+	return nil, m.errToReturn
+}
+
+func (m *mockErrSigService) GetSignature(ctx context.Context, userID uint) (*response.UserSignatureResponse, error) {
+	return nil, m.errToReturn
+}
+
+func (m *mockErrSigService) DeleteSignature(ctx context.Context, userID uint) error {
+	return m.errToReturn
+}
+
+func (m *mockErrSigService) SignTimesheet(ctx context.Context, userID uint, req *request.SignTimesheetRequest, meta service.AuditMeta) (*response.TimesheetSubmissionResponse, error) {
+	return nil, m.errToReturn
+}
+
+func (m *mockErrSigService) RevokeTimesheet(ctx context.Context, userID uint, req *request.RevokeTimesheetRequest, meta service.AuditMeta) error {
+	return m.errToReturn
+}
+
+func (m *mockErrSigService) GetTimesheetSubmission(ctx context.Context, userID uint, month, year int) (*response.TimesheetSubmissionResponse, error) {
+	return nil, m.errToReturn
+}
+
+func (m *mockErrSigService) SubmitBeritaAcara(ctx context.Context, userID uint, req *request.SubmitBeritaAcaraRequest, meta service.AuditMeta) (*response.BeritaAcaraSubmissionResponse, error) {
+	return nil, m.errToReturn
+}
+
+func (m *mockErrSigService) WitnessAction(ctx context.Context, witnessID uint, submissionID string, req *request.WitnessActionRequest, meta service.AuditMeta) (*response.BeritaAcaraSubmissionResponse, error) {
+	return nil, m.errToReturn
+}
+
+func (m *mockErrSigService) RevokeBeritaAcara(ctx context.Context, userID uint, submissionID string, meta service.AuditMeta) error {
+	return m.errToReturn
+}
+
+func (m *mockErrSigService) GetBeritaAcaraSubmission(ctx context.Context, userID uint, month, year int) (*response.BeritaAcaraSubmissionResponse, error) {
+	return nil, m.errToReturn
+}
+
+func (m *mockErrSigService) ListPendingWitnessRequests(ctx context.Context, witnessID uint) ([]response.BeritaAcaraSubmissionResponse, error) {
+	return nil, m.errToReturn
+}
+
+func (m *mockErrSigService) VerifyDocument(ctx context.Context, token string) (*response.PublicDocumentVerificationResponse, error) {
+	return nil, m.errToReturn
+}
+
+func TestSignatureHandlers_ServiceErrorBranches(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name       string
+		method     string
+		path       string
+		body       string
+		params     gin.Params
+		handler    func(srv *Server, c *gin.Context)
+		hasUserErr bool
+	}{
+		{
+			name:       "UploadSignature",
+			method:     http.MethodPost,
+			path:       "/api/v1/user/signature",
+			body:       `{"signature_base64":"abc"}`,
+			handler:    func(s *Server, c *gin.Context) { s.UploadSignature(c) },
+			hasUserErr: true,
+		},
+		{
+			name:       "GetSignature",
+			method:     http.MethodGet,
+			path:       "/api/v1/user/signature",
+			handler:    func(s *Server, c *gin.Context) { s.GetSignature(c) },
+			hasUserErr: true,
+		},
+		{
+			name:       "DeleteSignature",
+			method:     http.MethodDelete,
+			path:       "/api/v1/user/signature",
+			handler:    func(s *Server, c *gin.Context) { s.DeleteSignature(c) },
+			hasUserErr: true,
+		},
+		{
+			name:       "SignTimesheet",
+			method:     http.MethodPost,
+			path:       "/api/v1/timesheets/sign",
+			body:       `{"month":10,"year":2026}`,
+			handler:    func(s *Server, c *gin.Context) { s.SignTimesheet(c) },
+			hasUserErr: true,
+		},
+		{
+			name:       "RevokeTimesheet",
+			method:     http.MethodPost,
+			path:       "/api/v1/timesheets/revoke",
+			body:       `{"month":10,"year":2026}`,
+			handler:    func(s *Server, c *gin.Context) { s.RevokeTimesheet(c) },
+			hasUserErr: true,
+		},
+		{
+			name:       "GetTimesheetSubmissionStatus",
+			method:     http.MethodGet,
+			path:       "/api/v1/timesheets/status?month=10&year=2026",
+			handler:    func(s *Server, c *gin.Context) { s.GetTimesheetSubmissionStatus(c) },
+			hasUserErr: false,
+		},
+		{
+			name:       "SubmitBeritaAcara",
+			method:     http.MethodPost,
+			path:       "/api/v1/berita-acara/submit",
+			body:       `{"month":10,"year":2026,"witness_id":2}`,
+			handler:    func(s *Server, c *gin.Context) { s.SubmitBeritaAcara(c) },
+			hasUserErr: true,
+		},
+		{
+			name:       "WitnessAction",
+			method:     http.MethodPost,
+			path:       "/api/v1/berita-acara/ba-1/witness-action",
+			body:       `{"action":"approve"}`,
+			params:     gin.Params{{Key: "id", Value: "ba-1"}},
+			handler:    func(s *Server, c *gin.Context) { s.WitnessAction(c) },
+			hasUserErr: true,
+		},
+		{
+			name:       "RevokeBeritaAcara",
+			method:     http.MethodPost,
+			path:       "/api/v1/berita-acara/ba-1/revoke",
+			params:     gin.Params{{Key: "id", Value: "ba-1"}},
+			handler:    func(s *Server, c *gin.Context) { s.RevokeBeritaAcara(c) },
+			hasUserErr: true,
+		},
+		{
+			name:       "GetBeritaAcaraSubmissionStatus",
+			method:     http.MethodGet,
+			path:       "/api/v1/berita-acara/status?month=10&year=2026",
+			handler:    func(s *Server, c *gin.Context) { s.GetBeritaAcaraSubmissionStatus(c) },
+			hasUserErr: false,
+		},
+		{
+			name:       "ListPendingWitnessRequests",
+			method:     http.MethodGet,
+			path:       "/api/v1/berita-acara/pending-witness",
+			handler:    func(s *Server, c *gin.Context) { s.ListPendingWitnessRequests(c) },
+			hasUserErr: false,
+		},
+		{
+			name:       "VerifyDocument",
+			method:     http.MethodGet,
+			path:       "/api/v1/verify/doc/mytoken",
+			params:     gin.Params{{Key: "token", Value: "mytoken"}},
+			handler:    func(s *Server, c *gin.Context) { s.VerifyDocument(c) },
+			hasUserErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name+"_InternalServerError", func(t *testing.T) {
+			mockSvc := &mockErrSigService{errToReturn: errors.New("db connection failure")}
+			srv := &Server{SignatureSvc: mockSvc}
+
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			var bodyReader io.Reader
+			if tc.body != "" {
+				bodyReader = strings.NewReader(tc.body)
+			}
+			c.Request = httptest.NewRequest(tc.method, tc.path, bodyReader)
+			if tc.body != "" {
+				c.Request.Header.Set("Content-Type", "application/json")
+			}
+			if len(tc.params) > 0 {
+				c.Params = tc.params
+			}
+			c.Set("userID", uint(1))
+
+			tc.handler(srv, c)
+			assert.Equal(t, http.StatusInternalServerError, w.Code)
+		})
+
+		if tc.hasUserErr {
+			t.Run(tc.name+"_UserError", func(t *testing.T) {
+				mockSvc := &mockErrSigService{errToReturn: domain.NewUserError(domain.ErrNotFound, "Entity not found")}
+				srv := &Server{SignatureSvc: mockSvc}
+
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				var bodyReader io.Reader
+				if tc.body != "" {
+					bodyReader = strings.NewReader(tc.body)
+				}
+				c.Request = httptest.NewRequest(tc.method, tc.path, bodyReader)
+				if tc.body != "" {
+					c.Request.Header.Set("Content-Type", "application/json")
+				}
+				if len(tc.params) > 0 {
+					c.Params = tc.params
+				}
+				c.Set("userID", uint(1))
+
+				tc.handler(srv, c)
+				assert.Equal(t, http.StatusNotFound, w.Code)
+			})
+		}
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"image"
 	"image/color"
+	_ "image/gif"
 	"image/png"
 	"io"
 	"testing"
@@ -15,11 +16,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"timesheet-backend/config"
 	"timesheet-backend/dto/request"
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
+	"timesheet-backend/mailer"
 	"timesheet-backend/models"
+	"timesheet-backend/push"
 )
 
 // Helper to generate a valid test base64 PNG
@@ -36,10 +40,17 @@ func generateTestSignatureBase64(w, h int) string {
 }
 
 type mockSubmissionRepo struct {
-	tsSubmissions map[string]*models.TimesheetSubmission
-	baSubmissions map[string]*models.BeritaAcaraSubmission
-	tsLocked      map[string]bool
-	baLocked      map[string]bool
+	tsSubmissions  map[string]*models.TimesheetSubmission
+	baSubmissions  map[string]*models.BeritaAcaraSubmission
+	tsLocked       map[string]bool
+	baLocked       map[string]bool
+	findTsErr      error
+	findTsTokenErr error
+	upsertTsErr    error
+	findBaErr      error
+	findBaTokenErr error
+	upsertBaErr    error
+	listPendErr    error
 }
 
 func newMockSubmissionRepo() *mockSubmissionRepo {
@@ -52,25 +63,43 @@ func newMockSubmissionRepo() *mockSubmissionRepo {
 }
 
 func (m *mockSubmissionRepo) FindTimesheetSubmission(ctx context.Context, userID uint, month, year int) (*models.TimesheetSubmission, error) {
+	if m.findTsErr != nil {
+		return nil, m.findTsErr
+	}
 	for _, s := range m.tsSubmissions {
 		if s.UserID == userID && s.Month == month && s.Year == year {
-			return s, nil
+			clone := *s
+			return &clone, nil
 		}
 	}
 	return nil, nil
 }
 
 func (m *mockSubmissionRepo) FindTimesheetByToken(ctx context.Context, token string) (*models.TimesheetSubmission, error) {
+	if m.findTsTokenErr != nil {
+		return nil, m.findTsTokenErr
+	}
 	for _, s := range m.tsSubmissions {
 		if s.VerificationToken == token {
-			return s, nil
+			clone := *s
+			return &clone, nil
 		}
 	}
 	return nil, nil
 }
 
 func (m *mockSubmissionRepo) UpsertTimesheetSubmission(ctx context.Context, sub *models.TimesheetSubmission) error {
-	m.tsSubmissions[sub.ID] = sub
+	if m.upsertTsErr != nil {
+		return m.upsertTsErr
+	}
+	clone := *sub
+	for k, existing := range m.tsSubmissions {
+		if existing.UserID == sub.UserID && existing.Month == sub.Month && existing.Year == sub.Year {
+			delete(m.tsSubmissions, k)
+			break
+		}
+	}
+	m.tsSubmissions[sub.ID] = &clone
 	if sub.Status == models.SubmissionStatusSigned || sub.Status == models.SubmissionStatusSubmitted {
 		m.tsLocked[sub.ID] = true
 	} else {
@@ -80,33 +109,55 @@ func (m *mockSubmissionRepo) UpsertTimesheetSubmission(ctx context.Context, sub 
 }
 
 func (m *mockSubmissionRepo) FindBeritaAcaraSubmission(ctx context.Context, userID uint, month, year int) (*models.BeritaAcaraSubmission, error) {
+	if m.findBaErr != nil {
+		return nil, m.findBaErr
+	}
 	for _, s := range m.baSubmissions {
 		if s.UserID == userID && s.Month == month && s.Year == year {
-			return s, nil
+			clone := *s
+			return &clone, nil
 		}
 	}
 	return nil, nil
 }
 
 func (m *mockSubmissionRepo) FindBeritaAcaraByID(ctx context.Context, id string) (*models.BeritaAcaraSubmission, error) {
+	if m.findBaErr != nil {
+		return nil, m.findBaErr
+	}
 	s, ok := m.baSubmissions[id]
 	if !ok {
 		return nil, nil
 	}
-	return s, nil
+	clone := *s
+	return &clone, nil
 }
 
 func (m *mockSubmissionRepo) FindBeritaAcaraByToken(ctx context.Context, token string) (*models.BeritaAcaraSubmission, error) {
+	if m.findBaTokenErr != nil {
+		return nil, m.findBaTokenErr
+	}
 	for _, s := range m.baSubmissions {
 		if s.VerificationToken == token {
-			return s, nil
+			clone := *s
+			return &clone, nil
 		}
 	}
 	return nil, nil
 }
 
 func (m *mockSubmissionRepo) UpsertBeritaAcaraSubmission(ctx context.Context, sub *models.BeritaAcaraSubmission) error {
-	m.baSubmissions[sub.ID] = sub
+	if m.upsertBaErr != nil {
+		return m.upsertBaErr
+	}
+	clone := *sub
+	for k, existing := range m.baSubmissions {
+		if existing.UserID == sub.UserID && existing.Month == sub.Month && existing.Year == sub.Year {
+			delete(m.baSubmissions, k)
+			break
+		}
+	}
+	m.baSubmissions[sub.ID] = &clone
 	if sub.Status == models.SubmissionStatusPendingWitness || sub.Status == models.SubmissionStatusSigned {
 		m.baLocked[sub.ID] = true
 	} else {
@@ -116,6 +167,9 @@ func (m *mockSubmissionRepo) UpsertBeritaAcaraSubmission(ctx context.Context, su
 }
 
 func (m *mockSubmissionRepo) ListPendingWitnessRequests(ctx context.Context, witnessID uint) ([]models.BeritaAcaraSubmission, error) {
+	if m.listPendErr != nil {
+		return nil, m.listPendErr
+	}
 	var list []models.BeritaAcaraSubmission
 	for _, s := range m.baSubmissions {
 		if s.WitnessID == witnessID && s.Status == models.SubmissionStatusPendingWitness {
@@ -144,7 +198,8 @@ func (m *mockSubmissionRepo) IsBeritaAcaraLocked(ctx context.Context, userID uin
 }
 
 type mockStorageSvc struct {
-	files map[string][]byte
+	files     map[string][]byte
+	uploadErr error
 }
 
 func newMockStorageSvc() *mockStorageSvc {
@@ -152,6 +207,9 @@ func newMockStorageSvc() *mockStorageSvc {
 }
 
 func (m *mockStorageSvc) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
+	if m.uploadErr != nil {
+		return m.uploadErr
+	}
 	b, err := io.ReadAll(body)
 	if err != nil {
 		return err
@@ -188,7 +246,8 @@ func (m *mockStorageSvc) FileExists(ctx context.Context, key string) (bool, erro
 
 type mockUserRepo struct {
 	repository.UserRepository
-	users map[uint]*models.User
+	users        map[uint]*models.User
+	updateSigErr error
 }
 
 func newMockUserRepo() *mockUserRepo {
@@ -215,6 +274,9 @@ func (m *mockUserRepo) FindByIDWithDetails(ctx context.Context, id uint) (*model
 }
 
 func (m *mockUserRepo) UpdateSignatureFileKey(ctx context.Context, id uint, fileKey string) error {
+	if m.updateSigErr != nil {
+		return m.updateSigErr
+	}
 	u, ok := m.users[id]
 	if !ok {
 		return domain.ErrNotFound
@@ -226,6 +288,7 @@ func (m *mockUserRepo) UpdateSignatureFileKey(ctx context.Context, id uint, file
 type mockActivityRepo struct {
 	repository.ActivityRepository
 	activities []models.DailyActivity
+	listErr    error
 }
 
 func newMockActivityRepo() *mockActivityRepo {
@@ -233,6 +296,9 @@ func newMockActivityRepo() *mockActivityRepo {
 }
 
 func (m *mockActivityRepo) ListActiveByUser(ctx context.Context, userID uint, filter repository.ActivityFilter) ([]models.DailyActivity, int64, error) {
+	if m.listErr != nil {
+		return nil, 0, m.listErr
+	}
 	return m.activities, int64(len(m.activities)), nil
 }
 
@@ -642,5 +708,290 @@ func TestSignatureService_ValidationErrorsAndEdgeCases(t *testing.T) {
 		// Non-existent token -> ErrNotFound
 		_, err = svc.VerifyDocument(ctx, "non-existent-token")
 		assert.ErrorIs(t, err, domain.ErrNotFound)
+	})
+}
+
+func TestSignatureService_ComprehensiveBranches(t *testing.T) {
+	ctx := context.Background()
+	userRepo := newMockUserRepo()
+	actRepo := newMockActivityRepo()
+	subRepo := newMockSubmissionRepo()
+	storageSvc := newMockStorageSvc()
+
+	user := &models.User{
+		ID:       1,
+		Username: "employee_comp",
+		Email:    "emp@example.com",
+		Name:     "Employee Comp",
+		IsActive: true,
+	}
+	witness := &models.User{
+		ID:       2,
+		Username: "witness_comp",
+		Email:    "wit@example.com",
+		Name:     "Witness Comp",
+		IsActive: true,
+	}
+	_ = userRepo.Create(ctx, user)
+	_ = userRepo.Create(ctx, witness)
+
+	meta := service.AuditMeta{IP: "127.0.0.1", UserAgent: "TestAgent/1.0"}
+
+	// Mailer & Push initialized
+	m := mailer.New(&config.Config{})
+	p := push.New(&config.Config{}, nil)
+	svc := service.NewSignatureService(userRepo, actRepo, subRepo, storageSvc, m, p, "https://timesheet.local")
+
+	t.Run("UploadSignature oversized and non-png/jpeg format", func(t *testing.T) {
+		// Oversized (> 2MB)
+		bigBytes := make([]byte, 3*1024*1024)
+		bigB64 := base64.StdEncoding.EncodeToString(bigBytes)
+		_, err := svc.UploadSignature(ctx, user.ID, bigB64)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Valid GIF (not PNG or JPEG)
+		gifB64 := "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+		_, err = svc.UploadSignature(ctx, user.ID, gifB64)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+	})
+
+	t.Run("UploadSignature storage upload error and update key error", func(t *testing.T) {
+		validB64 := generateTestSignatureBase64(50, 50)
+		storageSvc.uploadErr = errors.New("s3 connection failed")
+		_, err := svc.UploadSignature(ctx, user.ID, validB64)
+		assert.ErrorContains(t, err, "failed to upload signature")
+		storageSvc.uploadErr = nil
+
+		userRepo.updateSigErr = errors.New("db error")
+		_, err = svc.UploadSignature(ctx, user.ID, validB64)
+		assert.ErrorContains(t, err, "failed to update user signature key")
+		userRepo.updateSigErr = nil
+	})
+
+	t.Run("DeleteSignature update key error", func(t *testing.T) {
+		userRepo.updateSigErr = errors.New("db clear error")
+		err := svc.DeleteSignature(ctx, user.ID)
+		assert.ErrorContains(t, err, "failed to clear signature key")
+		userRepo.updateSigErr = nil
+	})
+
+	t.Run("SignTimesheet activity list error and upsert submission error", func(t *testing.T) {
+		// Ensure signature is uploaded
+		validB64 := generateTestSignatureBase64(50, 50)
+		_, _ = svc.UploadSignature(ctx, user.ID, validB64)
+
+		actRepo.listErr = errors.New("db list error")
+		_, err := svc.SignTimesheet(ctx, user.ID, &request.SignTimesheetRequest{Month: 10, Year: 2026}, meta)
+		assert.ErrorContains(t, err, "list activities")
+		actRepo.listErr = nil
+
+		// Seed activities
+		actRepo.activities = []models.DailyActivity{{
+			ID:       1,
+			UserID:   user.ID,
+			Date:     time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC),
+			Activity: "Work",
+			IsActive: true,
+		}}
+
+		subRepo.upsertTsErr = errors.New("save ts error")
+		_, err = svc.SignTimesheet(ctx, user.ID, &request.SignTimesheetRequest{Month: 10, Year: 2026}, meta)
+		assert.ErrorContains(t, err, "save timesheet submission")
+		subRepo.upsertTsErr = nil
+	})
+
+	t.Run("RevokeTimesheet find error and upsert error", func(t *testing.T) {
+		subRepo.findTsErr = errors.New("find ts error")
+		err := svc.RevokeTimesheet(ctx, user.ID, &request.RevokeTimesheetRequest{Month: 10, Year: 2026}, meta)
+		assert.ErrorContains(t, err, "find timesheet submission")
+		subRepo.findTsErr = nil
+
+		// Sign first to have valid submission
+		_, err = svc.SignTimesheet(ctx, user.ID, &request.SignTimesheetRequest{Month: 10, Year: 2026}, meta)
+		require.NoError(t, err)
+
+		subRepo.upsertTsErr = errors.New("upsert ts error")
+		err = svc.RevokeTimesheet(ctx, user.ID, &request.RevokeTimesheetRequest{Month: 10, Year: 2026}, meta)
+		assert.ErrorContains(t, err, "revoke timesheet submission")
+		subRepo.upsertTsErr = nil
+
+		// Re-sign to restore signed status before successful revoke
+		tsResp, err := svc.SignTimesheet(ctx, user.ID, &request.SignTimesheetRequest{Month: 10, Year: 2026}, meta)
+		require.NoError(t, err)
+
+		// Successful revoke
+		err = svc.RevokeTimesheet(ctx, user.ID, &request.RevokeTimesheetRequest{Month: 10, Year: 2026}, meta)
+		require.NoError(t, err)
+
+		// Verify revoked timesheet
+		vResp, err := svc.VerifyDocument(ctx, tsResp.VerificationToken)
+		require.NoError(t, err)
+		assert.False(t, vResp.IsValid)
+		assert.Equal(t, "revoked", vResp.Status)
+	})
+
+	t.Run("GetTimesheetSubmission find error and existing return", func(t *testing.T) {
+		subRepo.findTsErr = errors.New("get ts error")
+		_, err := svc.GetTimesheetSubmission(ctx, user.ID, 10, 2026)
+		assert.ErrorContains(t, err, "find timesheet submission")
+		subRepo.findTsErr = nil
+
+		res, err := svc.GetTimesheetSubmission(ctx, user.ID, 10, 2026)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusRevoked, res.Status)
+	})
+
+	t.Run("SubmitBeritaAcara with notifications and error branches", func(t *testing.T) {
+		// User has no signature
+		userWithoutSig := &models.User{ID: 3, Username: "no_sig", Email: "ns@test.com", IsActive: true}
+		_ = userRepo.Create(ctx, userWithoutSig)
+		_, err := svc.SubmitBeritaAcara(ctx, userWithoutSig.ID, &request.SubmitBeritaAcaraRequest{Month: 10, Year: 2026, WitnessID: witness.ID}, meta)
+		assert.ErrorIs(t, err, domain.ErrInvalidInput)
+
+		// Activity list error
+		actRepo.listErr = errors.New("act list error")
+		_, err = svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 10, Year: 2026, WitnessID: witness.ID}, meta)
+		assert.ErrorContains(t, err, "list activities")
+		actRepo.listErr = nil
+
+		// Seed BA activity
+		actRepo.activities = []models.DailyActivity{{
+			ID:            10,
+			UserID:        user.ID,
+			Date:          time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC),
+			Activity:      "BA Work",
+			IsBeritaAcara: true,
+			IsActive:      true,
+		}}
+
+		// Upsert submission error
+		subRepo.upsertBaErr = errors.New("upsert ba error")
+		_, err = svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 10, Year: 2026, WitnessID: witness.ID}, meta)
+		assert.ErrorContains(t, err, "save berita acara submission")
+		subRepo.upsertBaErr = nil
+
+		// Successful submit with mailer & push notification dispatch
+		baSub, err := svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 10, Year: 2026, WitnessID: witness.ID}, meta)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusPendingWitness, baSub.Status)
+	})
+
+	t.Run("WitnessAction find error, approve error, and reject error", func(t *testing.T) {
+		// Upload witness signature
+		validB64 := generateTestSignatureBase64(50, 50)
+		_, _ = svc.UploadSignature(ctx, witness.ID, validB64)
+
+		baSub, err := svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 10, Year: 2026, WitnessID: witness.ID}, meta)
+		require.NoError(t, err)
+
+		subRepo.findBaErr = errors.New("find ba error")
+		_, err = svc.WitnessAction(ctx, witness.ID, baSub.ID, &request.WitnessActionRequest{Action: "approve"}, meta)
+		assert.ErrorContains(t, err, "find berita acara by id")
+		subRepo.findBaErr = nil
+
+		// Approve upsert error
+		subRepo.upsertBaErr = errors.New("upsert approve error")
+		_, err = svc.WitnessAction(ctx, witness.ID, baSub.ID, &request.WitnessActionRequest{Action: "approve"}, meta)
+		assert.ErrorContains(t, err, "save witness approval")
+		subRepo.upsertBaErr = nil
+
+		// Submit fresh BA for successful approval
+		baSubApprove, err := svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 12, Year: 2026, WitnessID: witness.ID}, meta)
+		require.NoError(t, err)
+
+		appResp, err := svc.WitnessAction(ctx, witness.ID, baSubApprove.ID, &request.WitnessActionRequest{Action: "approve"}, meta)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusSigned, appResp.Status)
+
+		// New submission for rejection testing
+		baSub2, err := svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 11, Year: 2026, WitnessID: witness.ID}, meta)
+		require.NoError(t, err)
+
+		subRepo.upsertBaErr = errors.New("upsert reject error")
+		_, err = svc.WitnessAction(ctx, witness.ID, baSub2.ID, &request.WitnessActionRequest{Action: "reject", Notes: "perbaiki catatan"}, meta)
+		assert.ErrorContains(t, err, "save witness rejection")
+		subRepo.upsertBaErr = nil
+
+		// Fresh BA for successful rejection
+		baSubRejectFresh, err := svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 7, Year: 2026, WitnessID: witness.ID}, meta)
+		require.NoError(t, err)
+
+		rejResp, err := svc.WitnessAction(ctx, witness.ID, baSubRejectFresh.ID, &request.WitnessActionRequest{Action: "reject", Notes: "perbaiki catatan"}, meta)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusRejected, rejResp.Status)
+
+		// Verify rejected BA token
+		vResp, err := svc.VerifyDocument(ctx, baSubRejectFresh.VerificationToken)
+		require.NoError(t, err)
+		assert.False(t, vResp.IsValid)
+		assert.Equal(t, "rejected", vResp.Status)
+	})
+
+	t.Run("RevokeBeritaAcara find error, forbidden, and upsert error", func(t *testing.T) {
+		baSub, err := svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 9, Year: 2026, WitnessID: witness.ID}, meta)
+		require.NoError(t, err)
+
+		subRepo.findBaErr = errors.New("find ba error")
+		err = svc.RevokeBeritaAcara(ctx, user.ID, baSub.ID, meta)
+		assert.ErrorContains(t, err, "find berita acara by id")
+		subRepo.findBaErr = nil
+
+		// Forbidden: different user revokes
+		err = svc.RevokeBeritaAcara(ctx, witness.ID, baSub.ID, meta)
+		assert.ErrorIs(t, err, domain.ErrForbidden)
+
+		// Upsert error
+		subRepo.upsertBaErr = errors.New("upsert revoke error")
+		err = svc.RevokeBeritaAcara(ctx, user.ID, baSub.ID, meta)
+		assert.ErrorContains(t, err, "revoke berita acara")
+		subRepo.upsertBaErr = nil
+
+		// Successful revoke
+		err = svc.RevokeBeritaAcara(ctx, user.ID, baSub.ID, meta)
+		require.NoError(t, err)
+
+		// Verify revoked BA token
+		vResp, err := svc.VerifyDocument(ctx, baSub.VerificationToken)
+		require.NoError(t, err)
+		assert.False(t, vResp.IsValid)
+		assert.Equal(t, "revoked", vResp.Status)
+	})
+
+	t.Run("GetBeritaAcaraSubmission and ListPendingWitnessRequests error and found branches", func(t *testing.T) {
+		subRepo.findBaErr = errors.New("find ba error")
+		_, err := svc.GetBeritaAcaraSubmission(ctx, user.ID, 9, 2026)
+		assert.ErrorContains(t, err, "find berita acara submission")
+		subRepo.findBaErr = nil
+
+		// Existing BA submission with user and witness details
+		baResp, err := svc.GetBeritaAcaraSubmission(ctx, user.ID, 9, 2026)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusRevoked, baResp.Status)
+
+		// List pending requests error
+		subRepo.listPendErr = errors.New("list pending error")
+		_, err = svc.ListPendingWitnessRequests(ctx, witness.ID)
+		assert.ErrorContains(t, err, "list pending requests")
+		subRepo.listPendErr = nil
+
+		// Submit a pending request to verify list return
+		_, err = svc.SubmitBeritaAcara(ctx, user.ID, &request.SubmitBeritaAcaraRequest{Month: 8, Year: 2026, WitnessID: witness.ID}, meta)
+		require.NoError(t, err)
+
+		pendingList, err := svc.ListPendingWitnessRequests(ctx, witness.ID)
+		require.NoError(t, err)
+		assert.NotEmpty(t, pendingList)
+	})
+
+	t.Run("VerifyDocument token query error branches", func(t *testing.T) {
+		subRepo.findTsTokenErr = errors.New("db ts token error")
+		_, err := svc.VerifyDocument(ctx, "any-tok")
+		assert.ErrorContains(t, err, "find timesheet by token")
+		subRepo.findTsTokenErr = nil
+
+		subRepo.findBaTokenErr = errors.New("db ba token error")
+		_, err = svc.VerifyDocument(ctx, "any-tok")
+		assert.ErrorContains(t, err, "find berita acara by token")
+		subRepo.findBaTokenErr = nil
 	})
 }
