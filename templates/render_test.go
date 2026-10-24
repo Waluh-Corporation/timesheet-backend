@@ -8,24 +8,6 @@ import (
 	"timesheet-backend/dto/response"
 )
 
-func assertContains(t *testing.T, html string, expected []string) {
-	t.Helper()
-	for _, s := range expected {
-		if !strings.Contains(html, s) {
-			t.Errorf("expected HTML to contain %q, but got:\n%s", s, html)
-		}
-	}
-}
-
-func assertNotContains(t *testing.T, html string, forbidden []string) {
-	t.Helper()
-	for _, f := range forbidden {
-		if strings.Contains(html, f) {
-			t.Errorf("HTML should not contain forbidden text %q", f)
-		}
-	}
-}
-
 func TestRenderVerifyDocument(t *testing.T) {
 	now := time.Date(2026, 10, 24, 15, 30, 0, 0, time.UTC)
 	empSigned := now.Add(-2 * time.Hour)
@@ -57,13 +39,16 @@ func TestRenderVerifyDocument(t *testing.T) {
 		VerifiedAt:   now,
 	}
 
-	t.Run("English Language Rendering with Custom AppName", func(t *testing.T) {
+	t.Run("Default UTC Timezone Verification Time", func(t *testing.T) {
+		t.Setenv("TZ", "")
+		t.Setenv("SCHEDULER_TZ", "")
+
 		html, err := RenderVerifyDocument(validBA, "Acme Enterprise Portal")
 		if err != nil {
 			t.Fatalf("RenderVerifyDocument failed: %v", err)
 		}
 
-		assertContains(t, html, []string{
+		expectedSubstrings := []string{
 			"Acme Enterprise Portal",
 			"AUTHENTIC &amp; VERIFIED DOCUMENT",
 			"Overtime Incident Report",
@@ -75,14 +60,20 @@ func TestRenderVerifyDocument(t *testing.T) {
 			"Document Information",
 			"Document Type",
 			"Employee Signature",
+			"13:30 UTC",
 			"Witness",
-			"Witness Signature",
+			"14:30 UTC",
 			"Verification Time",
+			"15:30 UTC",
 			"All Rights Reserved",
-		})
+		}
+		for _, s := range expectedSubstrings {
+			if !strings.Contains(html, s) {
+				t.Errorf("expected HTML to contain %q, but got:\n%s", s, html)
+			}
+		}
 
-		// Ensure no Indonesian text, no copy button, and no BNI branding remains
-		assertNotContains(t, html, []string{
+		forbiddenSubstrings := []string{
 			"DOKUMEN ASLI",
 			"Berita Acara",
 			"Oktober",
@@ -95,21 +86,51 @@ func TestRenderVerifyDocument(t *testing.T) {
 			"<button",
 			"Bank Negara Indonesia",
 			"BNI",
-		})
+		}
+		for _, f := range forbiddenSubstrings {
+			if strings.Contains(html, f) {
+				t.Errorf("HTML should not contain forbidden text %q", f)
+			}
+		}
+	})
+
+	t.Run("Configured via existing TZ env variable Asia/Jakarta", func(t *testing.T) {
+		t.Setenv("TZ", "Asia/Jakarta")
+
+		html, err := RenderVerifyDocument(validBA, "Acme Enterprise Portal")
+		if err != nil {
+			t.Fatalf("RenderVerifyDocument failed: %v", err)
+		}
+
+		expectedSubstrings := []string{
+			"22:30 WIB", // 15:30 UTC + 7h = 22:30 WIB
+			"20:30 WIB", // 13:30 UTC + 7h = 20:30 WIB
+		}
+		for _, s := range expectedSubstrings {
+			if !strings.Contains(html, s) {
+				t.Errorf("expected HTML to contain %q for Asia/Jakarta, but got:\n%s", s, html)
+			}
+		}
 	})
 
 	t.Run("English Revoked Timesheet", func(t *testing.T) {
+		t.Setenv("TZ", "UTC")
 		html, err := RenderVerifyDocument(revokedTS, "Timesheet System")
 		if err != nil {
 			t.Fatalf("RenderVerifyDocument failed: %v", err)
 		}
 
-		assertContains(t, html, []string{
+		expectedSubstrings := []string{
 			"SIGNATURE REVOKED",
 			"Monthly Timesheet",
 			"June 2026",
 			"Alice",
-		})
+		}
+		for _, s := range expectedSubstrings {
+			if !strings.Contains(html, s) {
+				t.Errorf("expected HTML to contain %q, but got:\n%s", s, html)
+			}
+		}
 	})
 
 	t.Run("Nil / Invalid Document Fallback to Environment APP_NAME", func(t *testing.T) {
@@ -119,9 +140,11 @@ func TestRenderVerifyDocument(t *testing.T) {
 			t.Fatalf("RenderVerifyDocument failed: %v", err)
 		}
 
-		assertContains(t, html, []string{
-			"INVALID DOCUMENT",
-			"Env Custom System",
-		})
+		if !strings.Contains(html, "INVALID DOCUMENT") {
+			t.Errorf("expected HTML to contain 'INVALID DOCUMENT', got:\n%s", html)
+		}
+		if !strings.Contains(html, "Env Custom System") {
+			t.Errorf("expected HTML to contain 'Env Custom System', got:\n%s", html)
+		}
 	})
 }

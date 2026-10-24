@@ -195,7 +195,7 @@
               <div>
                 <div class="info-title">Employee Signature</div>
                 <div class="info-content text-muted">
-                  {{formatDateWIB .Data.EmployeeSignedAt}}
+                  {{formatDateTime .Data.EmployeeSignedAt}}
                 </div>
               </div>
 
@@ -208,14 +208,14 @@
                 <div>
                   <div class="info-title">Witness Signature</div>
                   <div class="info-content text-muted">
-                    {{formatDateWIB .Data.WitnessSignedAt}}
+                    {{formatDateTime .Data.WitnessSignedAt}}
                   </div>
                 </div>
               {{end}}
 
               <div>
                 <div class="info-title">Verification Time</div>
-                <div class="info-content text-muted">{{formatDateWIB .Data.VerifiedAt}}</div>
+                <div class="info-content text-muted">{{formatDateTime .Data.VerifiedAt}}</div>
               </div>
             </div>
 

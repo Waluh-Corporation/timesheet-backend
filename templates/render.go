@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"timesheet-backend/config"
 	"timesheet-backend/dto/response"
 )
 
@@ -48,25 +49,28 @@ func parseTime(t any) (time.Time, bool) {
 	}
 }
 
-func formatDateWIB(t any) string {
+func formatDateTime(t any) string {
 	tm, ok := parseTime(t)
 	if !ok {
 		return "-"
 	}
 
-	loc, err := time.LoadLocation("Asia/Jakarta")
-	if err != nil {
-		loc = time.FixedZone("WIB", 7*3600)
-	}
-	wibTime := tm.In(loc)
+	loc := config.AppLocation()
+	targetTime := tm.In(loc)
 
-	m := int(wibTime.Month())
+	m := int(targetTime.Month())
 	mName := ""
 	if m >= 1 && m <= 12 {
 		mName = monthNames[m]
 	}
-	return fmt.Sprintf("%02d %s %04d, %02d:%02d WIB",
-		wibTime.Day(), mName, wibTime.Year(), wibTime.Hour(), wibTime.Minute())
+
+	zoneName, _ := targetTime.Zone()
+	if zoneName == "" {
+		zoneName = "UTC"
+	}
+
+	return fmt.Sprintf("%02d %s %04d, %02d:%02d %s",
+		targetTime.Day(), mName, targetTime.Year(), targetTime.Hour(), targetTime.Minute(), zoneName)
 }
 
 func formatMonthName(m int) string {
@@ -85,7 +89,8 @@ func docTypeName(docType string) string {
 
 func init() {
 	funcMap := template.FuncMap{
-		"formatDateWIB":   formatDateWIB,
+		"formatDateTime":  formatDateTime,
+		"formatDateWIB":   formatDateTime, // alias for backwards compatibility
 		"formatMonthName": formatMonthName,
 		"docTypeName":     docTypeName,
 	}
