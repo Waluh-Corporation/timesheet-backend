@@ -369,7 +369,14 @@ func (s *activityService) GetPreviousDailyActivity(ctx context.Context, userID u
 		return nil, domain.NewUserError(domain.ErrNotFound, "No previous activity found")
 	}
 
-	return toDailyActivityResponse(activity), nil
+	res := toDailyActivityResponse(activity)
+	res.StartTime = ""
+	res.EndTime = ""
+	res.IsBeritaAcara = false
+	res.WitnessID = nil
+	res.Witness = nil
+	res.BeritaAcaraNotes = ""
+	return res, nil
 }
 
 func (s *activityService) GetEligibleWitnesses(ctx context.Context, currentUserID uint) ([]response.WitnessResponse, error) {

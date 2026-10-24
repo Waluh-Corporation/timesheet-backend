@@ -889,7 +889,6 @@ definitions:
         type: integer
     required:
     - month
-    - witness_id
     - year
     type: object
   request.SubscribeRequest:
@@ -1718,7 +1717,8 @@ paths:
     get:
       description: 'Retrieves the most recent active daily activity strictly before
         the specified reference date (default: today in WIB) to allow copying/autofilling
-        activity descriptions.'
+        activity descriptions without copying Time In (start_time), Time Out (end_time),
+        or Berita Acara metadata.'
       parameters:
       - description: 'Reference date (YYYY-MM-DD, default: today)'
         in: query

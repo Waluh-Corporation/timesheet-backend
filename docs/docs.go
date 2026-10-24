@@ -184,7 +184,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves the most recent active daily activity strictly before the specified reference date (default: today in WIB) to allow copying/autofilling activity descriptions.",
+                "description": "Retrieves the most recent active daily activity strictly before the specified reference date (default: today in WIB) to allow copying/autofilling activity descriptions without copying Time In (start_time), Time Out (end_time), or Berita Acara metadata.",
                 "produces": [
                     "application/json"
                 ],
@@ -5892,7 +5892,6 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "month",
-                "witness_id",
                 "year"
             ],
             "properties": {
