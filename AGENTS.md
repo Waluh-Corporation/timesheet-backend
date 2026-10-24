@@ -82,3 +82,4 @@ git status && git diff     # 5. Cleanliness & Security Check
 2. **Preserve Documentation**: Keep existing comments, docstrings, and Swagger annotations (`@Summary`, `@Tags`, `@Param`).
 3. **No Hardcoded Credentials**: Read secrets from environment variables via `config`. Never commit credentials.
 4. **Environment File Guard**: Never edit or commit `.env`. Document new variables in `.env.example`.
+5. **English-Only Messages**: All messages—including commit messages, PR descriptions, code comments, and API response/error messages—MUST strictly be in English.
