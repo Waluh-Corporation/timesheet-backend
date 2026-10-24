@@ -380,6 +380,27 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 	if req == nil || req.Month < 1 || req.Month > 12 || req.Year < 2000 || req.Year > 2100 {
 		return nil, domain.NewUserError(domain.ErrInvalidInput, errInvalidPeriodMsg)
 	}
+
+	if req.WitnessID == 0 {
+		filter := repository.ActivityFilter{
+			Month: &req.Month,
+			Year:  &req.Year,
+			IsAll: true,
+		}
+		acts, _, aerr := s.activityRepo.ListActiveByUser(ctx, userID, filter)
+		if aerr == nil {
+			for _, a := range acts {
+				if a.IsBeritaAcara && a.WitnessID != nil && *a.WitnessID != 0 {
+					req.WitnessID = *a.WitnessID
+					break
+				}
+			}
+		}
+		if req.WitnessID == 0 {
+			return nil, domain.NewUserError(domain.ErrInvalidInput, "Belum ada saksi yang ditentukan untuk Berita Acara bulan ini. Silakan tentukan saksi terlebih dahulu.")
+		}
+	}
+
 	if req.WitnessID == userID {
 		return nil, domain.NewUserError(domain.ErrInvalidInput, "Saksi tidak boleh sama dengan pembuat Berita Acara")
 	}

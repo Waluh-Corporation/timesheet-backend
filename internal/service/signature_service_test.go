@@ -995,3 +995,60 @@ func TestSignatureService_ComprehensiveBranches(t *testing.T) {
 		subRepo.findBaTokenErr = nil
 	})
 }
+
+func TestSignatureService_SubmitBeritaAcara_AutoResolveWitness(t *testing.T) {
+	ctx := context.Background()
+	userRepo := newMockUserRepo()
+	actRepo := newMockActivityRepo()
+	subRepo := newMockSubmissionRepo()
+	storageSvc := newMockStorageSvc()
+
+	employee := &models.User{
+		ID:               1,
+		Username:         "emp",
+		Name:             "Employee One",
+		Email:            "emp@example.com",
+		SignatureFileKey: "signatures/1_sig.png",
+		IsActive:         true,
+	}
+	witness := &models.User{
+		ID:               2,
+		Username:         "wit",
+		Name:             "Witness Two",
+		Email:            "wit@example.com",
+		SignatureFileKey: "signatures/2_sig.png",
+		IsActive:         true,
+	}
+	_ = userRepo.Create(ctx, employee)
+	_ = userRepo.Create(ctx, witness)
+
+	svc := service.NewSignatureService(userRepo, actRepo, subRepo, storageSvc, nil, nil, "https://timesheet.local")
+	meta := service.AuditMeta{IP: "10.0.0.1", UserAgent: "TestClient"}
+
+	// 1. Submit with WitnessID == 0 fails when no monthly witness is assigned
+	actRepo.activities = []models.DailyActivity{{
+		ID:            1,
+		UserID:        employee.ID,
+		Date:          time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC),
+		Activity:      "Incident handling",
+		IsBeritaAcara: true,
+		WitnessID:     nil,
+		IsActive:      true,
+	}}
+	_, err := svc.SubmitBeritaAcara(ctx, employee.ID, &request.SubmitBeritaAcaraRequest{
+		Month: 11,
+		Year:  2026,
+	}, meta)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Belum ada saksi yang ditentukan")
+
+	// 2. Submit with WitnessID == 0 auto-resolves when activity has monthly witness assigned
+	actRepo.activities[0].WitnessID = &witness.ID
+	submitAutoResp, err := svc.SubmitBeritaAcara(ctx, employee.ID, &request.SubmitBeritaAcaraRequest{
+		Month: 11,
+		Year:  2026,
+	}, meta)
+	require.NoError(t, err)
+	assert.Equal(t, witness.ID, submitAutoResp.WitnessID)
+	assert.Equal(t, models.SubmissionStatusPendingWitness, submitAutoResp.Status)
+}

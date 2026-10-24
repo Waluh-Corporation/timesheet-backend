@@ -56,6 +56,11 @@ func (s *Server) GenerateTimesheet(c *gin.Context) {
 		return
 	}
 
+	if err := s.validateBeritaAcaraSignedBeforeGenerate(c, uid, req.Month, req.Year); err != nil {
+		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	if s.handleAsyncGeneration(c, user, req) {
 		return
 	}
@@ -112,6 +117,79 @@ func hasUserCompany(user *models.User) bool {
 		return true
 	}
 	return strings.TrimSpace(user.Company) != ""
+}
+
+func (s *Server) validateBeritaAcaraSignedBeforeGenerate(c *gin.Context, uid uint, month, year int) error {
+	actRepo := s.getActivityRepository()
+	if actRepo == nil {
+		return nil
+	}
+	filter := repository.ActivityFilter{
+		Month: &month,
+		Year:  &year,
+		IsAll: true,
+	}
+	activities, _, err := actRepo.ListActiveByUser(reqContext(c), uid, filter)
+	if err != nil {
+		return fmt.Errorf("failed to check activities: %w", err)
+	}
+
+	hasBA := false
+	var witnessName string
+	for _, a := range activities {
+		if a.IsBeritaAcara {
+			hasBA = true
+			if a.Witness != nil && a.Witness.Name != "" {
+				witnessName = a.Witness.Name
+			}
+			break
+		}
+	}
+	if !hasBA {
+		return nil
+	}
+
+	subRepo := s.getSubmissionRepository()
+	if subRepo == nil {
+		return nil
+	}
+
+	sub, err := subRepo.FindBeritaAcaraSubmission(reqContext(c), uid, month, year)
+	if err != nil {
+		return fmt.Errorf("failed to check berita acara submission: %w", err)
+	}
+
+	if sub == nil {
+		return errors.New("terdapat catatan Berita Acara pada periode ini yang belum diajukan ke saksi. Silakan ajukan Berita Acara terlebih dahulu agar saksi dapat menandatanganinya sebelum men-generate dokumen")
+	}
+
+	if sub.Witness != nil && sub.Witness.Name != "" {
+		witnessName = sub.Witness.Name
+	}
+	if witnessName == "" && sub.WitnessID != 0 {
+		userRepo := s.getUserRepository()
+		if userRepo != nil {
+			if wUser, werr := userRepo.FindByID(reqContext(c), sub.WitnessID); werr == nil && wUser != nil {
+				witnessName = wUser.Name
+			}
+		}
+	}
+	if witnessName == "" {
+		witnessName = "saksi"
+	}
+
+	switch sub.Status {
+	case models.SubmissionStatusSigned:
+		return nil
+	case models.SubmissionStatusPendingWitness:
+		return fmt.Errorf("dokumen belum dapat dibuat karena Berita Acara periode ini masih menunggu persetujuan dan tanda tangan dari saksi %s", witnessName)
+	case models.SubmissionStatusRejected:
+		return fmt.Errorf("dokumen belum dapat dibuat karena pengajuan Berita Acara ditolak oleh saksi %s. Harap periksa catatan revisi dan ajukan kembali", witnessName)
+	case models.SubmissionStatusRevoked:
+		return errors.New("dokumen belum dapat dibuat karena pengajuan Berita Acara telah dibatalkan. Silakan ajukan kembali ke saksi")
+	default:
+		return fmt.Errorf("dokumen belum dapat dibuat karena Berita Acara periode ini belum disetujui oleh saksi %s", witnessName)
+	}
 }
 
 func (s *Server) checkUserHasActivities(c *gin.Context, uid uint, month, year int) bool {
@@ -313,6 +391,11 @@ func (s *Server) enqueueNewGenerationJob(c *gin.Context, jobRepo repository.JobR
 }
 
 func (s *Server) handleSyncGenerationFallback(c *gin.Context, uid uint, req *request.GenerateRequest) {
+	if err := s.validateBeritaAcaraSignedBeforeGenerate(c, uid, req.Month, req.Year); err != nil {
+		RespondError(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	tsSvc := s.getTimesheetService()
 	if tsSvc == nil {
 		RespondError(c, http.StatusInternalServerError, "timesheet service not initialized")

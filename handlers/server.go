@@ -394,6 +394,13 @@ func (s *Server) getAuditRepository() repository.AuditRepository {
 	return s.AuditRepo
 }
 
+func (s *Server) getSubmissionRepository() repository.SubmissionRepository {
+	if s == nil {
+		return nil
+	}
+	return s.SubmissionRepo
+}
+
 // AuditLogParams encapsulates parameters for recording an administrative audit event.
 type AuditLogParams struct {
 	ActorID      *uint

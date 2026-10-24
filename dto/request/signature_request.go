@@ -22,7 +22,7 @@ type RevokeTimesheetRequest struct {
 type SubmitBeritaAcaraRequest struct {
 	Month     int  `json:"month" binding:"required,min=1,max=12" example:"10"`
 	Year      int  `json:"year" binding:"required,min=2000,max=2100" example:"2026"`
-	WitnessID uint `json:"witness_id" binding:"required,gt=0" example:"2"`
+	WitnessID uint `json:"witness_id" binding:"omitempty,gt=0" example:"2"`
 }
 
 // WitnessActionRequest represents the action taken by a witness (approve & sign or reject with notes).
