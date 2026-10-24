@@ -332,11 +332,12 @@ func TestSignatureHandlers_BeritaAcaraWorkflow(t *testing.T) {
 	assert.Equal(t, u2.Name, verResp.Data.WitnessName)
 	assert.NotEmpty(t, verResp.Data.DocumentHash)
 
-	// 4b. Verify Document via Tabler HTML (Browser mode via Accept header)
+	// 4b. Verify Document via Tabler HTML (Browser mode via Accept-Language: id-ID)
 	wVerHTML := httptest.NewRecorder()
 	cVerHTML, _ := gin.CreateTestContext(wVerHTML)
 	cVerHTML.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken, nil)
 	cVerHTML.Request.Header.Set("Accept", "text/html,application/xhtml+xml")
+	cVerHTML.Request.Header.Set("Accept-Language", "id-ID,id;q=0.9,en-US;q=0.8")
 	cVerHTML.Params = gin.Params{{Key: "token", Value: subResp.Data.VerificationToken}}
 	srv.VerifyDocument(cVerHTML)
 	assert.Equal(t, http.StatusOK, wVerHTML.Code)
@@ -345,14 +346,28 @@ func TestSignatureHandlers_BeritaAcaraWorkflow(t *testing.T) {
 	assert.Contains(t, wVerHTML.Body.String(), u1.Name)
 	assert.Contains(t, wVerHTML.Body.String(), u2.Name)
 
-	// 4c. Verify Document via Tabler HTML (?format=html query param)
+	// 4c. Verify Document via Tabler HTML (Browser mode via Accept-Language: en-US)
+	wVerEN := httptest.NewRecorder()
+	cVerEN, _ := gin.CreateTestContext(wVerEN)
+	cVerEN.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken, nil)
+	cVerEN.Request.Header.Set("Accept", "text/html")
+	cVerEN.Request.Header.Set("Accept-Language", "en-US,en;q=0.9,id;q=0.8")
+	cVerEN.Params = gin.Params{{Key: "token", Value: subResp.Data.VerificationToken}}
+	srv.VerifyDocument(cVerEN)
+	assert.Equal(t, http.StatusOK, wVerEN.Code)
+	assert.Contains(t, wVerEN.Body.String(), "AUTHENTIC &amp; VERIFIED DOCUMENT")
+	assert.Contains(t, wVerEN.Body.String(), "Document Information")
+
+	// 4d. Verify Document via Tabler HTML with query param ?lang=en and APP_NAME
+	srv.Cfg.AppName = "BNI Timesheet Central"
 	wVerQuery := httptest.NewRecorder()
 	cVerQuery, _ := gin.CreateTestContext(wVerQuery)
-	cVerQuery.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken+"?format=html", nil)
+	cVerQuery.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken+"?format=html&lang=en", nil)
 	cVerQuery.Params = gin.Params{{Key: "token", Value: subResp.Data.VerificationToken}}
 	srv.VerifyDocument(cVerQuery)
 	assert.Equal(t, http.StatusOK, wVerQuery.Code)
-	assert.Contains(t, wVerQuery.Body.String(), "DOKUMEN ASLI &amp; TERVERIFIKASI")
+	assert.Contains(t, wVerQuery.Body.String(), "AUTHENTIC &amp; VERIFIED DOCUMENT")
+	assert.Contains(t, wVerQuery.Body.String(), "BNI Timesheet Central")
 
 	// 5. Get Berita Acara Status
 	wStat := httptest.NewRecorder()

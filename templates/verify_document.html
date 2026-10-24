@@ -1,137 +1,298 @@
 <!doctype html>
-<html lang="id">
+<html lang="{{.Lang}}">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"/>
   <meta http-equiv="X-UA-Compatible" content="ie=edge"/>
-  <title>Verifikasi Dokumen Digital - Timesheet Engine</title>
-  <!-- CSS files -->
+  <title>{{if eq .Lang "en"}}Digital Document Verification - {{.AppName}}{{else}}Verifikasi Dokumen Digital - {{.AppName}}{{end}}</title>
+  <!-- Tabler Core & Icons CSS via CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
   <style>
     @import url('https://rsms.me/inter/inter.css');
     :root {
-      --tblr-font-sans-serif: 'Inter', -apple-system, BlinkMacSystemFont, San Francisco, Segoe UI, Roboto, Helvetica Neue, sans-serif;
+      --tblr-font-sans-serif: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     body {
       font-feature-settings: "cv03", "cv04", "cv11";
       background-color: #f4f6fa;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
-    .hash-badge {
-      word-break: break-all;
-      font-family: monospace;
-      font-size: 0.825rem;
-      background: #eef1f6;
-      padding: 0.5rem 0.75rem;
-      border-radius: 6px;
+    .verify-wrapper {
+      width: 100%;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 1rem 0.75rem;
+    }
+    @media (min-width: 576px) {
+      .verify-wrapper {
+        padding: 2rem 1rem;
+      }
+    }
+    .brand-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #066fd1;
+      max-width: 70%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    @media (min-width: 576px) {
+      .brand-title {
+        font-size: 1.5rem;
+        max-width: 75%;
+      }
+    }
+    .status-avatar {
+      width: 4rem;
+      height: 4rem;
+      font-size: 2rem;
+      margin: 0 auto 1rem auto;
+    }
+    @media (min-width: 576px) {
+      .status-avatar {
+        width: 4.75rem;
+        height: 4.75rem;
+        font-size: 2.5rem;
+      }
+    }
+    .status-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 0.5rem;
+    }
+    @media (min-width: 576px) {
+      .status-title {
+        font-size: 1.5rem;
+      }
+    }
+    .responsive-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.875rem;
+    }
+    @media (min-width: 576px) {
+      .responsive-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.25rem;
+      }
+    }
+    .info-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #64748b;
+      margin-bottom: 0.25rem;
+    }
+    .info-content {
+      font-size: 0.9375rem;
+      color: #1e293b;
+      word-break: break-word;
+    }
+    .hash-container {
+      background: #eef2f6;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 0.625rem 0.75rem;
+      position: relative;
+    }
+    .hash-text {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.785rem;
+      line-height: 1.45;
       color: #334155;
-      display: inline-block;
+      word-break: break-all;
+      overflow-wrap: anywhere;
       user-select: all;
+    }
+    .copy-btn {
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
     }
   </style>
 </head>
-<body class="d-flex flex-column">
-  <div class="page page-center">
-    <div class="container container-tight py-4">
-      <div class="text-center mb-4">
-        <a href="." class="navbar-brand navbar-brand-autodark">
-          <span class="fs-2 fw-bold text-primary">Timesheet<span class="text-dark">Verification</span></span>
-        </a>
-      </div>
+<body>
+  <div class="page page-center flex-fill d-flex align-items-center">
+    <div class="verify-wrapper">
+      <!-- Top Navigation & Language Switcher -->
+      <header class="d-flex justify-content-between align-items-center mb-3">
+        <div class="brand-title" title="{{.AppName}}">
+          {{.AppName}}
+        </div>
+        <div class="lang-switcher">
+          {{if eq .Lang "en"}}
+            <a href="?lang=id" class="btn btn-sm btn-outline-secondary rounded-pill px-2 px-sm-3" aria-label="Ganti ke Bahasa Indonesia">
+              <i class="ti ti-world me-1"></i> Bahasa Indonesia
+            </a>
+          {{else}}
+            <a href="?lang=en" class="btn btn-sm btn-outline-secondary rounded-pill px-2 px-sm-3" aria-label="Switch to English">
+              <i class="ti ti-world me-1"></i> English
+            </a>
+          {{end}}
+        </div>
+      </header>
 
-      <div class="card card-md shadow-sm">
-        {{if and .IsValid (eq .Status "valid")}}
+      <!-- Main Verification Card -->
+      <main class="card card-md shadow-sm border-0 rounded-3 overflow-hidden">
+        {{if and .Data.IsValid (eq .Data.Status "valid")}}
+          <!-- Status: Valid -->
           <div class="card-status-top bg-success"></div>
-          <div class="card-body text-center py-4">
-            <span class="avatar avatar-xl rounded-circle bg-success-lt mb-3">
-              <i class="ti ti-circle-check fs-1 text-success"></i>
-            </span>
-            <h2 class="card-title text-success mb-1">DOKUMEN ASLI &amp; TERVERIFIKASI</h2>
-            <div class="text-secondary">
-              Dokumen ini resmi terdaftar dan telah disahkan secara digital.
+          <div class="card-body text-center py-4 px-3 px-sm-4">
+            <div class="avatar status-avatar rounded-circle bg-success-lt">
+              <i class="ti ti-circle-check text-success"></i>
             </div>
+            <h1 class="status-title text-success">
+              {{if eq .Lang "en"}}AUTHENTIC &amp; VERIFIED DOCUMENT{{else}}DOKUMEN ASLI &amp; TERVERIFIKASI{{end}}
+            </h1>
+            <p class="text-secondary mb-0">
+              {{if eq .Lang "en"}}
+                This document is officially registered and has been digitally verified.
+              {{else}}
+                Dokumen ini resmi terdaftar dan telah disahkan secara digital.
+              {{end}}
+            </p>
           </div>
-        {{else if eq .Status "revoked"}}
+        {{else if eq .Data.Status "revoked"}}
+          <!-- Status: Revoked -->
           <div class="card-status-top bg-warning"></div>
-          <div class="card-body text-center py-4">
-            <span class="avatar avatar-xl rounded-circle bg-warning-lt mb-3">
-              <i class="ti ti-alert-triangle fs-1 text-warning"></i>
-            </span>
-            <h2 class="card-title text-warning mb-1">TANDA TANGAN DIBATALKAN</h2>
-            <div class="text-secondary">
-              Tanda tangan digital pada dokumen ini telah dibatalkan / ditarik oleh pemilik dokumen.
+          <div class="card-body text-center py-4 px-3 px-sm-4">
+            <div class="avatar status-avatar rounded-circle bg-warning-lt">
+              <i class="ti ti-alert-triangle text-warning"></i>
             </div>
+            <h1 class="status-title text-warning">
+              {{if eq .Lang "en"}}SIGNATURE REVOKED{{else}}TANDA TANGAN DIBATALKAN{{end}}
+            </h1>
+            <p class="text-secondary mb-0">
+              {{if eq .Lang "en"}}
+                The digital signature on this document has been revoked by the document owner.
+              {{else}}
+                Tanda tangan digital pada dokumen ini telah dibatalkan / ditarik oleh pemilik dokumen.
+              {{end}}
+            </p>
           </div>
         {{else}}
+          <!-- Status: Invalid / Not Found -->
           <div class="card-status-top bg-danger"></div>
-          <div class="card-body text-center py-4">
-            <span class="avatar avatar-xl rounded-circle bg-danger-lt mb-3">
-              <i class="ti ti-circle-x fs-1 text-danger"></i>
-            </span>
-            <h2 class="card-title text-danger mb-1">DOKUMEN TIDAK VALID</h2>
-            <div class="text-secondary">
-              Token verifikasi tidak ditemukan dalam basis data atau integritas dokumen tidak valid.
+          <div class="card-body text-center py-4 px-3 px-sm-4">
+            <div class="avatar status-avatar rounded-circle bg-danger-lt">
+              <i class="ti ti-circle-x text-danger"></i>
             </div>
+            <h1 class="status-title text-danger">
+              {{if eq .Lang "en"}}INVALID DOCUMENT{{else}}DOKUMEN TIDAK VALID{{end}}
+            </h1>
+            <p class="text-secondary mb-0">
+              {{if eq .Lang "en"}}
+                Verification token was not found in the database or document integrity is invalid.
+              {{else}}
+                Token verifikasi tidak ditemukan dalam basis data atau integritas dokumen tidak valid.
+              {{end}}
+            </p>
           </div>
         {{end}}
 
-        {{if or .IsValid (eq .Status "revoked")}}
-          <div class="card-body border-top">
-            <h4 class="card-title mb-3">Informasi Dokumen</h4>
-            <div class="datagrid">
-              <div class="datagrid-item">
-                <div class="datagrid-title">Jenis Dokumen</div>
-                <div class="datagrid-content fw-bold text-dark">{{docTypeName .DocumentType}}</div>
+        {{if or .Data.IsValid (eq .Data.Status "revoked")}}
+          <!-- Document Details Section -->
+          <div class="card-body border-top py-3 py-sm-4 px-3 px-sm-4">
+            <h2 class="fs-3 fw-bold mb-3 text-dark">
+              {{if eq .Lang "en"}}Document Information{{else}}Informasi Dokumen{{end}}
+            </h2>
+
+            <div class="responsive-grid">
+              <div>
+                <div class="info-title">{{if eq .Lang "en"}}Document Type{{else}}Jenis Dokumen{{end}}</div>
+                <div class="info-content fw-bold text-dark">{{docTypeName .Data.DocumentType $.Lang}}</div>
               </div>
-              <div class="datagrid-item">
-                <div class="datagrid-title">Periode</div>
-                <div class="datagrid-content">{{formatMonthName .Month}} {{.Year}}</div>
+
+              <div>
+                <div class="info-title">{{if eq .Lang "en"}}Period{{else}}Periode{{end}}</div>
+                <div class="info-content">{{formatMonthName .Data.Month $.Lang}} {{.Data.Year}}</div>
               </div>
-              <div class="datagrid-item">
-                <div class="datagrid-title">Karyawan</div>
-                <div class="datagrid-content">
-                  {{.EmployeeName}}
-                  {{if .EmployeeBNIID}}<span class="text-secondary">({{.EmployeeBNIID}})</span>{{end}}
-                </div>
-              </div>
-              <div class="datagrid-item">
-                <div class="datagrid-title">Tanda Tangan Karyawan</div>
-                <div class="datagrid-content text-muted">
-                  {{formatDateWIB .EmployeeSignedAt}}
+
+              <div>
+                <div class="info-title">{{if eq .Lang "en"}}Employee{{else}}Karyawan{{end}}</div>
+                <div class="info-content fw-semibold">
+                  {{.Data.EmployeeName}}
+                  {{if .Data.EmployeeBNIID}}<span class="text-secondary fw-normal">({{.Data.EmployeeBNIID}})</span>{{end}}
                 </div>
               </div>
 
-              {{if .WitnessName}}
-                <div class="datagrid-item">
-                  <div class="datagrid-title">Saksi (Berita Acara)</div>
-                  <div class="datagrid-content">{{.WitnessName}}</div>
+              <div>
+                <div class="info-title">{{if eq .Lang "en"}}Employee Signature{{else}}Tanda Tangan Karyawan{{end}}</div>
+                <div class="info-content text-muted">
+                  {{formatDateWIB .Data.EmployeeSignedAt $.Lang}}
                 </div>
-                <div class="datagrid-item">
-                  <div class="datagrid-title">Tanda Tangan Saksi</div>
-                  <div class="datagrid-content text-muted">
-                    {{formatDateWIB .WitnessSignedAt}}
+              </div>
+
+              {{if .Data.WitnessName}}
+                <div>
+                  <div class="info-title">{{if eq .Lang "en"}}Witness (Berita Acara){{else}}Saksi (Berita Acara){{end}}</div>
+                  <div class="info-content fw-semibold">{{.Data.WitnessName}}</div>
+                </div>
+
+                <div>
+                  <div class="info-title">{{if eq .Lang "en"}}Witness Signature{{else}}Tanda Tangan Saksi{{end}}</div>
+                  <div class="info-content text-muted">
+                    {{formatDateWIB .Data.WitnessSignedAt $.Lang}}
                   </div>
                 </div>
               {{end}}
 
-              <div class="datagrid-item">
-                <div class="datagrid-title">Waktu Verifikasi</div>
-                <div class="datagrid-content">{{formatDateWIB .VerifiedAt}}</div>
+              <div>
+                <div class="info-title">{{if eq .Lang "en"}}Verification Time{{else}}Waktu Verifikasi{{end}}</div>
+                <div class="info-content text-muted">{{formatDateWIB .Data.VerifiedAt $.Lang}}</div>
               </div>
             </div>
 
+            <!-- Cryptographic SHA-256 Hash Display -->
             <div class="mt-4">
-              <div class="text-secondary fs-5 mb-1">Sidik Jari Dokumen (SHA-256 Hash):</div>
-              <div class="hash-badge text-truncate d-block">{{.DocumentHash}}</div>
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="info-title mb-0">
+                  {{if eq .Lang "en"}}Document Fingerprint (SHA-256 Hash):{{else}}Sidik Jari Dokumen (SHA-256 Hash):{{end}}
+                </span>
+                <button type="button" class="btn btn-sm btn-ghost-secondary copy-btn" id="copyHashBtn" onclick="copyDocumentHash()">
+                  <i class="ti ti-copy me-1"></i> <span id="copyBtnText">{{if eq .Lang "en"}}Copy{{else}}Salin{{end}}</span>
+                </button>
+              </div>
+              <div class="hash-container">
+                <div class="hash-text" id="docHashValue">{{.Data.DocumentHash}}</div>
+              </div>
             </div>
           </div>
         {{end}}
 
-        <div class="card-footer bg-transparent text-secondary text-center py-3">
-          <small>&copy; 2026 Timesheet &amp; Berita Acara Generator</small>
-        </div>
-      </div>
+        <!-- Footer -->
+        <footer class="card-footer bg-transparent text-secondary text-center py-3 px-3">
+          <small class="text-muted">
+            {{if eq .Lang "en"}}
+              &copy; 2026 {{.AppName}}. All Rights Reserved.
+            {{else}}
+              &copy; 2026 {{.AppName}}. Hak Cipta Dilindungi.
+            {{end}}
+          </small>
+        </footer>
+      </main>
     </div>
   </div>
+
+  <script>
+    function copyDocumentHash() {
+      var hashText = document.getElementById("docHashValue");
+      if (!hashText) return;
+      var text = hashText.innerText || hashText.textContent;
+      navigator.clipboard.writeText(text).then(function() {
+        var btnText = document.getElementById("copyBtnText");
+        var original = btnText.innerText;
+        btnText.innerText = "{{if eq .Lang "en"}}Copied!{{else}}Tersalin!{{end}}";
+        setTimeout(function() {
+          btnText.innerText = original;
+        }, 2000);
+      });
+    }
+  </script>
 </body>
 </html>
