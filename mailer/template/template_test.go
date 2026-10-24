@@ -173,8 +173,11 @@ func TestRenderTimesheetEmail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error rendering timesheet email with download URL: %v", err)
 	}
-	if !strings.Contains(htmlWithURL, "Download Timesheet (.xlsx)") {
+	if !strings.Contains(htmlWithURL, "Download Berkas") {
 		t.Errorf("HTML should contain download button")
+	}
+	if strings.Contains(htmlWithURL, "Format Berkas") {
+		t.Errorf("HTML should not contain 'Format Berkas'")
 	}
 	if !strings.Contains(textWithURL, "https://timesheet.example.com/api/v1/timesheet/downloads/token123") {
 		t.Errorf("text should contain download URL")

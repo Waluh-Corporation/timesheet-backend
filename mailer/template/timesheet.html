@@ -8,7 +8,7 @@
     line-height: 1.6;
   "
 >
-  Halo{{if .Username}} <strong>{{.Username}}</strong>{{end}}, dokumen timesheet bulanan Anda telah berhasil dibuat dan <strong>terlampir</strong> pada email ini dalam format Microsoft Excel (.xlsx).
+  Halo{{if .Username}} <strong>{{.Username}}</strong>{{end}}, dokumen timesheet bulanan Anda telah berhasil dibuat{{if .DownloadURL}} dan siap diunduh melalui tautan di bawah ini.{{else}} dan <strong>terlampir</strong> pada email ini.{{end}}
 </p>
 
 <!-- DETAILS BOX (Tabler Datagrid Style) -->
@@ -46,12 +46,7 @@
           <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Nama Lampiran</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-weight: 600; color: #182433;">{{.Filename}}</td>
         </tr>
-        <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Format Berkas</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #2fb344; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-            <span style="display: inline-block; padding: 2px 8px; background-color: #eaf7ec; border: 1px solid #b4e4be; border-radius: 4px; color: #2fb344; font-size: 12px; font-weight: 600;">Microsoft Excel (.xlsx)</span>
-          </td>
-        </tr>
+
       </table>
     </td>
   </tr>
@@ -81,7 +76,7 @@
       >
         <w:anchorlock />
         <center style="color: #ffffff; font-family: Arial, sans-serif; font-size: 15px; font-weight: bold">
-          Download Timesheet (.xlsx)
+          Download Berkas
         </center>
       </v:roundrect>
       <![endif]-->
@@ -104,7 +99,7 @@
           border-radius: 4px;
           background-color: #066fd1;
         "
-      >Download Timesheet (.xlsx)</a>
+      >Download Berkas</a>
       <!--<![endif]-->
     </td>
   </tr>
