@@ -332,42 +332,30 @@ func TestSignatureHandlers_BeritaAcaraWorkflow(t *testing.T) {
 	assert.Equal(t, u2.Name, verResp.Data.WitnessName)
 	assert.NotEmpty(t, verResp.Data.DocumentHash)
 
-	// 4b. Verify Document via Tabler HTML (Browser mode via Accept-Language: id-ID)
+	// 4b. Verify Document via Tabler HTML (Browser mode via Accept: text/html)
+	srv.Cfg.AppName = "Corporate Timesheet Central"
 	wVerHTML := httptest.NewRecorder()
 	cVerHTML, _ := gin.CreateTestContext(wVerHTML)
 	cVerHTML.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken, nil)
 	cVerHTML.Request.Header.Set("Accept", "text/html,application/xhtml+xml")
-	cVerHTML.Request.Header.Set("Accept-Language", "id-ID,id;q=0.9,en-US;q=0.8")
 	cVerHTML.Params = gin.Params{{Key: "token", Value: subResp.Data.VerificationToken}}
 	srv.VerifyDocument(cVerHTML)
 	assert.Equal(t, http.StatusOK, wVerHTML.Code)
 	assert.Contains(t, wVerHTML.Header().Get("Content-Type"), "text/html")
-	assert.Contains(t, wVerHTML.Body.String(), "DOKUMEN ASLI &amp; TERVERIFIKASI")
+	assert.Contains(t, wVerHTML.Body.String(), "AUTHENTIC &amp; VERIFIED DOCUMENT")
+	assert.Contains(t, wVerHTML.Body.String(), "Corporate Timesheet Central")
 	assert.Contains(t, wVerHTML.Body.String(), u1.Name)
 	assert.Contains(t, wVerHTML.Body.String(), u2.Name)
 
-	// 4c. Verify Document via Tabler HTML (Browser mode via Accept-Language: en-US)
-	wVerEN := httptest.NewRecorder()
-	cVerEN, _ := gin.CreateTestContext(wVerEN)
-	cVerEN.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken, nil)
-	cVerEN.Request.Header.Set("Accept", "text/html")
-	cVerEN.Request.Header.Set("Accept-Language", "en-US,en;q=0.9,id;q=0.8")
-	cVerEN.Params = gin.Params{{Key: "token", Value: subResp.Data.VerificationToken}}
-	srv.VerifyDocument(cVerEN)
-	assert.Equal(t, http.StatusOK, wVerEN.Code)
-	assert.Contains(t, wVerEN.Body.String(), "AUTHENTIC &amp; VERIFIED DOCUMENT")
-	assert.Contains(t, wVerEN.Body.String(), "Document Information")
-
-	// 4d. Verify Document via Tabler HTML with query param ?lang=en and APP_NAME
-	srv.Cfg.AppName = "BNI Timesheet Central"
+	// 4c. Verify Document via Tabler HTML (?format=html query param)
 	wVerQuery := httptest.NewRecorder()
 	cVerQuery, _ := gin.CreateTestContext(wVerQuery)
-	cVerQuery.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken+"?format=html&lang=en", nil)
+	cVerQuery.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken+"?format=html", nil)
 	cVerQuery.Params = gin.Params{{Key: "token", Value: subResp.Data.VerificationToken}}
 	srv.VerifyDocument(cVerQuery)
 	assert.Equal(t, http.StatusOK, wVerQuery.Code)
 	assert.Contains(t, wVerQuery.Body.String(), "AUTHENTIC &amp; VERIFIED DOCUMENT")
-	assert.Contains(t, wVerQuery.Body.String(), "BNI Timesheet Central")
+	assert.Contains(t, wVerQuery.Body.String(), "Document Information")
 
 	// 5. Get Berita Acara Status
 	wStat := httptest.NewRecorder()
@@ -559,7 +547,7 @@ func TestSignatureHandlers_ValidationAndErrorBranches(t *testing.T) {
 		cHTML.Params = gin.Params{{Key: "token", Value: "non-existent-token"}}
 		srv.VerifyDocument(cHTML)
 		assert.Equal(t, http.StatusNotFound, wHTML.Code)
-		assert.Contains(t, wHTML.Body.String(), "DOKUMEN TIDAK VALID")
+		assert.Contains(t, wHTML.Body.String(), "INVALID DOCUMENT")
 	})
 
 	t.Run("VerifyDocument nil service HTML mode", func(t *testing.T) {
@@ -571,7 +559,7 @@ func TestSignatureHandlers_ValidationAndErrorBranches(t *testing.T) {
 		c.Params = gin.Params{{Key: "token", Value: "any-token"}}
 		nilSrv.VerifyDocument(c)
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
-		assert.Contains(t, w.Body.String(), "DOKUMEN TIDAK VALID")
+		assert.Contains(t, w.Body.String(), "INVALID DOCUMENT")
 	})
 }
 
@@ -627,18 +615,43 @@ func (m *mockErrSigService) VerifyDocument(ctx context.Context, token string) (*
 	return nil, m.errToReturn
 }
 
+type sigServiceErrorTestCase struct {
+	name       string
+	method     string
+	path       string
+	body       string
+	params     gin.Params
+	handler    func(srv *Server, c *gin.Context)
+	hasUserErr bool
+}
+
+func testServiceErrorEndpoint(t *testing.T, tc sigServiceErrorTestCase, svcErr error, expectedStatus int) {
+	t.Helper()
+	srv := &Server{SignatureSvc: &mockErrSigService{errToReturn: svcErr}}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	var bodyReader io.Reader
+	if tc.body != "" {
+		bodyReader = strings.NewReader(tc.body)
+	}
+	c.Request = httptest.NewRequest(tc.method, tc.path, bodyReader)
+	if tc.body != "" {
+		c.Request.Header.Set("Content-Type", "application/json")
+	}
+	if len(tc.params) > 0 {
+		c.Params = tc.params
+	}
+	c.Set("userID", uint(1))
+
+	tc.handler(srv, c)
+	assert.Equal(t, expectedStatus, w.Code)
+}
+
 func TestSignatureHandlers_ServiceErrorBranches(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	tests := []struct {
-		name       string
-		method     string
-		path       string
-		body       string
-		params     gin.Params
-		handler    func(srv *Server, c *gin.Context)
-		hasUserErr bool
-	}{
+	tests := []sigServiceErrorTestCase{
 		{
 			name:       "UploadSignature",
 			method:     http.MethodPost,
@@ -735,50 +748,12 @@ func TestSignatureHandlers_ServiceErrorBranches(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name+"_InternalServerError", func(t *testing.T) {
-			mockSvc := &mockErrSigService{errToReturn: errors.New("db connection failure")}
-			srv := &Server{SignatureSvc: mockSvc}
-
-			w := httptest.NewRecorder()
-			c, _ := gin.CreateTestContext(w)
-			var bodyReader io.Reader
-			if tc.body != "" {
-				bodyReader = strings.NewReader(tc.body)
-			}
-			c.Request = httptest.NewRequest(tc.method, tc.path, bodyReader)
-			if tc.body != "" {
-				c.Request.Header.Set("Content-Type", "application/json")
-			}
-			if len(tc.params) > 0 {
-				c.Params = tc.params
-			}
-			c.Set("userID", uint(1))
-
-			tc.handler(srv, c)
-			assert.Equal(t, http.StatusInternalServerError, w.Code)
+			testServiceErrorEndpoint(t, tc, errors.New("db connection failure"), http.StatusInternalServerError)
 		})
 
 		if tc.hasUserErr {
 			t.Run(tc.name+"_UserError", func(t *testing.T) {
-				mockSvc := &mockErrSigService{errToReturn: domain.NewUserError(domain.ErrNotFound, "Entity not found")}
-				srv := &Server{SignatureSvc: mockSvc}
-
-				w := httptest.NewRecorder()
-				c, _ := gin.CreateTestContext(w)
-				var bodyReader io.Reader
-				if tc.body != "" {
-					bodyReader = strings.NewReader(tc.body)
-				}
-				c.Request = httptest.NewRequest(tc.method, tc.path, bodyReader)
-				if tc.body != "" {
-					c.Request.Header.Set("Content-Type", "application/json")
-				}
-				if len(tc.params) > 0 {
-					c.Params = tc.params
-				}
-				c.Set("userID", uint(1))
-
-				tc.handler(srv, c)
-				assert.Equal(t, http.StatusNotFound, w.Code)
+				testServiceErrorEndpoint(t, tc, domain.NewUserError(domain.ErrNotFound, "Entity not found"), http.StatusNotFound)
 			})
 		}
 	}
