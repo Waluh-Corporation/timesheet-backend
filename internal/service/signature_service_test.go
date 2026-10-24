@@ -302,6 +302,14 @@ func (m *mockActivityRepo) ListActiveByUser(ctx context.Context, userID uint, fi
 	return m.activities, int64(len(m.activities)), nil
 }
 
+func (m *mockActivityRepo) UpdateMonthlyWitness(ctx context.Context, userID uint, month, year int, newWitnessID uint) (int64, error) {
+	return 1, nil
+}
+
+func (m *mockActivityRepo) GetMonthlyWitness(ctx context.Context, userID uint, month, year int) (*models.User, error) {
+	return nil, nil
+}
+
 func TestSignatureService_ProfileSignature(t *testing.T) {
 	ctx := context.Background()
 	userRepo := newMockUserRepo()

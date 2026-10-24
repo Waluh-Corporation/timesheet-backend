@@ -382,17 +382,22 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 	}
 
 	if req.WitnessID == 0 {
-		filter := repository.ActivityFilter{
-			Month: &req.Month,
-			Year:  &req.Year,
-			IsAll: true,
+		if mW, err := s.activityRepo.GetMonthlyWitness(ctx, userID, req.Month, req.Year); err == nil && mW != nil {
+			req.WitnessID = mW.ID
 		}
-		acts, _, aerr := s.activityRepo.ListActiveByUser(ctx, userID, filter)
-		if aerr == nil {
-			for _, a := range acts {
-				if a.IsBeritaAcara && a.WitnessID != nil && *a.WitnessID != 0 {
-					req.WitnessID = *a.WitnessID
-					break
+		if req.WitnessID == 0 {
+			filter := repository.ActivityFilter{
+				Month: &req.Month,
+				Year:  &req.Year,
+				IsAll: true,
+			}
+			acts, _, aerr := s.activityRepo.ListActiveByUser(ctx, userID, filter)
+			if aerr == nil {
+				for _, a := range acts {
+					if a.IsBeritaAcara && a.WitnessID != nil && *a.WitnessID != 0 {
+						req.WitnessID = *a.WitnessID
+						break
+					}
 				}
 			}
 		}
@@ -421,6 +426,9 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 	if err := s.validateBeritaAcaraActivities(ctx, userID, req.Month, req.Year); err != nil {
 		return nil, err
 	}
+
+	// Ensure all Berita Acara activities for this month have the consistent designated witness
+	_, _ = s.activityRepo.UpdateMonthlyWitness(ctx, userID, req.Month, req.Year, req.WitnessID)
 
 	now := s.nowFunc()
 	token := uuid.New().String()

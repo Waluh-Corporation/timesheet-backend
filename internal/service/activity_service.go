@@ -148,7 +148,7 @@ func (s *activityService) resolveBeritaAcaraWitness(ctx context.Context, userID 
 	}
 
 	if lockedWitness != nil {
-		if req.WitnessID != nil && *req.WitnessID != lockedWitness.ID {
+		if req.WitnessID != nil && *req.WitnessID != 0 && *req.WitnessID != lockedWitness.ID {
 			return nil, "", domain.NewUserError(domain.ErrInvalidInput, fmt.Sprintf("The witness for this month has already been designated as %s. Please use the same witness.", lockedWitness.Name))
 		}
 		return &lockedWitness.ID, notes, nil
