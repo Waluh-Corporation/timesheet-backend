@@ -213,52 +213,127 @@ func findParagraphStart(s string, beforePos int) int {
 	return -1
 }
 
-func populateDocumentXML(xmlStr string, payload BeritaAcaraPayload) string {
+func populateTableRowsInXML(xmlStr string, items []BeritaAcaraItem) string {
 	rStart, rEnd := findTableRowBoundaries(xmlStr)
-	if rStart != -1 && rEnd != -1 {
-		rowTemplate := xmlStr[rStart:rEnd]
-		renderedRows := renderTableRows(rowTemplate, payload.Items)
-		xmlStr = xmlStr[:rStart] + renderedRows + xmlStr[rEnd:]
+	if rStart == -1 || rEnd == -1 {
+		return xmlStr
+	}
+	rowTemplate := xmlStr[rStart:rEnd]
+	renderedRows := renderTableRows(rowTemplate, items)
+	return xmlStr[:rStart] + renderedRows + xmlStr[rEnd:]
+}
+
+func injectFloatingSignatures(xmlStr string, payload BeritaAcaraPayload) string {
+	witnessPos := strings.Index(xmlStr, "{{WITNESS_NAME}}")
+	if witnessPos == -1 {
+		return xmlStr
+	}
+	witPStart := findParagraphStart(xmlStr, witnessPos)
+	if witPStart == -1 {
+		return xmlStr
+	}
+	// Inject floating signatures directly into the witness/employee name paragraph
+	// Layout: "In front of text" (wp:anchor with wrapNone and behindDoc="0")
+	firstRPos := strings.Index(xmlStr[witPStart:], "<w:r")
+	if firstRPos == -1 {
+		return xmlStr
+	}
+	insertIdx := witPStart + firstRPos
+	var anchorRuns strings.Builder
+	if len(payload.WitnessSignatureBytes) > 0 {
+		anchorRuns.WriteString(buildFloatingAnchorXML("rIdWitSig", "WitnessSignature", 101, 200000, -650000, 1200000, 600000))
+	}
+	if len(payload.EmployeeSignatureBytes) > 0 {
+		anchorRuns.WriteString(buildFloatingAnchorXML("rIdEmpSig", "EmployeeSignature", 102, 4500000, -650000, 1200000, 600000))
+	}
+	return xmlStr[:insertIdx] + anchorRuns.String() + xmlStr[insertIdx:]
+}
+
+func injectFooterReference(xmlStr string) string {
+	const footerRef = `<w:footerReference w:type="default" r:id="rIdFooter1"/>`
+	const headerRef = `<w:headerReference w:type="default" r:id="rId7"/>`
+
+	// Link footer1 to section properties so QR code renders dynamically in the page footer
+	if headerRefIdx := strings.Index(xmlStr, headerRef); headerRefIdx != -1 {
+		insertPos := headerRefIdx + len(headerRef)
+		return xmlStr[:insertPos] + footerRef + xmlStr[insertPos:]
 	}
 
+	sectPrIdx := strings.Index(xmlStr, "<w:sectPr")
+	if sectPrIdx == -1 {
+		return xmlStr
+	}
+
+	gtIdx := strings.Index(xmlStr[sectPrIdx:], ">")
+	if gtIdx == -1 {
+		return xmlStr
+	}
+
+	insertPos := sectPrIdx + gtIdx + 1
+	return xmlStr[:insertPos] + footerRef + xmlStr[insertPos:]
+}
+
+func populateDocumentXML(xmlStr string, payload BeritaAcaraPayload) string {
+	xmlStr = populateTableRowsInXML(xmlStr, payload.Items)
 	if payload.IsSigned {
-		witnessPos := strings.Index(xmlStr, "{{WITNESS_NAME}}")
-		if witnessPos != -1 {
-			witPStart := findParagraphStart(xmlStr, witnessPos)
-			if witPStart != -1 {
-				// Inject floating signatures directly into the witness/employee name paragraph
-				// Layout: "In front of text" (wp:anchor with wrapNone and behindDoc="0")
-				firstRPos := strings.Index(xmlStr[witPStart:], "<w:r")
-				if firstRPos != -1 {
-					insertIdx := witPStart + firstRPos
-					var anchorRuns strings.Builder
-					if len(payload.WitnessSignatureBytes) > 0 {
-						anchorRuns.WriteString(buildFloatingAnchorXML("rIdWitSig", "WitnessSignature", 101, 200000, -650000, 1200000, 600000))
-					}
-					if len(payload.EmployeeSignatureBytes) > 0 {
-						anchorRuns.WriteString(buildFloatingAnchorXML("rIdEmpSig", "EmployeeSignature", 102, 4500000, -650000, 1200000, 600000))
-					}
-					xmlStr = xmlStr[:insertIdx] + anchorRuns.String() + xmlStr[insertIdx:]
-				}
-			}
-		}
-
+		xmlStr = injectFloatingSignatures(xmlStr, payload)
 		if len(payload.QRCodeBytes) > 0 && !strings.Contains(xmlStr, "rIdFooter1") {
-			// Link footer1 to section properties so QR code renders dynamically in the page footer
-			if headerRefIdx := strings.Index(xmlStr, `<w:headerReference w:type="default" r:id="rId7"/>`); headerRefIdx != -1 {
-				insertPos := headerRefIdx + len(`<w:headerReference w:type="default" r:id="rId7"/>`)
-				xmlStr = xmlStr[:insertPos] + `<w:footerReference w:type="default" r:id="rIdFooter1"/>` + xmlStr[insertPos:]
-			} else if sectPrIdx := strings.Index(xmlStr, "<w:sectPr"); sectPrIdx != -1 {
-				if gtIdx := strings.Index(xmlStr[sectPrIdx:], ">"); gtIdx != -1 {
-					insertPos := sectPrIdx + gtIdx + 1
-					xmlStr = xmlStr[:insertPos] + `<w:footerReference w:type="default" r:id="rIdFooter1"/>` + xmlStr[insertPos:]
-				}
-			}
+			xmlStr = injectFooterReference(xmlStr)
 		}
 	}
+	return replaceScalarPlaceholders(xmlStr, payload)
+}
 
-	xmlStr = replaceScalarPlaceholders(xmlStr, payload)
-	return xmlStr
+const maxZipEntrySize = 10 * 1024 * 1024 // 10MB limit per entry to prevent decompression bombs
+
+func processContentTypesEntry(w io.Writer, rc io.Reader, payload BeritaAcaraPayload) error {
+	xmlBytes, rerr := io.ReadAll(io.LimitReader(rc, maxZipEntrySize))
+	if rerr != nil {
+		return fmt.Errorf("failed to read [Content_Types].xml: %w", rerr)
+	}
+	ctStr := string(xmlBytes)
+	if len(payload.QRCodeBytes) > 0 && !strings.Contains(ctStr, "/word/footer1.xml") {
+		ctStr = strings.Replace(ctStr, "</Types>", `<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>`, 1)
+	}
+	if !strings.Contains(ctStr, `Extension="png"`) {
+		ctStr = strings.Replace(ctStr, "</Types>", `<Default Extension="png" ContentType="image/png"/></Types>`, 1)
+	}
+	_, werr := io.WriteString(w, ctStr)
+	return werr
+}
+
+func processRelsEntry(w io.Writer, rc io.Reader, payload BeritaAcaraPayload) error {
+	xmlBytes, rerr := io.ReadAll(io.LimitReader(rc, maxZipEntrySize))
+	if rerr != nil {
+		return fmt.Errorf("failed to read document.xml.rels: %w", rerr)
+	}
+	relsStr := string(xmlBytes)
+	var relsBuilder strings.Builder
+	if len(payload.WitnessSignatureBytes) > 0 {
+		relsBuilder.WriteString(`<Relationship Id="rIdWitSig" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/wit_sig.png"/>`)
+	}
+	if len(payload.EmployeeSignatureBytes) > 0 {
+		relsBuilder.WriteString(`<Relationship Id="rIdEmpSig" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/emp_sig.png"/>`)
+	}
+	if len(payload.QRCodeBytes) > 0 && !strings.Contains(relsStr, "footer1.xml") {
+		relsBuilder.WriteString(`<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`)
+	}
+	relsStr = strings.Replace(relsStr, "</Relationships>", relsBuilder.String()+"</Relationships>", 1)
+	_, werr := io.WriteString(w, relsStr)
+	return werr
+}
+
+func processDocumentXMLEntry(w io.Writer, rc io.Reader, payload BeritaAcaraPayload) error {
+	xmlBytes, err := io.ReadAll(io.LimitReader(rc, maxZipEntrySize))
+	if err != nil {
+		return fmt.Errorf("failed to read word/document.xml: %w", err)
+	}
+
+	populatedXML := populateDocumentXML(string(xmlBytes), payload)
+	if _, err := io.WriteString(w, populatedXML); err != nil {
+		return fmt.Errorf("failed to write populated word/document.xml: %w", err)
+	}
+	return nil
 }
 
 func processZipEntry(writer *zip.Writer, file *zip.File, payload BeritaAcaraPayload) error {
@@ -273,62 +348,19 @@ func processZipEntry(writer *zip.Writer, file *zip.File, payload BeritaAcaraPayl
 		return fmt.Errorf("failed to create zip entry %s: %w", file.Name, err)
 	}
 
-	const maxZipEntrySize = 10 * 1024 * 1024 // 10MB limit per entry to prevent decompression bombs
-
-	if file.Name == "[Content_Types].xml" && payload.IsSigned {
-		xmlBytes, rerr := io.ReadAll(io.LimitReader(rc, maxZipEntrySize))
-		if rerr != nil {
-			return fmt.Errorf("failed to read [Content_Types].xml: %w", rerr)
-		}
-		ctStr := string(xmlBytes)
-		if len(payload.QRCodeBytes) > 0 && !strings.Contains(ctStr, "/word/footer1.xml") {
-			ctStr = strings.Replace(ctStr, "</Types>", `<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>`, 1)
-		}
-		if !strings.Contains(ctStr, `Extension="png"`) {
-			ctStr = strings.Replace(ctStr, "</Types>", `<Default Extension="png" ContentType="image/png"/></Types>`, 1)
-		}
-		_, werr := io.WriteString(w, ctStr)
-		return werr
-	}
-
-	if file.Name == "word/_rels/document.xml.rels" && payload.IsSigned {
-		xmlBytes, rerr := io.ReadAll(io.LimitReader(rc, maxZipEntrySize))
-		if rerr != nil {
-			return fmt.Errorf("failed to read document.xml.rels: %w", rerr)
-		}
-		relsStr := string(xmlBytes)
-		var relsBuilder strings.Builder
-		if len(payload.WitnessSignatureBytes) > 0 {
-			relsBuilder.WriteString(`<Relationship Id="rIdWitSig" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/wit_sig.png"/>`)
-		}
-		if len(payload.EmployeeSignatureBytes) > 0 {
-			relsBuilder.WriteString(`<Relationship Id="rIdEmpSig" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/emp_sig.png"/>`)
-		}
-		if len(payload.QRCodeBytes) > 0 && !strings.Contains(relsStr, "footer1.xml") {
-			relsBuilder.WriteString(`<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`)
-		}
-		relsStr = strings.Replace(relsStr, "</Relationships>", relsBuilder.String()+"</Relationships>", 1)
-		_, werr := io.WriteString(w, relsStr)
-		return werr
-	}
-
-	if file.Name != "word/document.xml" {
+	switch {
+	case file.Name == "[Content_Types].xml" && payload.IsSigned:
+		return processContentTypesEntry(w, rc, payload)
+	case file.Name == "word/_rels/document.xml.rels" && payload.IsSigned:
+		return processRelsEntry(w, rc, payload)
+	case file.Name == "word/document.xml":
+		return processDocumentXMLEntry(w, rc, payload)
+	default:
 		if _, err := io.Copy(w, io.LimitReader(rc, maxZipEntrySize)); err != nil {
 			return fmt.Errorf("failed to copy template file %s: %w", file.Name, err)
 		}
 		return nil
 	}
-
-	xmlBytes, err := io.ReadAll(io.LimitReader(rc, maxZipEntrySize))
-	if err != nil {
-		return fmt.Errorf("failed to read word/document.xml: %w", err)
-	}
-
-	populatedXML := populateDocumentXML(string(xmlBytes), payload)
-	if _, err := io.WriteString(w, populatedXML); err != nil {
-		return fmt.Errorf("failed to write populated word/document.xml: %w", err)
-	}
-	return nil
 }
 
 // GenerateBeritaAcaraDocx generates a populated Berita Acara .docx document based on assets.BeritaAcaraTemplate.
