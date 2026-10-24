@@ -294,7 +294,8 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	// Public VAPID key (needed before the user is subscribed).
 	api.GET("/push/vapid-public-key", s.GetVAPIDKey)
 
-	// Public Document Verification endpoint (JSON API for Frontend)
+	// Public Document Verification endpoint (Tabler HTML / JSON API)
+	r.GET("/verify/doc/:token", s.VerifyDocument)
 	api.GET("/verify/doc/:token", s.VerifyDocument)
 
 	// Public magic download token endpoint (quota-enforced, 302 redirect to temporary S3 URL, supports HEAD for link verifiers)

@@ -332,6 +332,28 @@ func TestSignatureHandlers_BeritaAcaraWorkflow(t *testing.T) {
 	assert.Equal(t, u2.Name, verResp.Data.WitnessName)
 	assert.NotEmpty(t, verResp.Data.DocumentHash)
 
+	// 4b. Verify Document via Tabler HTML (Browser mode via Accept header)
+	wVerHTML := httptest.NewRecorder()
+	cVerHTML, _ := gin.CreateTestContext(wVerHTML)
+	cVerHTML.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken, nil)
+	cVerHTML.Request.Header.Set("Accept", "text/html,application/xhtml+xml")
+	cVerHTML.Params = gin.Params{{Key: "token", Value: subResp.Data.VerificationToken}}
+	srv.VerifyDocument(cVerHTML)
+	assert.Equal(t, http.StatusOK, wVerHTML.Code)
+	assert.Contains(t, wVerHTML.Header().Get("Content-Type"), "text/html")
+	assert.Contains(t, wVerHTML.Body.String(), "DOKUMEN ASLI &amp; TERVERIFIKASI")
+	assert.Contains(t, wVerHTML.Body.String(), u1.Name)
+	assert.Contains(t, wVerHTML.Body.String(), u2.Name)
+
+	// 4c. Verify Document via Tabler HTML (?format=html query param)
+	wVerQuery := httptest.NewRecorder()
+	cVerQuery, _ := gin.CreateTestContext(wVerQuery)
+	cVerQuery.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/"+subResp.Data.VerificationToken+"?format=html", nil)
+	cVerQuery.Params = gin.Params{{Key: "token", Value: subResp.Data.VerificationToken}}
+	srv.VerifyDocument(cVerQuery)
+	assert.Equal(t, http.StatusOK, wVerQuery.Code)
+	assert.Contains(t, wVerQuery.Body.String(), "DOKUMEN ASLI &amp; TERVERIFIKASI")
+
 	// 5. Get Berita Acara Status
 	wStat := httptest.NewRecorder()
 	cStat, _ := gin.CreateTestContext(wStat)
@@ -513,6 +535,28 @@ func TestSignatureHandlers_ValidationAndErrorBranches(t *testing.T) {
 		c.Params = gin.Params{{Key: "token", Value: "non-existent-token"}}
 		srv.VerifyDocument(c)
 		assert.Equal(t, http.StatusNotFound, w.Code)
+
+		// HTML mode not found
+		wHTML := httptest.NewRecorder()
+		cHTML, _ := gin.CreateTestContext(wHTML)
+		cHTML.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/non-existent-token", nil)
+		cHTML.Request.Header.Set("Accept", "text/html")
+		cHTML.Params = gin.Params{{Key: "token", Value: "non-existent-token"}}
+		srv.VerifyDocument(cHTML)
+		assert.Equal(t, http.StatusNotFound, wHTML.Code)
+		assert.Contains(t, wHTML.Body.String(), "DOKUMEN TIDAK VALID")
+	})
+
+	t.Run("VerifyDocument nil service HTML mode", func(t *testing.T) {
+		nilSrv := &Server{SignatureSvc: nil}
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/verify/doc/any-token", nil)
+		c.Request.Header.Set("Accept", "text/html")
+		c.Params = gin.Params{{Key: "token", Value: "any-token"}}
+		nilSrv.VerifyDocument(c)
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Contains(t, w.Body.String(), "DOKUMEN TIDAK VALID")
 	})
 }
 

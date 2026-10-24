@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta http-equiv="X-UA-Compatible" content="ie=edge"/>
+  <title>Verifikasi Dokumen Digital - Timesheet Engine</title>
+  <!-- CSS files -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+  <style>
+    @import url('https://rsms.me/inter/inter.css');
+    :root {
+      --tblr-font-sans-serif: 'Inter', -apple-system, BlinkMacSystemFont, San Francisco, Segoe UI, Roboto, Helvetica Neue, sans-serif;
+    }
+    body {
+      font-feature-settings: "cv03", "cv04", "cv11";
+      background-color: #f4f6fa;
+    }
+    .hash-badge {
+      word-break: break-all;
+      font-family: monospace;
+      font-size: 0.825rem;
+      background: #eef1f6;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      color: #334155;
+      display: inline-block;
+      user-select: all;
+    }
+  </style>
+</head>
+<body class="d-flex flex-column">
+  <div class="page page-center">
+    <div class="container container-tight py-4">
+      <div class="text-center mb-4">
+        <a href="." class="navbar-brand navbar-brand-autodark">
+          <span class="fs-2 fw-bold text-primary">Timesheet<span class="text-dark">Verification</span></span>
+        </a>
+      </div>
+
+      <div class="card card-md shadow-sm">
+        {{if and .IsValid (eq .Status "valid")}}
+          <div class="card-status-top bg-success"></div>
+          <div class="card-body text-center py-4">
+            <span class="avatar avatar-xl rounded-circle bg-success-lt mb-3">
+              <i class="ti ti-circle-check fs-1 text-success"></i>
+            </span>
+            <h2 class="card-title text-success mb-1">DOKUMEN ASLI &amp; TERVERIFIKASI</h2>
+            <div class="text-secondary">
+              Dokumen ini resmi terdaftar dan telah disahkan secara digital.
+            </div>
+          </div>
+        {{else if eq .Status "revoked"}}
+          <div class="card-status-top bg-warning"></div>
+          <div class="card-body text-center py-4">
+            <span class="avatar avatar-xl rounded-circle bg-warning-lt mb-3">
+              <i class="ti ti-alert-triangle fs-1 text-warning"></i>
+            </span>
+            <h2 class="card-title text-warning mb-1">TANDA TANGAN DIBATALKAN</h2>
+            <div class="text-secondary">
+              Tanda tangan digital pada dokumen ini telah dibatalkan / ditarik oleh pemilik dokumen.
+            </div>
+          </div>
+        {{else}}
+          <div class="card-status-top bg-danger"></div>
+          <div class="card-body text-center py-4">
+            <span class="avatar avatar-xl rounded-circle bg-danger-lt mb-3">
+              <i class="ti ti-circle-x fs-1 text-danger"></i>
+            </span>
+            <h2 class="card-title text-danger mb-1">DOKUMEN TIDAK VALID</h2>
+            <div class="text-secondary">
+              Token verifikasi tidak ditemukan dalam basis data atau integritas dokumen tidak valid.
+            </div>
+          </div>
+        {{end}}
+
+        {{if or .IsValid (eq .Status "revoked")}}
+          <div class="card-body border-top">
+            <h4 class="card-title mb-3">Informasi Dokumen</h4>
+            <div class="datagrid">
+              <div class="datagrid-item">
+                <div class="datagrid-title">Jenis Dokumen</div>
+                <div class="datagrid-content fw-bold text-dark">{{docTypeName .DocumentType}}</div>
+              </div>
+              <div class="datagrid-item">
+                <div class="datagrid-title">Periode</div>
+                <div class="datagrid-content">{{formatMonthName .Month}} {{.Year}}</div>
+              </div>
+              <div class="datagrid-item">
+                <div class="datagrid-title">Karyawan</div>
+                <div class="datagrid-content">
+                  {{.EmployeeName}}
+                  {{if .EmployeeBNIID}}<span class="text-secondary">({{.EmployeeBNIID}})</span>{{end}}
+                </div>
+              </div>
+              <div class="datagrid-item">
+                <div class="datagrid-title">Tanda Tangan Karyawan</div>
+                <div class="datagrid-content text-muted">
+                  {{formatDateWIB .EmployeeSignedAt}}
+                </div>
+              </div>
+
+              {{if .WitnessName}}
+                <div class="datagrid-item">
+                  <div class="datagrid-title">Saksi (Berita Acara)</div>
+                  <div class="datagrid-content">{{.WitnessName}}</div>
+                </div>
+                <div class="datagrid-item">
+                  <div class="datagrid-title">Tanda Tangan Saksi</div>
+                  <div class="datagrid-content text-muted">
+                    {{formatDateWIB .WitnessSignedAt}}
+                  </div>
+                </div>
+              {{end}}
+
+              <div class="datagrid-item">
+                <div class="datagrid-title">Waktu Verifikasi</div>
+                <div class="datagrid-content">{{formatDateWIB .VerifiedAt}}</div>
+              </div>
+            </div>
+
+            <div class="mt-4">
+              <div class="text-secondary fs-5 mb-1">Sidik Jari Dokumen (SHA-256 Hash):</div>
+              <div class="hash-badge text-truncate d-block">{{.DocumentHash}}</div>
+            </div>
+          </div>
+        {{end}}
+
+        <div class="card-footer bg-transparent text-secondary text-center py-3">
+          <small>&copy; 2026 Timesheet &amp; Berita Acara Generator</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
