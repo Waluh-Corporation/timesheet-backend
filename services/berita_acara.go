@@ -153,9 +153,20 @@ func renderTableRows(rowTemplate string, items []BeritaAcaraItem) string {
 	return rowsBuilder.String()
 }
 
-func buildDrawingXML(relID string, docPrID int, cx, cy int64) string {
-	return fmt.Sprintf(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="Signature"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="%d" name="Signature"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
-		cx, cy, docPrID, docPrID, relID, cx, cy)
+func buildDrawingXML(relID, name string, docPrID int, cx, cy int64) string {
+	return fmt.Sprintf(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="%d" name="%s"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
+		cx, cy, docPrID, name, docPrID, name, relID, cx, cy)
+}
+
+func findParagraphStart(s string, beforePos int) int {
+	for i := beforePos; i >= 0; i-- {
+		if i+4 <= len(s) && s[i:i+4] == "<w:p" {
+			if i+4 == len(s) || s[i+4] == ' ' || s[i+4] == '>' {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func populateDocumentXML(xmlStr string, payload BeritaAcaraPayload) string {
@@ -169,27 +180,56 @@ func populateDocumentXML(xmlStr string, payload BeritaAcaraPayload) string {
 	if payload.IsSigned {
 		var sigRuns strings.Builder
 		if len(payload.WitnessSignatureBytes) > 0 {
-			sigRuns.WriteString(buildDrawingXML("rIdWitSig", 101, 1200000, 600000))
+			sigRuns.WriteString(buildDrawingXML("rIdWitSig", "WitnessSignature", 101, 1200000, 600000))
 		}
 		sigRuns.WriteString("<w:r><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/></w:r>")
 		if len(payload.EmployeeSignatureBytes) > 0 {
-			sigRuns.WriteString(buildDrawingXML("rIdEmpSig", 102, 1200000, 600000))
+			sigRuns.WriteString(buildDrawingXML("rIdEmpSig", "EmployeeSignature", 102, 1200000, 600000))
 		}
 
 		witnessPos := strings.Index(xmlStr, "{{WITNESS_NAME}}")
 		if witnessPos != -1 {
-			prevPEnd := strings.LastIndex(xmlStr[:witnessPos], "</w:p>")
-			if prevPEnd != -1 {
-				prevPStart := strings.LastIndex(xmlStr[:prevPEnd], "<w:p")
-				if prevPStart != -1 {
-					sigP := fmt.Sprintf(`<w:p><w:pPr><w:spacing w:line="240" w:lineRule="auto"/><w:contextualSpacing/></w:pPr>%s</w:p>`, sigRuns.String())
-					xmlStr = xmlStr[:prevPStart] + sigP + xmlStr[prevPEnd+len("</w:p>"):]
+			witPStart := findParagraphStart(xmlStr, witnessPos)
+			if witPStart != -1 {
+				// Scan backwards for consecutive empty spacer paragraphs preceding the witness line
+				currEnd := witPStart
+				firstEmptyStart := -1
+				lastEmptyEnd := -1
+				for {
+					pEndIdx := strings.LastIndex(xmlStr[:currEnd], "</w:p>")
+					if pEndIdx == -1 {
+						break
+					}
+					pEnd := pEndIdx + len("</w:p>")
+					pStart := findParagraphStart(xmlStr, pEndIdx)
+					if pStart == -1 {
+						break
+					}
+					pContent := xmlStr[pStart:pEnd]
+					if strings.Contains(pContent, "<w:t") {
+						// Reached a paragraph containing text (e.g., "Saksi / Hormat Saya")
+						break
+					}
+					if lastEmptyEnd == -1 {
+						lastEmptyEnd = pEnd
+					}
+					firstEmptyStart = pStart
+					currEnd = pStart
+				}
+
+				sigP := fmt.Sprintf(`<w:p><w:pPr><w:spacing w:line="240" w:lineRule="auto"/><w:contextualSpacing/></w:pPr>%s</w:p>`, sigRuns.String())
+				if firstEmptyStart != -1 && lastEmptyEnd != -1 {
+					// Replace empty spacer paragraphs with the digital signature paragraph
+					xmlStr = xmlStr[:firstEmptyStart] + sigP + xmlStr[lastEmptyEnd:]
+				} else {
+					// Fallback: prepend directly before the witness paragraph
+					xmlStr = xmlStr[:witPStart] + sigP + xmlStr[witPStart:]
 				}
 			}
 		}
 
 		if len(payload.QRCodeBytes) > 0 {
-			qrDrawing := buildDrawingXML("rIdDocQR", 103, 900000, 900000)
+			qrDrawing := buildDrawingXML("rIdDocQR", "QRCode", 103, 900000, 900000)
 			qrP := fmt.Sprintf(`<w:p><w:pPr><w:jc w:val="right"/></w:pPr>%s</w:p>`, qrDrawing)
 			tblPos := strings.Index(xmlStr, "<w:tbl")
 			if tblPos != -1 {

@@ -3,6 +3,7 @@ package services_test
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/xml"
 	"io"
 	"strings"
 	"testing"
@@ -347,4 +348,27 @@ func TestGenerateBeritaAcaraDocx_SignedWithSignaturesAndQR(t *testing.T) {
 	assert.Contains(t, docXML, "rIdWitSig")
 	assert.Contains(t, docXML, "rIdEmpSig")
 	assert.Contains(t, docXML, "rIdDocQR")
+
+	// Validate valid XML structure and guarantee no nested <w:p> elements exist
+	decoder := xml.NewDecoder(strings.NewReader(docXML))
+	pDepth := 0
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err, "document.xml must be valid XML")
+		switch se := token.(type) {
+		case xml.StartElement:
+			if se.Name.Local == "p" {
+				pDepth++
+				assert.Equal(t, 1, pDepth, "nested <w:p> element is forbidden in WordprocessingML")
+			}
+		case xml.EndElement:
+			if se.Name.Local == "p" {
+				pDepth--
+			}
+		}
+	}
+	assert.Equal(t, 0, pDepth, "all <w:p> elements must be properly closed")
 }
