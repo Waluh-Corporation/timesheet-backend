@@ -51,12 +51,12 @@ func TestRenderVerifyDocument(t *testing.T) {
 		expectedSubstrings := []string{
 			"Acme Enterprise Portal",
 			"AUTHENTIC &amp; VERIFIED DOCUMENT",
-			"Overtime Incident Report",
+			"Berita Acara - Attendance Incident Report",
 			"October 2026",
 			"John Doe",
 			"(12345)",
 			"Jane Smith",
-			"abcd1234efgh5678",
+			"ABCD1234EFGH5678",
 			"Document Information",
 			"Document Type",
 			"Employee Signature",
@@ -75,7 +75,6 @@ func TestRenderVerifyDocument(t *testing.T) {
 
 		forbiddenSubstrings := []string{
 			"DOKUMEN ASLI",
-			"Berita Acara",
 			"Oktober",
 			"Informasi Dokumen",
 			"Jenis Dokumen",

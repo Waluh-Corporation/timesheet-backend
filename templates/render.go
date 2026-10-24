@@ -82,7 +82,7 @@ func formatMonthName(m int) string {
 
 func docTypeName(docType string) string {
 	if docType == "berita_acara" {
-		return "Overtime Incident Report"
+		return "Berita Acara - Attendance Incident Report"
 	}
 	return "Monthly Timesheet"
 }
@@ -93,6 +93,7 @@ func init() {
 		"formatDateWIB":   formatDateTime, // alias for backwards compatibility
 		"formatMonthName": formatMonthName,
 		"docTypeName":     docTypeName,
+		"toUpper":         strings.ToUpper,
 	}
 
 	var err error
