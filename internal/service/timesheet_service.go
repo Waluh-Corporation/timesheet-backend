@@ -211,27 +211,42 @@ func (s *timesheetService) GenerateBeritaAcara(ctx context.Context, userID uint,
 
 	var empSigBytes, witSigBytes, qrBytes []byte
 	isSigned := false
+	var witnessName string
 	if s.subRepo != nil {
 		sub, _ := s.subRepo.FindBeritaAcaraSubmission(ctx, user.ID, month, year)
-		if sub != nil && sub.Status == models.SubmissionStatusSigned {
-			isSigned = true
-			if user.SignatureFileKey != "" && s.storageSvc != nil {
-				empSigBytes, _ = s.fetchSignatureBytes(ctx, user.SignatureFileKey)
-			}
-			if sub.Witness != nil && sub.Witness.SignatureFileKey != "" && s.storageSvc != nil {
-				witSigBytes, _ = s.fetchSignatureBytes(ctx, sub.Witness.SignatureFileKey)
-			} else if sub.WitnessID != 0 && s.userRepo != nil && s.storageSvc != nil {
-				if wUser, werr := s.userRepo.FindByID(ctx, sub.WitnessID); werr == nil && wUser != nil && wUser.SignatureFileKey != "" {
-					witSigBytes, _ = s.fetchSignatureBytes(ctx, wUser.SignatureFileKey)
+		if sub != nil {
+			if sub.Witness != nil && sub.Witness.Name != "" {
+				witnessName = sub.Witness.Name
+			} else if sub.WitnessID != 0 && s.userRepo != nil {
+				if wUser, werr := s.userRepo.FindByID(ctx, sub.WitnessID); werr == nil && wUser != nil {
+					witnessName = wUser.Name
 				}
 			}
-			baseURL := strings.TrimRight(s.baseURL, "/")
-			if baseURL == "" {
-				baseURL = "https://timesheet.local"
+
+			if sub.Status == models.SubmissionStatusSigned {
+				isSigned = true
+				if user.SignatureFileKey != "" && s.storageSvc != nil {
+					empSigBytes, _ = s.fetchSignatureBytes(ctx, user.SignatureFileKey)
+				}
+				if sub.Witness != nil && sub.Witness.SignatureFileKey != "" && s.storageSvc != nil {
+					witSigBytes, _ = s.fetchSignatureBytes(ctx, sub.Witness.SignatureFileKey)
+				} else if sub.WitnessID != 0 && s.userRepo != nil && s.storageSvc != nil {
+					if wUser, werr := s.userRepo.FindByID(ctx, sub.WitnessID); werr == nil && wUser != nil && wUser.SignatureFileKey != "" {
+						witSigBytes, _ = s.fetchSignatureBytes(ctx, wUser.SignatureFileKey)
+					}
+				}
+				baseURL := strings.TrimRight(s.baseURL, "/")
+				if baseURL == "" {
+					baseURL = "https://timesheet.local"
+				}
+				qrURL := fmt.Sprintf("%s/verify/doc/%s", baseURL, sub.VerificationToken)
+				qrBytes, _ = services.GenerateQRCodePNG(qrURL, 120)
 			}
-			qrURL := fmt.Sprintf("%s/verify/doc/%s", baseURL, sub.VerificationToken)
-			qrBytes, _ = services.GenerateQRCodePNG(qrURL, 120)
 		}
+	}
+
+	if witnessName == "" {
+		witnessName = s.resolveWitnessName(ctx, user.ID, month, year, baActivities)
 	}
 
 	payload := services.BeritaAcaraPayload{
@@ -239,7 +254,7 @@ func (s *timesheetService) GenerateBeritaAcara(ctx context.Context, userID uint,
 		NPP:                    user.BniID,
 		Department:             deptName,
 		GroupName:              user.GroupName,
-		WitnessName:            s.resolveWitnessName(ctx, user.ID, month, year, baActivities),
+		WitnessName:            witnessName,
 		TeamLeadName:           teamLeadName,
 		Items:                  buildBeritaAcaraItems(baActivities),
 		EmployeeSignatureBytes: empSigBytes,
@@ -311,6 +326,9 @@ func (s *timesheetService) fetchActiveApprovers(ctx context.Context) []models.Ap
 }
 
 func (s *timesheetService) resolveWitnessName(ctx context.Context, userID uint, month, year int, baActivities []models.DailyActivity) string {
+	if w, werr := s.activityRepo.GetMonthlyWitness(ctx, userID, month, year); werr == nil && w != nil && w.Name != "" {
+		return w.Name
+	}
 	for _, a := range baActivities {
 		if a.Witness != nil && a.Witness.Name != "" {
 			return a.Witness.Name
@@ -320,9 +338,6 @@ func (s *timesheetService) resolveWitnessName(ctx context.Context, userID uint, 
 				return w.Name
 			}
 		}
-	}
-	if w, werr := s.activityRepo.GetMonthlyWitness(ctx, userID, month, year); werr == nil && w != nil {
-		return w.Name
 	}
 	return ""
 }

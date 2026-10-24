@@ -153,9 +153,53 @@ func renderTableRows(rowTemplate string, items []BeritaAcaraItem) string {
 	return rowsBuilder.String()
 }
 
-func buildDrawingXML(relID, name string, docPrID int, cx, cy int64) string {
-	return fmt.Sprintf(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="%d" cy="%d"/><wp:docPr id="%d" name="%s"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="%d" name="%s"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
-		cx, cy, docPrID, name, docPrID, name, relID, cx, cy)
+const footer1XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+       xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+       xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+  <w:p>
+    <w:pPr>
+      <w:jc w:val="right"/>
+    </w:pPr>
+    <w:r>
+      <w:drawing>
+        <wp:inline distT="0" distB="0" distL="0" distR="0">
+          <wp:extent cx="600000" cy="600000"/>
+          <wp:docPr id="201" name="QRCode"/>
+          <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+              <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:nvPicPr>
+                  <pic:cNvPr id="201" name="QRCode"/>
+                  <pic:cNvPicPr/>
+                </pic:nvPicPr>
+                <pic:blipFill>
+                  <a:blip r:embed="rIdDocQR"/>
+                  <a:stretch><a:fillRect/></a:stretch>
+                </pic:blipFill>
+                <pic:spPr>
+                  <a:xfrm><a:off x="0" y="0"/><a:ext cx="600000" cy="600000"/></a:xfrm>
+                  <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                </pic:spPr>
+              </pic:pic>
+            </a:graphicData>
+          </a:graphic>
+        </wp:inline>
+      </w:drawing>
+    </w:r>
+  </w:p>
+</w:ftr>`
+
+const footer1RelsXML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdDocQR" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/doc_qr.png"/>
+</Relationships>`
+
+func buildFloatingAnchorXML(relID, name string, docPrID int, offsetX, offsetY, cx, cy int64) string {
+	return fmt.Sprintf(`<w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251658240" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="column"><wp:posOffset>%d</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>%d</wp:posOffset></wp:positionV><wp:extent cx="%d" cy="%d"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="%d" name="%s"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="%d" name="%s"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="%s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%d" cy="%d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`,
+		offsetX, offsetY, cx, cy, docPrID, name, docPrID, name, relID, cx, cy)
 }
 
 func findParagraphStart(s string, beforePos int) int {
@@ -178,62 +222,37 @@ func populateDocumentXML(xmlStr string, payload BeritaAcaraPayload) string {
 	}
 
 	if payload.IsSigned {
-		var sigRuns strings.Builder
-		if len(payload.WitnessSignatureBytes) > 0 {
-			sigRuns.WriteString(buildDrawingXML("rIdWitSig", "WitnessSignature", 101, 1200000, 600000))
-		}
-		sigRuns.WriteString("<w:r><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/><w:tab/></w:r>")
-		if len(payload.EmployeeSignatureBytes) > 0 {
-			sigRuns.WriteString(buildDrawingXML("rIdEmpSig", "EmployeeSignature", 102, 1200000, 600000))
-		}
-
 		witnessPos := strings.Index(xmlStr, "{{WITNESS_NAME}}")
 		if witnessPos != -1 {
 			witPStart := findParagraphStart(xmlStr, witnessPos)
 			if witPStart != -1 {
-				// Scan backwards for consecutive empty spacer paragraphs preceding the witness line
-				currEnd := witPStart
-				firstEmptyStart := -1
-				lastEmptyEnd := -1
-				for {
-					pEndIdx := strings.LastIndex(xmlStr[:currEnd], "</w:p>")
-					if pEndIdx == -1 {
-						break
+				// Inject floating signatures directly into the witness/employee name paragraph
+				// Layout: "In front of text" (wp:anchor with wrapNone and behindDoc="0")
+				firstRPos := strings.Index(xmlStr[witPStart:], "<w:r")
+				if firstRPos != -1 {
+					insertIdx := witPStart + firstRPos
+					var anchorRuns strings.Builder
+					if len(payload.WitnessSignatureBytes) > 0 {
+						anchorRuns.WriteString(buildFloatingAnchorXML("rIdWitSig", "WitnessSignature", 101, 200000, -650000, 1200000, 600000))
 					}
-					pEnd := pEndIdx + len("</w:p>")
-					pStart := findParagraphStart(xmlStr, pEndIdx)
-					if pStart == -1 {
-						break
+					if len(payload.EmployeeSignatureBytes) > 0 {
+						anchorRuns.WriteString(buildFloatingAnchorXML("rIdEmpSig", "EmployeeSignature", 102, 4500000, -650000, 1200000, 600000))
 					}
-					pContent := xmlStr[pStart:pEnd]
-					if strings.Contains(pContent, "<w:t") {
-						// Reached a paragraph containing text (e.g., "Saksi / Hormat Saya")
-						break
-					}
-					if lastEmptyEnd == -1 {
-						lastEmptyEnd = pEnd
-					}
-					firstEmptyStart = pStart
-					currEnd = pStart
-				}
-
-				sigP := fmt.Sprintf(`<w:p><w:pPr><w:spacing w:line="240" w:lineRule="auto"/><w:contextualSpacing/></w:pPr>%s</w:p>`, sigRuns.String())
-				if firstEmptyStart != -1 && lastEmptyEnd != -1 {
-					// Replace empty spacer paragraphs with the digital signature paragraph
-					xmlStr = xmlStr[:firstEmptyStart] + sigP + xmlStr[lastEmptyEnd:]
-				} else {
-					// Fallback: prepend directly before the witness paragraph
-					xmlStr = xmlStr[:witPStart] + sigP + xmlStr[witPStart:]
+					xmlStr = xmlStr[:insertIdx] + anchorRuns.String() + xmlStr[insertIdx:]
 				}
 			}
 		}
 
-		if len(payload.QRCodeBytes) > 0 {
-			qrDrawing := buildDrawingXML("rIdDocQR", "QRCode", 103, 900000, 900000)
-			qrP := fmt.Sprintf(`<w:p><w:pPr><w:jc w:val="right"/></w:pPr>%s</w:p>`, qrDrawing)
-			tblPos := strings.Index(xmlStr, "<w:tbl")
-			if tblPos != -1 {
-				xmlStr = xmlStr[:tblPos] + qrP + xmlStr[tblPos:]
+		if len(payload.QRCodeBytes) > 0 && !strings.Contains(xmlStr, "rIdFooter1") {
+			// Link footer1 to section properties so QR code renders dynamically in the page footer
+			if headerRefIdx := strings.Index(xmlStr, `<w:headerReference w:type="default" r:id="rId7"/>`); headerRefIdx != -1 {
+				insertPos := headerRefIdx + len(`<w:headerReference w:type="default" r:id="rId7"/>`)
+				xmlStr = xmlStr[:insertPos] + `<w:footerReference w:type="default" r:id="rIdFooter1"/>` + xmlStr[insertPos:]
+			} else if sectPrIdx := strings.Index(xmlStr, "<w:sectPr"); sectPrIdx != -1 {
+				if gtIdx := strings.Index(xmlStr[sectPrIdx:], ">"); gtIdx != -1 {
+					insertPos := sectPrIdx + gtIdx + 1
+					xmlStr = xmlStr[:insertPos] + `<w:footerReference w:type="default" r:id="rIdFooter1"/>` + xmlStr[insertPos:]
+				}
 			}
 		}
 	}
@@ -262,6 +281,9 @@ func processZipEntry(writer *zip.Writer, file *zip.File, payload BeritaAcaraPayl
 			return fmt.Errorf("failed to read [Content_Types].xml: %w", rerr)
 		}
 		ctStr := string(xmlBytes)
+		if len(payload.QRCodeBytes) > 0 && !strings.Contains(ctStr, "/word/footer1.xml") {
+			ctStr = strings.Replace(ctStr, "</Types>", `<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>`, 1)
+		}
 		if !strings.Contains(ctStr, `Extension="png"`) {
 			ctStr = strings.Replace(ctStr, "</Types>", `<Default Extension="png" ContentType="image/png"/></Types>`, 1)
 		}
@@ -282,8 +304,8 @@ func processZipEntry(writer *zip.Writer, file *zip.File, payload BeritaAcaraPayl
 		if len(payload.EmployeeSignatureBytes) > 0 {
 			relsBuilder.WriteString(`<Relationship Id="rIdEmpSig" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/emp_sig.png"/>`)
 		}
-		if len(payload.QRCodeBytes) > 0 {
-			relsBuilder.WriteString(`<Relationship Id="rIdDocQR" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/doc_qr.png"/>`)
+		if len(payload.QRCodeBytes) > 0 && !strings.Contains(relsStr, "footer1.xml") {
+			relsBuilder.WriteString(`<Relationship Id="rIdFooter1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`)
 		}
 		relsStr = strings.Replace(relsStr, "</Relationships>", relsBuilder.String()+"</Relationships>", 1)
 		_, werr := io.WriteString(w, relsStr)
@@ -349,6 +371,22 @@ func GenerateBeritaAcaraDocx(payload BeritaAcaraPayload) ([]byte, error) {
 			}
 		}
 		if len(payload.QRCodeBytes) > 0 {
+			fw, err := writer.Create("word/footer1.xml")
+			if err != nil {
+				return nil, fmt.Errorf("failed to create word/footer1.xml: %w", err)
+			}
+			if _, err := io.WriteString(fw, footer1XML); err != nil {
+				return nil, err
+			}
+
+			frw, err := writer.Create("word/_rels/footer1.xml.rels")
+			if err != nil {
+				return nil, fmt.Errorf("failed to create word/_rels/footer1.xml.rels: %w", err)
+			}
+			if _, err := io.WriteString(frw, footer1RelsXML); err != nil {
+				return nil, err
+			}
+
 			w, err := writer.Create("word/media/doc_qr.png")
 			if err != nil {
 				return nil, fmt.Errorf("failed to create media entry doc_qr: %w", err)

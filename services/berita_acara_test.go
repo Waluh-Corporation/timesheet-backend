@@ -309,7 +309,7 @@ func TestGenerateBeritaAcaraDocx_SignedWithSignaturesAndQR(t *testing.T) {
 	zipReader, err := zip.NewReader(bytes.NewReader(docxBytes), int64(len(docxBytes)))
 	require.NoError(t, err)
 
-	var docXML, contentTypesXML, relsXML string
+	var docXML, contentTypesXML, relsXML, footer1XML, footerRelsXML string
 	mediaFound := make(map[string][]byte)
 
 	for _, f := range zipReader.File {
@@ -326,28 +326,43 @@ func TestGenerateBeritaAcaraDocx_SignedWithSignaturesAndQR(t *testing.T) {
 			contentTypesXML = string(b)
 		case "word/_rels/document.xml.rels":
 			relsXML = string(b)
+		case "word/footer1.xml":
+			footer1XML = string(b)
+		case "word/_rels/footer1.xml.rels":
+			footerRelsXML = string(b)
 		case "word/media/wit_sig.png", "word/media/emp_sig.png", "word/media/doc_qr.png":
 			mediaFound[f.Name] = b
 		}
 	}
 
-	// Verify content types has png
+	// Verify content types has png and footer1.xml
 	assert.Contains(t, contentTypesXML, `Extension="png"`)
+	assert.Contains(t, contentTypesXML, `/word/footer1.xml`)
 
-	// Verify relationships
+	// Verify document relationships and footer
 	assert.Contains(t, relsXML, "rIdWitSig")
 	assert.Contains(t, relsXML, "rIdEmpSig")
-	assert.Contains(t, relsXML, "rIdDocQR")
+	assert.Contains(t, relsXML, "rIdFooter1")
+	assert.Contains(t, footerRelsXML, "rIdDocQR")
+	assert.Contains(t, footerRelsXML, "media/doc_qr.png")
 
 	// Verify media contents
 	assert.Equal(t, witSig, mediaFound["word/media/wit_sig.png"])
 	assert.Equal(t, empSig, mediaFound["word/media/emp_sig.png"])
 	assert.Equal(t, qrPng, mediaFound["word/media/doc_qr.png"])
 
-	// Verify document.xml has drawings
+	// Verify document.xml has floating drawings and footer reference
 	assert.Contains(t, docXML, "rIdWitSig")
 	assert.Contains(t, docXML, "rIdEmpSig")
-	assert.Contains(t, docXML, "rIdDocQR")
+	assert.Contains(t, docXML, "<wp:anchor")
+	assert.Contains(t, docXML, `behindDoc="0"`)
+	assert.Contains(t, docXML, `<wp:wrapNone/>`)
+	assert.Contains(t, docXML, `<w:footerReference w:type="default" r:id="rIdFooter1"/>`)
+
+	// Verify footer1.xml contains right-aligned QR drawing
+	require.NotEmpty(t, footer1XML)
+	assert.Contains(t, footer1XML, "rIdDocQR")
+	assert.Contains(t, footer1XML, `<w:jc w:val="right"/>`)
 
 	// Validate valid XML structure and guarantee no nested <w:p> elements exist
 	decoder := xml.NewDecoder(strings.NewReader(docXML))
