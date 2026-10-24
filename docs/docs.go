@@ -4611,9 +4611,10 @@ const docTemplate = `{
         },
         "/api/v1/verify/doc/{token}": {
             "get": {
-                "description": "Validates the authenticity and signature audit trail of a Timesheet or Berita Acara via verification token.",
+                "description": "Validates the authenticity and signature audit trail of a Timesheet or Berita Acara via verification token. Supports dual HTML and JSON rendering.",
                 "produces": [
-                    "application/json"
+                    "application/json",
+                    "text/html"
                 ],
                 "tags": [
                     "Verification"
@@ -4626,6 +4627,12 @@ const docTemplate = `{
                         "name": "token",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Response format (json or html)",
+                        "name": "format",
+                        "in": "query"
                     }
                 ],
                 "responses": {

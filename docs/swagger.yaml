@@ -4571,15 +4571,20 @@ paths:
   /api/v1/verify/doc/{token}:
     get:
       description: Validates the authenticity and signature audit trail of a Timesheet
-        or Berita Acara via verification token.
+        or Berita Acara via verification token. Supports dual HTML and JSON rendering.
       parameters:
       - description: Document verification token
         in: path
         name: token
         required: true
         type: string
+      - description: Response format (json or html)
+        in: query
+        name: format
+        type: string
       produces:
       - application/json
+      - text/html
       responses:
         "200":
           description: OK
