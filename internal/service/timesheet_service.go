@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"timesheet-backend/dto/request"
@@ -12,6 +13,7 @@ import (
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/services"
+	"timesheet-backend/storage"
 )
 
 // TimesheetService defines business operations for generating timesheets and managing overtime records.
@@ -28,7 +30,10 @@ type timesheetService struct {
 	activityRepo repository.ActivityRepository
 	overtimeRepo repository.OvertimeRepository
 	masterRepo   repository.MasterRepository
+	subRepo      repository.SubmissionRepository
+	storageSvc   storage.StorageService
 	mailer       *mailer.Mailer
+	baseURL      string
 	nowFunc      func() time.Time
 }
 
@@ -53,6 +58,19 @@ func NewTimesheetService(
 // SetNowFunc overrides the time provider for testing purposes.
 func (s *timesheetService) SetNowFunc(fn func() time.Time) {
 	s.nowFunc = fn
+}
+
+func (s *timesheetService) SetSignatureDependencies(subRepo repository.SubmissionRepository, storageSvc storage.StorageService, baseURL string) {
+	s.subRepo = subRepo
+	s.storageSvc = storageSvc
+	s.baseURL = baseURL
+}
+
+func (s *timesheetService) fetchSignatureBytes(ctx context.Context, key string) ([]byte, error) {
+	if s.storageSvc == nil || key == "" {
+		return nil, nil
+	}
+	return s.storageSvc.Download(ctx, key)
 }
 
 func sanitizeFilename(s string) string {
@@ -102,15 +120,36 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 		return nil, "", err
 	}
 
+	var sigBytes, qrBytes []byte
+	isSigned := false
+	if s.subRepo != nil {
+		sub, _ := s.subRepo.FindTimesheetSubmission(ctx, user.ID, month, year)
+		if sub != nil && (sub.Status == models.SubmissionStatusSigned || sub.Status == models.SubmissionStatusSubmitted) {
+			isSigned = true
+			if user.SignatureFileKey != "" && s.storageSvc != nil {
+				sigBytes, _ = s.fetchSignatureBytes(ctx, user.SignatureFileKey)
+			}
+			baseURL := strings.TrimRight(s.baseURL, "/")
+			if baseURL == "" {
+				baseURL = "https://timesheet.local"
+			}
+			qrURL := fmt.Sprintf("%s/verify/doc/%s", baseURL, sub.VerificationToken)
+			qrBytes, _ = services.GenerateQRCodePNG(qrURL, 120)
+		}
+	}
+
 	out, err := services.GenerateFromTemplate(services.GenerationInput{
-		CompanyCode: companyCode,
-		User:        user,
-		Month:       month,
-		Year:        year,
-		Activities:  activities,
-		Overtimes:   overtimes,
-		Approvers:   s.fetchActiveApprovers(ctx),
-		Holidays:    s.fetchHolidaysMap(ctx, year, month),
+		CompanyCode:    companyCode,
+		User:           user,
+		Month:          month,
+		Year:           year,
+		Activities:     activities,
+		Overtimes:      overtimes,
+		Approvers:      s.fetchActiveApprovers(ctx),
+		Holidays:       s.fetchHolidaysMap(ctx, year, month),
+		SignatureBytes: sigBytes,
+		QRCodeBytes:    qrBytes,
+		IsSigned:       isSigned,
 	})
 	if err != nil {
 		return nil, "", err
@@ -170,14 +209,58 @@ func (s *timesheetService) GenerateBeritaAcara(ctx context.Context, userID uint,
 		empName = user.Username
 	}
 
+	var empSigBytes, witSigBytes, qrBytes []byte
+	isSigned := false
+	var witnessName string
+	if s.subRepo != nil {
+		sub, _ := s.subRepo.FindBeritaAcaraSubmission(ctx, user.ID, month, year)
+		if sub != nil {
+			if sub.Witness != nil && sub.Witness.Name != "" {
+				witnessName = sub.Witness.Name
+			} else if sub.WitnessID != 0 && s.userRepo != nil {
+				if wUser, werr := s.userRepo.FindByID(ctx, sub.WitnessID); werr == nil && wUser != nil {
+					witnessName = wUser.Name
+				}
+			}
+
+			if sub.Status == models.SubmissionStatusSigned {
+				isSigned = true
+				if user.SignatureFileKey != "" && s.storageSvc != nil {
+					empSigBytes, _ = s.fetchSignatureBytes(ctx, user.SignatureFileKey)
+				}
+				if sub.Witness != nil && sub.Witness.SignatureFileKey != "" && s.storageSvc != nil {
+					witSigBytes, _ = s.fetchSignatureBytes(ctx, sub.Witness.SignatureFileKey)
+				} else if sub.WitnessID != 0 && s.userRepo != nil && s.storageSvc != nil {
+					if wUser, werr := s.userRepo.FindByID(ctx, sub.WitnessID); werr == nil && wUser != nil && wUser.SignatureFileKey != "" {
+						witSigBytes, _ = s.fetchSignatureBytes(ctx, wUser.SignatureFileKey)
+					}
+				}
+				baseURL := strings.TrimRight(s.baseURL, "/")
+				if baseURL == "" {
+					baseURL = "https://timesheet.local"
+				}
+				qrURL := fmt.Sprintf("%s/verify/doc/%s", baseURL, sub.VerificationToken)
+				qrBytes, _ = services.GenerateQRCodePNG(qrURL, 120)
+			}
+		}
+	}
+
+	if witnessName == "" {
+		witnessName = s.resolveWitnessName(ctx, user.ID, month, year, baActivities)
+	}
+
 	payload := services.BeritaAcaraPayload{
-		EmployeeName: empName,
-		NPP:          user.BniID,
-		Department:   deptName,
-		GroupName:    user.GroupName,
-		WitnessName:  s.resolveWitnessName(ctx, user.ID, month, year, baActivities),
-		TeamLeadName: teamLeadName,
-		Items:        buildBeritaAcaraItems(baActivities),
+		EmployeeName:           empName,
+		NPP:                    user.BniID,
+		Department:             deptName,
+		GroupName:              user.GroupName,
+		WitnessName:            witnessName,
+		TeamLeadName:           teamLeadName,
+		Items:                  buildBeritaAcaraItems(baActivities),
+		EmployeeSignatureBytes: empSigBytes,
+		WitnessSignatureBytes:  witSigBytes,
+		QRCodeBytes:            qrBytes,
+		IsSigned:               isSigned,
 	}
 
 	out, err := services.GenerateBeritaAcaraDocx(payload)
@@ -243,6 +326,9 @@ func (s *timesheetService) fetchActiveApprovers(ctx context.Context) []models.Ap
 }
 
 func (s *timesheetService) resolveWitnessName(ctx context.Context, userID uint, month, year int, baActivities []models.DailyActivity) string {
+	if w, werr := s.activityRepo.GetMonthlyWitness(ctx, userID, month, year); werr == nil && w != nil && w.Name != "" {
+		return w.Name
+	}
 	for _, a := range baActivities {
 		if a.Witness != nil && a.Witness.Name != "" {
 			return a.Witness.Name
@@ -252,9 +338,6 @@ func (s *timesheetService) resolveWitnessName(ctx context.Context, userID uint, 
 				return w.Name
 			}
 		}
-	}
-	if w, werr := s.activityRepo.GetMonthlyWitness(ctx, userID, month, year); werr == nil && w != nil {
-		return w.Name
 	}
 	return ""
 }

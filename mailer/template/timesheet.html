@@ -2,16 +2,16 @@
   class="content-text"
   style="
     margin: 0;
-    color: #4b5563;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
+    font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     font-size: 15px;
-    line-height: 1.65;
+    line-height: 1.6;
   "
 >
-  Halo{{if .Username}} <strong>{{.Username}}</strong>{{end}}, dokumen timesheet bulanan Anda telah berhasil dibuat dan <strong>terlampir</strong> pada email ini dalam format Microsoft Excel (.xlsx).
+  Halo{{if .Username}} <strong>{{.Username}}</strong>{{end}}, dokumen timesheet bulanan Anda telah berhasil dibuat{{if .DownloadURL}} dan siap diunduh melalui tautan di bawah ini.{{else}} dan <strong>terlampir</strong> pada email ini.{{end}}
 </p>
 
-<!-- DETAILS BOX -->
+<!-- DETAILS BOX (Tabler Datagrid Style) -->
 <table
   role="presentation"
   width="100%"
@@ -22,9 +22,9 @@
   style="
     width: 100%;
     margin: 24px 0 0;
-    background-color: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
+    background-color: #f8fafc;
+    border: 1px solid #e6e7e9;
+    border-radius: 6px;
   "
 >
   <tr>
@@ -32,39 +32,36 @@
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         {{if .Company}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Perusahaan / Klien</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Company}}</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Perusahaan / Klien</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Company}}</td>
         </tr>
         {{end}}
         {{if .Period}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Periode Timesheet</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #4f46e5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Period}}</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Periode Timesheet</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 700; color: #066fd1; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Period}}</td>
         </tr>
         {{end}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Nama Lampiran</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-weight: bold; color: #111827;">{{.Filename}}</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Nama Lampiran</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-weight: 600; color: #182433;">{{.Filename}}</td>
         </tr>
-        <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Format Berkas</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #059669; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Microsoft Excel (.xlsx)</td>
-        </tr>
+
       </table>
     </td>
   </tr>
 </table>
 
 {{if .DownloadURL}}
-<!-- ACTION BUTTON -->
+<!-- ACTION BUTTON (Tabler Primary Button) -->
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn-shell" style="margin: 26px 0 0;">
   <tr>
     <td
       align="center"
-      bgcolor="#4f46e5"
+      bgcolor="#066fd1"
       style="
-        background-color: #4f46e5;
-        border-radius: 8px;
+        background-color: #066fd1;
+        border-radius: 4px;
       "
     >
       <!--[if mso]>
@@ -73,13 +70,13 @@
         xmlns:w="urn:schemas-microsoft-com:office:word"
         href="{{.DownloadURL}}"
         style="height: 48px; v-text-anchor: middle; width: 260px"
-        arcsize="17%"
-        strokecolor="#4f46e5"
-        fillcolor="#4f46e5"
+        arcsize="8%"
+        strokecolor="#066fd1"
+        fillcolor="#066fd1"
       >
         <w:anchorlock />
         <center style="color: #ffffff; font-family: Arial, sans-serif; font-size: 15px; font-weight: bold">
-          Download Timesheet (.xlsx)
+          Download Berkas
         </center>
       </v:roundrect>
       <![endif]-->
@@ -90,29 +87,29 @@
         class="confirm-button btn-block"
         style="
           display: inline-block;
-          padding: 14px 28px;
+          padding: 13px 26px;
           color: #ffffff;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
           font-size: 15px;
-          font-weight: bold;
+          font-weight: 600;
           line-height: 18px;
           text-align: center;
           text-decoration: none;
           white-space: nowrap;
-          border-radius: 8px;
-          background-color: #4f46e5;
+          border-radius: 4px;
+          background-color: #066fd1;
         "
-      >Download Timesheet (.xlsx)</a>
+      >Download Berkas</a>
       <!--<![endif]-->
     </td>
   </tr>
 </table>
-<p class="details-label" style="margin: 8px 0 0 0; font-size: 12px; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<p class="details-label" style="margin: 8px 0 0 0; font-size: 12px; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   *Tautan unduhan ini privat, dapat digunakan maksimal 3 kali unduhan, dan aktif selama 7 hari.
 </p>
 {{end}}
 
-<!-- NEXT STEPS / APPROVAL NOTICE -->
+<!-- NEXT STEPS (Tabler Alert Success Style) -->
 <table
   role="presentation"
   width="100%"
@@ -123,17 +120,18 @@
   style="
     width: 100%;
     margin-top: 22px;
-    background-color: #ecfdf5;
-    border-left: 3px solid #10b981;
-    border-radius: 0 6px 6px 0;
+    background-color: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-left: 4px solid #2fb344;
+    border-radius: 4px;
   "
 >
   <tr>
     <td style="padding: 12px 16px;">
-      <p class="callout-success-title" style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #065f46; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <p class="callout-success-title" style="margin: 0 0 3px 0; font-size: 12px; font-weight: 600; color: #14532d; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Langkah Selanjutnya
       </p>
-      <p class="callout-success-text" style="margin: 0; font-size: 12px; color: #047857; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <p class="callout-success-text" style="margin: 0; font-size: 12px; color: #166534; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Silakan periksa kembali rincian hari kerja, jam lembur, dan uraian tugas pada file lampiran sebelum menyerahkan dokumen kepada Team Leader atau Department Head untuk persetujuan resmi.
       </p>
     </td>

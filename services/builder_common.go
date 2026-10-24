@@ -619,6 +619,27 @@ type SignatureCells struct {
 	TLDateCell   string
 	DHDateCell   string
 	DatePrefix   string
+	UserBoxCell  string
+	QRCell       string
+}
+
+// EmbedPicture inserts a PNG picture into a cell with specified scale.
+func EmbedPicture(f *excelize.File, sheet, cell string, picBytes []byte, scaleX, scaleY float64) error {
+	if f == nil || len(picBytes) == 0 || cell == "" {
+		return nil
+	}
+	bTrue := true
+	return f.AddPictureFromBytes(sheet, cell, &excelize.Picture{
+		Extension: ".png",
+		File:      picBytes,
+		Format: &excelize.GraphicOptions{
+			PrintObject:     &bTrue,
+			LockAspectRatio: true,
+			ScaleX:          scaleX,
+			ScaleY:          scaleY,
+			Positioning:     "oneCell",
+		},
+	})
 }
 
 // WriteSignatures writes the user, team leader, department head names, and date stamp into signature cells.
@@ -648,6 +669,12 @@ func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, cells S
 		if cells.DHDateCell != "" {
 			_ = f.SetCellValue(sheet, cells.DHDateCell, dateStr)
 		}
+	}
+	if in.IsSigned && len(in.SignatureBytes) > 0 && cells.UserBoxCell != "" {
+		_ = EmbedPicture(f, sheet, cells.UserBoxCell, in.SignatureBytes, 0.4, 0.4)
+	}
+	if in.IsSigned && len(in.QRCodeBytes) > 0 && cells.QRCell != "" {
+		_ = EmbedPicture(f, sheet, cells.QRCell, in.QRCodeBytes, 0.6, 0.6)
 	}
 }
 

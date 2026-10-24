@@ -152,7 +152,7 @@ func (s *Server) GetDailyActivity(c *gin.Context) {
 
 // GetPreviousDailyActivity godoc
 // @Summary Get previous day activity
-// @Description Retrieves the most recent active daily activity strictly before the specified reference date (default: today in WIB) to allow copying/autofilling activity descriptions.
+// @Description Retrieves the most recent active daily activity strictly before the specified reference date (default: today in WIB) to allow copying/autofilling activity descriptions without copying Time In (start_time), Time Out (end_time), or Berita Acara metadata.
 // @Tags Activity
 // @Security BearerAuth
 // @Produce json

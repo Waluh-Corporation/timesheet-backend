@@ -75,6 +75,14 @@ func (m *mockUserRepo) UpdatePassword(ctx context.Context, id uint, passwordHash
 	return nil
 }
 
+func (m *mockUserRepo) UpdateSignatureFileKey(ctx context.Context, id uint, fileKey string) error {
+	if u, ok := m.users[id]; ok {
+		u.SignatureFileKey = fileKey
+		u.UpdatedAt = time.Now()
+	}
+	return nil
+}
+
 func (m *mockUserRepo) FindByIDWithDetails(ctx context.Context, id uint) (*models.User, error) {
 	return m.FindByID(ctx, id)
 }

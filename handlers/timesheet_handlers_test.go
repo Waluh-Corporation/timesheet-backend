@@ -32,6 +32,9 @@ type mockStorageService struct {
 func (m *mockStorageService) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
 	return nil
 }
+func (m *mockStorageService) Download(ctx context.Context, key string) ([]byte, error) {
+	return []byte("fake-bytes"), nil
+}
 func (m *mockStorageService) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	return m.downloadURL, m.downloadErr
 }
@@ -604,6 +607,101 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		cAdmin.Request.Header.Set("Content-Type", "application/json")
 		srv.GenerateTimesheet(cAdmin)
 		assertResponseCode(t, wAdmin, http.StatusOK)
+	})
+
+	t.Run("Berita Acara witness signature guard on generate", func(t *testing.T) {
+		witnessUser := &models.User{
+			Username: "ba_guard_witness",
+			Email:    "ba_witness@example.com",
+			Name:     "Saksi Guard",
+			Role:     models.RoleUser,
+			IsActive: true,
+		}
+		_ = userRepo.Create(context.Background(), witnessUser)
+
+		baDate := time.Date(currYear, time.Month(currMonth), 10, 0, 0, 0, 0, time.UTC)
+		_ = actRepo.Create(context.Background(), &models.DailyActivity{
+			UserID:        userWithCompany.ID,
+			Date:          baDate,
+			StartTime:     "08:00",
+			EndTime:       "17:00",
+			Status:        "P",
+			Activity:      "Deployment with Berita Acara",
+			IsBeritaAcara: true,
+			WitnessID:     &witnessUser.ID,
+			IsActive:      true,
+		})
+
+		payloadCurr, _ := json.Marshal(map[string]interface{}{"month": currMonth, "year": currYear})
+
+		// 1. Generate before BA is submitted -> 400 Bad Request
+		w1 := httptest.NewRecorder()
+		c1, _ := gin.CreateTestContext(w1)
+		c1.Set("userID", userWithCompany.ID)
+		c1.Set("userRole", models.RoleUser)
+		c1.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payloadCurr))
+		c1.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(c1)
+		assertResponseCode(t, w1, http.StatusBadRequest)
+		if !strings.Contains(w1.Body.String(), "belum diajukan ke saksi") {
+			t.Errorf("expected error about BA not submitted yet, got: %s", w1.Body.String())
+		}
+
+		// 2. Generate while BA is pending_witness -> 400 Bad Request
+		subRepo := repository.NewSubmissionRepository(tx)
+		baSub := &models.BeritaAcaraSubmission{
+			ID:                uuid.New().String(),
+			UserID:            userWithCompany.ID,
+			WitnessID:         witnessUser.ID,
+			Month:             currMonth,
+			Year:              currYear,
+			Status:            models.SubmissionStatusPendingWitness,
+			VerificationToken: uuid.New().String(),
+			CreatedAt:         time.Now(),
+			UpdatedAt:         time.Now(),
+		}
+		_ = subRepo.UpsertBeritaAcaraSubmission(context.Background(), baSub)
+
+		w2 := httptest.NewRecorder()
+		c2, _ := gin.CreateTestContext(w2)
+		c2.Set("userID", userWithCompany.ID)
+		c2.Set("userRole", models.RoleUser)
+		c2.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payloadCurr))
+		c2.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(c2)
+		assertResponseCode(t, w2, http.StatusBadRequest)
+		if !strings.Contains(w2.Body.String(), "masih menunggu persetujuan dan tanda tangan dari saksi") {
+			t.Errorf("expected error about pending witness, got: %s", w2.Body.String())
+		}
+
+		// 3. Generate when BA is rejected -> 400 Bad Request
+		baSub.Status = models.SubmissionStatusRejected
+		_ = subRepo.UpsertBeritaAcaraSubmission(context.Background(), baSub)
+
+		w3 := httptest.NewRecorder()
+		c3, _ := gin.CreateTestContext(w3)
+		c3.Set("userID", userWithCompany.ID)
+		c3.Set("userRole", models.RoleUser)
+		c3.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payloadCurr))
+		c3.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(c3)
+		assertResponseCode(t, w3, http.StatusBadRequest)
+		if !strings.Contains(w3.Body.String(), "ditolak oleh saksi") {
+			t.Errorf("expected error about rejected BA, got: %s", w3.Body.String())
+		}
+
+		// 4. Generate when BA is signed -> 200 OK
+		baSub.Status = models.SubmissionStatusSigned
+		_ = subRepo.UpsertBeritaAcaraSubmission(context.Background(), baSub)
+
+		w4 := httptest.NewRecorder()
+		c4, _ := gin.CreateTestContext(w4)
+		c4.Set("userID", userWithCompany.ID)
+		c4.Set("userRole", models.RoleUser)
+		c4.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payloadCurr))
+		c4.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(c4)
+		assertResponseCode(t, w4, http.StatusOK)
 	})
 }
 

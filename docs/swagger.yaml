@@ -492,6 +492,8 @@ definitions:
         type: string
       role:
         $ref: '#/definitions/models.Role'
+      signature_file_key:
+        type: string
       site:
         type: string
       site_id:
@@ -838,6 +840,57 @@ definitions:
     - password
     - token
     type: object
+  request.RevokeTimesheetRequest:
+    properties:
+      month:
+        example: 10
+        maximum: 12
+        minimum: 1
+        type: integer
+      year:
+        example: 2026
+        maximum: 2100
+        minimum: 2000
+        type: integer
+    required:
+    - month
+    - year
+    type: object
+  request.SignTimesheetRequest:
+    properties:
+      month:
+        example: 10
+        maximum: 12
+        minimum: 1
+        type: integer
+      year:
+        example: 2026
+        maximum: 2100
+        minimum: 2000
+        type: integer
+    required:
+    - month
+    - year
+    type: object
+  request.SubmitBeritaAcaraRequest:
+    properties:
+      month:
+        example: 10
+        maximum: 12
+        minimum: 1
+        type: integer
+      witness_id:
+        example: 2
+        type: integer
+      year:
+        example: 2026
+        maximum: 2100
+        minimum: 2000
+        type: integer
+    required:
+    - month
+    - year
+    type: object
   request.SubscribeRequest:
     properties:
       endpoint:
@@ -929,6 +982,16 @@ definitions:
         example: 1
         type: integer
     type: object
+  request.UploadSignatureRequest:
+    properties:
+      signature_base64:
+        description: SignatureBase64 is a Base64-encoded PNG image (can include data:image/png;base64,
+          prefix).
+        example: data:image/png;base64,iVBORw0KGgo...
+        type: string
+    required:
+    - signature_base64
+    type: object
   request.VerifyResetTokenRequest:
     properties:
       token:
@@ -936,6 +999,20 @@ definitions:
         type: string
     required:
     - token
+    type: object
+  request.WitnessActionRequest:
+    properties:
+      action:
+        enum:
+        - approve
+        - reject
+        example: approve
+        type: string
+      notes:
+        example: Mohon perbaiki tanggal kejadian nomor 3
+        type: string
+    required:
+    - action
     type: object
   response.APIResponse:
     properties:
@@ -1640,7 +1717,8 @@ paths:
     get:
       description: 'Retrieves the most recent active daily activity strictly before
         the specified reference date (default: today in WIB) to allow copying/autofilling
-        activity descriptions.'
+        activity descriptions without copying Time In (start_time), Time Out (end_time),
+        or Berita Acara metadata.'
       parameters:
       - description: 'Reference date (YYYY-MM-DD, default: today)'
         in: query
@@ -3288,6 +3366,117 @@ paths:
       summary: Verify password reset token
       tags:
       - Auth
+  /api/v1/berita-acara/{id}/revoke:
+    post:
+      description: Revokes a pending or signed Berita Acara back to draft.
+      parameters:
+      - description: Submission ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Revoke Berita Acara submission
+      tags:
+      - Signatures
+  /api/v1/berita-acara/{id}/witness-action:
+    post:
+      consumes:
+      - application/json
+      description: Allows the designated witness to sign/approve or reject with revision
+        notes.
+      parameters:
+      - description: Submission ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Witness decision
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.WitnessActionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Approve or reject Berita Acara as witness
+      tags:
+      - Signatures
+  /api/v1/berita-acara/status:
+    get:
+      description: Retrieves the sign-off lifecycle state of a monthly Berita Acara.
+      parameters:
+      - description: Month (1-12)
+        in: query
+        name: month
+        required: true
+        type: integer
+      - description: Year
+        in: query
+        name: year
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get Berita Acara sign-off status
+      tags:
+      - Signatures
+  /api/v1/berita-acara/submit:
+    post:
+      consumes:
+      - application/json
+      description: Submits monthly Berita Acara with employee signature and assigns
+        a witness for approval.
+      parameters:
+      - description: Submission payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.SubmitBeritaAcaraRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Submit Berita Acara for witness sign-off
+      tags:
+      - Signatures
+  /api/v1/berita-acara/witness-requests:
+    get:
+      description: Lists all Berita Acara submissions awaiting the authenticated user's
+        signature as a witness.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List pending witness review requests
+      tags:
+      - Signatures
   /api/v1/companies:
     get:
       description: Returns all companies with their associated departments.
@@ -4146,6 +4335,164 @@ paths:
       summary: Get timesheet generation job status
       tags:
       - Timesheet
+  /api/v1/timesheets/revoke:
+    post:
+      consumes:
+      - application/json
+      description: Revokes a signed timesheet, unlocking daily activity mutations.
+      parameters:
+      - description: Timesheet period
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.RevokeTimesheetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Revoke timesheet signature
+      tags:
+      - Signatures
+  /api/v1/timesheets/sign:
+    post:
+      consumes:
+      - application/json
+      description: Signs the user's monthly timesheet, locking activity edits and
+        issuing verification hash.
+      parameters:
+      - description: Timesheet period
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.SignTimesheetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Sign monthly timesheet
+      tags:
+      - Signatures
+  /api/v1/timesheets/status:
+    get:
+      description: Retrieves the sign-off lifecycle state of a monthly timesheet.
+      parameters:
+      - description: Month (1-12)
+        in: query
+        name: month
+        required: true
+        type: integer
+      - description: Year
+        in: query
+        name: year
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get timesheet sign-off status
+      tags:
+      - Signatures
+  /api/v1/user/signature:
+    delete:
+      description: Removes the saved signature for the authenticated user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete user profile signature
+      tags:
+      - Signatures
+    get:
+      description: Retrieves the signature presigned URL and status for the authenticated
+        user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get user profile signature
+      tags:
+      - Signatures
+    post:
+      consumes:
+      - application/json
+      description: Uploads a Base64-encoded PNG/JPEG signature image to storage and
+        updates user profile.
+      parameters:
+      - description: Signature base64 image
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/request.UploadSignatureRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Upload or draw user profile signature
+      tags:
+      - Signatures
   /api/v1/users/change-password:
     post:
       consumes:
@@ -4221,6 +4568,32 @@ paths:
       summary: List eligible witnesses for Berita Acara
       tags:
       - Activity
+  /api/v1/verify/doc/{token}:
+    get:
+      description: Validates the authenticity and signature audit trail of a Timesheet
+        or Berita Acara via verification token.
+      parameters:
+      - description: Document verification token
+        in: path
+        name: token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Public document verification
+      tags:
+      - Verification
 securityDefinitions:
   BearerAuth:
     description: Enter JWT token with format "Bearer {token}".

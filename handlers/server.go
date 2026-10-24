@@ -62,6 +62,8 @@ type Server struct {
 	SetupRepo         repository.SetupRepository
 	SetupSvc          service.SetupService
 	AuditRepo         repository.AuditRepository
+	SubmissionRepo    repository.SubmissionRepository
+	SignatureSvc      service.SignatureService
 	QueueClient       queue.QueueClient
 	Storage           storage.StorageService
 	RedisClient       *redis.Client
@@ -117,6 +119,16 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	var setupRepo repository.SetupRepository
 	var setupSvc service.SetupService
 	var auditRepo repository.AuditRepository
+	var submissionRepo repository.SubmissionRepository
+	var signatureSvc service.SignatureService
+	var storageSvc storage.StorageService
+	if cfg != nil {
+		var sErr error
+		storageSvc, sErr = storage.NewS3StorageService(cfg)
+		if sErr != nil {
+			slog.Warn("failed to initialize storage service in server", "error", sErr)
+		}
+	}
 
 	if db != nil {
 		userRepo = repository.NewUserRepository(db)
@@ -124,9 +136,20 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		masterRepo = repository.NewMasterRepository(db)
 		userSvc = service.NewUserService(userRepo, auth.DefaultHasher, m, masterRepo)
 		activityRepo = repository.NewActivityRepository(db)
-		activitySvc = service.NewActivityService(activityRepo)
+		submissionRepo = repository.NewSubmissionRepository(db)
+		activitySvc = service.NewActivityService(activityRepo, submissionRepo)
 		overtimeRepo = repository.NewOvertimeRepository(db)
 		timesheetSvc = service.NewTimesheetService(userRepo, activityRepo, overtimeRepo, masterRepo, m)
+		baseURL := ""
+		if cfg != nil {
+			baseURL = cfg.AppBaseURL
+		}
+		signatureSvc = service.NewSignatureService(userRepo, activityRepo, submissionRepo, storageSvc, m, p, baseURL)
+		if sigCfg, ok := timesheetSvc.(interface {
+			SetSignatureDependencies(repository.SubmissionRepository, storage.StorageService, string)
+		}); ok {
+			sigCfg.SetSignatureDependencies(submissionRepo, storageSvc, baseURL)
+		}
 		masterSvc = service.NewMasterDataService(masterRepo)
 		jobRepo = repository.NewJobRepository(db)
 		pushRepo = repository.NewPushRepository(db)
@@ -164,6 +187,9 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		SetupRepo:         setupRepo,
 		SetupSvc:          setupSvc,
 		AuditRepo:         auditRepo,
+		SubmissionRepo:    submissionRepo,
+		SignatureSvc:      signatureSvc,
+		Storage:           storageSvc,
 		GeoIP:             geoSvc,
 		webAuthnSessions:  make(map[string]*webAuthnSessionEntry),
 		resetCooldowns:    make(map[string]time.Time),
@@ -366,6 +392,13 @@ func (s *Server) getAuditRepository() repository.AuditRepository {
 		return nil
 	}
 	return s.AuditRepo
+}
+
+func (s *Server) getSubmissionRepository() repository.SubmissionRepository {
+	if s == nil {
+		return nil
+	}
+	return s.SubmissionRepo
 }
 
 // AuditLogParams encapsulates parameters for recording an administrative audit event.

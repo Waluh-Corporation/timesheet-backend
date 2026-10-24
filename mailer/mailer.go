@@ -425,3 +425,81 @@ func (m *Mailer) SendPasswordChangedEmailWithDetails(to, username, ipAddress, lo
 	m.setMessageContent(msg, htmlBody, textBody)
 	return m.send(msg)
 }
+
+// SendWitnessRequestEmail delivers a notification requesting a witness to review and sign a Berita Acara.
+func (m *Mailer) SendWitnessRequestEmail(to, witnessName, employeeName, period, reviewLink string) error {
+	htmlBody, textBody, err := RenderWitnessRequestEmail(WitnessRequestEmailData{
+		AppName:      m.appName(),
+		WitnessName:  witnessName,
+		EmployeeName: employeeName,
+		Period:       period,
+		ReviewURL:    reviewLink,
+		PortalURL:    m.frontendURL(),
+		SupportEmail: m.supportEmail(),
+	})
+	if err != nil {
+		log.Printf("[mailer] failed to render witness request email template: %v", err)
+		return err
+	}
+
+	msg := gomail.NewMessage()
+	msg.SetHeader("From", m.cfg.MailFrom)
+	msg.SetHeader("To", to)
+	msg.SetHeader("Subject", fmt.Sprintf("Permintaan Tanda Tangan Saksi Berita Acara - %s (%s)", employeeName, period))
+	m.setMessageContent(msg, htmlBody, textBody)
+	return m.send(msg)
+}
+
+// SendBeritaAcaraApprovedEmail notifies an employee that their Berita Acara has been signed by the witness.
+func (m *Mailer) SendBeritaAcaraApprovedEmail(to, employeeName, witnessName, period, downloadLink string) error {
+	htmlBody, textBody, err := RenderBeritaAcaraApprovedEmail(BeritaAcaraApprovedEmailData{
+		AppName:      m.appName(),
+		EmployeeName: employeeName,
+		WitnessName:  witnessName,
+		Period:       period,
+		DownloadURL:  downloadLink,
+		PortalURL:    m.frontendURL(),
+		SupportEmail: m.supportEmail(),
+	})
+	if err != nil {
+		log.Printf("[mailer] failed to render berita acara approved email template: %v", err)
+		return err
+	}
+
+	msg := gomail.NewMessage()
+	msg.SetHeader("From", m.cfg.MailFrom)
+	msg.SetHeader("To", to)
+	msg.SetHeader("Subject", fmt.Sprintf("Berita Acara Disetujui oleh Saksi (%s)", period))
+	m.setMessageContent(msg, htmlBody, textBody)
+	return m.send(msg)
+}
+
+// SendBeritaAcaraRejectedEmail notifies an employee that their Berita Acara was rejected by the witness.
+func (m *Mailer) SendBeritaAcaraRejectedEmail(to, employeeName, witnessName, period, reason string) error {
+	activityURL := ""
+	if m.frontendURL() != "" {
+		activityURL = strings.TrimRight(m.frontendURL(), "/") + "/activity"
+	}
+
+	htmlBody, textBody, err := RenderBeritaAcaraRejectedEmail(BeritaAcaraRejectedEmailData{
+		AppName:      m.appName(),
+		EmployeeName: employeeName,
+		WitnessName:  witnessName,
+		Period:       period,
+		Notes:        reason,
+		ActivityURL:  activityURL,
+		PortalURL:    m.frontendURL(),
+		SupportEmail: m.supportEmail(),
+	})
+	if err != nil {
+		log.Printf("[mailer] failed to render berita acara rejected email template: %v", err)
+		return err
+	}
+
+	msg := gomail.NewMessage()
+	msg.SetHeader("From", m.cfg.MailFrom)
+	msg.SetHeader("To", to)
+	msg.SetHeader("Subject", fmt.Sprintf("Berita Acara Perlu Revisi (%s)", period))
+	m.setMessageContent(msg, htmlBody, textBody)
+	return m.send(msg)
+}

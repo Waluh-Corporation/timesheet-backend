@@ -20,6 +20,7 @@ type UserRepository interface {
 	Create(ctx context.Context, user *models.User) error
 	Update(ctx context.Context, user *models.User) error
 	UpdatePassword(ctx context.Context, id uint, passwordHash string, updatedAt time.Time) error
+	UpdateSignatureFileKey(ctx context.Context, id uint, fileKey string) error
 	SoftDelete(ctx context.Context, id uint) error
 	Anonymize(ctx context.Context, id uint) error
 	ListUsers(ctx context.Context, isActive *bool) ([]models.User, error)

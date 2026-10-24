@@ -294,6 +294,10 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 	// Public VAPID key (needed before the user is subscribed).
 	api.GET("/push/vapid-public-key", s.GetVAPIDKey)
 
+	// Public Document Verification endpoint (Tabler HTML / JSON API)
+	r.GET("/verify/doc/:token", s.VerifyDocument)
+	api.GET("/verify/doc/:token", s.VerifyDocument)
+
 	// Public magic download token endpoint (quota-enforced, 302 redirect to temporary S3 URL, supports HEAD for link verifiers)
 	if rateLimitEnabled {
 		api.Match([]string{http.MethodGet, http.MethodHead}, "/timesheet/downloads/:token", middleware.RateLimitMiddleware(authLimiter), s.DownloadTimesheetByToken)
@@ -321,6 +325,23 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.GET("/passkeys", s.ListPasskeys)
 		authed.PATCH("/passkeys/:id", s.UpdatePasskey)
 		authed.DELETE("/passkeys/:id", s.DeletePasskey)
+
+		// Profile Signature Management
+		authed.POST("/user/signature", s.UploadSignature)
+		authed.GET("/user/signature", s.GetSignature)
+		authed.DELETE("/user/signature", s.DeleteSignature)
+
+		// Timesheet Signing Lifecycle
+		authed.POST("/timesheets/sign", s.SignTimesheet)
+		authed.POST("/timesheets/revoke", s.RevokeTimesheet)
+		authed.GET("/timesheets/status", s.GetTimesheetSubmissionStatus)
+
+		// Berita Acara Multi-Party Signing Lifecycle
+		authed.POST("/berita-acara/submit", s.SubmitBeritaAcara)
+		authed.GET("/berita-acara/status", s.GetBeritaAcaraSubmissionStatus)
+		authed.GET("/berita-acara/witness-requests", s.ListPendingWitnessRequests)
+		authed.POST("/berita-acara/:id/witness-action", s.WitnessAction)
+		authed.POST("/berita-acara/:id/revoke", s.RevokeBeritaAcara)
 
 		// Daily activity entry + list + detail + generation.
 		authed.POST("/activities", s.UpsertDailyActivity)

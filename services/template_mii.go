@@ -123,6 +123,8 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		TLDateCell:   "D47",
 		DHDateCell:   "G47",
 		DatePrefix:   "DATE : ",
+		UserBoxCell:  "A43",
+		QRCell:       "L43",
 	})
 	return WriteWorkbookToBuffer(f, "mii")
 }

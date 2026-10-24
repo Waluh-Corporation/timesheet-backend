@@ -16,6 +16,7 @@ var (
 	ErrEmailConflict    = errors.New("email already exists")
 	ErrInternal         = errors.New("internal server error")
 	ErrAccountDisabled  = errors.New("account is disabled")
+	ErrLockedPeriod     = errors.New("period is locked")
 )
 
 // UserError wraps an underlying sentinel error with a clean message suitable for clients and front-ends.
@@ -54,7 +55,7 @@ func MapErrorToHTTPStatus(err error) int {
 		return http.StatusForbidden
 	case errors.Is(err, ErrInvalidInput):
 		return http.StatusBadRequest
-	case errors.Is(err, ErrConflict), errors.Is(err, ErrUsernameConflict), errors.Is(err, ErrEmailConflict):
+	case errors.Is(err, ErrConflict), errors.Is(err, ErrUsernameConflict), errors.Is(err, ErrEmailConflict), errors.Is(err, ErrLockedPeriod):
 		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError

@@ -3,6 +3,7 @@ package services_test
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/xml"
 	"io"
 	"strings"
 	"testing"
@@ -267,4 +268,122 @@ func TestGenerateBeritaAcaraDocx_AutoDayComputationAndEmptyDate(t *testing.T) {
 	assert.Contains(t, docXML, "Rabu")
 	assert.Contains(t, docXML, "ManualDay")
 	assert.Contains(t, docXML, "04/11/2026")
+}
+
+func TestGenerateBeritaAcaraDocx_SignedWithSignaturesAndQR(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	require.NoError(t, err)
+
+	date := time.Date(2026, 11, 10, 0, 0, 0, 0, loc)
+
+	empSig := []byte("emp-signature-png-data")
+	witSig := []byte("wit-signature-png-data")
+	qrPng := []byte("qr-png-data")
+
+	payload := services.BeritaAcaraPayload{
+		EmployeeName: "Budi Santoso",
+		NPP:          "BNI-98765",
+		Department:   "Wholesale Channel and Service Delivery",
+		GroupName:    "SDD Development",
+		WitnessName:  "Citra Lestari",
+		TeamLeadName: "Agus Pratama",
+		Items: []services.BeritaAcaraItem{
+			{
+				Date:      date,
+				Day:       "Selasa",
+				StartTime: "08:00",
+				EndTime:   "17:00",
+				Notes:     "Signed Berita Acara Incident",
+			},
+		},
+		EmployeeSignatureBytes: empSig,
+		WitnessSignatureBytes:  witSig,
+		QRCodeBytes:            qrPng,
+		IsSigned:               true,
+	}
+
+	docxBytes, err := services.GenerateBeritaAcaraDocx(payload)
+	require.NoError(t, err)
+	require.NotEmpty(t, docxBytes)
+
+	zipReader, err := zip.NewReader(bytes.NewReader(docxBytes), int64(len(docxBytes)))
+	require.NoError(t, err)
+
+	var docXML, contentTypesXML, relsXML, footer1XML, footerRelsXML string
+	mediaFound := make(map[string][]byte)
+
+	for _, f := range zipReader.File {
+		rc, err := f.Open()
+		require.NoError(t, err)
+		b, err := io.ReadAll(rc)
+		require.NoError(t, err)
+		_ = rc.Close()
+
+		switch f.Name {
+		case "word/document.xml":
+			docXML = string(b)
+		case "[Content_Types].xml":
+			contentTypesXML = string(b)
+		case "word/_rels/document.xml.rels":
+			relsXML = string(b)
+		case "word/footer1.xml":
+			footer1XML = string(b)
+		case "word/_rels/footer1.xml.rels":
+			footerRelsXML = string(b)
+		case "word/media/wit_sig.png", "word/media/emp_sig.png", "word/media/doc_qr.png":
+			mediaFound[f.Name] = b
+		}
+	}
+
+	// Verify content types has png and footer1.xml
+	assert.Contains(t, contentTypesXML, `Extension="png"`)
+	assert.Contains(t, contentTypesXML, `/word/footer1.xml`)
+
+	// Verify document relationships and footer
+	assert.Contains(t, relsXML, "rIdWitSig")
+	assert.Contains(t, relsXML, "rIdEmpSig")
+	assert.Contains(t, relsXML, "rIdFooter1")
+	assert.Contains(t, footerRelsXML, "rIdDocQR")
+	assert.Contains(t, footerRelsXML, "media/doc_qr.png")
+
+	// Verify media contents
+	assert.Equal(t, witSig, mediaFound["word/media/wit_sig.png"])
+	assert.Equal(t, empSig, mediaFound["word/media/emp_sig.png"])
+	assert.Equal(t, qrPng, mediaFound["word/media/doc_qr.png"])
+
+	// Verify document.xml has floating drawings and footer reference
+	assert.Contains(t, docXML, "rIdWitSig")
+	assert.Contains(t, docXML, "rIdEmpSig")
+	assert.Contains(t, docXML, "<wp:anchor")
+	assert.Contains(t, docXML, `behindDoc="0"`)
+	assert.Contains(t, docXML, `<wp:wrapNone/>`)
+	assert.Contains(t, docXML, `<w:footerReference w:type="default" r:id="rIdFooter1"/>`)
+
+	// Verify footer1.xml contains right-aligned QR drawing
+	require.NotEmpty(t, footer1XML)
+	assert.Contains(t, footer1XML, "rIdDocQR")
+	assert.Contains(t, footer1XML, `<w:jc w:val="right"/>`)
+
+	// Validate valid XML structure and guarantee no nested <w:p> elements exist
+	decoder := xml.NewDecoder(strings.NewReader(docXML))
+	pDepth := 0
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err, "document.xml must be valid XML")
+		switch se := token.(type) {
+		case xml.StartElement:
+			if se.Name.Local == "p" {
+				pDepth++
+				assert.Equal(t, 1, pDepth, "nested <w:p> element is forbidden in WordprocessingML")
+			}
+		case xml.EndElement:
+			if se.Name.Local == "p" {
+				pDepth--
+			}
+		}
+	}
+	assert.Equal(t, 0, pDepth, "all <w:p> elements must be properly closed")
 }
