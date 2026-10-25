@@ -31,7 +31,7 @@ type WorkerServer struct {
 	mux         *asynq.ServeMux
 	cfg         *config.Config
 	jobRepo     repository.JobRepository
-	userRepo    repository.UserRepository
+	userRepo    repository.UserAccountRepository
 	tsSvc       service.TimesheetService
 	storage     storage.StorageService
 	mailer      *mailer.Mailer
@@ -44,7 +44,7 @@ type WorkerServer struct {
 func NewWorkerServer(
 	cfg *config.Config,
 	jobRepo repository.JobRepository,
-	userRepo repository.UserRepository,
+	userRepo repository.UserAccountRepository,
 	tsSvc service.TimesheetService,
 	storage storage.StorageService,
 	m *mailer.Mailer,

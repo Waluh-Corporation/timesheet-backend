@@ -16,7 +16,7 @@ import (
 )
 
 type mockUserRepoForAuth struct {
-	repository.UserRepository
+	repository.UserAccountRepository
 	user          *models.User
 	findErr       error
 	updatePassErr error
@@ -677,7 +677,7 @@ func TestAuthService_Accessors(t *testing.T) {
 
 	type repoChecker interface {
 		GetTokenRepo() repository.TokenRepository
-		GetUserRepo() repository.UserRepository
+		GetUserRepo() repository.UserAccountRepository
 		GetAuditRepo() repository.AuditRepository
 		GetJWTService() *auth.Service
 		GetHasher() auth.PasswordHasher

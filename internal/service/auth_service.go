@@ -60,7 +60,7 @@ type AuthService interface {
 }
 
 type authService struct {
-	userRepo        repository.UserRepository
+	userRepo        repository.UserAccountRepository
 	tokenRepo       repository.TokenRepository
 	jwtSvc          *auth.Service
 	auditRepo       repository.AuditRepository
@@ -70,7 +70,7 @@ type authService struct {
 
 // NewAuthService constructs an AuthService implementation.
 func NewAuthService(
-	userRepo repository.UserRepository,
+	userRepo repository.UserAccountRepository,
 	tokenRepo repository.TokenRepository,
 	jwtSvc *auth.Service,
 	auditRepo repository.AuditRepository,
@@ -96,8 +96,8 @@ func (s *authService) GetTokenRepo() repository.TokenRepository {
 	return s.tokenRepo
 }
 
-// GetUserRepo returns the underlying UserRepository.
-func (s *authService) GetUserRepo() repository.UserRepository {
+// GetUserRepo returns the underlying UserAccountRepository.
+func (s *authService) GetUserRepo() repository.UserAccountRepository {
 	return s.userRepo
 }
 

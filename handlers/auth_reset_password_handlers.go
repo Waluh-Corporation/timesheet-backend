@@ -47,7 +47,7 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	userRepo := s.getUserRepository()
+	userRepo := s.getUserAccountRepository()
 	tokenRepo := s.getTokenRepository()
 	if userRepo != nil && tokenRepo != nil {
 		if user, err := userRepo.FindByEmail(c.Request.Context(), normEmail); err == nil && user != nil && user.IsActive {
@@ -139,7 +139,7 @@ func (s *Server) VerifyResetPasswordToken(c *gin.Context) {
 	}
 
 	tokenRepo := s.getTokenRepository()
-	userRepo := s.getUserRepository()
+	userRepo := s.getUserAccountRepository()
 	if tokenRepo == nil || userRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
@@ -212,7 +212,7 @@ func (s *Server) ResetPassword(c *gin.Context) {
 	}
 
 	tokenRepo := s.getTokenRepository()
-	userRepo := s.getUserRepository()
+	userRepo := s.getUserAccountRepository()
 	if tokenRepo == nil || userRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return

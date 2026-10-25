@@ -10,16 +10,19 @@ import (
 	"timesheet-backend/auth"
 	"timesheet-backend/dto/request"
 	"timesheet-backend/internal/domain"
+	"timesheet-backend/internal/repository"
 	"timesheet-backend/models"
 )
 
 type mockUserRepo struct {
-	users          map[uint]*models.User
-	updatedPass    map[uint]string
-	updatedAtTimes map[uint]time.Time
-	profileChanges map[uint]*models.ProfileChangeRequest
-	createErr      error
-	updatePassErr  error
+	repository.PasskeyRepository
+	users            map[uint]*models.User
+	updatedPass      map[uint]string
+	updatedAtTimes   map[uint]time.Time
+	profileChanges   map[uint]*models.ProfileChangeRequest
+	createErr        error
+	updatePassErr    error
+	updateProfileErr error
 }
 
 func newMockUserRepo() *mockUserRepo {
@@ -87,28 +90,8 @@ func (m *mockUserRepo) FindByIDWithDetails(ctx context.Context, id uint) (*model
 	return m.FindByID(ctx, id)
 }
 
-func (m *mockUserRepo) FindByIDWithCredentials(ctx context.Context, id uint) (*models.User, error) {
-	return m.FindByID(ctx, id)
-}
-
-func (m *mockUserRepo) FindByUsernameOrEmailWithCredentials(ctx context.Context, identifier string) (*models.User, error) {
-	return m.FindByUsernameOrEmail(ctx, identifier)
-}
-
 func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*models.User, error) {
 	return m.FindByUsernameOrEmail(ctx, email)
-}
-
-func (m *mockUserRepo) CreatePasskeyCredential(ctx context.Context, cred *models.WebAuthnCredential) error {
-	return nil
-}
-
-func (m *mockUserRepo) UpdatePasskeySignCount(ctx context.Context, credID []byte, signCount uint32, backupState bool) error {
-	return nil
-}
-
-func (m *mockUserRepo) ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error) {
-	return nil, nil
 }
 
 func (m *mockUserRepo) FindByEmailExcludingUser(ctx context.Context, email string, excludeUserID uint) (*models.User, error) {
@@ -177,21 +160,16 @@ func (m *mockUserRepo) FindProfileChangeByID(ctx context.Context, id uint) (*mod
 }
 
 func (m *mockUserRepo) UpdateProfileChange(ctx context.Context, change *models.ProfileChangeRequest) error {
+	if m.updateProfileErr != nil {
+		return m.updateProfileErr
+	}
 	m.profileChanges[change.ID] = change
 	return nil
 }
 
-func (m *mockUserRepo) DeletePasskey(ctx context.Context, id uint, userID *uint) (bool, error) {
-	return true, nil
-}
-
-func (m *mockUserRepo) UpdatePasskeyName(ctx context.Context, id uint, userID *uint, name string) (bool, error) {
-	return true, nil
-}
-
 func TestUserService_ApplyApprovedProfileChange(t *testing.T) {
 	repo := newMockUserRepo()
-	svc := NewUserService(repo, auth.DefaultHasher, nil)
+	svc := NewUserService(repo, repo, auth.DefaultHasher, nil, nil)
 
 	user := &models.User{
 		ID:         10,
@@ -228,7 +206,7 @@ func TestUserService_ApplyApprovedProfileChange(t *testing.T) {
 
 func TestUserService_ApplyApprovedProfileChange_WithEmail(t *testing.T) {
 	repo := newMockUserRepo()
-	svc := NewUserService(repo, auth.DefaultHasher, nil)
+	svc := NewUserService(repo, repo, auth.DefaultHasher, nil, nil)
 
 	user := &models.User{
 		ID:       10,
@@ -258,7 +236,7 @@ func TestUserService_ApplyApprovedProfileChange_WithEmail(t *testing.T) {
 
 func TestUserService_ApplyApprovedProfileChange_EmailConflict(t *testing.T) {
 	repo := newMockUserRepo()
-	svc := NewUserService(repo, auth.DefaultHasher, nil)
+	svc := NewUserService(repo, repo, auth.DefaultHasher, nil, nil)
 
 	user1 := &models.User{
 		ID:       10,
@@ -292,7 +270,7 @@ func TestUserService_ApplyApprovedProfileChange_EmailConflict(t *testing.T) {
 
 func TestUserService_CreateUserByAdmin(t *testing.T) {
 	repo := newMockUserRepo()
-	svc := NewUserService(repo, auth.DefaultHasher, nil)
+	svc := NewUserService(repo, repo, auth.DefaultHasher, nil, nil)
 
 	user := &models.User{
 		Username: "newadminuser",
@@ -338,7 +316,7 @@ func TestUserService_CreateUserByAdmin(t *testing.T) {
 
 func TestUserService_ChangePassword(t *testing.T) {
 	repo := newMockUserRepo()
-	svc := NewUserService(repo, auth.DefaultHasher, nil)
+	svc := NewUserService(repo, repo, auth.DefaultHasher, nil, nil)
 
 	oldPass := "InitialPass123!@#"
 	oldHash, _ := auth.HashPassword(oldPass)
@@ -428,7 +406,7 @@ func TestUserService_ChangePassword(t *testing.T) {
 func TestUserService_CreateUserByAdmin_RepoError(t *testing.T) {
 	repo := newMockUserRepo()
 	repo.createErr = errors.New("failed to persist user")
-	svc := NewUserService(repo, nil, nil) // tests nil hasher fallback to DefaultHasher
+	svc := NewUserService(repo, repo, nil, nil, nil) // tests nil hasher fallback to DefaultHasher
 
 	user := &models.User{
 		Username: "dbfailuser",
@@ -603,7 +581,7 @@ func (m *mockMasterRepoForUser) UpsertHolidays(ctx context.Context, holidays []m
 
 func TestUserService_ListUsers(t *testing.T) {
 	repo := newMockUserRepo()
-	svc := NewUserService(repo, nil, nil)
+	svc := NewUserService(repo, repo, nil, nil, nil)
 	ctx := context.Background()
 
 	u1 := &models.User{ID: 1, Username: "user1", IsActive: true}
@@ -628,7 +606,7 @@ func TestUserService_ListUsers(t *testing.T) {
 func TestUserService_AdminCreateUser(t *testing.T) {
 	repo := newMockUserRepo()
 	master := newMockMasterRepoForUser()
-	svc := NewUserService(repo, nil, nil, master)
+	svc := NewUserService(repo, repo, nil, nil, master)
 	ctx := context.Background()
 
 	// Seed master data
@@ -758,7 +736,7 @@ func TestUserService_AdminCreateUser(t *testing.T) {
 func TestUserService_AdminUpdateUser(t *testing.T) {
 	repo := newMockUserRepo()
 	master := newMockMasterRepoForUser()
-	svc := NewUserService(repo, nil, nil, master)
+	svc := NewUserService(repo, repo, nil, nil, master)
 	ctx := context.Background()
 
 	adminUser := &models.User{
@@ -871,7 +849,7 @@ func TestUserService_AdminUpdateUser(t *testing.T) {
 
 func TestUserService_AdminDeleteUser(t *testing.T) {
 	repo := newMockUserRepo()
-	svc := NewUserService(repo, nil, nil)
+	svc := NewUserService(repo, repo, nil, nil, nil)
 	ctx := context.Background()
 
 	u := &models.User{ID: 10, Username: "to_delete", IsActive: true}
@@ -904,7 +882,7 @@ func TestUserService_AdminDeleteUser(t *testing.T) {
 
 func TestUserService_ProfileChanges_Workflow(t *testing.T) {
 	repo := newMockUserRepo()
-	svc := NewUserService(repo, nil, nil)
+	svc := NewUserService(repo, repo, nil, nil, nil)
 	ctx := context.Background()
 
 	user1 := &models.User{ID: 1, Username: "user1", Email: "user1@example.com", Name: "User One", IsActive: true}
@@ -973,7 +951,7 @@ func TestUserService_ProfileChanges_Workflow(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ReviewProfileChange reject failed: %v", err)
 		}
-		if repo.profileChanges[2].Status != "rejected" {
+		if repo.profileChanges[2].Status != models.ProfileRejected {
 			t.Errorf("expected rejected status, got %s", repo.profileChanges[2].Status)
 		}
 
@@ -1003,7 +981,7 @@ func TestUserService_AdminAnonymizeUser(t *testing.T) {
 	repo := newMockUserRepo()
 	repo.users[1] = &models.User{ID: 1, Name: "Admin User", Role: models.RoleAdmin, IsActive: true}
 	repo.users[2] = &models.User{ID: 2, Name: "Target User", Role: models.RoleUser, IsActive: true}
-	svc := NewUserService(repo, nil, nil)
+	svc := NewUserService(repo, repo, nil, nil, nil)
 
 	// 1. Cannot anonymize self -> ErrForbidden
 	err := svc.AdminAnonymizeUser(ctx, 1, 1)
@@ -1049,7 +1027,7 @@ func TestUserService_AnonymizedAccountGuards(t *testing.T) {
 		IsActive:     false,
 		IsAnonymized: true,
 	}
-	svc := NewUserService(repo, nil, nil)
+	svc := NewUserService(repo, repo, nil, nil, nil)
 
 	t.Run("AdminUpdateUser rejects editing anonymized user", func(t *testing.T) {
 		newName := "Should Not Update"
@@ -1092,7 +1070,7 @@ func TestUserService_ReviewProfileChange_WithRelationalIDs(t *testing.T) {
 	master.companies[compID] = &models.Company{ID: compID, Name: "Acme Corp", IsActive: true}
 
 	repo.users[1] = &models.User{ID: 1, Name: "Standard User", Role: models.RoleUser, IsActive: true}
-	svc := NewUserService(repo, nil, nil, master)
+	svc := NewUserService(repo, repo, nil, nil, master)
 
 	divID := uint(1)
 	siteID := uint(2)
@@ -1128,4 +1106,266 @@ func TestUserService_ReviewProfileChange_WithRelationalIDs(t *testing.T) {
 
 func uintPtr(u uint) *uint {
 	return &u
+}
+
+type mockTransactor struct {
+	called     bool
+	committed  bool
+	rolledBack bool
+	repo       *mockUserRepo
+}
+
+func newMockTransactor(repo *mockUserRepo) *mockTransactor {
+	return &mockTransactor{repo: repo}
+}
+
+func (m *mockTransactor) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	m.called = true
+	// Snapshot user state to verify rollback
+	snapshot := make(map[uint]models.User, len(m.repo.users))
+	for k, v := range m.repo.users {
+		snapshot[k] = *v
+	}
+
+	err := fn(ctx)
+	if err != nil {
+		m.rolledBack = true
+		for k, v := range snapshot {
+			copied := v
+			m.repo.users[k] = &copied
+		}
+		return err
+	}
+	m.committed = true
+	return nil
+}
+
+func TestUserService_ReviewProfileChange_AtomicRollback(t *testing.T) {
+	ctx := context.Background()
+	repo := newMockUserRepo()
+	tx := newMockTransactor(repo)
+	svc := NewUserService(repo, repo, nil, nil, nil, tx)
+
+	repo.users[1] = &models.User{
+		ID:       1,
+		Username: "johndoe",
+		Email:    "john@example.com",
+		Name:     "John Original",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+
+	req := &request.ProfileChangeRequestDTO{
+		Name: "John Modified",
+	}
+	if err := svc.SubmitProfileChange(ctx, 1, req); err != nil {
+		t.Fatalf("SubmitProfileChange failed: %v", err)
+	}
+
+	// Simulate Step 2 failure: UpdateProfileChange returns error
+	repo.updateProfileErr = errors.New("simulated db failure on profile change update")
+
+	err := svc.ReviewProfileChange(ctx, 1, 99, "approve")
+	if err == nil {
+		t.Fatalf("expected error from ReviewProfileChange when UpdateProfileChange fails, got nil")
+	}
+
+	if !tx.called {
+		t.Errorf("expected transactor.WithinTransaction to be called")
+	}
+	if !tx.rolledBack {
+		t.Errorf("expected transaction to be rolled back")
+	}
+	if tx.committed {
+		t.Errorf("expected transaction NOT to be committed")
+	}
+	if repo.users[1].Name != "John Original" {
+		t.Errorf("expected user name to remain 'John Original' after rollback, got %s", repo.users[1].Name)
+	}
+}
+
+func TestUserService_ReviewProfileChange_AtomicCommit(t *testing.T) {
+	ctx := context.Background()
+	repo := newMockUserRepo()
+	tx := newMockTransactor(repo)
+	svc := NewUserService(repo, repo, nil, nil, nil, tx)
+
+	repo.users[1] = &models.User{
+		ID:       1,
+		Username: "johndoe",
+		Email:    "john@example.com",
+		Name:     "John Original",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+
+	req := &request.ProfileChangeRequestDTO{
+		Name: "John New Name",
+	}
+	if err := svc.SubmitProfileChange(ctx, 1, req); err != nil {
+		t.Fatalf("SubmitProfileChange failed: %v", err)
+	}
+
+	err := svc.ReviewProfileChange(ctx, 1, 99, "approve")
+	if err != nil {
+		t.Fatalf("ReviewProfileChange failed: %v", err)
+	}
+
+	if !tx.called {
+		t.Errorf("expected transactor.WithinTransaction to be called")
+	}
+	if !tx.committed {
+		t.Errorf("expected transaction to be committed")
+	}
+	if tx.rolledBack {
+		t.Errorf("expected transaction NOT to be rolled back")
+	}
+	if repo.users[1].Name != "John New Name" {
+		t.Errorf("expected user name to be 'John New Name', got %s", repo.users[1].Name)
+	}
+	if repo.profileChanges[1].Status != models.ProfileApproved {
+		t.Errorf("expected status to be approved, got %s", repo.profileChanges[1].Status)
+	}
+}
+
+type mockTransactorUserRepo struct {
+	*mockUserRepo
+	tx *mockTransactor
+}
+
+func (m *mockTransactorUserRepo) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	return m.tx.WithinTransaction(ctx, fn)
+}
+
+func TestUserService_TransactorAutoInference(t *testing.T) {
+	ctx := context.Background()
+	baseRepo := newMockUserRepo()
+	tx := newMockTransactor(baseRepo)
+	repo := &mockTransactorUserRepo{
+		mockUserRepo: baseRepo,
+		tx:           tx,
+	}
+
+	t.Run("NewUserService infers transactor when repo satisfies domain.Transactor", func(t *testing.T) {
+		svc := NewUserService(repo, repo, nil, nil, nil)
+		repo.users[1] = &models.User{
+			ID:       1,
+			Username: "user_auto_infer",
+			Email:    "infer@example.com",
+			Name:     "Initial Name",
+			Role:     models.RoleUser,
+			IsActive: true,
+		}
+		_ = svc.SubmitProfileChange(ctx, 1, &request.ProfileChangeRequestDTO{Name: "Inferred Name"})
+
+		if err := svc.ReviewProfileChange(ctx, 1, 99, "approve"); err != nil {
+			t.Fatalf("ReviewProfileChange failed: %v", err)
+		}
+		if !tx.called {
+			t.Errorf("expected transactor to be automatically inferred and executed")
+		}
+	})
+
+	t.Run("NewUserServiceFromUserRepo infers transactor", func(t *testing.T) {
+		tx.called = false
+		svc := NewUserServiceFromUserRepo(repo, nil, nil)
+		repo.users[2] = &models.User{
+			ID:       2,
+			Username: "user_from_repo",
+			Email:    "fromrepo@example.com",
+			Name:     "Initial Name 2",
+			Role:     models.RoleUser,
+			IsActive: true,
+		}
+		_ = svc.SubmitProfileChange(ctx, 2, &request.ProfileChangeRequestDTO{Name: "Inferred Name 2"})
+
+		if err := svc.ReviewProfileChange(ctx, 2, 99, "approve"); err != nil {
+			t.Fatalf("ReviewProfileChange failed: %v", err)
+		}
+		if !tx.called {
+			t.Errorf("expected transactor to be automatically inferred in NewUserServiceFromUserRepo")
+		}
+	})
+}
+
+func TestUserService_ReviewProfileChange_ConcurrentConflict(t *testing.T) {
+	ctx := context.Background()
+	repo := newMockUserRepo()
+	tx := newMockTransactor(repo)
+	svc := NewUserService(repo, repo, nil, nil, nil, tx)
+
+	repo.users[1] = &models.User{
+		ID:       1,
+		Username: "concurrent_user",
+		Email:    "concurrent@example.com",
+		Name:     "Original Name",
+		Role:     models.RoleUser,
+		IsActive: true,
+	}
+
+	req := &request.ProfileChangeRequestDTO{
+		Name: "New Name",
+	}
+	if err := svc.SubmitProfileChange(ctx, 1, req); err != nil {
+		t.Fatalf("SubmitProfileChange failed: %v", err)
+	}
+
+	// First admin review approves it
+	if err := svc.ReviewProfileChange(ctx, 1, 10, "approve"); err != nil {
+		t.Fatalf("First ReviewProfileChange failed: %v", err)
+	}
+
+	// Concurrent / subsequent review on already reviewed request returns ErrConflict
+	err := svc.ReviewProfileChange(ctx, 1, 20, "reject")
+	if !errors.Is(err, domain.ErrConflict) {
+		t.Fatalf("expected ErrConflict on concurrent/second review, got %v", err)
+	}
+}
+
+func TestUserService_ReviewProfileChange_PartialUpdatePreservesFields(t *testing.T) {
+	ctx := context.Background()
+	repo := newMockUserRepo()
+	svc := NewUserService(repo, repo, nil, nil, nil)
+
+	repo.users[1] = &models.User{
+		ID:         1,
+		Username:   "user_partial",
+		Email:      "partial@example.com",
+		Name:       "Preserved Name",
+		BniID:      "BNI12345",
+		EmployeeID: "EMP-999",
+		Division:   "IT Division",
+		Site:       "Old Site",
+		Role:       models.RoleUser,
+		IsActive:   true,
+	}
+
+	// Change request only modifies Site, omitting Name, BniID, EmployeeID, Division
+	req := &request.ProfileChangeRequestDTO{
+		Site: "New Site",
+	}
+	if err := svc.SubmitProfileChange(ctx, 1, req); err != nil {
+		t.Fatalf("SubmitProfileChange failed: %v", err)
+	}
+
+	if err := svc.ReviewProfileChange(ctx, 1, 99, "approve"); err != nil {
+		t.Fatalf("ReviewProfileChange failed: %v", err)
+	}
+
+	u := repo.users[1]
+	if u.Site != "New Site" {
+		t.Errorf("expected Site to be updated to 'New Site', got %q", u.Site)
+	}
+	if u.Name != "Preserved Name" {
+		t.Errorf("expected Name to be preserved as 'Preserved Name', got %q", u.Name)
+	}
+	if u.BniID != "BNI12345" {
+		t.Errorf("expected BniID to be preserved as 'BNI12345', got %q", u.BniID)
+	}
+	if u.EmployeeID != "EMP-999" {
+		t.Errorf("expected EmployeeID to be preserved as 'EMP-999', got %q", u.EmployeeID)
+	}
+	if u.Division != "IT Division" {
+		t.Errorf("expected Division to be preserved as 'IT Division', got %q", u.Division)
+	}
 }

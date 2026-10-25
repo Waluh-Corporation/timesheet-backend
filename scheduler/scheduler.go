@@ -233,7 +233,7 @@ func (s *Scheduler) syncHolidays() {
 		log.Printf("[scheduler] failed to sync holidays for %d: %v", year, err)
 		return
 	}
-	masterRepo := repository.NewMasterRepository(s.db)
+	holidayRepo := repository.NewHolidayRepository(s.db)
 	var holidays []models.Holiday
 	for _, h := range yearlyHolidays {
 		if t, parseErr := time.Parse("2006-01-02", h.Date); parseErr == nil {
@@ -246,7 +246,7 @@ func (s *Scheduler) syncHolidays() {
 			})
 		}
 	}
-	if err := masterRepo.UpsertHolidays(context.Background(), holidays); err != nil {
+	if err := holidayRepo.UpsertHolidays(context.Background(), holidays); err != nil {
 		log.Printf("[scheduler] failed to upsert holidays: %v", err)
 	} else {
 		log.Printf("[scheduler] synchronized %d holidays for year %d", len(holidays), year)

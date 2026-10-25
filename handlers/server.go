@@ -39,6 +39,7 @@ type Server struct {
 	WebAuthn          *webauthn.WebAuthn
 	Hasher            auth.PasswordHasher
 	UserRepo          repository.UserRepository
+	PasskeyRepo       repository.PasskeyRepository
 	UserSvc           service.UserService
 	AuthSvc           service.AuthService
 	TokenRepo         repository.TokenRepository
@@ -120,7 +121,8 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		userRepo = repository.NewUserRepository(db)
 		tokenRepo = repository.NewTokenRepository(db)
 		masterRepo = repository.NewMasterRepository(db)
-		userSvc = service.NewUserService(userRepo, auth.DefaultHasher, m, masterRepo)
+		transactor := repository.NewGormTransactor(db)
+		userSvc = service.NewUserService(userRepo, userRepo, auth.DefaultHasher, m, masterRepo, transactor)
 		activityRepo = repository.NewActivityRepository(db)
 		submissionRepo = repository.NewSubmissionRepository(db)
 		activitySvc = service.NewActivityService(activityRepo, submissionRepo)
@@ -456,7 +458,20 @@ func (s *Server) getRedisClient() *redis.Client {
 	return s.RedisClient
 }
 
-func (s *Server) getUserRepository() repository.UserRepository {
+func (s *Server) getUserAccountRepository() repository.UserAccountRepository {
+	if s == nil {
+		return nil
+	}
+	return s.UserRepo
+}
+
+func (s *Server) getPasskeyRepository() repository.PasskeyRepository {
+	if s == nil {
+		return nil
+	}
+	if s.PasskeyRepo != nil {
+		return s.PasskeyRepo
+	}
 	return s.UserRepo
 }
 
@@ -492,7 +507,7 @@ func (s *Server) getSetupService() service.SetupService {
 
 type authServiceRepoChecker interface {
 	GetTokenRepo() repository.TokenRepository
-	GetUserRepo() repository.UserRepository
+	GetUserRepo() repository.UserAccountRepository
 	GetAuditRepo() repository.AuditRepository
 	GetJWTService() *auth.Service
 	GetHasher() auth.PasswordHasher
@@ -513,7 +528,7 @@ func (s *Server) getAuthService() service.AuthService {
 				if s.Cfg != nil {
 					refreshTTL = s.Cfg.RefreshTokenTTL
 				}
-				userRepo := s.UserRepo
+				var userRepo repository.UserAccountRepository = s.UserRepo
 				if userRepo == nil {
 					userRepo = checker.GetUserRepo()
 				}
@@ -583,9 +598,11 @@ func (s *Server) recordAuditLog(ctx context.Context, p AuditLogParams) {
 		actorID = nil
 	}
 	actorUsername := ""
-	if actorID != nil && s != nil && s.UserRepo != nil {
-		if u, err := s.UserRepo.FindByID(ctx, *actorID); err == nil && u != nil {
-			actorUsername = u.Username
+	if actorID != nil && s != nil {
+		if repo := s.getUserAccountRepository(); repo != nil {
+			if u, err := repo.FindByID(ctx, *actorID); err == nil && u != nil {
+				actorUsername = u.Username
+			}
 		}
 	}
 	var detailsBytes datatypes.JSON

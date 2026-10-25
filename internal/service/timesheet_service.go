@@ -26,7 +26,7 @@ type TimesheetService interface {
 }
 
 type timesheetService struct {
-	userRepo     repository.UserRepository
+	userRepo     repository.UserAccountRepository
 	activityRepo repository.ActivityRepository
 	overtimeRepo repository.OvertimeRepository
 	masterRepo   repository.MasterRepository
@@ -39,7 +39,7 @@ type timesheetService struct {
 
 // NewTimesheetService constructs a TimesheetService implementation.
 func NewTimesheetService(
-	userRepo repository.UserRepository,
+	userRepo repository.UserAccountRepository,
 	activityRepo repository.ActivityRepository,
 	overtimeRepo repository.OvertimeRepository,
 	masterRepo repository.MasterRepository,

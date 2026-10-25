@@ -90,7 +90,7 @@ func (s *Server) bindAndValidateGenerateRequest(c *gin.Context) (*request.Genera
 }
 
 func (s *Server) validateUserWithCompany(c *gin.Context, uid uint) (*models.User, bool) {
-	userRepo := s.getUserRepository()
+	userRepo := s.getUserAccountRepository()
 	if userRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "user repository not initialized")
 		return nil, false
@@ -167,7 +167,7 @@ func (s *Server) validateBeritaAcaraSignedBeforeGenerate(c *gin.Context, uid uin
 		witnessName = sub.Witness.Name
 	}
 	if witnessName == "" && sub.WitnessID != 0 {
-		userRepo := s.getUserRepository()
+		userRepo := s.getUserAccountRepository()
 		if userRepo != nil {
 			if wUser, werr := userRepo.FindByID(reqContext(c), sub.WitnessID); werr == nil && wUser != nil {
 				witnessName = wUser.Name

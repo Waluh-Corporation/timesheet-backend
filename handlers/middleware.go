@@ -81,7 +81,7 @@ func (s *Server) isAccountActive(ctx context.Context, userID uint) bool {
 		return true
 	}
 
-	userRepo := s.getUserRepository()
+	userRepo := s.getUserAccountRepository()
 	if userRepo == nil {
 		return true
 	}

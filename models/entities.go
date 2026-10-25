@@ -23,6 +23,7 @@ type ProfileStatus string
 const (
 	ProfileApproved ProfileStatus = "approved"
 	ProfilePending  ProfileStatus = "pending"
+	ProfileRejected ProfileStatus = "rejected"
 )
 
 // User is the core account entity. Registration is strictly admin-driven;

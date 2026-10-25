@@ -245,7 +245,7 @@ func (m *mockStorageSvc) FileExists(ctx context.Context, key string) (bool, erro
 }
 
 type mockUserRepo struct {
-	repository.UserRepository
+	repository.UserAccountRepository
 	users        map[uint]*models.User
 	updateSigErr error
 }

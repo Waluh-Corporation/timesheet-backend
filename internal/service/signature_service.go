@@ -65,7 +65,7 @@ type SignatureService interface {
 }
 
 type signatureService struct {
-	userRepo       repository.UserRepository
+	userRepo       repository.UserAccountRepository
 	activityRepo   repository.ActivityRepository
 	submissionRepo repository.SubmissionRepository
 	storageSvc     storage.StorageService
@@ -77,7 +77,7 @@ type signatureService struct {
 
 // NewSignatureService constructs a SignatureService implementation.
 func NewSignatureService(
-	userRepo repository.UserRepository,
+	userRepo repository.UserAccountRepository,
 	activityRepo repository.ActivityRepository,
 	submissionRepo repository.SubmissionRepository,
 	storageSvc storage.StorageService,

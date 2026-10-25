@@ -187,7 +187,7 @@ func (m *mockTimesheetService) DeleteOvertime(ctx context.Context, id uint, user
 }
 
 type mockUserRepo struct {
-	repository.UserRepository
+	repository.UserAccountRepository
 }
 
 func (m *mockUserRepo) FindByIDWithDetails(ctx context.Context, id uint) (*models.User, error) {
