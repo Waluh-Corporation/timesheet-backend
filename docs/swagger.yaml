@@ -1387,6 +1387,23 @@ definitions:
       user_id:
         type: integer
     type: object
+  response.PushScheduleResponse:
+    properties:
+      cron_expression:
+        type: string
+      hour:
+        type: integer
+      human_readable:
+        type: string
+      is_enabled:
+        type: boolean
+      minute:
+        type: integer
+      next_run:
+        type: string
+      timezone:
+        type: string
+    type: object
   response.RefreshResponse:
     properties:
       refresh_token:
@@ -1970,6 +1987,67 @@ paths:
       summary: Update an existing approver (admin only)
       tags:
       - Master Data
+  /api/v1/admin/audit-logs:
+    get:
+      description: Retrieves paginated audit logs with optional filtering by action,
+        resource type, actor username, and date range.
+      parameters:
+      - description: Filter by action
+        in: query
+        name: action
+        type: string
+      - description: Filter by resource type
+        in: query
+        name: resource_type
+        type: string
+      - description: Filter by actor username
+        in: query
+        name: actor_username
+        type: string
+      - description: Filter by start date (YYYY-MM-DD or RFC3339)
+        in: query
+        name: start_date
+        type: string
+      - description: Filter by end date (YYYY-MM-DD or RFC3339)
+        in: query
+        name: end_date
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size limit (default 50, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PaginatedResponse'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List audit logs (Admin)
+      tags:
+      - Admin
   /api/v1/admin/authenticators:
     get:
       description: Retrieves all known AAGUID authenticators stored in the database
@@ -4010,6 +4088,20 @@ paths:
       summary: List active projects
       tags:
       - Master Data
+  /api/v1/push/schedule:
+    get:
+      description: Returns the dynamic push reminder schedule, including hour, minute,
+        active timezone, next run time, and human-readable description.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.PushScheduleResponse'
+      summary: Get push notification schedule
+      tags:
+      - Push Notification
   /api/v1/push/subscribe:
     post:
       consumes:

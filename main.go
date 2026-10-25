@@ -293,6 +293,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 
 	// Public VAPID key (needed before the user is subscribed).
 	api.GET("/push/vapid-public-key", s.GetVAPIDKey)
+	api.GET("/push/schedule", s.GetPushSchedule)
 
 	// Public Document Verification endpoint (Tabler HTML / JSON API)
 	r.GET("/verify/doc/:token", s.VerifyDocument)
@@ -393,6 +394,7 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		admin.DELETE("/users/:id/passkeys/:pid", s.AdminDeletePasskey)
 		admin.GET("/authenticators", s.AdminListAuthenticators)
 		admin.POST("/authenticators/sync", s.SyncCommunityAuthenticators)
+		admin.GET("/audit-logs", s.ListAuditLogs)
 
 		admin.GET("/profile-changes", s.ListProfileChanges)
 		admin.POST("/profile-changes/:id/review", s.ReviewProfileChange)

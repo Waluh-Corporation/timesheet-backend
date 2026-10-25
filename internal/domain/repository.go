@@ -151,3 +151,18 @@ type SetupRepository interface {
 	GetSystemSetting(ctx context.Context, key string) (string, error)
 	ExecuteSetup(ctx context.Context, adminUser *models.User, companies []models.Company, depts []models.Department, approvers []models.Approver) error
 }
+
+// AuditLogFilter encapsulates criteria for filtering audit trail records.
+type AuditLogFilter struct {
+	Action        string
+	ResourceType  string
+	ActorUsername string
+	StartDate     *time.Time
+	EndDate       *time.Time
+}
+
+// AuditRepository defines persistence operations for audit log entries.
+type AuditRepository interface {
+	Create(ctx context.Context, entry *models.AuditLog) error
+	List(ctx context.Context, filter AuditLogFilter, limit, offset int) ([]models.AuditLog, int64, error)
+}

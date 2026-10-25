@@ -2,11 +2,15 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"timesheet-backend/config"
 	"timesheet-backend/dto/request"
-	_ "timesheet-backend/dto/response"
+	"timesheet-backend/dto/response"
+	"timesheet-backend/scheduler"
 )
 
 // GetVAPIDKey godoc
@@ -23,6 +27,73 @@ func (s *Server) GetVAPIDKey(c *gin.Context) {
 		return
 	}
 	RespondSuccess(c, http.StatusOK, gin.H{"public_key": svc.GetPublicKey()})
+}
+
+// GetPushSchedule godoc
+// @Summary Get push notification schedule
+// @Description Returns the dynamic push reminder schedule, including hour, minute, active timezone, next run time, and human-readable description.
+// @Tags Push Notification
+// @Produce json
+// @Success 200 {object} response.PushScheduleResponse
+// @Router /api/v1/push/schedule [get]
+func (s *Server) GetPushSchedule(c *gin.Context) {
+	tz := ""
+	cronExpr := scheduler.DefaultReminderCron
+
+	if s != nil && s.Cfg != nil {
+		tz = strings.TrimSpace(s.Cfg.Timezone)
+		if trimmedCron := strings.TrimSpace(s.Cfg.ReminderCron); trimmedCron != "" {
+			cronExpr = trimmedCron
+		}
+	}
+
+	if tz == "" {
+		if loc := config.AppLocation(); loc != nil && loc.String() != "" {
+			tz = loc.String()
+		} else {
+			tz = "UTC"
+		}
+	}
+
+	info := scheduler.GetScheduleInfo(tz, cronExpr)
+
+	hour := 17
+	minute := 0
+	parts := strings.Fields(info.CronExpression)
+	if len(parts) >= 2 {
+		if m, err := strconv.Atoi(parts[0]); err == nil {
+			minute = m
+		} else if info.NextRun != nil {
+			minute = info.NextRun.Minute()
+		}
+		if h, err := strconv.Atoi(parts[1]); err == nil {
+			hour = h
+		} else if info.NextRun != nil {
+			hour = info.NextRun.Hour()
+		}
+	} else if info.NextRun != nil {
+		hour = info.NextRun.Hour()
+		minute = info.NextRun.Minute()
+	}
+
+	if hour < 0 || hour > 23 {
+		hour = 17
+	}
+	if minute < 0 || minute > 59 {
+		minute = 0
+	}
+
+	resp := response.PushScheduleResponse{
+		Hour:           hour,
+		Minute:         minute,
+		Timezone:       info.Timezone,
+		NextRun:        info.NextRun,
+		HumanReadable:  info.HumanReadable,
+		CronExpression: info.CronExpression,
+		IsEnabled:      info.IsEnabled,
+	}
+
+	RespondSuccess(c, http.StatusOK, resp)
 }
 
 // Subscribe godoc
