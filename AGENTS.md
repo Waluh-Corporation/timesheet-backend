@@ -73,6 +73,10 @@ git status && git diff     # 5. Cleanliness & Security Check
 
 - **Non-Negotiable**: Never bypass, delete, or comment out failing tests. Diagnose and fix root causes.
 - Accompany new endpoints or handler changes with unit tests (`*_test.go`).
+- **No Pre-Implementation Test Runs**: Do NOT run tests before starting feature implementation or bug fixing. Execute tests strictly during the post-implementation verification phase to avoid slow, redundant test executions.
+- **SonarQube Standards**:
+  - **Quality Profile (`Sonar way comprehensive`)**: The project enforces the **Sonar way comprehensive** profile for Go. All Go code must satisfy this profile: zero code smells, zero vulnerabilities, zero bugs, low cognitive complexity, and clean code hygiene.
+  - **Quality Gate (`Sonar way`)**: New code must pass the **Sonar way** quality gate (0 new bugs, 0 new vulnerabilities, 0 security hotspots, >= 80% test coverage on new code, <= 3% duplication, and Maintainability Rating A).
 
 ---
 
@@ -83,3 +87,5 @@ git status && git diff     # 5. Cleanliness & Security Check
 3. **No Hardcoded Credentials**: Read secrets from environment variables via `config`. Never commit credentials.
 4. **Environment File Guard**: Never edit or commit `.env`. Document new variables in `.env.example`.
 5. **English-Only Messages**: All messages—including commit messages, PR descriptions, code comments, and API response/error messages—MUST strictly be in English.
+6. **No Upfront Testing**: Do NOT execute tests before beginning work or code changes; run tests only once after completing implementation to avoid redundant test cycles.
+7. **SonarQube Compliance**: Strictly adhere to the **Sonar way comprehensive** profile for Go and fulfill the **Sonar way** quality gate on all new or modified code.
