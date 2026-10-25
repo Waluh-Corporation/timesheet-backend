@@ -40,6 +40,7 @@ type Server struct {
 	Hasher            auth.PasswordHasher
 	UserRepo          repository.UserRepository
 	UserSvc           service.UserService
+	AuthSvc           service.AuthService
 	TokenRepo         repository.TokenRepository
 	ActivityRepo      repository.ActivityRepository
 	ActivitySvc       service.ActivityService
@@ -88,6 +89,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 
 	var userRepo repository.UserRepository
 	var userSvc service.UserService
+	var authDomainSvc service.AuthService
 	var tokenRepo repository.TokenRepository
 	var activityRepo repository.ActivityRepository
 	var activitySvc service.ActivityService
@@ -143,6 +145,11 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		setupRepo = repository.NewSetupRepository(db)
 		setupSvc = service.NewSetupService(setupRepo, authSvc)
 		auditRepo = repository.NewAuditRepository(db)
+		var refreshTTL time.Duration
+		if cfg != nil {
+			refreshTTL = cfg.RefreshTokenTTL
+		}
+		authDomainSvc = service.NewAuthService(userRepo, tokenRepo, authSvc, auditRepo, refreshTTL, auth.DefaultHasher)
 
 		_ = database.SyncAuthenticatorAAGUIDs(db)
 	}
@@ -156,6 +163,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		Hasher:            auth.DefaultHasher,
 		UserRepo:          userRepo,
 		UserSvc:           userSvc,
+		AuthSvc:           authDomainSvc,
 		TokenRepo:         tokenRepo,
 		ActivityRepo:      activityRepo,
 		ActivitySvc:       activitySvc,
@@ -480,6 +488,64 @@ func (s *Server) getAuthenticatorService() service.AuthenticatorService {
 
 func (s *Server) getSetupService() service.SetupService {
 	return s.SetupSvc
+}
+
+type authServiceRepoChecker interface {
+	GetTokenRepo() repository.TokenRepository
+	GetUserRepo() repository.UserRepository
+	GetAuditRepo() repository.AuditRepository
+	GetJWTService() *auth.Service
+	GetHasher() auth.PasswordHasher
+}
+
+func (s *Server) getAuthService() service.AuthService {
+	if s == nil {
+		return nil
+	}
+	if s.AuthSvc != nil {
+		if checker, ok := s.AuthSvc.(authServiceRepoChecker); ok {
+			if (s.TokenRepo != nil && s.TokenRepo != checker.GetTokenRepo()) ||
+				(s.UserRepo != nil && s.UserRepo != checker.GetUserRepo()) ||
+				(s.AuditRepo != nil && s.AuditRepo != checker.GetAuditRepo()) ||
+				(s.Auth != nil && s.Auth != checker.GetJWTService()) ||
+				(s.Hasher != nil && s.Hasher != checker.GetHasher()) {
+				var refreshTTL time.Duration
+				if s.Cfg != nil {
+					refreshTTL = s.Cfg.RefreshTokenTTL
+				}
+				userRepo := s.UserRepo
+				if userRepo == nil {
+					userRepo = checker.GetUserRepo()
+				}
+				tokenRepo := s.TokenRepo
+				if tokenRepo == nil {
+					tokenRepo = checker.GetTokenRepo()
+				}
+				auditRepo := s.AuditRepo
+				if auditRepo == nil {
+					auditRepo = checker.GetAuditRepo()
+				}
+				jwtSvc := s.Auth
+				if jwtSvc == nil {
+					jwtSvc = checker.GetJWTService()
+				}
+				hasher := s.Hasher
+				if hasher == nil {
+					hasher = checker.GetHasher()
+				}
+				return service.NewAuthService(userRepo, tokenRepo, jwtSvc, auditRepo, refreshTTL, hasher)
+			}
+		}
+		return s.AuthSvc
+	}
+	if s.UserRepo != nil || s.TokenRepo != nil {
+		var refreshTTL time.Duration
+		if s.Cfg != nil {
+			refreshTTL = s.Cfg.RefreshTokenTTL
+		}
+		return service.NewAuthService(s.UserRepo, s.TokenRepo, s.Auth, s.AuditRepo, refreshTTL, s.Hasher)
+	}
+	return nil
 }
 
 func (s *Server) getAuditRepository() repository.AuditRepository {

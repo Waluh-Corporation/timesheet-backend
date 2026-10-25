@@ -2,19 +2,20 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 
-	"timesheet-backend/auth"
 	"timesheet-backend/dto/request"
 	"timesheet-backend/dto/response"
-	"timesheet-backend/models"
+	"timesheet-backend/internal/domain"
+	"timesheet-backend/internal/service"
 )
 
 const (
@@ -43,74 +44,31 @@ func (s *Server) Login(c *gin.Context) {
 		return
 	}
 
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
+	authSvc := s.getAuthService()
+	if authSvc == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
 
-	user, err := userRepo.FindByUsernameOrEmail(c.Request.Context(), req.Identifier)
-	if err != nil || user == nil {
-		slog.Warn("login failed: user not found", "identifier", req.Identifier, "ip", c.ClientIP())
-		RespondError(c, http.StatusUnauthorized, errInvalidAuth)
-		return
-	}
-	if !user.IsActive {
-		slog.Warn("login failed: account deactivated", "user_id", user.ID, "username", user.Username, "ip", c.ClientIP())
-		RespondError(c, http.StatusForbidden, "account is disabled")
-		return
-	}
-	if user.PasswordHash == "" || !auth.CheckPassword(user.PasswordHash, req.Password) {
-		slog.Warn("login failed: invalid password", "user_id", user.ID, "username", user.Username, "ip", c.ClientIP())
-		RespondError(c, http.StatusUnauthorized, errInvalidAuth)
-		return
-	}
-
-	// Opportunistically upgrade weaker hashes (e.g. from previous Argon2id parameter
-	// configurations) to the current Argon2id parameters now that we have the plaintext in hand.
-	if auth.NeedsRehash(user.PasswordHash) {
-		if newHash, herr := auth.HashPassword(req.Password); herr == nil {
-			_ = userRepo.UpdatePassword(c.Request.Context(), user.ID, newHash, time.Now())
-		}
-	}
-
-	token, err := s.Auth.GenerateToken(user)
+	result, err := authSvc.Login(c.Request.Context(), service.LoginDTO{
+		Identifier: req.Identifier,
+		Password:   req.Password,
+		ClientIP:   c.ClientIP(),
+		UserAgent:  c.Request.UserAgent(),
+	})
 	if err != nil {
-		slog.Error("failed to generate access token", "user_id", user.ID, "error", err)
+		RespondError(c, domain.MapErrorToHTTPStatus(err), err.Error())
+		return
+	}
+	if result == nil {
 		RespondError(c, http.StatusInternalServerError, "could not issue token")
 		return
 	}
 
-	// Issue Dual-Token: Cryptographically secure Refresh Token
-	rawRefreshToken, refreshHash, err := auth.GenerateRefreshToken()
-	if err != nil {
-		slog.Error("failed to generate refresh token", "user_id", user.ID, "error", err)
-		RespondError(c, http.StatusInternalServerError, "could not issue refresh token")
-		return
-	}
-
-	tokenRepo := s.getTokenRepository()
-	if tokenRepo != nil {
-		refreshRecord := &models.RefreshToken{
-			UserID:    user.ID,
-			TokenHash: refreshHash,
-			FamilyID:  uuid.NewString(),
-			ExpiresAt: time.Now().Add(s.Cfg.RefreshTokenTTL),
-			CreatedIP: c.ClientIP(),
-			UserAgent: c.Request.UserAgent(),
-		}
-		if terr := tokenRepo.CreateRefreshToken(c.Request.Context(), refreshRecord); terr != nil {
-			slog.Error("failed to persist refresh token", "user_id", user.ID, "error", terr)
-			RespondError(c, http.StatusInternalServerError, "could not persist refresh token")
-			return
-		}
-	}
-
-	slog.Info("user logged in successfully", "user_id", user.ID, "username", user.Username, "ip", c.ClientIP(), "user_agent", c.Request.UserAgent())
 	RespondSuccess(c, http.StatusOK, response.LoginResponse{
-		Token:        token,
-		RefreshToken: rawRefreshToken,
-		User:         response.ToUserResponse(user),
+		Token:        result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		User:         response.ToUserResponse(result.User),
 	})
 }
 
@@ -133,96 +91,29 @@ func (s *Server) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	tokenRepo := s.getTokenRepository()
-	userRepo := s.getUserRepository()
-	if tokenRepo == nil || userRepo == nil {
+	authSvc := s.getAuthService()
+	if authSvc == nil {
 		RespondError(c, http.StatusInternalServerError, "service unavailable")
 		return
 	}
 
-	hash := auth.HashToken(req.RefreshToken)
-	tokenRecord, err := tokenRepo.FindRefreshTokenByHash(c.Request.Context(), hash)
-	if err != nil || tokenRecord == nil {
-		slog.Warn("refresh token lookup failed", "ip", c.ClientIP())
-		RespondError(c, http.StatusUnauthorized, "invalid refresh token")
+	result, err := authSvc.RefreshToken(c.Request.Context(), service.RefreshTokenDTO{
+		RefreshToken: req.RefreshToken,
+		ClientIP:     c.ClientIP(),
+		UserAgent:    c.Request.UserAgent(),
+	})
+	if err != nil {
+		RespondError(c, domain.MapErrorToHTTPStatus(err), err.Error())
 		return
 	}
-
-	// Token Reuse Detection: If token is already revoked, an attacker or compromised client is reusing it
-	if tokenRecord.RevokedAt != nil {
-		slog.Warn("SECURITY ALERT: refresh token reuse detected; revoking family",
-			"family_id", tokenRecord.FamilyID,
-			"user_id", tokenRecord.UserID,
-			"ip", c.ClientIP(),
-		)
-		// Revoke the entire family
-		_ = tokenRepo.RevokeFamily(c.Request.Context(), tokenRecord.FamilyID, time.Now())
-		RespondError(c, http.StatusUnauthorized, "token reuse detected, please sign in again")
-		return
-	}
-
-	// Expiration check
-	if time.Now().After(tokenRecord.ExpiresAt) {
-		slog.Warn("expired refresh token presented", "user_id", tokenRecord.UserID, "ip", c.ClientIP())
-		RespondError(c, http.StatusUnauthorized, "refresh token expired")
-		return
-	}
-
-	// Validate user status
-	user, uerr := userRepo.FindByID(c.Request.Context(), tokenRecord.UserID)
-	if uerr != nil || user == nil || !user.IsActive {
-		slog.Warn("refresh attempt for deactivated user", "user_id", tokenRecord.UserID, "ip", c.ClientIP())
-		RespondError(c, http.StatusUnauthorized, "Account is deactivated")
-		return
-	}
-
-	// Rotate token: revoke current token
-	now := time.Now()
-	if err := tokenRepo.RevokeRefreshToken(c.Request.Context(), tokenRecord.ID, now); err != nil {
-		slog.Error("failed to revoke old refresh token during rotation", "token_id", tokenRecord.ID, "error", err)
+	if result == nil {
 		RespondError(c, http.StatusInternalServerError, "failed to rotate token")
 		return
 	}
 
-	// Generate new access token
-	newAccessToken, err := s.Auth.GenerateToken(user)
-	if err != nil {
-		slog.Error("failed to generate new access token", "user_id", user.ID, "error", err)
-		RespondError(c, http.StatusInternalServerError, "could not issue token")
-		return
-	}
-
-	// Generate new rotated refresh token in the same family
-	newRaw, newHash, err := auth.GenerateRefreshToken()
-	if err != nil {
-		slog.Error("failed to generate new refresh token", "user_id", user.ID, "error", err)
-		RespondError(c, http.StatusInternalServerError, "could not issue refresh token")
-		return
-	}
-
-	newRecord := &models.RefreshToken{
-		UserID:    user.ID,
-		TokenHash: newHash,
-		FamilyID:  tokenRecord.FamilyID,
-		ExpiresAt: now.Add(s.Cfg.RefreshTokenTTL),
-		CreatedIP: c.ClientIP(),
-		UserAgent: c.Request.UserAgent(),
-	}
-	if err := tokenRepo.CreateRefreshToken(c.Request.Context(), newRecord); err != nil {
-		slog.Error("failed to persist rotated refresh token", "user_id", user.ID, "error", err)
-		RespondError(c, http.StatusInternalServerError, "could not persist refresh token")
-		return
-	}
-
-	slog.Info("refresh token rotated successfully",
-		"user_id", user.ID,
-		"family_id", tokenRecord.FamilyID,
-		"ip", c.ClientIP(),
-	)
-
 	RespondSuccess(c, http.StatusOK, response.RefreshResponse{
-		Token:        newAccessToken,
-		RefreshToken: newRaw,
+		Token:        result.AccessToken,
+		RefreshToken: result.RefreshToken,
 	})
 }
 
@@ -237,10 +128,16 @@ func (s *Server) RefreshToken(c *gin.Context) {
 // @Router /api/v1/auth/logout [post]
 func (s *Server) Logout(c *gin.Context) {
 	var req request.LogoutRequest
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		slog.Debug("optional logout payload binding skipped", "error", err)
+	}
 
 	s.blacklistAccessToken(c.Request.Context(), c.GetHeader("Authorization"))
-	s.revokeRefreshTokenOnLogout(c.Request.Context(), req.RefreshToken, c.ClientIP())
+	if authSvc := s.getAuthService(); authSvc != nil {
+		if err := authSvc.RevokeRefreshToken(c.Request.Context(), req.RefreshToken, c.ClientIP()); err != nil {
+			slog.Warn("failed to revoke refresh token on logout", "error", err, "ip", c.ClientIP())
+		}
+	}
 
 	RespondMessage(c, http.StatusOK, "logged out successfully")
 }
@@ -263,25 +160,11 @@ func (s *Server) blacklistAccessToken(ctx context.Context, authHeader string) {
 		return
 	}
 	blacklistKey := fmt.Sprintf("jwt:blacklist:%s", claims.ID)
-	_ = rdb.Set(ctx, blacklistKey, "revoked", remaining).Err()
+	if err := rdb.Set(ctx, blacklistKey, "revoked", remaining).Err(); err != nil {
+		slog.Warn("failed to blacklist access token in redis", "jti", claims.ID, "user_id", claims.UserID, "error", err)
+		return
+	}
 	slog.Info("access token blacklisted in redis", "jti", claims.ID, "user_id", claims.UserID)
-}
-
-func (s *Server) revokeRefreshTokenOnLogout(ctx context.Context, refreshToken, clientIP string) {
-	if refreshToken == "" {
-		return
-	}
-	tokenRepo := s.getTokenRepository()
-	if tokenRepo == nil {
-		return
-	}
-	hash := auth.HashToken(refreshToken)
-	tokenRecord, err := tokenRepo.FindRefreshTokenByHash(ctx, hash)
-	if err != nil || tokenRecord == nil {
-		return
-	}
-	_ = tokenRepo.RevokeRefreshToken(ctx, tokenRecord.ID, time.Now())
-	slog.Info("refresh token revoked on logout", "token_id", tokenRecord.ID, "user_id", tokenRecord.UserID, "ip", clientIP)
 }
 
 // Me godoc
@@ -295,13 +178,17 @@ func (s *Server) revokeRefreshTokenOnLogout(ctx context.Context, refreshToken, c
 // @Failure 404 {object} response.ErrorResponse "User not found"
 // @Router /api/v1/me [get]
 func (s *Server) Me(c *gin.Context) {
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
+	authSvc := s.getAuthService()
+	if authSvc == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
-	user, err := userRepo.FindByID(c.Request.Context(), currentUserID(c))
-	if err != nil || user == nil {
+	user, err := authSvc.GetProfile(c.Request.Context(), currentUserID(c))
+	if err != nil {
+		RespondError(c, domain.MapErrorToHTTPStatus(err), err.Error())
+		return
+	}
+	if user == nil {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
 	}
