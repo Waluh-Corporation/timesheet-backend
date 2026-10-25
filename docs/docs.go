@@ -5210,11 +5210,13 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "approved",
-                "pending"
+                "pending",
+                "rejected"
             ],
             "x-enum-varnames": [
                 "ProfileApproved",
-                "ProfilePending"
+                "ProfilePending",
+                "ProfileRejected"
             ]
         },
         "models.Project": {

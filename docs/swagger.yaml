@@ -387,10 +387,12 @@ definitions:
     enum:
     - approved
     - pending
+    - rejected
     type: string
     x-enum-varnames:
     - ProfileApproved
     - ProfilePending
+    - ProfileRejected
   models.Project:
     properties:
       app_impacted:
