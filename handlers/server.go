@@ -3,10 +3,13 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
+	"math"
+	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -26,16 +29,6 @@ import (
 	"timesheet-backend/services"
 	"timesheet-backend/storage"
 )
-
-type webAuthnSessionEntry struct {
-	data      *webauthn.SessionData
-	createdAt time.Time
-}
-
-type clientCooldownRecord struct {
-	windowStart time.Time
-	count       int
-}
 
 // Server carries the shared dependencies used by all HTTP handlers.
 type Server struct {
@@ -68,15 +61,6 @@ type Server struct {
 	Storage           storage.StorageService
 	RedisClient       *redis.Client
 	GeoIP             *services.GeoIPService
-
-	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
-	// handed to the client for the duration of a single begin/finish exchange.
-	webAuthnSessions map[string]*webAuthnSessionEntry
-	sessionsMu       sync.Mutex
-
-	resetCooldowns map[string]time.Time
-	ipCooldowns    map[string]*clientCooldownRecord
-	cooldownMu     sync.Mutex
 
 	finishRegistrationFunc func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error)
 	sendResetEmailFunc     func(toEmail, username, resetLink string) error
@@ -191,84 +175,126 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		SignatureSvc:      signatureSvc,
 		Storage:           storageSvc,
 		GeoIP:             geoSvc,
-		webAuthnSessions:  make(map[string]*webAuthnSessionEntry),
-		resetCooldowns:    make(map[string]time.Time),
-		ipCooldowns:       make(map[string]*clientCooldownRecord),
 	}, nil
 }
 
-func (s *Server) checkAndRecordResetCooldown(email, ip string, cooldown time.Duration) bool {
+func (s *Server) checkAndRecordResetCooldownCtx(ctx context.Context, email, ip string, cooldown time.Duration) bool {
 	if cooldown <= 0 {
 		return true
 	}
-	s.cooldownMu.Lock()
-	defer s.cooldownMu.Unlock()
 
-	if s.resetCooldowns == nil {
-		s.resetCooldowns = make(map[string]time.Time)
-	}
-	if s.ipCooldowns == nil {
-		s.ipCooldowns = make(map[string]*clientCooldownRecord)
-	}
-
-	now := time.Now()
-	s.cleanupExpiredCooldowns(now, cooldown)
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 
 	normEmail := strings.ToLower(strings.TrimSpace(email))
 	cleanIP := strings.TrimSpace(ip)
-
-	if s.isEmailInCooldown(normEmail, now, cooldown) || s.isIPRateLimited(cleanIP, now, cooldown) {
-		return false
+	if commaIdx := strings.Index(cleanIP, ","); commaIdx != -1 {
+		cleanIP = strings.TrimSpace(cleanIP[:commaIdx])
+	}
+	if host, _, err := net.SplitHostPort(cleanIP); err == nil {
+		cleanIP = host
+	}
+	cleanIP = strings.Trim(cleanIP, "[]")
+	if zoneIdx := strings.Index(cleanIP, "%"); zoneIdx != -1 {
+		cleanIP = cleanIP[:zoneIdx]
+	}
+	if parsed := net.ParseIP(cleanIP); parsed != nil {
+		cleanIP = parsed.String()
 	}
 
+	if normEmail == "" && cleanIP == "" {
+		return true
+	}
+
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		slog.Warn("redis client unavailable for reset cooldown check; bypassing fast-path")
+		return true
+	}
+
+	const maxIPRequestsPerWindow = 5
+
+	effectiveCooldown := cooldown
+	if effectiveCooldown < time.Millisecond {
+		effectiveCooldown = time.Millisecond
+	}
+
+	// 1. Check IP rate limit window if client IP is present
+	var ipKey string
+	if cleanIP != "" {
+		ipKey = fmt.Sprintf("cooldown:reset:ip:%s", cleanIP)
+		if currCount, err := rdb.Get(ctx, ipKey).Int(); err == nil && currCount >= maxIPRequestsPerWindow {
+			return false
+		}
+	}
+
+	// 2. Atomic email cooldown using SET NX EX pattern
+	var emailKey string
 	if normEmail != "" {
-		s.resetCooldowns[normEmail] = now
+		emailKey = fmt.Sprintf("cooldown:reset:email:%s", normEmail)
+		set, err := rdb.SetNX(ctx, emailKey, "1", effectiveCooldown).Result()
+		if err != nil {
+			slog.Warn("redis error during email reset cooldown check; bypassing fast-path", "error", err, "email", normEmail)
+			return true
+		}
+		if !set {
+			return false
+		}
 	}
-	s.recordIPCooldown(cleanIP, now, cooldown)
+
+	// 3. Atomically track and increment client IP request count with TTL preservation
+	if ipKey != "" {
+		const ipIncrScript = `
+			local count = redis.call('INCR', KEYS[1])
+			if count == 1 or redis.call('PTTL', KEYS[1]) < 0 then
+				redis.call('PEXPIRE', KEYS[1], ARGV[1])
+			end
+			return count
+		`
+		var newCount int64
+		res, err := rdb.Eval(ctx, ipIncrScript, []string{ipKey}, effectiveCooldown.Milliseconds()).Result()
+		if err == nil {
+			switch n := res.(type) {
+			case int64:
+				newCount = n
+			case int:
+				newCount = int64(n)
+			case int32:
+				newCount = int64(n)
+			case uint64:
+				if n > math.MaxInt64 {
+					newCount = math.MaxInt64
+				} else {
+					newCount = int64(n)
+				}
+			case float64:
+				if n > float64(math.MaxInt64) {
+					newCount = math.MaxInt64
+				} else {
+					newCount = int64(n)
+				}
+			}
+		} else {
+			newCount, err = rdb.Incr(ctx, ipKey).Result()
+			if err == nil && newCount == 1 {
+				_ = rdb.PExpire(ctx, ipKey, effectiveCooldown).Err()
+			}
+		}
+
+		if err == nil && newCount > maxIPRequestsPerWindow {
+			// Rollback email reservation if IP limit was exceeded concurrently
+			if emailKey != "" {
+				_ = rdb.Del(ctx, emailKey).Err()
+			}
+			return false
+		}
+	}
 
 	return true
 }
 
-func (s *Server) cleanupExpiredCooldowns(now time.Time, cooldown time.Duration) {
-	cutoff := now.Add(-2 * cooldown)
-	for k, v := range s.resetCooldowns {
-		if v.Before(cutoff) {
-			delete(s.resetCooldowns, k)
-		}
-	}
-	for k, v := range s.ipCooldowns {
-		if v.windowStart.Before(cutoff) {
-			delete(s.ipCooldowns, k)
-		}
-	}
-}
-
-func (s *Server) isEmailInCooldown(email string, now time.Time, cooldown time.Duration) bool {
-	if email == "" {
-		return false
-	}
-	last, exists := s.resetCooldowns[email]
-	return exists && now.Sub(last) < cooldown
-}
-
-func (s *Server) isIPRateLimited(ip string, now time.Time, cooldown time.Duration) bool {
-	const maxIPRequestsPerWindow = 5
-	if ip == "" {
-		return false
-	}
-	rec, exists := s.ipCooldowns[ip]
-	return exists && now.Sub(rec.windowStart) < cooldown && rec.count >= maxIPRequestsPerWindow
-}
-
-func (s *Server) recordIPCooldown(ip string, now time.Time, cooldown time.Duration) {
-	if ip == "" {
-		return
-	}
-	if rec, exists := s.ipCooldowns[ip]; exists && now.Sub(rec.windowStart) < cooldown {
-		rec.count++
-	} else {
-		s.ipCooldowns[ip] = &clientCooldownRecord{windowStart: now, count: 1}
-	}
+func (s *Server) checkAndRecordResetCooldown(email, ip string, cooldown time.Duration) bool {
+	return s.checkAndRecordResetCooldownCtx(context.Background(), email, ip, cooldown)
 }
 
 func (s *Server) dispatchResetEmail(toEmail, username, resetLink, clientIP, location string) {
@@ -289,43 +315,109 @@ func (s *Server) dispatchResetEmail(toEmail, username, resetLink, clientIP, loca
 	}
 }
 
-func (s *Server) putSession(id string, data *webauthn.SessionData) {
-	s.sessionsMu.Lock()
-	defer s.sessionsMu.Unlock()
+const webAuthnSessionTTL = 5 * time.Minute
 
-	if s.webAuthnSessions == nil {
-		s.webAuthnSessions = make(map[string]*webAuthnSessionEntry)
+func (s *Server) putSessionCtx(ctx context.Context, id string, data *webauthn.SessionData) {
+	cleanID := strings.TrimSpace(id)
+	if cleanID == "" || data == nil {
+		return
+	}
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		slog.Warn("cannot store webauthn session: redis client is unavailable", "session_id", cleanID)
+		return
 	}
 
-	// Proactively clean up expired sessions (> 5 minutes old)
-	cutoff := time.Now().Add(-5 * time.Minute)
-	for k, v := range s.webAuthnSessions {
-		if v.createdAt.Before(cutoff) {
-			delete(s.webAuthnSessions, k)
-		}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		slog.Error("failed to marshal webauthn session data", "error", err, "session_id", cleanID)
+		return
 	}
 
-	s.webAuthnSessions[id] = &webAuthnSessionEntry{
-		data:      data,
-		createdAt: time.Now(),
+	key := fmt.Sprintf("webauthn:session:%s", cleanID)
+	if err := rdb.Set(ctx, key, b, webAuthnSessionTTL).Err(); err != nil {
+		slog.Error("failed to store webauthn session in redis", "error", err, "session_id", cleanID)
 	}
 }
 
-func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
-	s.sessionsMu.Lock()
-	defer s.sessionsMu.Unlock()
-	if s.webAuthnSessions == nil {
+func (s *Server) putSession(id string, data *webauthn.SessionData) {
+	s.putSessionCtx(context.Background(), id, data)
+}
+
+func (s *Server) takeSessionCtx(ctx context.Context, id string) (*webauthn.SessionData, bool) {
+	cleanID := strings.TrimSpace(id)
+	if cleanID == "" {
 		return nil, false
 	}
-	entry, ok := s.webAuthnSessions[id]
-	if ok {
-		delete(s.webAuthnSessions, id)
-		if time.Since(entry.createdAt) > 5*time.Minute {
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		slog.Warn("cannot retrieve webauthn session: redis client is unavailable", "session_id", cleanID)
+		return nil, false
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	key := fmt.Sprintf("webauthn:session:%s", cleanID)
+	val, err := rdb.GetDel(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
 			return nil, false
 		}
-		return entry.data, true
+		// Fallback for older Redis versions (< 6.2) or test doubles / proxies not supporting GETDEL
+		errLower := strings.ToLower(err.Error())
+		if strings.Contains(errLower, "unknown") || strings.Contains(errLower, "unsupported") || strings.Contains(errLower, "not supported") {
+			const getDelScript = `
+				local v = redis.call('GET', KEYS[1])
+				if not v or v == false then
+					return nil
+				end
+				redis.call('DEL', KEYS[1])
+				return v
+			`
+			res, scriptErr := rdb.Eval(ctx, getDelScript, []string{key}).Result()
+			if scriptErr != nil {
+				if errors.Is(scriptErr, redis.Nil) {
+					return nil, false
+				}
+				slog.Error("failed to execute fallback getdel script", "error", scriptErr, "session_id", cleanID)
+				return nil, false
+			}
+			var strVal string
+			switch s := res.(type) {
+			case string:
+				strVal = s
+			case []byte:
+				strVal = string(s)
+			}
+			if strVal == "" {
+				return nil, false
+			}
+			val = strVal
+		} else {
+			slog.Error("failed to retrieve webauthn session from redis", "error", err, "session_id", cleanID)
+			return nil, false
+		}
 	}
-	return nil, false
+
+	if strings.TrimSpace(val) == "" {
+		return nil, false
+	}
+
+	var data webauthn.SessionData
+	if err := json.Unmarshal([]byte(val), &data); err != nil {
+		slog.Error("failed to unmarshal webauthn session data", "error", err, "session_id", cleanID)
+		return nil, false
+	}
+
+	return &data, true
+}
+
+func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
+	return s.takeSessionCtx(context.Background(), id)
 }
 
 // GetUserService retrieves the UserService.
@@ -350,6 +442,9 @@ func (s *Server) getStorage() storage.StorageService {
 }
 
 func (s *Server) getRedisClient() *redis.Client {
+	if s == nil {
+		return nil
+	}
 	return s.RedisClient
 }
 

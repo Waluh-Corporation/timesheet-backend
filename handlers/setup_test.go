@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
@@ -16,6 +18,13 @@ import (
 	"timesheet-backend/database"
 	"timesheet-backend/models"
 )
+
+func newTestRedisClient(t *testing.T) *redis.Client {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	mr.ClockTTL(true)
+	return redis.NewClient(&redis.Options{Addr: mr.Addr()})
+}
 
 func setupTestDB(t *testing.T) (*gorm.DB, *config.Config) {
 	cfg := config.Load()

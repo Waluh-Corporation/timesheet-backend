@@ -18,7 +18,10 @@ func TestAuthHandlers_Validation(t *testing.T) {
 	cfg := &config.Config{
 		RPOrigins: []string{"http://localhost:3000", "https://timesheet.example.com"},
 	}
-	srv := &Server{Cfg: cfg}
+	srv := &Server{
+		Cfg:         cfg,
+		RedisClient: newTestRedisClient(t),
+	}
 
 	t.Run("WebAuthnRelatedOrigins returns configured origins", func(t *testing.T) {
 		w := httptest.NewRecorder()

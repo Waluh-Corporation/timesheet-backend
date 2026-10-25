@@ -39,9 +39,9 @@ func (s *Server) ForgotPassword(c *gin.Context) {
 		cooldown = s.Cfg.ResetPasswordCooldown
 	}
 
-	// 1. Fast in-memory cooldown check per email and per IP to prevent email bombing,
-	// spamming, and resource exhaustion (applies uniformly to existing and non-existing accounts).
-	if !s.checkAndRecordResetCooldown(normEmail, clientIP, cooldown) {
+	// 1. Redis-backed atomic cooldown check per email and per IP to prevent email bombing,
+	// spamming, and resource exhaustion across multi-pod replicas (applies uniformly to existing and non-existing accounts).
+	if !s.checkAndRecordResetCooldownCtx(c.Request.Context(), normEmail, clientIP, cooldown) {
 		slog.Warn("password reset throttled by cooldown", "email", maskEmail(normEmail), "ip", clientIP)
 		RespondMessage(c, http.StatusOK, "if the email exists, a reset link has been sent")
 		return

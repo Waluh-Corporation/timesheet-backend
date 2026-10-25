@@ -67,7 +67,7 @@ func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
 		return
 	}
 	sid := uuid.NewString()
-	s.putSession(sid, sessionData)
+	s.putSessionCtx(c.Request.Context(), sid, sessionData)
 	RespondSuccess(c, http.StatusOK, gin.H{"session_id": sid, "options": options})
 }
 
@@ -88,7 +88,7 @@ func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
 // @Router /api/v1/passkey/register/finish [post]
 func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 	sid := c.Query("session_id")
-	sessionData, ok := s.takeSession(sid)
+	sessionData, ok := s.takeSessionCtx(c.Request.Context(), sid)
 	if !ok {
 		RespondError(c, http.StatusBadRequest, "unknown or expired session")
 		return
@@ -238,7 +238,7 @@ func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 		return
 	}
 	sid := uuid.NewString()
-	s.putSession(sid, sessionData)
+	s.putSessionCtx(c.Request.Context(), sid, sessionData)
 	RespondSuccess(c, http.StatusOK, gin.H{"session_id": sid, "options": options})
 }
 
@@ -257,7 +257,7 @@ func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 // @Router /api/v1/auth/passkey/login/finish [post]
 func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 	sid := c.Query("session_id")
-	sessionData, ok := s.takeSession(sid)
+	sessionData, ok := s.takeSessionCtx(c.Request.Context(), sid)
 	if !ok {
 		RespondError(c, http.StatusBadRequest, "unknown or expired session")
 		return
