@@ -66,39 +66,25 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		row := 8 + day
 		rs := fmt.Sprintf("%d", row)
 
-		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
+		dsc, ok := SetupDayRowStylesAndHours(f, sheet, in, byDay, st, DailyRowSetupConfig{
+			Row:         row,
+			Day:         day,
+			DaysInMonth: daysInMonth,
+			DateCol:     "A",
+			AllCols:     allCols,
+			WrapCols:    wrapCols,
+			HoursCfg: WorkingHoursConfig{
+				StartCol:   "B",
+				EndCol:     "C",
+				TotalCol:   "D",
+				FormulaFmt: "C%s-B%s",
+			},
+		})
+		if !ok {
 			continue
 		}
 
-		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "A", rs, allCols, wrapCols, dsc)
-		_ = f.SetCellValue(sheet, "A"+rs, dsc.Date)
-
-		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
-			StartCol:   "B",
-			EndCol:     "C",
-			TotalCol:   "D",
-			RowStr:     rs,
-			FormulaFmt: "C%s-B%s",
-		}, dsc)
-
-		status := ""
-		if dsc.HasActivity {
-			status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
-			_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
-			_ = f.SetCellValue(sheet, "L"+rs, miiProjectName)
-			_ = f.SetCellValue(sheet, "M"+rs, miiProjectID)
-			_ = f.SetCellValue(sheet, "N"+rs, NormalizeMIIAppImpacted(dsc.Activity.GetAppImpacted()))
-			_ = f.SetCellValue(sheet, "P"+rs, miiDivision)
-			_ = f.SetCellValue(sheet, "Q"+rs, miiDepartment)
-
-			h := calculateRowHeight(dsc.Activity.Activity, miiProjectName, miiProjectID, dsc.Activity.GetAppImpacted(), miiDivision, miiDepartment)
-			_ = f.SetRowHeight(sheet, row, h)
-		} else if dsc.IsHolidayOrWeekend {
-			WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
-		}
-
+		status := renderMIIDayActivity(f, sheet, rs, row, *dsc)
 		WriteAttendanceMatrixStatus(f, sheet, rs, status)
 		if status != "" {
 			statusCounts[status]++
@@ -123,6 +109,31 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		TLDateCell:   "D47",
 		DHDateCell:   "G47",
 		DatePrefix:   "DATE : ",
+		UserBoxCell:  "A43",
+		QRCell:       "L43",
 	})
 	return WriteWorkbookToBuffer(f, "mii")
+}
+
+func renderMIIDayActivity(f *excelize.File, sheet, rs string, row int, dsc DayStyleContext) string {
+	if dsc.HasActivity {
+		status := strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+		if status == "" {
+			status = "P"
+		}
+		_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
+		_ = f.SetCellValue(sheet, "L"+rs, miiProjectName)
+		_ = f.SetCellValue(sheet, "M"+rs, miiProjectID)
+		_ = f.SetCellValue(sheet, "N"+rs, NormalizeMIIAppImpacted(dsc.Activity.GetAppImpacted()))
+		_ = f.SetCellValue(sheet, "P"+rs, miiDivision)
+		_ = f.SetCellValue(sheet, "Q"+rs, miiDepartment)
+
+		h := calculateRowHeight(dsc.Activity.Activity, miiProjectName, miiProjectID, dsc.Activity.GetAppImpacted(), miiDivision, miiDepartment)
+		_ = f.SetRowHeight(sheet, row, h)
+		return status
+	}
+	if dsc.IsHolidayOrWeekend {
+		WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
+	}
+	return ""
 }

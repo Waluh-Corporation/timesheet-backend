@@ -33,6 +33,10 @@ func (m *mockStorageService) Upload(ctx context.Context, key string, body io.Rea
 	return nil
 }
 
+func (m *mockStorageService) Download(ctx context.Context, key string) ([]byte, error) {
+	return m.uploadedBytes, nil
+}
+
 func (m *mockStorageService) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {
 	return "https://s3.example.com/timesheets/" + key, nil
 }
@@ -183,7 +187,7 @@ func (m *mockTimesheetService) DeleteOvertime(ctx context.Context, id uint, user
 }
 
 type mockUserRepo struct {
-	repository.UserRepository
+	repository.UserAccountRepository
 }
 
 func (m *mockUserRepo) FindByIDWithDetails(ctx context.Context, id uint) (*models.User, error) {

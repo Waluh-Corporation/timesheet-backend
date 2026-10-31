@@ -2,16 +2,16 @@
   class="content-text"
   style="
     margin: 0;
-    color: #4b5563;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
+    font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     font-size: 15px;
-    line-height: 1.65;
+    line-height: 1.6;
   "
 >
   Halo{{if .Username}} <strong>{{.Username}}</strong>{{end}}, kami menerima permintaan untuk mengatur ulang kata sandi akun <strong>{{.AppName}}</strong> yang terhubung dengan alamat email ini.
 </p>
 
-<!-- DETAILS BOX -->
+<!-- DETAILS BOX (Tabler Datagrid Style) -->
 <table
   role="presentation"
   width="100%"
@@ -22,9 +22,9 @@
   style="
     width: 100%;
     margin: 24px 0 0;
-    background-color: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
+    background-color: #f8fafc;
+    border: 1px solid #e6e7e9;
+    border-radius: 6px;
   "
 >
   <tr>
@@ -32,28 +32,28 @@
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         {{if .Username}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Akun</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: bold; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Username}}</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Akun</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Username}}</td>
         </tr>
         {{end}}
         {{if .RequestedAt}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Waktu Permintaan</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 500; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.RequestedAt}}</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Waktu Permintaan</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 500; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.RequestedAt}}</td>
         </tr>
         {{end}}
         {{if .IPAddress}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Alamat IP</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #111827;">
-            <span style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;">{{.IPAddress}}</span>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Alamat IP</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #182433;">
+            <span style="font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">{{.IPAddress}}</span>
           </td>
         </tr>
         {{end}}
         {{if .Location}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6b7280; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Lokasi</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 500; color: #111827; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Location}}</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Lokasi</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 500; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Location}}</td>
         </tr>
         {{end}}
       </table>
@@ -61,15 +61,15 @@
   </tr>
 </table>
 
-<!-- ACTION BUTTON -->
+<!-- ACTION BUTTON (Tabler Primary Button) -->
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn-shell" style="margin: 26px 0 0;">
   <tr>
     <td
       align="center"
-      bgcolor="#4f46e5"
+      bgcolor="#066fd1"
       style="
-        background-color: #4f46e5;
-        border-radius: 8px;
+        background-color: #066fd1;
+        border-radius: 4px;
       "
     >
       <!--[if mso]>
@@ -78,9 +78,9 @@
         xmlns:w="urn:schemas-microsoft-com:office:word"
         href="{{.ResetURL}}"
         style="height: 48px; v-text-anchor: middle; width: 240px"
-        arcsize="17%"
-        strokecolor="#4f46e5"
-        fillcolor="#4f46e5"
+        arcsize="8%"
+        strokecolor="#066fd1"
+        fillcolor="#066fd1"
       >
         <w:anchorlock />
         <center style="color: #ffffff; font-family: Arial, sans-serif; font-size: 15px; font-weight: bold">
@@ -95,17 +95,17 @@
         class="confirm-button btn-block"
         style="
           display: inline-block;
-          padding: 14px 28px;
+          padding: 13px 26px;
           color: #ffffff;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
           font-size: 15px;
-          font-weight: bold;
+          font-weight: 600;
           line-height: 18px;
           text-align: center;
           text-decoration: none;
           white-space: nowrap;
-          border-radius: 8px;
-          background-color: #4f46e5;
+          border-radius: 4px;
+          background-color: #066fd1;
         "
       >Reset Kata Sandi Saya</a>
       <!--<![endif]-->
@@ -113,14 +113,14 @@
   </tr>
 </table>
 
-<!-- FALLBACK URL BOX -->
+<!-- FALLBACK URL BOX (Tabler Monospace Box) -->
 <div style="margin-top: 26px;">
   <p
     class="details-label"
     style="
       margin: 0;
-      color: #6b7280;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #6c7a91;
+      font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       font-size: 12px;
       line-height: 1.6;
     "
@@ -132,11 +132,12 @@
     style="
       margin: 8px 0 0;
       padding: 12px 14px;
-      background-color: #f3f4f6;
-      border-left: 3px solid #4f46e5;
+      background-color: #f6f8fb;
+      border: 1px solid #e6e7e9;
+      border-left: 3px solid #066fd1;
       border-radius: 0 4px 4px 0;
-      color: #3730a3;
-      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+      color: #182433;
+      font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
       font-size: 11px;
       line-height: 1.55;
       word-break: break-all;
@@ -144,11 +145,11 @@
       word-wrap: break-word;
     "
   >
-    <a href="{{.ResetURL}}" target="_blank" style="color: #4f46e5; text-decoration: none;">{{.ResetURL}}</a>
+    <a href="{{.ResetURL}}" target="_blank" style="color: #066fd1; text-decoration: none;">{{.ResetURL}}</a>
   </div>
 </div>
 
-<!-- SECURITY ALERT NOTICE -->
+<!-- SECURITY ALERT NOTICE (Tabler Alert Warning Style) -->
 <table
   role="presentation"
   width="100%"
@@ -159,17 +160,18 @@
   style="
     width: 100%;
     margin-top: 22px;
-    background-color: #fffbeb;
-    border-left: 3px solid #f59e0b;
-    border-radius: 0 6px 6px 0;
+    background-color: #fffbf0;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #f59f00;
+    border-radius: 4px;
   "
 >
   <tr>
     <td style="padding: 12px 16px;">
-      <p class="callout-warning-title" style="margin: 0 0 3px 0; font-size: 12px; font-weight: bold; color: #92400e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <p class="callout-warning-title" style="margin: 0 0 3px 0; font-size: 12px; font-weight: 600; color: #92400e; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Peringatan Keamanan
       </p>
-      <p class="callout-warning-text" style="margin: 0; font-size: 12px; color: #78350f; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+      <p class="callout-warning-text" style="margin: 0; font-size: 12px; color: #78350f; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
         Tautan ini bersifat rahasia dan hanya berlaku hingga <strong>{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}{{.ExpireMinutes}} menit{{end}}</strong>. Jangan bagikan tautan ini kepada siapapun.
       </p>
     </td>
@@ -183,7 +185,7 @@
   cellspacing="0"
   border="0"
   width="100%"
-  style="width: 100%; border-top: 1px solid #e5e7eb; margin-top: 28px;"
+  style="width: 100%; border-top: 1px solid #e6e7e9; margin-top: 28px;"
   class="details-card"
 >
   <tr>
@@ -192,13 +194,13 @@
         class="details-label"
         style="
           margin: 0;
-          color: #6b7280;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          color: #6c7a91;
+          font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
           font-size: 13px;
           line-height: 1.6;
         "
       >
-        <strong style="color: #374151" class="details-value">Tidak meminta reset kata sandi?</strong><br />
+        <strong style="color: #182433" class="details-value">Tidak meminta reset kata sandi?</strong><br />
         Anda dapat mengabaikan email ini dengan aman. Kata sandi Anda tetap aman dan tidak akan berubah.
       </p>
     </td>

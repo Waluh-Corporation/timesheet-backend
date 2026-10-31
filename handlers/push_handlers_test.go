@@ -57,6 +57,249 @@ func TestPushHandlers(t *testing.T) {
 	}
 }
 
+func TestGetPushSchedule(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("Default configuration", func(t *testing.T) {
+		srv := &Server{
+			Cfg: &config.Config{
+				Timezone:     "UTC",
+				ReminderCron: "0 17 * * *",
+			},
+		}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srv.GetPushSchedule(c)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+
+		var resp map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		data, ok := resp["data"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected data map in response, got %v", resp)
+		}
+		if data["hour"] != float64(17) {
+			t.Errorf("expected hour 17, got %v", data["hour"])
+		}
+		if data["minute"] != float64(0) {
+			t.Errorf("expected minute 0, got %v", data["minute"])
+		}
+		if data["timezone"] != "UTC" {
+			t.Errorf("expected timezone UTC, got %v", data["timezone"])
+		}
+		if data["is_enabled"] != true {
+			t.Errorf("expected is_enabled true, got %v", data["is_enabled"])
+		}
+		if data["next_run"] == nil {
+			t.Errorf("expected non-nil next_run")
+		}
+		if data["human_readable"] == "" {
+			t.Errorf("expected non-empty human_readable")
+		}
+	})
+
+	t.Run("Custom timezone and weekdays schedule", func(t *testing.T) {
+		srv := &Server{
+			Cfg: &config.Config{
+				Timezone:     "Asia/Jakarta",
+				ReminderCron: "30 18 * * 1-5",
+			},
+		}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srv.GetPushSchedule(c)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+
+		var resp map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		data := resp["data"].(map[string]interface{})
+		if data["hour"] != float64(18) {
+			t.Errorf("expected hour 18, got %v", data["hour"])
+		}
+		if data["minute"] != float64(30) {
+			t.Errorf("expected minute 30, got %v", data["minute"])
+		}
+		if data["timezone"] != "Asia/Jakarta" {
+			t.Errorf("expected timezone Asia/Jakarta, got %v", data["timezone"])
+		}
+		hr, _ := data["human_readable"].(string)
+		if !strings.Contains(hr, "18:30") || !strings.Contains(hr, "Asia/Jakarta") {
+			t.Errorf("expected human_readable containing '18:30' and 'Asia/Jakarta', got %s", hr)
+		}
+	})
+
+	t.Run("Disabled reminder cron", func(t *testing.T) {
+		srv := &Server{
+			Cfg: &config.Config{
+				Timezone:     "Asia/Jakarta",
+				ReminderCron: "disabled",
+			},
+		}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srv.GetPushSchedule(c)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+
+		var resp map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		data := resp["data"].(map[string]interface{})
+		if data["is_enabled"] != false {
+			t.Errorf("expected is_enabled false, got %v", data["is_enabled"])
+		}
+	})
+
+	t.Run("Nil server and nil config graceful fallback with dynamic TZ", func(t *testing.T) {
+		t.Setenv("TZ", "Asia/Makassar")
+
+		var srvNil *Server
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srvNil.GetPushSchedule(c)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+
+		var resp map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		data := resp["data"].(map[string]interface{})
+		if data["timezone"] != "Asia/Makassar" {
+			t.Errorf("expected timezone Asia/Makassar from AppLocation fallback, got %v", data["timezone"])
+		}
+
+		srvEmpty := &Server{}
+		wEmpty := httptest.NewRecorder()
+		cEmpty, _ := gin.CreateTestContext(wEmpty)
+		srvEmpty.GetPushSchedule(cEmpty)
+
+		if wEmpty.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", wEmpty.Code)
+		}
+	})
+
+	t.Run("Non-nil config with empty timezone falls back to dynamic AppLocation", func(t *testing.T) {
+		t.Setenv("TZ", "Asia/Jayapura")
+
+		srvWithEmptyTZ := &Server{
+			Cfg: &config.Config{
+				Timezone:     "",
+				ReminderCron: "15 9 * * *",
+			},
+		}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srvWithEmptyTZ.GetPushSchedule(c)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		var resp map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		data := resp["data"].(map[string]interface{})
+		if data["timezone"] != "Asia/Jayapura" {
+			t.Errorf("expected timezone Asia/Jayapura, got %v", data["timezone"])
+		}
+		if data["hour"] != float64(9) || data["minute"] != float64(15) {
+			t.Errorf("expected 9:15, got %v:%v", data["hour"], data["minute"])
+		}
+	})
+
+	t.Run("Non-standard cron descriptors extract hour and minute from NextRun", func(t *testing.T) {
+		srvDaily := &Server{
+			Cfg: &config.Config{
+				Timezone:     "UTC",
+				ReminderCron: "@daily",
+			},
+		}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srvDaily.GetPushSchedule(c)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		var resp map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		data := resp["data"].(map[string]interface{})
+		if data["hour"] != float64(0) || data["minute"] != float64(0) {
+			t.Errorf("expected 0:0 for @daily, got %v:%v", data["hour"], data["minute"])
+		}
+	})
+
+	t.Run("ReminderCron with surrounding whitespace and out-of-range bounds check", func(t *testing.T) {
+		srv := &Server{
+			Cfg: &config.Config{
+				Timezone:     "UTC",
+				ReminderCron: "  45 8 * * *  ",
+			},
+		}
+
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		srv.GetPushSchedule(c)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+		var resp map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		data := resp["data"].(map[string]interface{})
+		if data["hour"] != float64(8) || data["minute"] != float64(45) {
+			t.Errorf("expected 8:45, got %v:%v", data["hour"], data["minute"])
+		}
+	})
+
+	t.Run("Route mounted publicly without auth requirement", func(t *testing.T) {
+		srv := &Server{
+			Cfg: &config.Config{
+				Timezone:     "UTC",
+				ReminderCron: "0 17 * * *",
+			},
+		}
+
+		r := gin.New()
+		api := r.Group("/api/v1")
+		api.GET("/push/schedule", srv.GetPushSchedule)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/push/schedule", nil)
+		// No Authorization header provided
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected public endpoint 200 OK without token, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+}
+
 func TestPushHandlers_Extended(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, cfg := setupTestDB(t)

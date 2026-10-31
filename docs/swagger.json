@@ -177,7 +177,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "Retrieves the most recent active daily activity strictly before the specified reference date (default: today in WIB) to allow copying/autofilling activity descriptions.",
+                "description": "Retrieves the most recent active daily activity strictly before the specified reference date (default: today in WIB) to allow copying/autofilling activity descriptions without copying Time In (start_time), Time Out (end_time), or Berita Acara metadata.",
                 "produces": [
                     "application/json"
                 ],
@@ -614,6 +614,99 @@
                     },
                     "404": {
                         "description": "Approver not found",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/audit-logs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves paginated audit logs with optional filtering by action, resource type, actor username, and date range.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "List audit logs (Admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by action",
+                        "name": "action",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by resource type",
+                        "name": "resource_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by actor username",
+                        "name": "actor_username",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by start date (YYYY-MM-DD or RFC3339)",
+                        "name": "start_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by end date (YYYY-MM-DD or RFC3339)",
+                        "name": "end_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size limit (default 50, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.PaginatedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
                         }
@@ -2772,6 +2865,168 @@
                 }
             }
         },
+        "/api/v1/berita-acara/status": {
+            "get": {
+                "description": "Retrieves the sign-off lifecycle state of a monthly Berita Acara.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Get Berita Acara sign-off status",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Month (1-12)",
+                        "name": "month",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Year",
+                        "name": "year",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/berita-acara/submit": {
+            "post": {
+                "description": "Submits monthly Berita Acara with employee signature and assigns a witness for approval.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Submit Berita Acara for witness sign-off",
+                "parameters": [
+                    {
+                        "description": "Submission payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.SubmitBeritaAcaraRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/berita-acara/witness-requests": {
+            "get": {
+                "description": "Lists all Berita Acara submissions awaiting the authenticated user's signature as a witness.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "List pending witness review requests",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/berita-acara/{id}/revoke": {
+            "post": {
+                "description": "Revokes a pending or signed Berita Acara back to draft.",
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Revoke Berita Acara submission",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Submission ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/berita-acara/{id}/witness-action": {
+            "post": {
+                "description": "Allows the designated witness to sign/approve or reject with revision notes.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Approve or reject Berita Acara as witness",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Submission ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Witness decision",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.WitnessActionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/companies": {
             "get": {
                 "security": [
@@ -3596,6 +3851,26 @@
                 }
             }
         },
+        "/api/v1/push/schedule": {
+            "get": {
+                "description": "Returns the dynamic push reminder schedule, including hour, minute, active timezone, next run time, and human-readable description.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Push Notification"
+                ],
+                "summary": "Get push notification schedule",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.PushScheduleResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/push/subscribe": {
             "post": {
                 "security": [
@@ -4090,6 +4365,235 @@
                 }
             }
         },
+        "/api/v1/timesheets/revoke": {
+            "post": {
+                "description": "Revokes a signed timesheet, unlocking daily activity mutations.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Revoke timesheet signature",
+                "parameters": [
+                    {
+                        "description": "Timesheet period",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.RevokeTimesheetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/timesheets/sign": {
+            "post": {
+                "description": "Signs the user's monthly timesheet, locking activity edits and issuing verification hash.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Sign monthly timesheet",
+                "parameters": [
+                    {
+                        "description": "Timesheet period",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.SignTimesheetRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/timesheets/status": {
+            "get": {
+                "description": "Retrieves the sign-off lifecycle state of a monthly timesheet.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Get timesheet sign-off status",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Month (1-12)",
+                        "name": "month",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Year",
+                        "name": "year",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/user/signature": {
+            "get": {
+                "description": "Retrieves the signature presigned URL and status for the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Get user profile signature",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Uploads a Base64-encoded PNG/JPEG signature image to storage and updates user profile.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Upload or draw user profile signature",
+                "parameters": [
+                    {
+                        "description": "Signature base64 image",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.UploadSignatureRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes the saved signature for the authenticated user.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Signatures"
+                ],
+                "summary": "Delete user profile signature",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/users/change-password": {
             "post": {
                 "security": [
@@ -4206,6 +4710,50 @@
                         "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/response.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/verify/doc/{token}": {
+            "get": {
+                "description": "Validates the authenticity and signature audit trail of a Timesheet or Berita Acara via verification token. Supports dual HTML and JSON rendering.",
+                "produces": [
+                    "application/json",
+                    "text/html"
+                ],
+                "tags": [
+                    "Verification"
+                ],
+                "summary": "Public document verification",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Document verification token",
+                        "name": "token",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Response format (json or html)",
+                        "name": "format",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -4768,11 +5316,13 @@
             "type": "string",
             "enum": [
                 "approved",
-                "pending"
+                "pending",
+                "rejected"
             ],
             "x-enum-varnames": [
                 "ProfileApproved",
-                "ProfilePending"
+                "ProfilePending",
+                "ProfileRejected"
             ]
         },
         "models.Project": {
@@ -4919,6 +5469,9 @@
                 },
                 "role": {
                     "$ref": "#/definitions/models.Role"
+                },
+                "signature_file_key": {
+                    "type": "string"
                 },
                 "site": {
                     "type": "string"
@@ -5408,6 +5961,73 @@
                 }
             }
         },
+        "request.RevokeTimesheetRequest": {
+            "type": "object",
+            "required": [
+                "month",
+                "year"
+            ],
+            "properties": {
+                "month": {
+                    "type": "integer",
+                    "maximum": 12,
+                    "minimum": 1,
+                    "example": 10
+                },
+                "year": {
+                    "type": "integer",
+                    "maximum": 2100,
+                    "minimum": 2000,
+                    "example": 2026
+                }
+            }
+        },
+        "request.SignTimesheetRequest": {
+            "type": "object",
+            "required": [
+                "month",
+                "year"
+            ],
+            "properties": {
+                "month": {
+                    "type": "integer",
+                    "maximum": 12,
+                    "minimum": 1,
+                    "example": 10
+                },
+                "year": {
+                    "type": "integer",
+                    "maximum": 2100,
+                    "minimum": 2000,
+                    "example": 2026
+                }
+            }
+        },
+        "request.SubmitBeritaAcaraRequest": {
+            "type": "object",
+            "required": [
+                "month",
+                "year"
+            ],
+            "properties": {
+                "month": {
+                    "type": "integer",
+                    "maximum": 12,
+                    "minimum": 1,
+                    "example": 10
+                },
+                "witness_id": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "year": {
+                    "type": "integer",
+                    "maximum": 2100,
+                    "minimum": 2000,
+                    "example": 2026
+                }
+            }
+        },
         "request.SubscribeRequest": {
             "type": "object",
             "required": [
@@ -5536,6 +6156,19 @@
                 }
             }
         },
+        "request.UploadSignatureRequest": {
+            "type": "object",
+            "required": [
+                "signature_base64"
+            ],
+            "properties": {
+                "signature_base64": {
+                    "description": "SignatureBase64 is a Base64-encoded PNG image (can include data:image/png;base64, prefix).",
+                    "type": "string",
+                    "example": "data:image/png;base64,iVBORw0KGgo..."
+                }
+            }
+        },
         "request.VerifyResetTokenRequest": {
             "type": "object",
             "required": [
@@ -5545,6 +6178,26 @@
                 "token": {
                     "type": "string",
                     "example": "a8f9c0e2b1d3..."
+                }
+            }
+        },
+        "request.WitnessActionRequest": {
+            "type": "object",
+            "required": [
+                "action"
+            ],
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": [
+                        "approve",
+                        "reject"
+                    ],
+                    "example": "approve"
+                },
+                "notes": {
+                    "type": "string",
+                    "example": "Mohon perbaiki tanggal kejadian nomor 3"
                 }
             }
         },
@@ -6093,6 +6746,32 @@
                 },
                 "user_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "response.PushScheduleResponse": {
+            "type": "object",
+            "properties": {
+                "cron_expression": {
+                    "type": "string"
+                },
+                "hour": {
+                    "type": "integer"
+                },
+                "human_readable": {
+                    "type": "string"
+                },
+                "is_enabled": {
+                    "type": "boolean"
+                },
+                "minute": {
+                    "type": "integer"
+                },
+                "next_run": {
+                    "type": "string"
+                },
+                "timezone": {
+                    "type": "string"
                 }
             }
         },

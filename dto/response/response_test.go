@@ -114,6 +114,11 @@ func TestUserResponseDTOs(t *testing.T) {
 		t.Fatalf("ToUserResponse mismatch: %+v", userResp)
 	}
 
+	nilResp := ToUserResponse(nil)
+	if nilResp.ID != 0 || nilResp.Username != "" {
+		t.Fatalf("expected zero value UserResponse for nil user, got: %+v", nilResp)
+	}
+
 	createData := CreateUserData{
 		Message: "user created",
 		User:    userResp,

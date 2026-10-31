@@ -1,6 +1,7 @@
 package response
 
 import (
+	"encoding/json"
 	"time"
 
 	"timesheet-backend/models"
@@ -60,4 +61,18 @@ type AdminPasskeyResponse struct {
 	AuthenticatorAAGUID *string   `json:"authenticator_aaguid,omitempty"`
 	Icon                string    `json:"icon,omitempty"`
 	CreatedAt           time.Time `json:"created_at"`
+}
+
+// AuditLogResponse represents an audit trail record for administrative inspection.
+type AuditLogResponse struct {
+	ID            uint            `json:"id"`
+	CreatedAt     time.Time       `json:"created_at"`
+	ActorID       *uint           `json:"actor_id,omitempty"`
+	ActorUsername string          `json:"actor_username"`
+	Action        string          `json:"action"`
+	ResourceType  string          `json:"resource_type"`
+	ResourceID    string          `json:"resource_id"`
+	IPAddress     string          `json:"ip_address"`
+	UserAgent     string          `json:"user_agent"`
+	Details       json.RawMessage `json:"details,omitempty"`
 }

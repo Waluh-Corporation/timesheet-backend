@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover"/>
+  <meta http-equiv="X-UA-Compatible" content="ie=edge"/>
+  <title>Digital Document Verification - {{.AppName}}</title>
+  <!-- Optional Tabler Core CDN fallback -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/core@1.0.0-beta20/dist/css/tabler.min.css"/>
+  <style>
+    /* Complete Self-Contained Styles (Zero external dependency & CSP compliant) */
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background-color: #f4f6fa;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+      color: #1e293b;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    .page-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem 1rem;
+    }
+    .verify-container {
+      width: 100%;
+      max-width: 580px;
+      margin: 0 auto;
+    }
+    .brand-header {
+      text-align: center;
+      margin-bottom: 1.25rem;
+    }
+    .brand-name {
+      font-size: 1.375rem;
+      font-weight: 700;
+      color: #066fd1;
+      letter-spacing: -0.01em;
+      text-decoration: none;
+      word-break: break-word;
+    }
+    .verify-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+      overflow: hidden;
+    }
+    .card-bar {
+      height: 4px;
+      width: 100%;
+    }
+    .bar-success { background-color: #2fb344; }
+    .bar-warning { background-color: #f59f00; }
+    .bar-danger  { background-color: #d63939; }
+
+    .status-section {
+      padding: 2rem 1.5rem 1.5rem 1.5rem;
+      text-align: center;
+    }
+    .status-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      margin: 0 auto 1.125rem auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .avatar-success { background-color: #eaf7ec; color: #2fb344; }
+    .avatar-warning { background-color: #fef5e6; color: #f59f00; }
+    .avatar-danger  { background-color: #fae8e8; color: #d63939; }
+
+    .status-title {
+      font-size: 1.325rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin: 0 0 0.5rem 0;
+      line-height: 1.3;
+    }
+    .title-success { color: #2fb344; }
+    .title-warning { color: #d97706; }
+    .title-danger  { color: #d63939; }
+
+    .status-desc {
+      color: #64748b;
+      font-size: 0.9375rem;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .details-section {
+      border-top: 1px solid #e2e8f0;
+      padding: 1.5rem;
+    }
+    .section-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 0 0 1.25rem 0;
+    }
+    .details-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+    @media (min-width: 480px) {
+      .details-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.25rem;
+      }
+    }
+    .info-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .info-label {
+      font-size: 0.725rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.25rem;
+    }
+    .info-value {
+      font-size: 0.9375rem;
+      color: #0f172a;
+      font-weight: 500;
+      word-break: break-word;
+    }
+    .info-value.bold {
+      font-weight: 700;
+    }
+    .info-value.muted {
+      color: #64748b;
+      font-weight: 400;
+    }
+
+    .fingerprint-box {
+      margin-top: 1.5rem;
+    }
+    .fingerprint-label {
+      font-size: 0.725rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 0.375rem;
+    }
+    .hash-well {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 0.625rem 0.75rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.8125rem;
+      line-height: 1.45;
+      color: #334155;
+      word-break: break-all;
+      overflow-wrap: anywhere;
+      user-select: all;
+      text-transform: uppercase;
+    }
+
+    .card-footer {
+      border-top: 1px solid #f1f5f9;
+      background-color: #fafbfc;
+      padding: 0.875rem 1.5rem;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.8125rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrapper">
+    <div class="verify-container">
+      <!-- Main Card -->
+      <main class="verify-card">
+        {{if and .Data.IsValid (eq .Data.Status "valid")}}
+          <!-- Status: Authentic & Verified -->
+          <div class="card-bar bar-success"></div>
+          <div class="status-section">
+            <div class="status-avatar avatar-success">
+              <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/>
+                <path d="M9 12l2 2l4 -4"/>
+              </svg>
+            </div>
+            <h1 class="status-title title-success">
+              AUTHENTIC &amp; VERIFIED DOCUMENT
+            </h1>
+            <p class="status-desc">
+              This document is officially registered and has been digitally verified.
+            </p>
+          </div>
+        {{else if eq .Data.Status "revoked"}}
+          <!-- Status: Signature Revoked -->
+          <div class="card-bar bar-warning"></div>
+          <div class="status-section">
+            <div class="status-avatar avatar-warning">
+              <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 9v4"/>
+                <path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"/>
+                <path d="M12 16h.01"/>
+              </svg>
+            </div>
+            <h1 class="status-title title-warning">
+              SIGNATURE REVOKED
+            </h1>
+            <p class="status-desc">
+              The digital signature on this document has been revoked by the document owner.
+            </p>
+          </div>
+        {{else}}
+          <!-- Status: Invalid -->
+          <div class="card-bar bar-danger"></div>
+          <div class="status-section">
+            <div class="status-avatar avatar-danger">
+              <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/>
+                <path d="M10 10l4 4m0 -4l-4 4"/>
+              </svg>
+            </div>
+            <h1 class="status-title title-danger">
+              INVALID DOCUMENT
+            </h1>
+            <p class="status-desc">
+              The verification token was not found or the document integrity is invalid.
+            </p>
+          </div>
+        {{end}}
+
+        {{if or .Data.IsValid (eq .Data.Status "revoked")}}
+          <!-- Document Information Section -->
+          <div class="details-section">
+            <h2 class="section-title">
+              Document Information
+            </h2>
+
+            <div class="details-grid">
+              <div class="info-item">
+                <span class="info-label">Document Type</span>
+                <span class="info-value bold">{{docTypeName .Data.DocumentType}}</span>
+              </div>
+
+              <div class="info-item">
+                <span class="info-label">Period</span>
+                <span class="info-value">{{formatMonthName .Data.Month}} {{.Data.Year}}</span>
+              </div>
+
+              <div class="info-item">
+                <span class="info-label">Employee</span>
+                <span class="info-value">
+                  {{.Data.EmployeeName}}
+                  {{if .Data.EmployeeBNIID}}<span class="info-value muted">({{.Data.EmployeeBNIID}})</span>{{end}}
+                </span>
+              </div>
+
+              <div class="info-item">
+                <span class="info-label">Employee Signature</span>
+                <span class="info-value muted">
+                  {{formatDateTime .Data.EmployeeSignedAt}}
+                </span>
+              </div>
+
+              {{if .Data.WitnessName}}
+                <div class="info-item">
+                  <span class="info-label">Witness</span>
+                  <span class="info-value">{{.Data.WitnessName}}</span>
+                </div>
+
+                <div class="info-item">
+                  <span class="info-label">Witness Signature</span>
+                  <span class="info-value muted">
+                    {{formatDateTime .Data.WitnessSignedAt}}
+                  </span>
+                </div>
+              {{end}}
+
+              <div class="info-item">
+                <span class="info-label">Verification Time</span>
+                <span class="info-value muted">{{formatDateTime .Data.VerifiedAt}}</span>
+              </div>
+            </div>
+
+            <!-- Fingerprint Hash Box -->
+            <div class="fingerprint-box">
+              <div class="fingerprint-label">
+                Document Fingerprint:
+              </div>
+              <div class="hash-well">
+                {{toUpper .Data.DocumentHash}}
+              </div>
+            </div>
+          </div>
+        {{end}}
+
+        <!-- Footer -->
+        <footer class="card-footer">
+          &copy; 2026 {{.AppName}}. All Rights Reserved.
+        </footer>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -149,33 +149,41 @@ func (m *Mailer) setMessageContent(msg *gomail.Message, htmlBody, textBody strin
 	}
 }
 
-// SendSetupEmail delivers initial credentials + a setup link to a new user.
-func (m *Mailer) SendSetupEmail(to, username, setupLink string) error {
-	loc := m.timeLocation()
-	now := time.Now().In(loc)
-	expiresAt := now.Add(7 * 24 * time.Hour).Format(defaultTimeFormatWIB)
-
-	htmlBody, textBody, err := RenderSetupEmail(SetupEmailData{
-		AppName:      m.appName(),
-		Username:     username,
-		Email:        to,
-		SetupURL:     setupLink,
-		ExpireDays:   7,
-		ExpiresAt:    expiresAt,
-		SupportEmail: m.supportEmail(),
-		PortalURL:    m.frontendURL(),
-	})
-	if err != nil {
-		log.Printf("[mailer] failed to render setup email template: %v", err)
-		return err
-	}
-
+func (m *Mailer) sendSimpleMessage(to, subject, htmlBody, textBody string) error {
 	msg := gomail.NewMessage()
 	msg.SetHeader("From", m.cfg.MailFrom)
 	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", fmt.Sprintf("Selamat Datang di %s", m.appName()))
+	msg.SetHeader("Subject", subject)
 	m.setMessageContent(msg, htmlBody, textBody)
 	return m.send(msg)
+}
+
+func (m *Mailer) formatExpiryDate(duration time.Duration) string {
+	return time.Now().In(m.timeLocation()).Add(duration).Format(defaultTimeFormatWIB)
+}
+
+func (m *Mailer) sendSetupOrWelcomeEmail(to string, data SetupEmailData) error {
+	data.AppName = m.appName()
+	data.Email = to
+	data.SupportEmail = m.supportEmail()
+	data.PortalURL = m.frontendURL()
+
+	htmlBody, textBody, err := RenderSetupEmail(data)
+	if err != nil {
+		log.Printf("[mailer] failed to render setup/welcome email template: %v", err)
+		return err
+	}
+	return m.sendSimpleMessage(to, fmt.Sprintf("Selamat Datang di %s", data.AppName), htmlBody, textBody)
+}
+
+// SendSetupEmail delivers initial credentials + a setup link to a new user.
+func (m *Mailer) SendSetupEmail(to, username, setupLink string) error {
+	return m.sendSetupOrWelcomeEmail(to, SetupEmailData{
+		Username:   username,
+		SetupURL:   setupLink,
+		ExpireDays: 7,
+		ExpiresAt:  m.formatExpiryDate(7 * 24 * time.Hour),
+	})
 }
 
 // SendAccountWelcomeEmail delivers an activation notification with initial password and instructions to a newly created user,
@@ -184,33 +192,13 @@ func (m *Mailer) SendAccountWelcomeEmail(to, username, initialPassword, loginLin
 	if loginLink == "" && m.frontendURL() != "" {
 		loginLink = strings.TrimRight(m.frontendURL(), "/") + "/login"
 	}
-
-	loc := m.timeLocation()
-	now := time.Now().In(loc)
-	expiresAt := now.Add(30 * 24 * time.Hour).Format(defaultTimeFormatWIB)
-
-	htmlBody, textBody, err := RenderSetupEmail(SetupEmailData{
-		AppName:         m.appName(),
+	return m.sendSetupOrWelcomeEmail(to, SetupEmailData{
 		Username:        username,
-		Email:           to,
 		InitialPassword: initialPassword,
 		SetupURL:        loginLink,
 		ExpireDays:      30,
-		ExpiresAt:       expiresAt,
-		SupportEmail:    m.supportEmail(),
-		PortalURL:       m.frontendURL(),
+		ExpiresAt:       m.formatExpiryDate(30 * 24 * time.Hour),
 	})
-	if err != nil {
-		log.Printf("[mailer] failed to render welcome email template: %v", err)
-		return err
-	}
-
-	msg := gomail.NewMessage()
-	msg.SetHeader("From", m.cfg.MailFrom)
-	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", fmt.Sprintf("Selamat Datang di %s", m.appName()))
-	m.setMessageContent(msg, htmlBody, textBody)
-	return m.send(msg)
 }
 
 // SendResetEmail delivers a password-reset link.
@@ -259,12 +247,7 @@ func (m *Mailer) SendResetEmailWithDetails(to, username, resetLink, ipAddress, l
 		return err
 	}
 
-	msg := gomail.NewMessage()
-	msg.SetHeader("From", m.cfg.MailFrom)
-	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", fmt.Sprintf("Reset Kata Sandi Akun %s", m.appName()))
-	m.setMessageContent(msg, htmlBody, textBody)
-	return m.send(msg)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Reset Kata Sandi Akun %s", m.appName()), htmlBody, textBody)
 }
 
 // SendTimesheetEmail attaches the generated timesheet file and sends it to the
@@ -377,12 +360,7 @@ func (m *Mailer) SendReminderEmail(to, username, dateStr, activityURL string) er
 		return err
 	}
 
-	msg := gomail.NewMessage()
-	msg.SetHeader("From", m.cfg.MailFrom)
-	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", fmt.Sprintf("Pengingat Harian: Isi Timesheet Hari Ini (%s)", dateStr))
-	m.setMessageContent(msg, htmlBody, textBody)
-	return m.send(msg)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Pengingat Harian: Isi Timesheet Hari Ini (%s)", dateStr), htmlBody, textBody)
 }
 
 // SendPasswordChangedEmail delivers a security notice confirming password was updated.
@@ -418,10 +396,68 @@ func (m *Mailer) SendPasswordChangedEmailWithDetails(to, username, ipAddress, lo
 		return err
 	}
 
-	msg := gomail.NewMessage()
-	msg.SetHeader("From", m.cfg.MailFrom)
-	msg.SetHeader("To", to)
-	msg.SetHeader("Subject", fmt.Sprintf("Keamanan Akun: Kata Sandi %s Anda Berhasil Diperbarui", m.appName()))
-	m.setMessageContent(msg, htmlBody, textBody)
-	return m.send(msg)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Keamanan Akun: Kata Sandi %s Anda Berhasil Diperbarui", m.appName()), htmlBody, textBody)
+}
+
+// SendWitnessRequestEmail delivers a notification requesting a witness to review and sign a Berita Acara.
+func (m *Mailer) SendWitnessRequestEmail(to, witnessName, employeeName, period, reviewLink string) error {
+	htmlBody, textBody, err := RenderWitnessRequestEmail(WitnessRequestEmailData{
+		AppName:      m.appName(),
+		WitnessName:  witnessName,
+		EmployeeName: employeeName,
+		Period:       period,
+		ReviewURL:    reviewLink,
+		PortalURL:    m.frontendURL(),
+		SupportEmail: m.supportEmail(),
+	})
+	if err != nil {
+		log.Printf("[mailer] failed to render witness request email template: %v", err)
+		return err
+	}
+
+	return m.sendSimpleMessage(to, fmt.Sprintf("Permintaan Tanda Tangan Saksi Berita Acara - %s (%s)", employeeName, period), htmlBody, textBody)
+}
+
+// SendBeritaAcaraApprovedEmail notifies an employee that their Berita Acara has been signed by the witness.
+func (m *Mailer) SendBeritaAcaraApprovedEmail(to, employeeName, witnessName, period, downloadLink string) error {
+	htmlBody, textBody, err := RenderBeritaAcaraApprovedEmail(BeritaAcaraApprovedEmailData{
+		AppName:      m.appName(),
+		EmployeeName: employeeName,
+		WitnessName:  witnessName,
+		Period:       period,
+		DownloadURL:  downloadLink,
+		PortalURL:    m.frontendURL(),
+		SupportEmail: m.supportEmail(),
+	})
+	if err != nil {
+		log.Printf("[mailer] failed to render berita acara approved email template: %v", err)
+		return err
+	}
+
+	return m.sendSimpleMessage(to, fmt.Sprintf("Berita Acara Disetujui oleh Saksi (%s)", period), htmlBody, textBody)
+}
+
+// SendBeritaAcaraRejectedEmail notifies an employee that their Berita Acara was rejected by the witness.
+func (m *Mailer) SendBeritaAcaraRejectedEmail(to, employeeName, witnessName, period, reason string) error {
+	activityURL := ""
+	if m.frontendURL() != "" {
+		activityURL = strings.TrimRight(m.frontendURL(), "/") + "/activity"
+	}
+
+	htmlBody, textBody, err := RenderBeritaAcaraRejectedEmail(BeritaAcaraRejectedEmailData{
+		AppName:      m.appName(),
+		EmployeeName: employeeName,
+		WitnessName:  witnessName,
+		Period:       period,
+		Notes:        reason,
+		ActivityURL:  activityURL,
+		PortalURL:    m.frontendURL(),
+		SupportEmail: m.supportEmail(),
+	})
+	if err != nil {
+		log.Printf("[mailer] failed to render berita acara rejected email template: %v", err)
+		return err
+	}
+
+	return m.sendSimpleMessage(to, fmt.Sprintf("Berita Acara Perlu Revisi (%s)", period), htmlBody, textBody)
 }

@@ -39,6 +39,7 @@ func TestAuthHandlers_FullFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
+	srv.RedisClient = newTestRedisClient(t)
 
 	rawPass := "MyStr0ngPassw0rd!2026"
 	hash, err := auth.HashPassword(rawPass)
@@ -1528,7 +1529,8 @@ func TestFinishPasskeyRegistration_FullCoverage(t *testing.T) {
 	}
 
 	srv := &Server{
-		UserRepo: userRepo,
+		UserRepo:    userRepo,
+		RedisClient: newTestRedisClient(t),
 	}
 
 	// 1. Success with response.transports
@@ -1593,7 +1595,8 @@ func TestFinishPasskeyRegistration_FullCoverage(t *testing.T) {
 		err:            errors.New("db save error"),
 	}
 	srvErr := &Server{
-		UserRepo: errRepo,
+		UserRepo:    errRepo,
+		RedisClient: newTestRedisClient(t),
 		finishRegistrationFunc: func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
 			return &webauthn.Credential{
 				ID:        []byte("cred-id-4"),

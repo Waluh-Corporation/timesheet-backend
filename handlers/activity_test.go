@@ -193,12 +193,15 @@ func TestActivityHandlers_GetAndListIntegration(t *testing.T) { // NOSONAR
 		EndTime:   "17:00",
 	}
 	act2 := models.DailyActivity{
-		UserID:    user1.ID,
-		Date:      date2,
-		Status:    "P",
-		Activity:  "Working on feature 2",
-		StartTime: "08:00",
-		EndTime:   "17:00",
+		UserID:           user1.ID,
+		Date:             date2,
+		Status:           "P",
+		Activity:         "Working on feature 2",
+		StartTime:        "08:00",
+		EndTime:          "17:00",
+		IsBeritaAcara:    true,
+		WitnessID:        &user2.ID,
+		BeritaAcaraNotes: "Power outage in office",
 	}
 	act3 := models.DailyActivity{
 		UserID:    user1.ID,
@@ -299,6 +302,21 @@ func TestActivityHandlers_GetAndListIntegration(t *testing.T) { // NOSONAR
 		if resp.Data.Activity != "Working on feature 2" {
 			t.Errorf("unexpected activity description: %s", resp.Data.Activity)
 		}
+		if resp.Data.StartTime != "" || resp.Data.EndTime != "" {
+			t.Errorf("expected start_time and end_time to be empty when copying previous activity, got %s - %s", resp.Data.StartTime, resp.Data.EndTime)
+		}
+		if resp.Data.IsBeritaAcara {
+			t.Errorf("expected is_berita_acara to be false when copying previous activity, got true")
+		}
+		if resp.Data.WitnessID != nil {
+			t.Errorf("expected witness_id to be nil when copying previous activity, got %v", *resp.Data.WitnessID)
+		}
+		if resp.Data.Witness != nil {
+			t.Errorf("expected witness to be nil when copying previous activity, got %+v", resp.Data.Witness)
+		}
+		if resp.Data.BeritaAcaraNotes != "" {
+			t.Errorf("expected berita_acara_notes to be empty when copying previous activity, got %s", resp.Data.BeritaAcaraNotes)
+		}
 	})
 
 	t.Run("GetPreviousDailyActivity defaults to latest activity when date param is empty", func(t *testing.T) {
@@ -324,6 +342,21 @@ func TestActivityHandlers_GetAndListIntegration(t *testing.T) { // NOSONAR
 		}
 		if resp.Data.Activity != "Business trip" {
 			t.Errorf("unexpected activity description: %s", resp.Data.Activity)
+		}
+		if resp.Data.StartTime != "" || resp.Data.EndTime != "" {
+			t.Errorf("expected start_time and end_time to be empty when copying previous activity, got %s - %s", resp.Data.StartTime, resp.Data.EndTime)
+		}
+		if resp.Data.IsBeritaAcara {
+			t.Errorf("expected is_berita_acara to be false when copying previous activity, got true")
+		}
+		if resp.Data.WitnessID != nil {
+			t.Errorf("expected witness_id to be nil when copying previous activity, got %v", *resp.Data.WitnessID)
+		}
+		if resp.Data.Witness != nil {
+			t.Errorf("expected witness to be nil when copying previous activity, got %+v", resp.Data.Witness)
+		}
+		if resp.Data.BeritaAcaraNotes != "" {
+			t.Errorf("expected berita_acara_notes to be empty when copying previous activity, got %s", resp.Data.BeritaAcaraNotes)
 		}
 	})
 
@@ -1326,6 +1359,10 @@ type testActivityMockStorage struct{}
 
 func (s *testActivityMockStorage) Upload(ctx context.Context, key string, body io.Reader, contentType string) error {
 	return nil
+}
+
+func (s *testActivityMockStorage) Download(ctx context.Context, key string) ([]byte, error) {
+	return []byte("dummy-content"), nil
 }
 
 func (s *testActivityMockStorage) GetPresignedDownloadURL(ctx context.Context, key string, expiry time.Duration) (string, error) {

@@ -78,6 +78,13 @@ func renderSDDTemplate(in GenerationInput) ([]byte, error) {
 	_ = f.SetCellValue(sheet, "H52", sddNamePrefix+tlName)
 	_ = f.SetCellValue(sheet, "L52", sddNamePrefix+dhName)
 
+	if in.IsSigned && len(in.SignatureBytes) > 0 {
+		_ = EmbedPicture(f, sheet, "C46", in.SignatureBytes, 0.4, 0.4)
+	}
+	if in.IsSigned && len(in.QRCodeBytes) > 0 {
+		_ = EmbedPicture(f, sheet, "M46", in.QRCodeBytes, 0.6, 0.6)
+	}
+
 	return WriteWorkbookToBuffer(f, "sdd")
 }
 
@@ -89,8 +96,6 @@ func renderSDDDailyRows(
 	st *BuilderStyles,
 ) map[string]int {
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
-	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
-	wrapCols := []string{"K", "L", "M", "N"}
 	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {
@@ -98,12 +103,12 @@ func renderSDDDailyRows(
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
+			ApplyBlankPaddingRow(f, sheet, row, StandardGrid14Cols, StandardGridWrapCols, st)
 			continue
 		}
 
 		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "B", rs, allCols, wrapCols, dsc)
+		ApplyDayRowStyles(f, sheet, "B", rs, StandardGrid14Cols, StandardGridWrapCols, dsc)
 		_ = f.SetCellValue(sheet, "A"+rs, day)
 
 		// Clear status cells
@@ -128,7 +133,11 @@ func renderSDDDayActivity(
 	statusCounts map[string]int,
 ) {
 	if dsc.HasActivity {
-		col, mark := resolveSDDStatusMark(dsc.Activity.Status)
+		status := dsc.Activity.Status
+		if strings.TrimSpace(status) == "" {
+			status = "H"
+		}
+		col, mark := resolveSDDStatusMark(status)
 		if col != "" {
 			_ = f.SetCellValue(sheet, col+rs, mark)
 			statusCounts[col]++

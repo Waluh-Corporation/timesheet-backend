@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-10-31
+
+### Added
+- **Dynamic Weekend & Holiday Overtime Timesheet Generation**: Full support for overtime logged on weekends and public holidays. Timesheet spreadsheets across all vendor formats (MII, SDD, Adidata, and NTT) now display overtime hours, project details, attendance markings, and calculated totals on clean white rows instead of inactive grey backgrounds.
+- **Weekend Inactive Row Remark Standardization**: Consistent timesheet notes for inactive days off. Weekend days without logged activities now clearly show "Weekend" in the remarks column across all timesheet templates.
+- **Admin Audit Log Query & Filtering**: Comprehensive administrative audit trail. Administrators can now browse and filter system audit records by date range, action type, user, and resource to monitor administrative changes.
+- **Dynamic Push Notification Schedule Endpoint**: Daily reminder schedule transparency. Users and client apps can now view active daily notification reminder times, the configured timezone, and the exact time of the next scheduled reminder.
+- **Digital Signature & Document Verification QR Code System**: Digital signatures and tamper-evident QR verification. Monthly timesheets and incident reports now feature embedded employee signatures alongside secure verification QR codes to guarantee document authenticity.
+- **Standalone Tabler Document Verification Webpage**: Mobile-friendly document verification web page. Anyone scanning a timesheet or report QR code with a smartphone camera can instantly verify document validity, signers, signature dates, and integrity in a clean, modern web view.
+- **User Profile Signature Management**: Profile signature setup. Employees can now easily draw or upload their signature directly in their profile settings for use on official documents.
+- **Explicit Timesheet Sign-Off & Period Locking**: Monthly timesheet locking and sign-off. Employees can officially sign off on their completed monthly timesheet, locking activity edits to prevent accidental changes and embedding their signature and QR verification code into generated spreadsheets.
+- **Asynchronous Berita Acara Dual-Signature Workflow**: Collaborative witness sign-off for incident reports (Berita Acara). Employees can send attendance incident reports to a nominated colleague for witness verification. Witnesses receive email and push notifications to review, approve, or request revisions. Once approved, the generated Word document automatically includes both employee and witness signatures with a verification QR code.
+- **Dedicated Responsive Email Templates**: Action-oriented email alerts for report approvals. New clean, responsive email notifications alert colleagues when their witness signature is requested and notify employees once their report has been approved or rejected.
+- **Public Document Verification API for Frontend**: Public verification service. External portals and client applications can programmatically verify document details, signer identity, and tamper status.
+
+### Fixed
+- **Timesheet Handler Test End-of-Month Calculation**: End-of-month date calculations. Resolved an edge-case calculation error when retrieving or processing records on the 31st day of the month.
+- **Inadvertent Grey Styling on Weekend/Holiday Overtime Rows**: Accurate overtime row highlights. Resolved an issue where overtime rows on weekends and holidays were accidentally shaded grey instead of remaining highlighted as active workdays.
+- **Attendance Status Fallback on Overtime Entries**: Reliable attendance markings for overtime. Ensured attendance columns always record present status markers on overtime days even if no explicit status code was provided.
+- **Verification Page Self-Contained Styling & CSP Whitelist**: Self-contained document verification styling. Embedded styles and icons directly into the document verification page to ensure fast, reliable rendering across all mobile and desktop browsers under strict security headers.
+- **Verification Page English Label Normalization**: Standardized verification page wording. Cleaned up document headings and labels for consistent English presentation.
+- **Berita Acara OpenXML `.docx` Schema Corruption on Signature Embed**: Word document recovery error fix. Resolved an issue where digitally signed Berita Acara Word (.docx) files prompted a repair or recovery alert in Microsoft Word when opened.
+- **Berita Acara Verification QR Relocation to Word Footer**: Clean single-page Word report layout. Moved the verification QR code into the document footer so the entire Berita Acara document fits neatly on a single printed page.
+- **Berita Acara Floating Signatures ("In Front of Text")**: Natural signature placement in Word documents. Signatures now float naturally over the signature lines without pushing text down or altering paragraph alignment.
+- **Strict Designated Witness Signature Binding**: Accurate witness signature placement. Guaranteed that the approved colleague's signature always attaches to the witness column without duplication or mismatch.
+
+### Changed
+- **SonarQube Quality Hardening & Cognitive Complexity Optimization**: Internal code health and performance improvements. Refactored key services and controllers to boost efficiency, streamline internal workflows, and maintain strict quality standards.
+- **Inactive Attendance Status Matrix Marker Blanking**: Cleaner attendance matrix display. Inactive non-working days now leave attendance cells clean and blank instead of printing "X", matching company timesheet design guidelines.
+- **Repository Interface Segregation & ACID Transactor Abstraction**: Enhanced database transaction safety. Upgraded multi-step operations (such as profile approvals and account updates) to guarantee complete data consistency.
+- **Distributed Redis State for WebAuthn Sessions & Cooldowns**: High-availability authentication sessions. Passkey (WebAuthn) logins and password reset cooldowns now synchronize reliably across multiple backend servers.
+- **Verification Page Configurable Timezone Display**: Timezone-aware verification timestamps. Document verification records now display timestamps in the system's configured timezone (e.g., WIB, UTC) with clear timezone abbreviations.
+- **Document Verification & Berita Acara Generator Code Quality Hardening**: Document generator reliability enhancements. Streamlined document generation routines for faster, more dependable file creation.
+- **Berita Acara Witness Signature Guard on Generation**: Witness approval requirement before export. Timesheet and Berita Acara exports are now protected: if a month contains incident reports, they must be reviewed and signed by the witness before the final documents can be downloaded.
+- **Berita Acara Single Monthly Witness Simplification**: Simplified witness selection. Employees designate one witness per month; that choice is automatically shared across all incident entries for that month, removing repetitive selections.
+- **Berita Acara Submission Monthly Witness Auto-Resolution**: Automatic witness linking on submission. Submitting an incident report automatically associates the employee's designated monthly witness if not specified individually.
+- **Timesheet Delivery Email Template Refinement**: Updated delivery email wording. Download buttons and email notifications now clearly indicate that deliveries include both Timesheet spreadsheets and Berita Acara documents.
+- **Daily Activity Copying Excludes Working Hours & Berita Acara**: Smarter previous-day activity copying. Copying tasks from a previous day now imports task descriptions and project names while leaving hours and incident reports blank, encouraging accurate daily time recording.
+- **AuthService Extraction & Clean Architecture Separation**: Strengthened account authentication security. Centralized password verification, token refresh rotation, and login audit trails to protect against session reuse and token tampering.
+- **Tabler-Inspired Transactional Email Redesign**: Modernized email notification design. Upgraded all transactional emails (account setup, password resets, timesheet deliveries, reminders) with clean modern styling, clear key-value summary cards, and full dark mode support across Outlook, Gmail, and Apple Mail.
+
+### Removed
+- **Dead Code Cleanup (Mapper & Domain Entity Layer)**: Retired obsolete internal components. Removed legacy data mappers and inactive entities to streamline system maintenance.
+
 ## [1.15.1] - 2026-10-24
 
 ### Fixed
@@ -73,38 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Replaced the "Status Keamanan" row in password changed notification emails with the actor's IP address and approximate geolocation in dedicated rows.
   - Removed "Status Akun" from account setup emails.
 
-## [1.12.0] - 2026-09-26
-
-### Added
-- **Asynchronous Timesheet Generation Engine**: High-throughput background generation pipeline powered by Redis (`hibiken/asynq`) with worker concurrency limiting (`EXCEL_MAX_CONCURRENT_JOBS`). Generation requests now return `202 Accepted` with a tracking Job ID, preventing HTTP timeouts and CPU starvation during peak generation windows.
-- **Magic Download Tokens & Single-User Quota Enforcement**: Single-user secure download links using Magic Download Tokens with automated quota enforcement (maximum 3 downloads per generation result) and 7-day expiration, eliminating link leakage and unauthorized sharing.
-- **Autonomous Cache Evaluation & Re-issue**: Intelligent idempotency check on `POST /api/v1/timesheet/generate` that automatically inspects activity updates (`MAX(updated_at)`), profile modifications, and physical S3 file availability. Re-issues fresh download links in under 5ms without redundant Excel regeneration or S3 file duplication.
-- **Fast-Path Redis Counters, Debounce Lock & URL Caching**: Redis-backed atomic quota counters, 10-second distributed debounce locking, and temporary S3 Presigned URL handling to manage network reconnects with 0 MB server file bandwidth.
-- **Dedicated Secure Download Endpoint**: Added public `GET /api/v1/timesheet/downloads/:token` endpoint that validates token quota, increments access counts, and issues `302 Found` redirects directly to temporary S3 Presigned URLs.
-- **Configurable Download Token Quota**: Added `TIMESHEET_DOWNLOAD_MAX_QUOTA` configuration to `.env` (default 3) allowing administrators to tune maximum downloads permitted per generation link.
-- **HTTP HEAD Support on Magic Download Endpoint**: Added `HEAD` method support on `/api/v1/timesheet/downloads/:token` that returns `200 OK` for email security scanners and link preview bots without consuming user download quota.
-- **S3-Compatible Object Storage & 7-Day Retention**: Automated storage integration using the official AWS SDK Go v2 supporting AWS S3, MinIO, Cloudflare R2, and Wasabi with automated daily cleanup of expired files and database records.
-- **SES-Ready Rate-Limited Transactional Mailer**: Throttled outbound email delivery using token-bucket rate limiting, safeguarding SMTP servers from connection spikes and rate limit penalties.
-- **Real-Time Job Notifications & Status APIs**: Web Push notifications and email alerts with direct download buttons when timesheets are ready, alongside `GET /api/v1/timesheet/jobs/:id` and `GET /api/v1/timesheet/jobs` endpoints.
-
-### Changed
-- **Asynchronous Generation Contract**: `POST /api/v1/timesheet/generate` now delegates to the background queue returning `202 Accepted` with job metadata (`TimesheetJobResponse`), while retaining backward-compatible synchronous generation if the queue is unconfigured.
-- **Clean Architecture & Handler Decoupling**: Refactored HTTP handlers to adhere to Clean Architecture principles by eliminating direct database coupling from `handlers.Server` and all route handlers. Introduced pure domain entities, repository interfaces, and encapsulated business logic within dedicated domain services.
-- **Official Timesheet Formats Across All Companies**: Exported monthly timesheets now faithfully match official spreadsheet layouts, colors, and branding for all partner companies (MII, SDD, Adidata, and NTT).
-- **Automatic Generation Date in Signatures**: The signature section across timesheets now automatically fills the exact generation date (e.g., `DATE : 26-Sep-2026`).
-- **Standardized Attendance Markers & Formulas**: Standardized attendance status markers for SDD timesheets (`H`, `C`, `I`, `S`, `L`) and aligned NTT summary row formulas to use `COUNTIF`.
-
-### Fixed
-- **Timesheet Download Counter & Browser Attachment**: Fixed download counter increment issues and added RFC 6266 `Content-Disposition: attachment` headers for immediate browser file downloads.
-- **Total Attendance Calculation in Exported Timesheets**: Fixed an issue where the "Total Kehadiran" summary row remained 0 in generated Excel files.
-- **Adidata Timesheet Template Alignment**: Aligned cell coordinates, formulas, and headers to match the official Adidata master template.
-- **Accurate Working Hours and Total Hours Display**: Formatted daily and total working hours as standard time values (`08:00`, `17:00`) instead of decimal numbers.
-- **Accurate App Impacted & Project Selection**: Fixed synchronization issues where project selections and impacted applications were reset upon updates.
-
-
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.1...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.1...v1.16.0
 [1.15.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...v1.13.0
-[1.12.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.11.0...v1.12.0

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -421,5 +422,317 @@ func TestMonthNameIndonesian(t *testing.T) {
 	}
 	if MonthNameIndonesian(13) != "Bulan 13" {
 		t.Errorf("expected Bulan 13, got %s", MonthNameIndonesian(13))
+	}
+}
+
+func TestResolveDayStyleContext_WeekendAndHolidayScenarios(t *testing.T) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	st, err := NewBuilderStyles(f)
+	if err != nil {
+		t.Fatalf("failed to create builder styles: %v", err)
+	}
+
+	holidays := map[int]string{
+		10: "Nyepi",
+	}
+	byDay := map[int]models.DailyActivity{
+		10: {StartTime: "08:00", EndTime: "17:00", Activity: "Holiday Maintenance", Status: "P"},
+		14: {StartTime: "09:00", EndTime: "18:00", Activity: "Saturday Deployment", Status: "P"},
+	}
+
+	tests := []struct {
+		name              string
+		year              int
+		month             int
+		day               int
+		byDayMap          map[int]models.DailyActivity
+		wantHolidayOrWknd bool
+		wantHasActivity   bool
+		wantCenterStyle   int
+		wantDateStyle     int
+		wantTimeStyle     int
+	}{
+		{
+			name:              "Weekend without activity -> grey style",
+			year:              2026,
+			month:             3,
+			day:               15, // Sunday
+			byDayMap:          byDay,
+			wantHolidayOrWknd: true,
+			wantHasActivity:   false,
+			wantCenterStyle:   st.GreyCenterStyle,
+			wantDateStyle:     st.GreyDateStyle,
+			wantTimeStyle:     st.GreyTimeStyle,
+		},
+		{
+			name:              "Weekend with overtime activity -> standard clean/white style",
+			year:              2026,
+			month:             3,
+			day:               14, // Saturday
+			byDayMap:          byDay,
+			wantHolidayOrWknd: true,
+			wantHasActivity:   true,
+			wantCenterStyle:   st.DataCenterStyle,
+			wantDateStyle:     st.DateStyle,
+			wantTimeStyle:     st.TimeStyle,
+		},
+		{
+			name:              "Public holiday without activity -> grey style",
+			year:              2026,
+			month:             3,
+			day:               10, // Nyepi
+			byDayMap:          map[int]models.DailyActivity{},
+			wantHolidayOrWknd: true,
+			wantHasActivity:   false,
+			wantCenterStyle:   st.GreyCenterStyle,
+			wantDateStyle:     st.GreyDateStyle,
+			wantTimeStyle:     st.GreyTimeStyle,
+		},
+		{
+			name:              "Public holiday with overtime activity -> standard clean/white style",
+			year:              2026,
+			month:             3,
+			day:               10, // Nyepi
+			byDayMap:          byDay,
+			wantHolidayOrWknd: true,
+			wantHasActivity:   true,
+			wantCenterStyle:   st.DataCenterStyle,
+			wantDateStyle:     st.DateStyle,
+			wantTimeStyle:     st.TimeStyle,
+		},
+		{
+			name:              "Regular weekday without activity -> standard clean/white style",
+			year:              2026,
+			month:             3,
+			day:               11, // Wednesday
+			byDayMap:          byDay,
+			wantHolidayOrWknd: false,
+			wantHasActivity:   false,
+			wantCenterStyle:   st.DataCenterStyle,
+			wantDateStyle:     st.DateStyle,
+			wantTimeStyle:     st.TimeStyle,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dsc := ResolveDayStyleContext(tc.year, tc.month, tc.day, holidays, tc.byDayMap, st)
+			if dsc.IsHolidayOrWeekend != tc.wantHolidayOrWknd {
+				t.Errorf("IsHolidayOrWeekend = %v, want %v", dsc.IsHolidayOrWeekend, tc.wantHolidayOrWknd)
+			}
+			if dsc.HasActivity != tc.wantHasActivity {
+				t.Errorf("HasActivity = %v, want %v", dsc.HasActivity, tc.wantHasActivity)
+			}
+			if dsc.CenterStyle != tc.wantCenterStyle {
+				t.Errorf("CenterStyle = %d, want %d", dsc.CenterStyle, tc.wantCenterStyle)
+			}
+			if dsc.DateStyle != tc.wantDateStyle {
+				t.Errorf("DateStyle = %d, want %d", dsc.DateStyle, tc.wantDateStyle)
+			}
+			if dsc.TimeStyle != tc.wantTimeStyle {
+				t.Errorf("TimeStyle = %d, want %d", dsc.TimeStyle, tc.wantTimeStyle)
+			}
+		})
+	}
+}
+
+func TestWriteBuilderDailyRows_WeekendAndHolidayOvertime(t *testing.T) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	sheet := "Sheet1"
+	st, _ := NewBuilderStyles(f)
+
+	in := GenerationInput{
+		Year:  2026,
+		Month: 3, // March 2026: Day 1 is Sunday, Day 10 is Nyepi (Holiday), Day 14 is Saturday (OT)
+		Activities: []models.DailyActivity{
+			{Date: time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC), Activity: "Holiday Support", Status: "P"},
+			{Date: time.Date(2026, 3, 14, 0, 0, 0, 0, time.UTC), Activity: "Weekend Deploy", Status: "P"},
+		},
+		Holidays: map[int]string{
+			10: "Hari Raya Nyepi",
+		},
+	}
+
+	WriteBuilderDailyRows(f, sheet, in, DailyRowsConfig{
+		StartRow: 10,
+		AllCols:  []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"},
+		WrapCols: []string{"K"},
+		Styles:   st,
+		WriteAct: func(rs string, row int, dsc DayStyleContext) {
+			_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
+		},
+	})
+
+	// Day 1: Sunday without activity -> Row 10
+	valK10, _ := f.GetCellValue(sheet, "K10")
+	if valK10 != "Weekend" {
+		t.Errorf("K10 = %q, want 'Weekend'", valK10)
+	}
+	sID10, _ := f.GetCellStyle(sheet, "A10")
+	if sID10 != st.GreyDateStyle {
+		t.Errorf("A10 style = %d, want GreyDateStyle %d", sID10, st.GreyDateStyle)
+	}
+	// Assert status matrix columns E..J are all empty for Day 1
+	for _, col := range []string{"E", "F", "G", "H", "I", "J"} {
+		v, _ := f.GetCellValue(sheet, col+"10")
+		if v != "" {
+			t.Errorf("Day 1 cell %s10 = %q, want empty", col, v)
+		}
+	}
+
+	// Day 10: Holiday with activity -> Row 19
+	valK19, _ := f.GetCellValue(sheet, "K19")
+	if valK19 != "Holiday Support" {
+		t.Errorf("K19 = %q, want 'Holiday Support'", valK19)
+	}
+	sID19, _ := f.GetCellStyle(sheet, "A19")
+	if sID19 != st.DateStyle {
+		t.Errorf("A19 style = %d, want standard DateStyle %d", sID19, st.DateStyle)
+	}
+	valE19, _ := f.GetCellValue(sheet, "E19")
+	if valE19 != "P" {
+		t.Errorf("E19 = %q, want 'P'", valE19)
+	}
+	valJ19, _ := f.GetCellValue(sheet, "J19")
+	if valJ19 != "" {
+		t.Errorf("J19 = %q, want empty inactive status cell", valJ19)
+	}
+
+	// Day 14: Weekend with activity -> Row 23
+	valK23, _ := f.GetCellValue(sheet, "K23")
+	if valK23 != "Weekend Deploy" {
+		t.Errorf("K23 = %q, want 'Weekend Deploy'", valK23)
+	}
+	sID23, _ := f.GetCellStyle(sheet, "A23")
+	if sID23 != st.DateStyle {
+		t.Errorf("A23 style = %d, want standard DateStyle %d", sID23, st.DateStyle)
+	}
+	valE23, _ := f.GetCellValue(sheet, "E23")
+	if valE23 != "P" {
+		t.Errorf("E23 = %q, want 'P'", valE23)
+	}
+	valJ23, _ := f.GetCellValue(sheet, "J23")
+	if valJ23 != "" {
+		t.Errorf("J23 = %q, want empty inactive status cell", valJ23)
+	}
+}
+
+func TestWriteAttendanceMatrixStatus_InactiveMarkerAndAllStatuses(t *testing.T) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	sheet := "Sheet1"
+
+	tests := []struct {
+		name        string
+		statusInput string
+		expectedCol string
+		expectedVal string
+		wantJVal    string
+	}{
+		{
+			name:        "Present 'P' -> col E has 'P', col J is empty",
+			statusInput: "P",
+			expectedCol: "E",
+			expectedVal: "P",
+			wantJVal:    "",
+		},
+		{
+			name:        "Sick 'S' -> col F has 'S', col J is empty",
+			statusInput: "S",
+			expectedCol: "F",
+			expectedVal: "S",
+			wantJVal:    "",
+		},
+		{
+			name:        "Business Trip 'BT' -> col G has 'BT', col J is empty",
+			statusInput: "BT",
+			expectedCol: "G",
+			expectedVal: "BT",
+			wantJVal:    "",
+		},
+		{
+			name:        "Permit 'PM' -> col H has 'PM', col J is empty",
+			statusInput: "PM",
+			expectedCol: "H",
+			expectedVal: "PM",
+			wantJVal:    "",
+		},
+		{
+			name:        "Vacation 'V' -> col I has 'V', col J is empty",
+			statusInput: "V",
+			expectedCol: "I",
+			expectedVal: "V",
+			wantJVal:    "",
+		},
+		{
+			name:        "Inactive status uppercase 'X' -> col J must be EMPTY (not 'x' or 'X')",
+			statusInput: "X",
+			expectedCol: "J",
+			expectedVal: "",
+			wantJVal:    "",
+		},
+		{
+			name:        "Inactive status lowercase 'x' -> col J must be EMPTY (not 'x' or 'X')",
+			statusInput: "x",
+			expectedCol: "J",
+			expectedVal: "",
+			wantJVal:    "",
+		},
+		{
+			name:        "Inactive status with spaces ' X ' -> col J must be EMPTY",
+			statusInput: " X ",
+			expectedCol: "J",
+			expectedVal: "",
+			wantJVal:    "",
+		},
+		{
+			name:        "Empty status -> all matrix cells empty",
+			statusInput: "",
+			expectedCol: "",
+			expectedVal: "",
+			wantJVal:    "",
+		},
+		{
+			name:        "Unknown status -> all matrix cells empty",
+			statusInput: "UNKNOWN",
+			expectedCol: "",
+			expectedVal: "",
+			wantJVal:    "",
+		},
+	}
+
+	for i, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rowStr := fmt.Sprintf("%d", 30+i)
+			WriteAttendanceMatrixStatus(f, sheet, rowStr, tc.statusInput)
+
+			if tc.expectedCol != "" {
+				val, _ := f.GetCellValue(sheet, tc.expectedCol+rowStr)
+				if val != tc.expectedVal {
+					t.Errorf("Cell %s%s = %q, want %q", tc.expectedCol, rowStr, val, tc.expectedVal)
+				}
+			}
+
+			// Cell J must never contain "x" or "X" when status is inactive
+			valJ, _ := f.GetCellValue(sheet, "J"+rowStr)
+			if valJ == "x" || valJ == "X" {
+				t.Errorf("Cell J%s contains %q, but inactive marker must be empty (\"\")", rowStr, valJ)
+			}
+			if valJ != tc.wantJVal {
+				t.Errorf("Cell J%s = %q, want %q", rowStr, valJ, tc.wantJVal)
+			}
+
+			// Verify other columns are empty when status is "X", "x", or ""
+			if tc.expectedVal == "" {
+				for _, col := range []string{"E", "F", "G", "H", "I", "J"} {
+					v, _ := f.GetCellValue(sheet, col+rowStr)
+					if v != "" {
+						t.Errorf("Expected cell %s%s to be empty, got %q", col, rowStr, v)
+					}
+				}
+			}
+		})
 	}
 }

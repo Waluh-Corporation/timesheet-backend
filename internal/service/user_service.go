@@ -44,31 +44,66 @@ type UserService interface {
 }
 
 type userService struct {
-	repo   repository.UserRepository
-	hasher auth.PasswordHasher
-	mailer *mailer.Mailer
-	master repository.MasterRepository
+	userRepo   repository.UserAccountRepository
+	changeRepo repository.ProfileChangeRepository
+	hasher     auth.PasswordHasher
+	mailer     *mailer.Mailer
+	master     repository.MasterRepository
+	transactor domain.Transactor
 }
 
-// NewUserService constructs an instance of UserService.
-func NewUserService(repo repository.UserRepository, hasher auth.PasswordHasher, m *mailer.Mailer, master ...repository.MasterRepository) UserService {
+// NewUserService constructs an instance of UserService with segregated repositories.
+func NewUserService(
+	userRepo repository.UserAccountRepository,
+	changeRepo repository.ProfileChangeRepository,
+	hasher auth.PasswordHasher,
+	m *mailer.Mailer,
+	master repository.MasterRepository,
+	transactor ...domain.Transactor,
+) UserService {
 	if hasher == nil {
 		hasher = auth.DefaultHasher
 	}
+	if changeRepo == nil {
+		if cr, ok := userRepo.(repository.ProfileChangeRepository); ok {
+			changeRepo = cr
+		}
+	}
+	var tx domain.Transactor
+	if len(transactor) > 0 && transactor[0] != nil {
+		tx = transactor[0]
+	} else if t, ok := userRepo.(domain.Transactor); ok {
+		tx = t
+	} else if t, ok := changeRepo.(domain.Transactor); ok {
+		tx = t
+	} else if t, ok := master.(domain.Transactor); ok {
+		tx = t
+	}
+	return &userService{
+		userRepo:   userRepo,
+		changeRepo: changeRepo,
+		hasher:     hasher,
+		mailer:     m,
+		master:     master,
+		transactor: tx,
+	}
+}
+
+// NewUserServiceFromUserRepo constructs an instance of UserService using a composite UserRepository for backward compatibility.
+func NewUserServiceFromUserRepo(repo repository.UserRepository, hasher auth.PasswordHasher, m *mailer.Mailer, master ...repository.MasterRepository) UserService {
 	var mr repository.MasterRepository
 	if len(master) > 0 {
 		mr = master[0]
 	}
-	return &userService{
-		repo:   repo,
-		hasher: hasher,
-		mailer: m,
-		master: mr,
+	var tx domain.Transactor
+	if t, ok := repo.(domain.Transactor); ok {
+		tx = t
 	}
+	return NewUserService(repo, repo, hasher, m, mr, tx)
 }
 
 func (s *userService) ListUsers(ctx context.Context, isActive *bool) ([]models.User, error) {
-	return s.repo.ListUsers(ctx, isActive)
+	return s.userRepo.ListUsers(ctx, isActive)
 }
 
 func (s *userService) resolveCreateCompany(ctx context.Context, req *request.CreateUserRequest, user *models.User) error {
@@ -270,7 +305,7 @@ func (s *userService) applyEmailUpdate(ctx context.Context, newEmail *string, us
 	if email == "" || email == user.Email {
 		return nil
 	}
-	existing, err := s.repo.FindByEmailExcludingUser(ctx, email, user.ID)
+	existing, err := s.userRepo.FindByEmailExcludingUser(ctx, email, user.ID)
 	if err == nil && existing != nil {
 		return domain.NewUserError(domain.ErrInvalidInput, "email is already registered")
 	}
@@ -439,7 +474,7 @@ func (s *userService) AdminUpdateUser(ctx context.Context, id uint, callerID uin
 		return err
 	}
 
-	user, err := s.repo.FindByID(ctx, id)
+	user, err := s.userRepo.FindByID(ctx, id)
 	if err := validateUpdatableUser(user, err); err != nil {
 		return err
 	}
@@ -460,7 +495,7 @@ func (s *userService) AdminUpdateUser(ctx context.Context, id uint, callerID uin
 		user.CompanyID = nil
 	}
 
-	if err := s.repo.Update(ctx, user); err != nil {
+	if err := s.userRepo.Update(ctx, user); err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
 	}
 	return nil
@@ -470,35 +505,35 @@ func (s *userService) AdminDeleteUser(ctx context.Context, id uint, callerID uin
 	if id == callerID {
 		return domain.NewUserError(domain.ErrForbidden, "you cannot deactivate your own account")
 	}
-	user, err := s.repo.FindByID(ctx, id)
+	user, err := s.userRepo.FindByID(ctx, id)
 	if err != nil || user == nil {
 		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
 		return domain.NewUserError(domain.ErrForbidden, "cannot deactivate an anonymized account")
 	}
-	return s.repo.SoftDelete(ctx, id)
+	return s.userRepo.SoftDelete(ctx, id)
 }
 
 func (s *userService) AdminAnonymizeUser(ctx context.Context, id uint, callerID uint) error {
 	if id == callerID {
 		return domain.NewUserError(domain.ErrForbidden, "you cannot anonymize your own account")
 	}
-	user, err := s.repo.FindByID(ctx, id)
+	user, err := s.userRepo.FindByID(ctx, id)
 	if err != nil || user == nil {
 		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	if user.IsAnonymized || strings.HasPrefix(user.Username, "deleted_user_") || strings.HasPrefix(user.Name, "ANONYMIZED_USER_") {
 		return domain.NewUserError(domain.ErrForbidden, "user is already anonymized")
 	}
-	if err := s.repo.Anonymize(ctx, id); err != nil {
+	if err := s.userRepo.Anonymize(ctx, id); err != nil {
 		return fmt.Errorf("failed to anonymize user data: %w", err)
 	}
-	return s.repo.SoftDelete(ctx, id)
+	return s.userRepo.SoftDelete(ctx, id)
 }
 
 func (s *userService) SubmitProfileChange(ctx context.Context, userID uint, req *request.ProfileChangeRequestDTO) error {
-	user, err := s.repo.FindByID(ctx, userID)
+	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil || user == nil {
 		return domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
@@ -507,7 +542,7 @@ func (s *userService) SubmitProfileChange(ctx context.Context, userID uint, req 
 	}
 
 	if req.Email != "" {
-		existing, err := s.repo.FindByEmailExcludingUser(ctx, req.Email, userID)
+		existing, err := s.userRepo.FindByEmailExcludingUser(ctx, req.Email, userID)
 		if err == nil && existing != nil {
 			return domain.NewUserError(domain.ErrInvalidInput, "email is already registered by another user")
 		}
@@ -530,18 +565,18 @@ func (s *userService) SubmitProfileChange(ctx context.Context, userID uint, req 
 		Notes:        req.Notes,
 	}
 
-	if err := s.repo.CreateProfileChange(ctx, &change); err != nil {
+	if err := s.changeRepo.CreateProfileChange(ctx, &change); err != nil {
 		return fmt.Errorf("failed to create profile change request: %w", err)
 	}
 	return nil
 }
 
 func (s *userService) MyProfileChanges(ctx context.Context, userID uint) ([]models.ProfileChangeRequest, error) {
-	return s.repo.ListProfileChanges(ctx, &userID, "")
+	return s.changeRepo.ListProfileChanges(ctx, &userID, "")
 }
 
 func (s *userService) ListProfileChanges(ctx context.Context, status string) ([]models.ProfileChangeRequest, error) {
-	return s.repo.ListProfileChanges(ctx, nil, status)
+	return s.changeRepo.ListProfileChanges(ctx, nil, status)
 }
 
 func (s *userService) ReviewProfileChange(ctx context.Context, id uint, reviewerID uint, action string) error {
@@ -549,36 +584,47 @@ func (s *userService) ReviewProfileChange(ctx context.Context, id uint, reviewer
 		return domain.NewUserError(domain.ErrInvalidInput, "invalid action: must be 'approve' or 'reject'")
 	}
 
-	change, err := s.repo.FindProfileChangeByID(ctx, id)
-	if err != nil || change == nil {
-		return domain.NewUserError(domain.ErrNotFound, "request not found")
-	}
-	if change.Status != models.ProfilePending {
-		return domain.NewUserError(domain.ErrConflict, "request already reviewed")
-	}
-
-	now := time.Now()
-	if action == "approve" {
-		if err := s.ApplyApprovedProfileChange(ctx, change); err != nil {
-			return err
+	executeReview := func(tCtx context.Context) error {
+		change, err := s.changeRepo.FindProfileChangeByID(tCtx, id)
+		if err != nil || change == nil {
+			return domain.NewUserError(domain.ErrNotFound, "request not found")
 		}
-		change.Status = models.ProfileApproved
-	} else {
-		change.Status = "rejected"
-	}
-	change.ReviewedBy = &reviewerID
-	change.ReviewedAt = &now
+		if change.Status != models.ProfilePending {
+			return domain.NewUserError(domain.ErrConflict, "request already reviewed")
+		}
 
-	return s.repo.UpdateProfileChange(ctx, change)
+		now := time.Now()
+		if action == "approve" {
+			if err := s.ApplyApprovedProfileChange(tCtx, change); err != nil {
+				return err
+			}
+			change.Status = models.ProfileApproved
+		} else {
+			change.Status = models.ProfileRejected
+		}
+		if reviewerID > 0 {
+			change.ReviewedBy = &reviewerID
+		} else {
+			change.ReviewedBy = nil
+		}
+		change.ReviewedAt = &now
+
+		return s.changeRepo.UpdateProfileChange(tCtx, change)
+	}
+
+	if s.transactor != nil {
+		return s.transactor.WithinTransaction(ctx, executeReview)
+	}
+	return executeReview(ctx)
 }
 
 // CreateUserByAdmin generates a cryptographically-secure random initial password,
 // hashes it with Argon2id, persists the user record, and dispatches a welcome notification.
 func (s *userService) CreateUserByAdmin(ctx context.Context, user *models.User, loginURL string) (string, error) {
-	if existing, err := s.repo.FindByUsernameOrEmail(ctx, user.Username); err == nil && existing != nil {
+	if existing, err := s.userRepo.FindByUsernameOrEmail(ctx, user.Username); err == nil && existing != nil {
 		return "", domain.ErrUsernameConflict
 	}
-	if existing, err := s.repo.FindByUsernameOrEmail(ctx, user.Email); err == nil && existing != nil {
+	if existing, err := s.userRepo.FindByUsernameOrEmail(ctx, user.Email); err == nil && existing != nil {
 		return "", domain.ErrEmailConflict
 	}
 
@@ -594,7 +640,7 @@ func (s *userService) CreateUserByAdmin(ctx context.Context, user *models.User, 
 	user.PasswordHash = hash
 	user.IsActive = true
 
-	if err := s.repo.Create(ctx, user); err != nil {
+	if err := s.userRepo.Create(ctx, user); err != nil {
 		return "", err
 	}
 
@@ -612,7 +658,7 @@ func (s *userService) CreateUserByAdmin(ctx context.Context, user *models.User, 
 // ChangePassword verifies current credentials, detects weak passwords, confirms difference,
 // hashes with Argon2id, updates the timestamp, and sends a security notice email.
 func (s *userService) ChangePassword(ctx context.Context, userID uint, oldPassword, newPassword string) error {
-	user, err := s.repo.FindByID(ctx, userID)
+	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		return domain.NewUserError(domain.ErrNotFound, "User not found")
 	}
@@ -638,7 +684,7 @@ func (s *userService) ChangePassword(ctx context.Context, userID uint, oldPasswo
 	}
 
 	now := time.Now()
-	if err := s.repo.UpdatePassword(ctx, user.ID, newHash, now); err != nil {
+	if err := s.userRepo.UpdatePassword(ctx, user.ID, newHash, now); err != nil {
 		return fmt.Errorf("failed to update password: %w", err)
 	}
 
@@ -655,7 +701,7 @@ func (s *userService) applyChangeEmail(ctx context.Context, newEmail string, use
 	if newEmail == "" || newEmail == user.Email {
 		return nil
 	}
-	existing, err := s.repo.FindByEmail(ctx, newEmail)
+	existing, err := s.userRepo.FindByEmail(ctx, newEmail)
 	if err == nil && existing != nil && existing.ID != user.ID {
 		return domain.NewUserError(domain.ErrEmailConflict, "email already in use")
 	}
@@ -664,16 +710,24 @@ func (s *userService) applyChangeEmail(ctx context.Context, newEmail string, use
 }
 
 func applyChangeBasicFields(change *models.ProfileChangeRequest, user *models.User) {
-	user.Name = change.Name
-	user.BniID = change.BniID
+	if change.Name != "" {
+		user.Name = change.Name
+	}
+	if change.BniID != "" {
+		user.BniID = change.BniID
+	}
 	if change.EmployeeID != "" {
 		user.EmployeeID = change.EmployeeID
 	}
-	user.Division = change.Division
+	if change.Division != "" {
+		user.Division = change.Division
+	}
 	if change.DivisionID != nil && *change.DivisionID != 0 {
 		user.DivisionID = change.DivisionID
 	}
-	user.Site = change.Site
+	if change.Site != "" {
+		user.Site = change.Site
+	}
 	if change.SiteID != nil && *change.SiteID != 0 {
 		user.SiteID = change.SiteID
 	}
@@ -716,7 +770,7 @@ func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *mo
 	if change == nil {
 		return domain.NewUserError(domain.ErrInvalidInput, "Profile change request is required")
 	}
-	user, err := s.repo.FindByID(ctx, change.UserID)
+	user, err := s.userRepo.FindByID(ctx, change.UserID)
 	if err := validateUpdatableUser(user, err); err != nil {
 		return err
 	}
@@ -728,5 +782,5 @@ func (s *userService) ApplyApprovedProfileChange(ctx context.Context, change *mo
 	s.applyChangeDepartment(ctx, change, user)
 	s.applyChangeCompany(ctx, change, user)
 
-	return s.repo.Update(ctx, user)
+	return s.userRepo.Update(ctx, user)
 }
