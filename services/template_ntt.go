@@ -86,10 +86,13 @@ func renderNTTDailyRows(
 		row := 10 + day
 		rs := fmt.Sprintf("%d", row)
 
-		dsc, ok := SetupDayRowStylesAndHours(f, sheet, row, day, daysInMonth, in, byDay, st, DailyRowSetupConfig{
-			DateCol:  "A",
-			AllCols:  StandardGrid14Cols,
-			WrapCols: StandardGridWrapCols,
+		dsc, ok := SetupDayRowStylesAndHours(f, sheet, in, byDay, st, DailyRowSetupConfig{
+			Row:         row,
+			Day:         day,
+			DaysInMonth: daysInMonth,
+			DateCol:     "A",
+			AllCols:     StandardGrid14Cols,
+			WrapCols:    StandardGridWrapCols,
 			HoursCfg: WorkingHoursConfig{
 				StartCol:   "B",
 				EndCol:     "C",

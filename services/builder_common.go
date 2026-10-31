@@ -517,28 +517,30 @@ var StandardGridWrapCols = []string{"K", "L", "M", "N"}
 
 // DailyRowSetupConfig configures common timesheet row setup.
 type DailyRowSetupConfig struct {
-	DateCol  string
-	AllCols  []string
-	WrapCols []string
-	HoursCfg WorkingHoursConfig
+	Row         int
+	Day         int
+	DaysInMonth int
+	DateCol     string
+	AllCols     []string
+	WrapCols    []string
+	HoursCfg    WorkingHoursConfig
 }
 
 // SetupDayRowStylesAndHours applies blank padding if day > daysInMonth, or resolves styles, sets the date cell, and writes working hours.
 func SetupDayRowStylesAndHours(
 	f *excelize.File,
 	sheet string,
-	row, day, daysInMonth int,
 	in GenerationInput,
 	byDay map[int]models.DailyActivity,
 	st *BuilderStyles,
 	cfg DailyRowSetupConfig,
 ) (*DayStyleContext, bool) {
-	if day > daysInMonth {
-		ApplyBlankPaddingRow(f, sheet, row, cfg.AllCols, cfg.WrapCols, st)
+	if cfg.Day > cfg.DaysInMonth {
+		ApplyBlankPaddingRow(f, sheet, cfg.Row, cfg.AllCols, cfg.WrapCols, st)
 		return nil, false
 	}
-	dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-	rs := fmt.Sprintf("%d", row)
+	dsc := ResolveDayStyleContext(in.Year, in.Month, cfg.Day, in.Holidays, byDay, st)
+	rs := fmt.Sprintf("%d", cfg.Row)
 	ApplyDayRowStyles(f, sheet, cfg.DateCol, rs, cfg.AllCols, cfg.WrapCols, dsc)
 	_ = f.SetCellValue(sheet, cfg.DateCol+rs, dsc.Date)
 

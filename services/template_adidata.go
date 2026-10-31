@@ -117,10 +117,13 @@ func renderAdidataDailyRows(
 		// Merge Activity/Remark columns (L:N) for this row to match header L8:N9
 		_ = f.MergeCell(sheet, "L"+rs, "N"+rs)
 
-		dsc, ok := SetupDayRowStylesAndHours(f, sheet, row, day, daysInMonth, in, byDay, st, DailyRowSetupConfig{
-			DateCol:  "B",
-			AllCols:  allCols,
-			WrapCols: wrapCols,
+		dsc, ok := SetupDayRowStylesAndHours(f, sheet, in, byDay, st, DailyRowSetupConfig{
+			Row:         row,
+			Day:         day,
+			DaysInMonth: daysInMonth,
+			DateCol:     "B",
+			AllCols:     allCols,
+			WrapCols:    wrapCols,
 			HoursCfg: WorkingHoursConfig{
 				StartCol:       "C",
 				EndCol:         "D",

@@ -66,10 +66,13 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		row := 8 + day
 		rs := fmt.Sprintf("%d", row)
 
-		dsc, ok := SetupDayRowStylesAndHours(f, sheet, row, day, daysInMonth, in, byDay, st, DailyRowSetupConfig{
-			DateCol:  "A",
-			AllCols:  allCols,
-			WrapCols: wrapCols,
+		dsc, ok := SetupDayRowStylesAndHours(f, sheet, in, byDay, st, DailyRowSetupConfig{
+			Row:         row,
+			Day:         day,
+			DaysInMonth: daysInMonth,
+			DateCol:     "A",
+			AllCols:     allCols,
+			WrapCols:    wrapCols,
 			HoursCfg: WorkingHoursConfig{
 				StartCol:   "B",
 				EndCol:     "C",
