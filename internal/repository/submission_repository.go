@@ -69,29 +69,48 @@ func (r *submissionRepository) FindTimesheetByToken(ctx context.Context, token s
 	return &sub, nil
 }
 
-func (r *submissionRepository) UpsertTimesheetSubmission(ctx context.Context, sub *models.TimesheetSubmission) error {
-	if sub == nil {
-		return errors.New("timesheet submission cannot be nil")
+var (
+	timesheetUpdateColumns = []string{
+		"status",
+		"signed_at",
+		"verification_token",
+		"document_hash",
+		"audit_metadata",
+		"updated_at",
 	}
-	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
+	beritaAcaraUpdateColumns = []string{
+		"witness_id",
+		"status",
+		"employee_signed_at",
+		"witness_signed_at",
+		"witness_rejection_notes",
+		"verification_token",
+		"document_hash",
+		"audit_metadata",
+		"updated_at",
+	}
+)
+
+func upsertMonthlySubmission(ctx context.Context, db *gorm.DB, entity any, updateCols []string, opName string) error {
+	err := db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "user_id"},
 			{Name: "month"},
 			{Name: "year"},
 		},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"status",
-			"signed_at",
-			"verification_token",
-			"document_hash",
-			"audit_metadata",
-			"updated_at",
-		}),
-	}).Create(sub).Error
+		DoUpdates: clause.AssignmentColumns(updateCols),
+	}).Create(entity).Error
 	if err != nil {
-		return fmt.Errorf("upsert timesheet submission: %w", err)
+		return fmt.Errorf("upsert %s: %w", opName, err)
 	}
 	return nil
+}
+
+func (r *submissionRepository) UpsertTimesheetSubmission(ctx context.Context, sub *models.TimesheetSubmission) error {
+	if sub == nil {
+		return errors.New("timesheet submission cannot be nil")
+	}
+	return upsertMonthlySubmission(ctx, r.db, sub, timesheetUpdateColumns, "timesheet submission")
 }
 
 func (r *submissionRepository) FindBeritaAcaraSubmission(ctx context.Context, userID uint, month, year int) (*models.BeritaAcaraSubmission, error) {
@@ -146,28 +165,7 @@ func (r *submissionRepository) UpsertBeritaAcaraSubmission(ctx context.Context, 
 	if sub == nil {
 		return errors.New("berita acara submission cannot be nil")
 	}
-	err := r.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns: []clause.Column{
-			{Name: "user_id"},
-			{Name: "month"},
-			{Name: "year"},
-		},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"witness_id",
-			"status",
-			"employee_signed_at",
-			"witness_signed_at",
-			"witness_rejection_notes",
-			"verification_token",
-			"document_hash",
-			"audit_metadata",
-			"updated_at",
-		}),
-	}).Create(sub).Error
-	if err != nil {
-		return fmt.Errorf("upsert berita acara submission: %w", err)
-	}
-	return nil
+	return upsertMonthlySubmission(ctx, r.db, sub, beritaAcaraUpdateColumns, "berita acara submission")
 }
 
 func (r *submissionRepository) ListPendingWitnessRequests(ctx context.Context, witnessID uint) ([]models.BeritaAcaraSubmission, error) {

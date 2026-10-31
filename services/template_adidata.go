@@ -117,25 +117,23 @@ func renderAdidataDailyRows(
 		// Merge Activity/Remark columns (L:N) for this row to match header L8:N9
 		_ = f.MergeCell(sheet, "L"+rs, "N"+rs)
 
-		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
+		dsc, ok := SetupDayRowStylesAndHours(f, sheet, row, day, daysInMonth, in, byDay, st, DailyRowSetupConfig{
+			DateCol:  "B",
+			AllCols:  allCols,
+			WrapCols: wrapCols,
+			HoursCfg: WorkingHoursConfig{
+				StartCol:       "C",
+				EndCol:         "D",
+				TotalCol:       "E",
+				FormulaFmt:     "(D%s-C%s)*24",
+				IsDecimalTotal: true,
+			},
+		})
+		if !ok {
 			continue
 		}
 
-		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "B", rs, allCols, wrapCols, dsc)
-		_ = f.SetCellValue(sheet, "B"+rs, dsc.Date)
-
-		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
-			StartCol:       "C",
-			EndCol:         "D",
-			TotalCol:       "E",
-			RowStr:         rs,
-			FormulaFmt:     "(D%s-C%s)*24",
-			IsDecimalTotal: true,
-		}, dsc)
-
-		status := renderAdidataDayActivity(f, sheet, rs, row, dsc)
+		status := renderAdidataDayActivity(f, sheet, rs, row, *dsc)
 		writeAdidataAttendanceMatrixStatus(f, sheet, rs, status)
 		if status != "" {
 			statusCounts[status]++

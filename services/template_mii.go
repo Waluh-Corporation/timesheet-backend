@@ -66,24 +66,22 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		row := 8 + day
 		rs := fmt.Sprintf("%d", row)
 
-		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
+		dsc, ok := SetupDayRowStylesAndHours(f, sheet, row, day, daysInMonth, in, byDay, st, DailyRowSetupConfig{
+			DateCol:  "A",
+			AllCols:  allCols,
+			WrapCols: wrapCols,
+			HoursCfg: WorkingHoursConfig{
+				StartCol:   "B",
+				EndCol:     "C",
+				TotalCol:   "D",
+				FormulaFmt: "C%s-B%s",
+			},
+		})
+		if !ok {
 			continue
 		}
 
-		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "A", rs, allCols, wrapCols, dsc)
-		_ = f.SetCellValue(sheet, "A"+rs, dsc.Date)
-
-		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
-			StartCol:   "B",
-			EndCol:     "C",
-			TotalCol:   "D",
-			RowStr:     rs,
-			FormulaFmt: "C%s-B%s",
-		}, dsc)
-
-		status := renderMIIDayActivity(f, sheet, rs, row, dsc)
+		status := renderMIIDayActivity(f, sheet, rs, row, *dsc)
 		WriteAttendanceMatrixStatus(f, sheet, rs, status)
 		if status != "" {
 			statusCounts[status]++

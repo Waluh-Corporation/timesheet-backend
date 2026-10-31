@@ -509,6 +509,44 @@ func WriteColumnFormulas(f *excelize.File, sheet, targetRow string, formulas map
 	}
 }
 
+// StandardGrid14Cols represents standard columns A through N for 14-column timesheet templates (NTT, SDD).
+var StandardGrid14Cols = []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
+
+// StandardGridWrapCols represents standard text-wrapped columns K through N for timesheets.
+var StandardGridWrapCols = []string{"K", "L", "M", "N"}
+
+// DailyRowSetupConfig configures common timesheet row setup.
+type DailyRowSetupConfig struct {
+	DateCol  string
+	AllCols  []string
+	WrapCols []string
+	HoursCfg WorkingHoursConfig
+}
+
+// SetupDayRowStylesAndHours applies blank padding if day > daysInMonth, or resolves styles, sets the date cell, and writes working hours.
+func SetupDayRowStylesAndHours(
+	f *excelize.File,
+	sheet string,
+	row, day, daysInMonth int,
+	in GenerationInput,
+	byDay map[int]models.DailyActivity,
+	st *BuilderStyles,
+	cfg DailyRowSetupConfig,
+) (*DayStyleContext, bool) {
+	if day > daysInMonth {
+		ApplyBlankPaddingRow(f, sheet, row, cfg.AllCols, cfg.WrapCols, st)
+		return nil, false
+	}
+	dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
+	rs := fmt.Sprintf("%d", row)
+	ApplyDayRowStyles(f, sheet, cfg.DateCol, rs, cfg.AllCols, cfg.WrapCols, dsc)
+	_ = f.SetCellValue(sheet, cfg.DateCol+rs, dsc.Date)
+
+	cfg.HoursCfg.RowStr = rs
+	WriteWorkingHoursRow(f, sheet, cfg.HoursCfg, dsc)
+	return &dsc, true
+}
+
 // DailyRowsConfig encapsulates options for generating the 31-day timesheet grid.
 type DailyRowsConfig struct {
 	StartRow int

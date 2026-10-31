@@ -96,8 +96,6 @@ func renderSDDDailyRows(
 	st *BuilderStyles,
 ) map[string]int {
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
-	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
-	wrapCols := []string{"K", "L", "M", "N"}
 	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {
@@ -105,12 +103,12 @@ func renderSDDDailyRows(
 		rs := fmt.Sprintf("%d", row)
 
 		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
+			ApplyBlankPaddingRow(f, sheet, row, StandardGrid14Cols, StandardGridWrapCols, st)
 			continue
 		}
 
 		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "B", rs, allCols, wrapCols, dsc)
+		ApplyDayRowStyles(f, sheet, "B", rs, StandardGrid14Cols, StandardGridWrapCols, dsc)
 		_ = f.SetCellValue(sheet, "A"+rs, day)
 
 		// Clear status cells
