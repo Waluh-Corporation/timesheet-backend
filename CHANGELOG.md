@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-11-01
+
 ### Added
 - **Document Verification Audit Trail & Stepper Timeline**: Enhanced the public document verification API and web view with an immutable, chronologically ordered audit log trail (`AuditTrail`). Tracks key lifecycle milestones including document submission, witness approvals/rejections, SHA-256 seal generation, revocations, and verification lookups. The standalone HTML verification page renders these events in a zero-CDN, CSP-compliant Tabler vertical stepper timeline with color-coded status badges, formatted timestamps, and actor details.
 - **Client IP Address Anonymization for Public Verification**: Integrated privacy-preserving IP masking (`MaskIP`) for audit trail verification entries, masking the last two octets of IPv4 addresses (`192.168.***.***`) and trailing segments of IPv6 addresses (`2001:db8:****::1`).
@@ -117,22 +119,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - **Embedded Frontend / SPA Static File Serving**: Removed embedded SPA static file serving, route fallback handlers (`spaHandler`), and static path helpers (`tryFiles`, `isPathWithinRoot`) to maintain a pure, dedicated backend REST API architecture.
 
-## [1.13.0] - 2026-09-27
-
-### Added
-- **IP2Location Geolocation Integration**: Integrated `github.com/ip2location/ip2location-go/v9` to resolve requesting client IP addresses into approximate geographic locations (city, country) displayed in password reset and password changed security notifications. Configured via `IP2LOCATION_DB_PATH` in `.env` with thread-safe lookup and graceful fallback when the database file is not present.
-- **Modernized Transactional Email Design**: Redesigned transactional emails with responsive 600px containers, brand monogram header, dynamic color-coded category badges (`Akun Baru`, `Reset Sandi`, `Timesheet Siap`, `Pengingat`, `Keamanan Akun`), dark mode support (`prefers-color-scheme: dark` and Outlook `[data-ogsc]`), and preheader whitespace padding.
-- **Bulletproof Email Action Buttons**: Added Microsoft Outlook VML (`v:roundrect`) button fallbacks across notification templates ensuring consistent rendering across desktop Outlook, webmail, and mobile mail clients.
-
-### Changed
-- **Security Notification Detail Box**:
-  - Replaced the "Berlaku Hingga" row in password reset emails with the requester's IP address and approximate geolocation in dedicated rows.
-  - Replaced the "Status Keamanan" row in password changed notification emails with the actor's IP address and approximate geolocation in dedicated rows.
-  - Removed "Status Akun" from account setup emails.
-
-[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.17.0...HEAD
+[1.17.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.1...v1.16.0
 [1.15.1]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.14.0...v1.15.0
 [1.14.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.13.0...v1.14.0
-[1.13.0]: https://github.com/Waluh-Corporation/timesheet-backend/compare/v1.12.0...v1.13.0
