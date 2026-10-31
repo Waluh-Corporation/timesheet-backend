@@ -33,11 +33,9 @@ func RenderReminderEmail(data ReminderEmailData) (htmlBody string, textBody stri
 
 	layout := BaseLayoutData{
 		AppName:      data.AppName,
-		Preheader:    fmt.Sprintf("Pengingat: Waktunya mencatat aktivitas kerja hari ini (%s).", data.Date),
-		Subject:      fmt.Sprintf("Pengingat Harian: Isi Timesheet Hari Ini (%s)", data.Date),
-		BadgeText:    "Pengingat Harian",
-		BadgeColor:   "sky",
-		HeaderTitle:  "Pengingat Pengisian Timesheet",
+		Preheader:    fmt.Sprintf("Reminder: It's time to log today's work activities (%s).", data.Date),
+		Subject:      fmt.Sprintf("Daily Reminder: Log Your Timesheet Today (%s)", data.Date),
+		HeaderTitle:  "Timesheet Logging Reminder",
 		SupportEmail: data.SupportEmail,
 		PortalURL:    data.PortalURL,
 	}
@@ -47,15 +45,15 @@ func RenderReminderEmail(data ReminderEmailData) (htmlBody string, textBody stri
 		return "", "", err
 	}
 
-	textBody = fmt.Sprintf(`Halo %s,
+	textBody = fmt.Sprintf(`Hello %s,
 
-Ini adalah pengingat harian otomatis dari %s.
-Anda belum mencatat aktivitas kerja untuk hari ini (%s).
+This is an automated daily reminder from %s.
+You have not logged your work activities for today (%s).
 
-Silakan isi aktivitas kerja Anda melalui tautan berikut:
+Please log your work activities using the following link:
 %s
 
-Mencatat aktivitas kerja secara rutin setiap hari membantu menjaga keakuratan jam kerja dan kelancaran rekapitulasi di akhir bulan.
+Regularly logging your work activities every day helps maintain accurate records and ensures a smooth cutoff recap at the end of the month.
 
 --
 %s

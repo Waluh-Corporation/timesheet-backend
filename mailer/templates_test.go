@@ -62,6 +62,12 @@ func TestReExportedRenderFunctions(t *testing.T) {
 		}
 	})
 
+	t.Run("FormatMonthYearEnglish", func(t *testing.T) {
+		if got := FormatMonthYearEnglish(1, 2026); got != "January 2026" {
+			t.Errorf("got %q, want 'January 2026'", got)
+		}
+	})
+
 	t.Run("FormatMonthYearIndonesian", func(t *testing.T) {
 		if got := FormatMonthYearIndonesian(9, 2026); got != "September 2026" {
 			t.Errorf("got %q, want 'September 2026'", got)

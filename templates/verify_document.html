@@ -179,6 +179,129 @@
       color: #94a3b8;
       font-size: 0.8125rem;
     }
+
+    /* Tabler Vertical Stepper Timeline */
+    .audit-section {
+      border-top: 1px solid #e2e8f0;
+      padding: 1.5rem;
+      background-color: #ffffff;
+    }
+    .timeline {
+      list-style: none;
+      padding: 0;
+      margin: 1.25rem 0 0 0;
+      position: relative;
+    }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      top: 14px;
+      bottom: 14px;
+      left: 17px;
+      width: 2px;
+      background-color: #e2e8f0;
+    }
+    .timeline-event {
+      position: relative;
+      padding-left: 48px;
+      padding-bottom: 1.5rem;
+    }
+    .timeline-event:last-child {
+      padding-bottom: 0;
+    }
+    .timeline-event-icon {
+      position: absolute;
+      left: 6px;
+      top: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background-color: #ffffff;
+      border: 2px solid #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .timeline-icon-completed {
+      background-color: #2fb344;
+      border-color: #2fb344;
+      color: #ffffff;
+    }
+    .timeline-icon-pending {
+      background-color: #f59f00;
+      border-color: #f59f00;
+      color: #ffffff;
+    }
+    .timeline-icon-rejected, .timeline-icon-revoked {
+      background-color: #d63939;
+      border-color: #d63939;
+      color: #ffffff;
+    }
+    .timeline-event-card {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+    }
+    .timeline-event-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+      margin-bottom: 0.25rem;
+    }
+    .timeline-event-title {
+      font-size: 0.875rem;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .timeline-event-time {
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+    .timeline-event-desc {
+      font-size: 0.8125rem;
+      color: #334155;
+      margin-bottom: 0.5rem;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+    .timeline-event-meta {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+    }
+    .timeline-actor {
+      font-weight: 600;
+      color: #1e293b;
+    }
+    .timeline-role-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      background-color: #e2e8f0;
+      color: #475569;
+      border-radius: 4px;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .timeline-ip-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      background-color: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      color: #64748b;
+      border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.6875rem;
+    }
   </style>
 </head>
 <body>
@@ -302,6 +425,56 @@
                 {{toUpper .Data.DocumentHash}}
               </div>
             </div>
+          </div>
+        {{end}}
+
+        {{if .Data.AuditTrail}}
+          <!-- Audit Log Trail Section (Tabler Stepper Timeline) -->
+          <div class="audit-section">
+            <h2 class="section-title">
+              Signing Audit Trail
+            </h2>
+            <ul class="timeline">
+              {{range .Data.AuditTrail}}
+              <li class="timeline-event">
+                <div class="timeline-event-icon timeline-icon-{{.Status}}">
+                  {{if eq .Status "completed"}}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M5 12l5 5l10 -10"/>
+                    </svg>
+                  {{else if eq .Status "rejected"}}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M18 6l-12 12"/>
+                      <path d="M6 6l12 12"/>
+                    </svg>
+                  {{else if eq .Status "revoked"}}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 9v4"/>
+                      <path d="M12 16h.01"/>
+                    </svg>
+                  {{else}}
+                    <span>{{.Step}}</span>
+                  {{end}}
+                </div>
+                <div class="timeline-event-card">
+                  <div class="timeline-event-header">
+                    <span class="timeline-event-title">{{.Title}}</span>
+                    <span class="timeline-event-time">
+                      {{if .Timestamp}}{{formatDateTime .Timestamp}}{{else if eq .Status "revoked"}}Revoked{{else if eq .Status "rejected"}}Rejected{{else}}Pending{{end}}
+                    </span>
+                  </div>
+                  {{if .Description}}
+                  <div class="timeline-event-desc">{{.Description}}</div>
+                  {{end}}
+                  <div class="timeline-event-meta">
+                    {{if .Actor}}<span class="timeline-actor">{{.Actor}}</span>{{end}}
+                    {{if .Role}}<span class="timeline-role-badge">{{.Role}}</span>{{end}}
+                    {{if .MaskedIP}}<span class="timeline-ip-badge">IP: {{.MaskedIP}}</span>{{end}}
+                  </div>
+                </div>
+              </li>
+              {{end}}
+            </ul>
           </div>
         {{end}}
 

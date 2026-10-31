@@ -11,6 +11,7 @@ import (
 	"image"
 	_ "image/jpeg" // Register JPEG image decoder for image.Decode
 	_ "image/png"  // Register PNG image decoder for image.Decode
+	"net"
 	"strings"
 	"time"
 
@@ -32,6 +33,45 @@ import (
 type AuditMeta struct {
 	IP        string `json:"ip"`
 	UserAgent string `json:"user_agent"`
+}
+
+// MaskIP obscures the trailing octets or segments of an IP address for privacy compliance.
+func MaskIP(ipStr string) string {
+	ipStr = strings.TrimSpace(ipStr)
+	if ipStr == "" {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(ipStr); err == nil {
+		ipStr = host
+	}
+	ipStr = strings.Trim(ipStr, "[]")
+
+	if ip := net.ParseIP(ipStr); ip != nil {
+		if ip4 := ip.To4(); ip4 != nil {
+			return fmt.Sprintf("%d.%d.***.***", ip4[0], ip4[1])
+		}
+		// Pure IPv6: mask to 2001:db8:****::1 style
+		seg0 := (uint16(ip[0]) << 8) | uint16(ip[1])
+		seg1 := (uint16(ip[2]) << 8) | uint16(ip[3])
+		return fmt.Sprintf("%x:%x:****::1", seg0, seg1)
+	}
+
+	if strings.Contains(ipStr, ".") {
+		parts := strings.Split(ipStr, ".")
+		if len(parts) == 4 {
+			return fmt.Sprintf("%s.%s.***.***", parts[0], parts[1])
+		}
+	}
+
+	if strings.Contains(ipStr, ":") {
+		parts := strings.Split(ipStr, ":")
+		if len(parts) >= 3 && parts[0] != "" && parts[1] != "" {
+			return fmt.Sprintf("%s:%s:****::1", parts[0], parts[1])
+		}
+		return "::****"
+	}
+
+	return ipStr
 }
 
 const (
@@ -306,6 +346,7 @@ func (s *signatureService) RevokeTimesheet(ctx context.Context, userID uint, req
 	_ = json.Unmarshal(sub.AuditMetadata, &metaMap)
 	metaMap["revoked_at"] = now.Format(time.RFC3339)
 	metaMap["revoked_ip"] = meta.IP
+	metaMap["revoked_user_agent"] = meta.UserAgent
 	metaBytes, _ := json.Marshal(metaMap)
 	sub.AuditMetadata = datatypes.JSON(metaBytes)
 
@@ -368,8 +409,8 @@ func (s *signatureService) notifyWitnessRequest(witness *models.User, employeeNa
 	}
 	if s.pushSvc != nil {
 		s.pushSvc.SendToUser(witness.ID, push.Payload{
-			Title: "Permintaan Tanda Tangan Saksi",
-			Body:  fmt.Sprintf("%s meminta Anda menjadi saksi Berita Acara (%s)", employeeName, periodStr),
+			Title: "Witness Signature Request",
+			Body:  fmt.Sprintf("%s requested you to witness their Berita Acara (%s)", employeeName, periodStr),
 			URL:   beritaAcaraPath,
 		})
 	}
@@ -463,7 +504,7 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 		return nil, fmt.Errorf("save berita acara submission: %w", err)
 	}
 
-	periodStr := fmt.Sprintf("%s %d", services.MonthNameIndonesian(req.Month), req.Year)
+	periodStr := fmt.Sprintf("%s %d", services.MonthNameEnglish(req.Month), req.Year)
 	s.notifyWitnessRequest(witness, user.Name, periodStr)
 
 	return &response.BeritaAcaraSubmissionResponse{
@@ -516,15 +557,15 @@ func (s *signatureService) approveWitness(
 		return fmt.Errorf("save witness approval: %w", err)
 	}
 
-	periodStr := fmt.Sprintf("%s %d", services.MonthNameIndonesian(sub.Month), sub.Year)
+	periodStr := fmt.Sprintf("%s %d", services.MonthNameEnglish(sub.Month), sub.Year)
 	dlLink := fmt.Sprintf("%s%s", strings.TrimRight(s.baseURL, "/"), beritaAcaraPath)
 	if s.mailer != nil && employee.Email != "" {
 		_ = s.mailer.SendBeritaAcaraApprovedEmail(employee.Email, employee.Name, witness.Name, periodStr, dlLink)
 	}
 	if s.pushSvc != nil {
 		s.pushSvc.SendToUser(employee.ID, push.Payload{
-			Title: "Berita Acara Disetujui",
-			Body:  fmt.Sprintf("Saksi %s telah menandatangani Berita Acara Anda (%s)", witness.Name, periodStr),
+			Title: "Berita Acara Approved",
+			Body:  fmt.Sprintf("Witness %s has signed your Berita Acara (%s)", witness.Name, periodStr),
 			URL:   beritaAcaraPath,
 		})
 	}
@@ -561,14 +602,14 @@ func (s *signatureService) rejectWitness(
 		return fmt.Errorf("save witness rejection: %w", err)
 	}
 
-	periodStr := fmt.Sprintf("%s %d", services.MonthNameIndonesian(sub.Month), sub.Year)
+	periodStr := fmt.Sprintf("%s %d", services.MonthNameEnglish(sub.Month), sub.Year)
 	if s.mailer != nil && employee.Email != "" {
 		_ = s.mailer.SendBeritaAcaraRejectedEmail(employee.Email, employee.Name, witness.Name, periodStr, trimmedNotes)
 	}
 	if s.pushSvc != nil {
 		s.pushSvc.SendToUser(employee.ID, push.Payload{
-			Title: "Berita Acara Ditolak",
-			Body:  fmt.Sprintf("Saksi %s menolak Berita Acara Anda: %s", witness.Name, trimmedNotes),
+			Title: "Berita Acara Requires Revision",
+			Body:  fmt.Sprintf("Witness %s requested revisions on your Berita Acara: %s", witness.Name, trimmedNotes),
 			URL:   beritaAcaraPath,
 		})
 	}
@@ -660,6 +701,7 @@ func (s *signatureService) RevokeBeritaAcara(ctx context.Context, userID uint, s
 	_ = json.Unmarshal(sub.AuditMetadata, &metaMap)
 	metaMap["revoked_at"] = now.Format(time.RFC3339)
 	metaMap["revoked_ip"] = meta.IP
+	metaMap["revoked_user_agent"] = meta.UserAgent
 	metaBytes, _ := json.Marshal(metaMap)
 	sub.AuditMetadata = datatypes.JSON(metaBytes)
 
@@ -774,6 +816,244 @@ func (s *signatureService) resolveWitnessName(ctx context.Context, witness *mode
 	return ""
 }
 
+func (s *signatureService) buildTimesheetAuditTrail(
+	ts *models.TimesheetSubmission,
+	empName string,
+	now time.Time,
+) []response.DocumentAuditTrailItem {
+	var metaMap map[string]interface{}
+	if len(ts.AuditMetadata) > 0 {
+		_ = json.Unmarshal(ts.AuditMetadata, &metaMap)
+	}
+	ip, _ := metaMap["ip"].(string)
+	revokedIP, _ := metaMap["revoked_ip"].(string)
+
+	trail := make([]response.DocumentAuditTrailItem, 0, 4)
+
+	// Step 1: Submission & Signature
+	trail = append(trail, response.DocumentAuditTrailItem{
+		Step:        1,
+		Title:       "Timesheet Submitted & Signed",
+		Description: fmt.Sprintf("Signed and locked by %s", empName),
+		Actor:       empName,
+		Role:        "Employee",
+		Timestamp:   ts.SignedAt,
+		MaskedIP:    MaskIP(ip),
+		Status:      "completed",
+	})
+
+	// Step 2: Cryptographic Hash Seal
+	if ts.DocumentHash != "" {
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        2,
+			Title:       "Cryptographic SHA-256 Seal",
+			Description: fmt.Sprintf("Hash lock: %s", ts.DocumentHash),
+			Actor:       "System Engine",
+			Role:        "Security Seal",
+			Timestamp:   ts.SignedAt,
+			Status:      "completed",
+		})
+	} else if ts.Status == models.SubmissionStatusRevoked {
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        2,
+			Title:       "Cryptographic SHA-256 Seal",
+			Description: "Document hash seal invalidated due to revocation",
+			Actor:       "System Engine",
+			Role:        "Security Seal",
+			Timestamp:   nil,
+			Status:      "revoked",
+		})
+	}
+
+	// Step 3: Revocation (if revoked) or Public Verification
+	switch ts.Status {
+	case models.SubmissionStatusRevoked:
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        len(trail) + 1,
+			Title:       "Timesheet Signature Revoked",
+			Description: "Timesheet activities unlocked and signature revoked by owner",
+			Actor:       empName,
+			Role:        "Employee",
+			Timestamp:   &ts.UpdatedAt,
+			MaskedIP:    MaskIP(revokedIP),
+			Status:      "revoked",
+		})
+	case models.SubmissionStatusSigned, models.SubmissionStatusSubmitted:
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        len(trail) + 1,
+			Title:       "Public Verification Gateway",
+			Description: "Document authenticity cryptographically validated",
+			Actor:       "Public Verifier",
+			Role:        "Verification",
+			Timestamp:   &now,
+			Status:      "completed",
+		})
+	}
+
+	return trail
+}
+
+func (s *signatureService) buildBeritaAcaraAuditTrail(
+	ba *models.BeritaAcaraSubmission,
+	empName, witName string,
+	now time.Time,
+) []response.DocumentAuditTrailItem {
+	var metaMap map[string]interface{}
+	if len(ba.AuditMetadata) > 0 {
+		_ = json.Unmarshal(ba.AuditMetadata, &metaMap)
+	}
+	submitIP, _ := metaMap["submit_ip"].(string)
+	witnessIP, _ := metaMap["witness_ip"].(string)
+	revokedIP, _ := metaMap["revoked_ip"].(string)
+
+	trail := make([]response.DocumentAuditTrailItem, 0, 5)
+
+	// Step 1: Submitter Signature
+	trail = append(trail, response.DocumentAuditTrailItem{
+		Step:        1,
+		Title:       "Document Submitted & Signed",
+		Description: fmt.Sprintf("Signed and submitted by %s", empName),
+		Actor:       empName,
+		Role:        "Employee",
+		Timestamp:   ba.EmployeeSignedAt,
+		MaskedIP:    MaskIP(submitIP),
+		Status:      "completed",
+	})
+
+	// Step 2: Witness Review / Signature
+	switch ba.Status {
+	case models.SubmissionStatusSigned:
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        2,
+			Title:       "Witness Signature Affixed",
+			Description: fmt.Sprintf("Approved and signed by %s", witName),
+			Actor:       witName,
+			Role:        "Witness",
+			Timestamp:   ba.WitnessSignedAt,
+			MaskedIP:    MaskIP(witnessIP),
+			Status:      "completed",
+		})
+	case models.SubmissionStatusRejected:
+		desc := "Revision requested by witness"
+		if ba.WitnessRejectionNotes != "" {
+			desc = fmt.Sprintf("Revision requested by %s: %s", witName, ba.WitnessRejectionNotes)
+		}
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        2,
+			Title:       "Witness Requested Revision",
+			Description: desc,
+			Actor:       witName,
+			Role:        "Witness",
+			Timestamp:   &ba.UpdatedAt,
+			MaskedIP:    MaskIP(witnessIP),
+			Status:      "rejected",
+		})
+	case models.SubmissionStatusRevoked:
+		if ba.WitnessSignedAt != nil {
+			trail = append(trail, response.DocumentAuditTrailItem{
+				Step:        2,
+				Title:       "Witness Signature Affixed",
+				Description: fmt.Sprintf("Approved and signed by %s", witName),
+				Actor:       witName,
+				Role:        "Witness",
+				Timestamp:   ba.WitnessSignedAt,
+				MaskedIP:    MaskIP(witnessIP),
+				Status:      "completed",
+			})
+		} else {
+			trail = append(trail, response.DocumentAuditTrailItem{
+				Step:        2,
+				Title:       "Witness Review Revoked",
+				Description: "Submission was recalled by submitter prior to witness completion",
+				Actor:       witName,
+				Role:        "Witness",
+				Timestamp:   nil,
+				Status:      "revoked",
+			})
+		}
+	default: // pending_witness
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        2,
+			Title:       "Witness Review Pending",
+			Description: fmt.Sprintf("Awaiting review and signature by %s", witName),
+			Actor:       witName,
+			Role:        "Witness",
+			Timestamp:   nil,
+			Status:      "pending",
+		})
+	}
+
+	// Step 3: Cryptographic SHA-256 Seal
+	if ba.DocumentHash != "" {
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        3,
+			Title:       "Cryptographic SHA-256 Seal",
+			Description: fmt.Sprintf("Hash lock: %s", ba.DocumentHash),
+			Actor:       "System Engine",
+			Role:        "Security Seal",
+			Timestamp:   ba.WitnessSignedAt,
+			Status:      "completed",
+		})
+	} else if ba.Status == models.SubmissionStatusRejected {
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        3,
+			Title:       "Cryptographic SHA-256 Seal",
+			Description: "Document hash seal withheld pending activity revision",
+			Actor:       "System Engine",
+			Role:        "Security Seal",
+			Timestamp:   nil,
+			Status:      "rejected",
+		})
+	} else if ba.Status == models.SubmissionStatusRevoked {
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        3,
+			Title:       "Cryptographic SHA-256 Seal",
+			Description: "Document hash seal invalidated due to revocation",
+			Actor:       "System Engine",
+			Role:        "Security Seal",
+			Timestamp:   nil,
+			Status:      "revoked",
+		})
+	} else {
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        3,
+			Title:       "Cryptographic SHA-256 Seal",
+			Description: "Awaiting all signatures before generating digital integrity seal",
+			Actor:       "System Engine",
+			Role:        "Security Seal",
+			Timestamp:   nil,
+			Status:      "pending",
+		})
+	}
+
+	// Step 4: Revocation record if revoked
+	switch ba.Status {
+	case models.SubmissionStatusRevoked:
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        len(trail) + 1,
+			Title:       "Document Revoked",
+			Description: "Document submission and signature were revoked by owner",
+			Actor:       empName,
+			Role:        "Employee",
+			Timestamp:   &ba.UpdatedAt,
+			MaskedIP:    MaskIP(revokedIP),
+			Status:      "revoked",
+		})
+	case models.SubmissionStatusSigned:
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        len(trail) + 1,
+			Title:       "Public Verification Gateway",
+			Description: "Document authenticity cryptographically validated",
+			Actor:       "Public Verifier",
+			Role:        "Verification",
+			Timestamp:   &now,
+			Status:      "completed",
+		})
+	}
+
+	return trail
+}
+
 func (s *signatureService) verifyTimesheet(ctx context.Context, token string, now time.Time) (*response.PublicDocumentVerificationResponse, error) {
 	ts, err := s.submissionRepo.FindTimesheetByToken(ctx, token)
 	if err != nil {
@@ -790,6 +1070,8 @@ func (s *signatureService) verifyTimesheet(ctx context.Context, token string, no
 		statusStr = "revoked"
 	}
 
+	auditTrail := s.buildTimesheetAuditTrail(ts, empName, now)
+
 	return &response.PublicDocumentVerificationResponse{
 		DocumentType:     "timesheet",
 		Status:           statusStr,
@@ -801,6 +1083,7 @@ func (s *signatureService) verifyTimesheet(ctx context.Context, token string, no
 		EmployeeSignedAt: ts.SignedAt,
 		DocumentHash:     ts.DocumentHash,
 		VerifiedAt:       now,
+		AuditTrail:       auditTrail,
 	}, nil
 }
 
@@ -824,6 +1107,8 @@ func (s *signatureService) verifyBeritaAcara(ctx context.Context, token string, 
 		statusStr = ba.Status
 	}
 
+	auditTrail := s.buildBeritaAcaraAuditTrail(ba, empName, witName, now)
+
 	return &response.PublicDocumentVerificationResponse{
 		DocumentType:     "berita_acara",
 		Status:           statusStr,
@@ -837,6 +1122,7 @@ func (s *signatureService) verifyBeritaAcara(ctx context.Context, token string, 
 		WitnessSignedAt:  ba.WitnessSignedAt,
 		DocumentHash:     ba.DocumentHash,
 		VerifiedAt:       now,
+		AuditTrail:       auditTrail,
 	}, nil
 }
 

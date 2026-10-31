@@ -31,8 +31,8 @@ func TestRenderSetupEmail(t *testing.T) {
 	if strings.Contains(html, "Aktivasi Akun &amp; Atur Password") {
 		t.Errorf("HTML should NOT contain wording 'Aktivasi Akun & Atur Password'")
 	}
-	if !strings.Contains(html, "Masuk ke Portal") {
-		t.Errorf("HTML should contain button wording 'Masuk ke Portal'")
+	if !strings.Contains(html, "Log In to Portal") {
+		t.Errorf("HTML should contain button wording 'Log In to Portal'")
 	}
 	if !strings.Contains(html, "https://timesheet.example.com/setup?token=xyz") {
 		t.Errorf("HTML should contain setup URL")
@@ -55,8 +55,8 @@ func TestRenderSetupEmail(t *testing.T) {
 	if strings.Contains(text, "Status Akun") {
 		t.Errorf("text should NOT contain 'Status Akun'")
 	}
-	if !strings.Contains(html, "Akun Baru") {
-		t.Errorf("HTML should contain badge 'Akun Baru'")
+	if strings.Contains(html, "Akun Baru") {
+		t.Errorf("HTML should NOT contain removed badge 'Akun Baru'")
 	}
 	if !strings.Contains(html, "color-scheme") {
 		t.Errorf("HTML should contain color-scheme meta tag")
@@ -64,8 +64,8 @@ func TestRenderSetupEmail(t *testing.T) {
 	if !strings.Contains(html, "&zwnj;&nbsp;") {
 		t.Errorf("HTML should contain preheader whitespace padding")
 	}
-	if !strings.Contains(text, "Tautan Login:") {
-		t.Errorf("text should contain 'Tautan Login:'")
+	if !strings.Contains(text, "Login Link:") {
+		t.Errorf("text should contain 'Login Link:'")
 	}
 }
 
@@ -94,7 +94,7 @@ func TestRenderResetEmail(t *testing.T) {
 	if strings.Contains(html, "Berlaku Hingga") {
 		t.Errorf("HTML should NOT contain 'Berlaku Hingga' in details box")
 	}
-	if !strings.Contains(html, "Peringatan Keamanan") {
+	if !strings.Contains(html, "Security Warning") {
 		t.Errorf("HTML should contain security warning")
 	}
 	if !strings.Contains(text, "https://timesheet.example.com/reset?token=abc") {
@@ -117,17 +117,17 @@ func TestRenderResetEmail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error rendering reset email with IP: %v", err)
 	}
-	if !strings.Contains(htmlWithIP, "Alamat IP") || !strings.Contains(htmlWithIP, "192.168.1.100") {
-		t.Errorf("HTML should contain Alamat IP when provided")
+	if !strings.Contains(htmlWithIP, "IP Address") || !strings.Contains(htmlWithIP, "192.168.1.100") {
+		t.Errorf("HTML should contain IP Address when provided")
 	}
-	if !strings.Contains(htmlWithIP, "Lokasi") || !strings.Contains(htmlWithIP, "Jakarta, Indonesia") {
-		t.Errorf("HTML should contain Lokasi row when provided")
+	if !strings.Contains(htmlWithIP, "Location") || !strings.Contains(htmlWithIP, "Jakarta, Indonesia") {
+		t.Errorf("HTML should contain Location row when provided")
 	}
 	if !strings.Contains(textWithIP, "192.168.1.100") {
 		t.Errorf("text should contain IP address")
 	}
-	if !strings.Contains(textWithIP, "Lokasi") || !strings.Contains(textWithIP, "Jakarta, Indonesia") {
-		t.Errorf("text should contain Lokasi line when provided")
+	if !strings.Contains(textWithIP, "Location") || !strings.Contains(textWithIP, "Jakarta, Indonesia") {
+		t.Errorf("text should contain Location line when provided")
 	}
 }
 
@@ -173,7 +173,7 @@ func TestRenderTimesheetEmail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error rendering timesheet email with download URL: %v", err)
 	}
-	if !strings.Contains(htmlWithURL, "Download Berkas") {
+	if !strings.Contains(htmlWithURL, "Download Timesheet Document") {
 		t.Errorf("HTML should contain download button")
 	}
 	if strings.Contains(htmlWithURL, "Format Berkas") {
@@ -235,7 +235,7 @@ func TestRenderPasswordChangedEmail(t *testing.T) {
 	if strings.Contains(html, "Status Keamanan") {
 		t.Errorf("HTML should NOT contain 'Status Keamanan'")
 	}
-	if !strings.Contains(html, "Bukan Anda yang Melakukan Perubahan Ini?") {
+	if !strings.Contains(html, "Didn't Make This Change?") {
 		t.Errorf("HTML should contain security alert")
 	}
 	if !strings.Contains(text, "https://timesheet.example.com/login") {
@@ -256,17 +256,17 @@ func TestRenderPasswordChangedEmail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error rendering password changed email with IP: %v", err)
 	}
-	if !strings.Contains(htmlWithIP, "Alamat IP") || !strings.Contains(htmlWithIP, "203.0.113.195") {
-		t.Errorf("HTML should contain Alamat IP when provided")
+	if !strings.Contains(htmlWithIP, "IP Address") || !strings.Contains(htmlWithIP, "203.0.113.195") {
+		t.Errorf("HTML should contain IP Address when provided")
 	}
-	if !strings.Contains(htmlWithIP, "Lokasi") || !strings.Contains(htmlWithIP, "Jakarta, Indonesia") {
-		t.Errorf("HTML should contain Lokasi row when provided")
+	if !strings.Contains(htmlWithIP, "Location") || !strings.Contains(htmlWithIP, "Jakarta, Indonesia") {
+		t.Errorf("HTML should contain Location row when provided")
 	}
 	if !strings.Contains(textWithIP, "203.0.113.195") {
 		t.Errorf("text should contain IP address")
 	}
-	if !strings.Contains(textWithIP, "Lokasi") || !strings.Contains(textWithIP, "Jakarta, Indonesia") {
-		t.Errorf("text should contain Lokasi line when provided")
+	if !strings.Contains(textWithIP, "Location") || !strings.Contains(textWithIP, "Jakarta, Indonesia") {
+		t.Errorf("text should contain Location line when provided")
 	}
 }
 
@@ -311,6 +311,26 @@ func TestFormatMonthYearIndonesian(t *testing.T) {
 	}
 }
 
+func TestFormatMonthYearEnglish(t *testing.T) {
+	cases := []struct {
+		m, y int
+		want string
+	}{
+		{1, 2026, "January 2026"},
+		{9, 2026, "September 2026"},
+		{12, 2025, "December 2025"},
+		{0, 2026, "Month 00 2026"},
+		{13, 2026, "Month 13 2026"},
+	}
+
+	for _, tc := range cases {
+		got := FormatMonthYearEnglish(tc.m, tc.y)
+		if got != tc.want {
+			t.Errorf("FormatMonthYearEnglish(%d, %d) = %q, want %q", tc.m, tc.y, got, tc.want)
+		}
+	}
+}
+
 func TestParsePeriodFromFilename(t *testing.T) {
 	cases := []struct {
 		filename     string
@@ -318,7 +338,7 @@ func TestParsePeriodFromFilename(t *testing.T) {
 		wantUsername string
 	}{
 		{"Timesheet_john_09_2026.xlsx", "September 2026", "john"},
-		{"Timesheet_john_doe_01_2025.xlsx", "Januari 2025", "john_doe"},
+		{"Timesheet_john_doe_01_2025.xlsx", "January 2025", "john_doe"},
 		{"random_file.pdf", "", ""},
 	}
 
@@ -332,21 +352,11 @@ func TestParsePeriodFromFilename(t *testing.T) {
 
 func TestBaseLayoutDataHelpers(t *testing.T) {
 	data := BaseLayoutData{
-		AppName:    "Timesheet Portal",
-		BadgeColor: "emerald",
+		AppName: "Timesheet Portal",
 	}
 
 	if data.AppInitial() != "T" {
 		t.Errorf("AppInitial() = %q, want 'T'", data.AppInitial())
-	}
-	if data.BadgeBgColor() != "#ecfdf5" {
-		t.Errorf("BadgeBgColor() = %q, want '#ecfdf5'", data.BadgeBgColor())
-	}
-	if data.BadgeTextColor() != "#047857" {
-		t.Errorf("BadgeTextColor() = %q, want '#047857'", data.BadgeTextColor())
-	}
-	if data.BadgeBorderColor() != "#a7f3d0" {
-		t.Errorf("BadgeBorderColor() = %q, want '#a7f3d0'", data.BadgeBorderColor())
 	}
 
 	emptyApp := BaseLayoutData{}
@@ -360,7 +370,7 @@ func TestRenderWitnessRequestEmail(t *testing.T) {
 		AppName:      "",
 		WitnessName:  "Jane Witness",
 		EmployeeName: "John Employee",
-		Period:       "Oktober 2026",
+		Period:       "October 2026",
 		ReviewURL:    "https://timesheet.example.com/berita-acara/123/review",
 		PortalURL:    "https://timesheet.example.com",
 		SupportEmail: "support@example.com",
@@ -377,14 +387,17 @@ func TestRenderWitnessRequestEmail(t *testing.T) {
 	if !strings.Contains(html, "John Employee") {
 		t.Errorf("HTML should contain employee name")
 	}
-	if !strings.Contains(html, "Oktober 2026") {
+	if !strings.Contains(html, "October 2026") {
 		t.Errorf("HTML should contain period")
 	}
 	if !strings.Contains(html, data.ReviewURL) {
 		t.Errorf("HTML should contain review URL")
 	}
-	if !strings.Contains(html, "Permintaan Saksi") {
-		t.Errorf("HTML should contain badge 'Permintaan Saksi'")
+	if strings.Contains(html, "Permintaan Saksi") {
+		t.Errorf("HTML should NOT contain removed badge 'Permintaan Saksi'")
+	}
+	if !strings.Contains(html, "Pending Witness Approval") {
+		t.Errorf("HTML should contain status 'Pending Witness Approval'")
 	}
 	if !strings.Contains(text, "Jane Witness") || !strings.Contains(text, "John Employee") {
 		t.Errorf("text should contain witness and employee names")
@@ -399,7 +412,7 @@ func TestRenderBeritaAcaraApprovedEmail(t *testing.T) {
 		AppName:      "Timesheet Portal",
 		EmployeeName: "John Employee",
 		WitnessName:  "Jane Witness",
-		Period:       "Oktober 2026",
+		Period:       "October 2026",
 		DownloadURL:  "https://timesheet.example.com/downloads/ba-123.docx",
 		PortalURL:    "https://timesheet.example.com",
 		SupportEmail: "support@example.com",
@@ -416,14 +429,17 @@ func TestRenderBeritaAcaraApprovedEmail(t *testing.T) {
 	if !strings.Contains(html, "Jane Witness") {
 		t.Errorf("HTML should contain witness name")
 	}
-	if !strings.Contains(html, "Oktober 2026") {
+	if !strings.Contains(html, "October 2026") {
 		t.Errorf("HTML should contain period")
 	}
 	if !strings.Contains(html, data.DownloadURL) {
 		t.Errorf("HTML should contain download URL")
 	}
-	if !strings.Contains(html, "Berita Acara Disetujui") {
-		t.Errorf("HTML should contain badge 'Berita Acara Disetujui'")
+	if strings.Contains(html, "Berita Acara Disetujui") {
+		t.Errorf("HTML should NOT contain removed badge 'Berita Acara Disetujui'")
+	}
+	if !strings.Contains(html, "Approved &amp; Fully Signed") {
+		t.Errorf("HTML should contain status 'Approved & Fully Signed'")
 	}
 	if !strings.Contains(text, "John Employee") || !strings.Contains(text, "Jane Witness") {
 		t.Errorf("text should contain names")
@@ -438,8 +454,8 @@ func TestRenderBeritaAcaraRejectedEmail(t *testing.T) {
 		AppName:      "Timesheet Portal",
 		EmployeeName: "John Employee",
 		WitnessName:  "Jane Witness",
-		Period:       "Oktober 2026",
-		Notes:        "Jam lembur pada tanggal 12 tidak sesuai dengan approval email",
+		Period:       "October 2026",
+		Notes:        "Overtime hours on 12th do not match approval email",
 		ActivityURL:  "https://timesheet.example.com/activity",
 		PortalURL:    "https://timesheet.example.com",
 		SupportEmail: "support@example.com",
@@ -462,8 +478,11 @@ func TestRenderBeritaAcaraRejectedEmail(t *testing.T) {
 	if !strings.Contains(html, data.ActivityURL) {
 		t.Errorf("HTML should contain activity URL")
 	}
-	if !strings.Contains(html, "Perlu Revisi") {
-		t.Errorf("HTML should contain badge 'Perlu Revisi'")
+	if strings.Contains(html, "Perlu Revisi") {
+		t.Errorf("HTML should NOT contain removed badge 'Perlu Revisi'")
+	}
+	if !strings.Contains(html, "Requires Revision") {
+		t.Errorf("HTML should contain status 'Requires Revision'")
 	}
 	if !strings.Contains(text, data.Notes) {
 		t.Errorf("text should contain revision notes")

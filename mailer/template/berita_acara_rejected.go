@@ -30,11 +30,9 @@ func RenderBeritaAcaraRejectedEmail(data BeritaAcaraRejectedEmailData) (htmlBody
 
 	layout := BaseLayoutData{
 		AppName:      data.AppName,
-		Preheader:    fmt.Sprintf("Berita Acara periode %s memerlukan revisi sesuai catatan dari %s.", data.Period, data.WitnessName),
-		Subject:      fmt.Sprintf("Berita Acara Perlu Revisi (%s)", data.Period),
-		BadgeText:    "Perlu Revisi",
-		BadgeColor:   "rose",
-		HeaderTitle:  "Berita Acara Memerlukan Revisi",
+		Preheader:    fmt.Sprintf("Your Berita Acara for %s requires revision based on notes from %s.", data.Period, data.WitnessName),
+		Subject:      fmt.Sprintf("Berita Acara Requires Revision (%s)", data.Period),
+		HeaderTitle:  "Berita Acara Requires Revision",
 		SupportEmail: data.SupportEmail,
 		PortalURL:    data.PortalURL,
 	}
@@ -46,18 +44,18 @@ func RenderBeritaAcaraRejectedEmail(data BeritaAcaraRejectedEmailData) (htmlBody
 
 	notesText := ""
 	if data.Notes != "" {
-		notesText = fmt.Sprintf("\nCatatan Revisi dari Saksi:\n\"%s\"\n", data.Notes)
+		notesText = fmt.Sprintf("\nWitness Revision Notes:\n\"%s\"\n", data.Notes)
 	}
 
 	activityText := ""
 	if data.ActivityURL != "" {
-		activityText = fmt.Sprintf("\nTautan Perbaikan Aktivitas: %s\n", data.ActivityURL)
+		activityText = fmt.Sprintf("\nActivity Update Link: %s\n", data.ActivityURL)
 	}
 
-	textBody = fmt.Sprintf(`Halo %s,
+	textBody = fmt.Sprintf(`Hello %s,
 
-Pengajuan Berita Acara Anda untuk periode %s telah ditinjau oleh saksi %s dan memerlukan revisi sebelum dapat disetujui.%s%s
-Kunci mutasi periode bulan ini telah dibuka kembali secara otomatis agar Anda dapat menyesuaikan catatan aktivitas dan mengajukannya kembali.
+Your Berita Acara submission for the period of %s was reviewed by witness %s and requires revision before it can be approved.%s%s
+Activity edits for this period have been unlocked automatically so you can adjust your records and resubmit.
 
 --
 %s

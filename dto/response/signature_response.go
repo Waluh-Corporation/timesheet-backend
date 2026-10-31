@@ -41,18 +41,31 @@ type BeritaAcaraSubmissionResponse struct {
 	UpdatedAt             time.Time  `json:"updated_at"`
 }
 
+// DocumentAuditTrailItem represents a single step in a document's verification audit log trail.
+type DocumentAuditTrailItem struct {
+	Step        int        `json:"step" example:"1"`
+	Title       string     `json:"title" example:"Document Submitted & Signed"`
+	Description string     `json:"description" example:"Signed and submitted by John Doe"`
+	Actor       string     `json:"actor" example:"John Doe"`
+	Role        string     `json:"role" example:"Employee"`
+	Timestamp   *time.Time `json:"timestamp,omitempty"`
+	MaskedIP    string     `json:"masked_ip,omitempty" example:"192.168.***.***"`
+	Status      string     `json:"status" example:"completed"` // "completed", "pending", "rejected", "revoked"
+}
+
 // PublicDocumentVerificationResponse is returned by the public document verification endpoint.
 type PublicDocumentVerificationResponse struct {
-	DocumentType     string     `json:"document_type" example:"timesheet"` // "timesheet" or "berita_acara"
-	Status           string     `json:"status" example:"valid"`            // "valid", "revoked", "invalid"
-	IsValid          bool       `json:"is_valid" example:"true"`
-	Month            int        `json:"month" example:"10"`
-	Year             int        `json:"year" example:"2026"`
-	EmployeeName     string     `json:"employee_name" example:"John Doe"`
-	EmployeeBNIID    string     `json:"employee_bni_id,omitempty" example:"12345"`
-	EmployeeSignedAt *time.Time `json:"employee_signed_at,omitempty"`
-	WitnessName      string     `json:"witness_name,omitempty" example:"Jane Smith"`
-	WitnessSignedAt  *time.Time `json:"witness_signed_at,omitempty"`
-	DocumentHash     string     `json:"document_hash" example:"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`
-	VerifiedAt       time.Time  `json:"verified_at"`
+	DocumentType     string                   `json:"document_type" example:"timesheet"` // "timesheet" or "berita_acara"
+	Status           string                   `json:"status" example:"valid"`            // "valid", "revoked", "invalid"
+	IsValid          bool                     `json:"is_valid" example:"true"`
+	Month            int                      `json:"month" example:"10"`
+	Year             int                      `json:"year" example:"2026"`
+	EmployeeName     string                   `json:"employee_name" example:"John Doe"`
+	EmployeeBNIID    string                   `json:"employee_bni_id,omitempty" example:"12345"`
+	EmployeeSignedAt *time.Time               `json:"employee_signed_at,omitempty"`
+	WitnessName      string                   `json:"witness_name,omitempty" example:"Jane Smith"`
+	WitnessSignedAt  *time.Time               `json:"witness_signed_at,omitempty"`
+	DocumentHash     string                   `json:"document_hash" example:"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"`
+	VerifiedAt       time.Time                `json:"verified_at"`
+	AuditTrail       []DocumentAuditTrailItem `json:"audit_trail,omitempty"`
 }

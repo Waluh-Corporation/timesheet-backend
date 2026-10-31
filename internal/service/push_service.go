@@ -65,7 +65,7 @@ func (s *pushService) SendTestPush(ctx context.Context, userID uint) error {
 	if s.dispatcher != nil {
 		s.dispatcher.SendToUser(userID, push.Payload{
 			Title: "Timesheet Portal",
-			Body:  "Waktunya isi timesheet hari ini!",
+			Body:  "Time to log your timesheet today!",
 			URL:   "/activity",
 		})
 	}

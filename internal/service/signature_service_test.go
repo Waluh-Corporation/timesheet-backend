@@ -1060,3 +1060,189 @@ func TestSignatureService_SubmitBeritaAcara_AutoResolveWitness(t *testing.T) {
 	assert.Equal(t, witness.ID, submitAutoResp.WitnessID)
 	assert.Equal(t, models.SubmissionStatusPendingWitness, submitAutoResp.Status)
 }
+
+func TestMaskIP(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"empty string", "", ""},
+		{"whitespace string", "   ", ""},
+		{"IPv4 standard", "192.168.1.100", "192.168.***.***"},
+		{"IPv4 loopback", "127.0.0.1", "127.0.***.***"},
+		{"IPv4 with port", "192.168.1.100:8080", "192.168.***.***"},
+		{"IPv6 standard", "2001:0db8:85a3:0000:0000:8a2e:0370:7334", "2001:db8:****::1"},
+		{"IPv6 compressed", "2001:db8::1", "2001:db8:****::1"},
+		{"IPv6 with brackets and port", "[2001:db8::1]:443", "2001:db8:****::1"},
+		{"IPv6 link-local", "fe80::1", "fe80:0:****::1"},
+		{"IPv6 loopback", "::1", "0:0:****::1"},
+		{"IPv6-mapped IPv4", "::ffff:192.168.1.1", "192.168.***.***"},
+		{"IPv6-mapped IPv4 with port", "[::ffff:192.168.1.1]:8080", "192.168.***.***"},
+		{"already masked IPv4", "192.168.***.***", "192.168.***.***"},
+		{"non-IP fallback", "unknown-host", "unknown-host"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := service.MaskIP(tc.input)
+			assert.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+func TestSignatureService_AuditTrail_Comprehensive(t *testing.T) {
+	ctx := context.Background()
+	userRepo := newMockUserRepo()
+	actRepo := newMockActivityRepo()
+	subRepo := newMockSubmissionRepo()
+	storageSvc := newMockStorageSvc()
+
+	employee := &models.User{
+		ID:               10,
+		Username:         "emp10",
+		Name:             "Alice Employee",
+		Email:            "alice@example.com",
+		SignatureFileKey: "signatures/10_sig.png",
+		IsActive:         true,
+	}
+	witness := &models.User{
+		ID:               20,
+		Username:         "wit20",
+		Name:             "Bob Witness",
+		Email:            "bob@example.com",
+		SignatureFileKey: "signatures/20_sig.png",
+		IsActive:         true,
+	}
+	_ = userRepo.Create(ctx, employee)
+	_ = userRepo.Create(ctx, witness)
+
+	svc := service.NewSignatureService(userRepo, actRepo, subRepo, storageSvc, nil, nil, "https://timesheet.local")
+	meta := service.AuditMeta{IP: "192.168.10.45", UserAgent: "TestBrowser/1.0"}
+
+	t.Run("Timesheet Audit Trail: Submit, Verify, Revoke", func(t *testing.T) {
+		// Mock PDF in storage for submission
+		storageSvc.files["signatures/10_sig.png"] = []byte("pngdata")
+		actRepo.activities = []models.DailyActivity{{
+			ID:       101,
+			UserID:   employee.ID,
+			Date:     time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC),
+			Activity: "Development work",
+			IsActive: true,
+		}}
+
+		subResp, err := svc.SignTimesheet(ctx, employee.ID, &request.SignTimesheetRequest{
+			Month: 10,
+			Year:  2026,
+		}, meta)
+		require.NoError(t, err)
+		require.NotEmpty(t, subResp.VerificationToken)
+
+		// 1. Verify Timesheet (Signed state)
+		vResp, err := svc.VerifyDocument(ctx, subResp.VerificationToken)
+		require.NoError(t, err)
+		assert.True(t, vResp.IsValid)
+		assert.Equal(t, "valid", vResp.Status)
+		require.Len(t, vResp.AuditTrail, 3)
+
+		// Step 1: Submission
+		assert.Equal(t, 1, vResp.AuditTrail[0].Step)
+		assert.Equal(t, "Timesheet Submitted & Signed", vResp.AuditTrail[0].Title)
+		assert.Equal(t, "192.168.***.***", vResp.AuditTrail[0].MaskedIP)
+		assert.Equal(t, "completed", vResp.AuditTrail[0].Status)
+		assert.Equal(t, "Alice Employee", vResp.AuditTrail[0].Actor)
+
+		// Step 2: SHA-256 Seal
+		assert.Equal(t, 2, vResp.AuditTrail[1].Step)
+		assert.Equal(t, "Cryptographic SHA-256 Seal", vResp.AuditTrail[1].Title)
+		assert.Equal(t, "completed", vResp.AuditTrail[1].Status)
+
+		// Step 3: Public Verification
+		assert.Equal(t, 3, vResp.AuditTrail[2].Step)
+		assert.Equal(t, "Public Verification Gateway", vResp.AuditTrail[2].Title)
+		assert.Equal(t, "completed", vResp.AuditTrail[2].Status)
+
+		// 2. Revoke Timesheet
+		revokeMeta := service.AuditMeta{IP: "10.0.5.99:9090", UserAgent: "RevokeAgent/1.0"}
+		err = svc.RevokeTimesheet(ctx, employee.ID, &request.RevokeTimesheetRequest{Month: 10, Year: 2026}, revokeMeta)
+		require.NoError(t, err)
+
+		// Verify Timesheet (Revoked state)
+		vRevoked, err := svc.VerifyDocument(ctx, subResp.VerificationToken)
+		require.NoError(t, err)
+		assert.False(t, vRevoked.IsValid)
+		assert.Equal(t, "revoked", vRevoked.Status)
+		require.Len(t, vRevoked.AuditTrail, 3)
+
+		// Step 3 should now be Revocation
+		assert.Equal(t, 3, vRevoked.AuditTrail[2].Step)
+		assert.Equal(t, "Timesheet Signature Revoked", vRevoked.AuditTrail[2].Title)
+		assert.Equal(t, "10.0.***.***", vRevoked.AuditTrail[2].MaskedIP)
+		assert.Equal(t, "revoked", vRevoked.AuditTrail[2].Status)
+	})
+
+	t.Run("Berita Acara Audit Trail: Submit, Witness Approve, and Revoke", func(t *testing.T) {
+		// Mock signatures for Berita Acara
+		storageSvc.files["signatures/20_sig.png"] = []byte("pngdata")
+		actRepo.activities = []models.DailyActivity{{
+			ID:            102,
+			UserID:        employee.ID,
+			Date:          time.Date(2026, 10, 20, 0, 0, 0, 0, time.UTC),
+			Activity:      "Deployment incident",
+			IsBeritaAcara: true,
+			WitnessID:     &witness.ID,
+			IsActive:      true,
+		}}
+
+		baSub, err := svc.SubmitBeritaAcara(ctx, employee.ID, &request.SubmitBeritaAcaraRequest{
+			Month:     10,
+			Year:      2026,
+			WitnessID: witness.ID,
+		}, service.AuditMeta{IP: "192.168.1.50"})
+		require.NoError(t, err)
+
+		// 1. Pending Witness
+		vPending, err := svc.VerifyDocument(ctx, baSub.VerificationToken)
+		require.NoError(t, err)
+		assert.False(t, vPending.IsValid)
+		assert.Equal(t, "pending", vPending.Status)
+		require.Len(t, vPending.AuditTrail, 3)
+		assert.Equal(t, "pending", vPending.AuditTrail[1].Status)
+		assert.Equal(t, "Witness Review Pending", vPending.AuditTrail[1].Title)
+
+		// 2. Approve by Witness
+		_, err = svc.WitnessAction(ctx, witness.ID, baSub.ID, &request.WitnessActionRequest{
+			Action: "approve",
+		}, service.AuditMeta{IP: "10.10.20.30"})
+		require.NoError(t, err)
+
+		// Verify Approved
+		vApproved, err := svc.VerifyDocument(ctx, baSub.VerificationToken)
+		require.NoError(t, err)
+		assert.True(t, vApproved.IsValid)
+		assert.Equal(t, "valid", vApproved.Status)
+		require.Len(t, vApproved.AuditTrail, 4)
+
+		assert.Equal(t, "192.168.***.***", vApproved.AuditTrail[0].MaskedIP)
+		assert.Equal(t, "10.10.***.***", vApproved.AuditTrail[1].MaskedIP)
+		assert.Equal(t, "Witness Signature Affixed", vApproved.AuditTrail[1].Title)
+		assert.Equal(t, "Cryptographic SHA-256 Seal", vApproved.AuditTrail[2].Title)
+		assert.Equal(t, "Public Verification Gateway", vApproved.AuditTrail[3].Title)
+
+		// 3. Revoke after Approval
+		err = svc.RevokeBeritaAcara(ctx, employee.ID, baSub.ID, service.AuditMeta{IP: "172.16.5.1"})
+		require.NoError(t, err)
+
+		vRevoked, err := svc.VerifyDocument(ctx, baSub.VerificationToken)
+		require.NoError(t, err)
+		assert.False(t, vRevoked.IsValid)
+		assert.Equal(t, "revoked", vRevoked.Status)
+		require.Len(t, vRevoked.AuditTrail, 4)
+		// Step 2 remains completed witness signature
+		assert.Equal(t, "completed", vRevoked.AuditTrail[1].Status)
+		// Step 4 is Document Revoked
+		assert.Equal(t, "Document Revoked", vRevoked.AuditTrail[3].Title)
+		assert.Equal(t, "172.16.***.***", vRevoked.AuditTrail[3].MaskedIP)
+		assert.Equal(t, "revoked", vRevoked.AuditTrail[3].Status)
+	})
+}

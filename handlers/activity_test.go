@@ -552,7 +552,8 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) { // NOSONAR
 		t.Fatalf("failed to create test project: %v", err)
 	}
 
-	reqBody := `{"date":"2026-09-20","project_ref_id":` + itoa(testProj.ID) + `,"activity":"Developing Alpha feature","status":"P","start_time":"08:30","end_time":"17:30"}`
+	today := time.Now().Format("2006-01-02")
+	reqBody := fmt.Sprintf(`{"date":"%s","project_ref_id":%d,"activity":"Developing Alpha feature","status":"P","start_time":"08:30","end_time":"17:30"}`, today, testProj.ID)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest("POST", "/api/v1/activities", strings.NewReader(reqBody))
@@ -598,7 +599,7 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) { // NOSONAR
 
 		wList := httptest.NewRecorder()
 		cList, _ := gin.CreateTestContext(wList)
-		cList.Request = httptest.NewRequest("GET", "/api/v1/activities?start_date=2026-09-20&end_date=2026-09-20", nil)
+		cList.Request = httptest.NewRequest("GET", fmt.Sprintf("/api/v1/activities?start_date=%s&end_date=%s", today, today), nil)
 		cList.Set(ctxUserID, user1.ID)
 		cList.Set(ctxRole, models.RoleUser)
 
@@ -635,7 +636,7 @@ func TestActivityHandlers_UpsertSyncIntegration(t *testing.T) { // NOSONAR
 			t.Fatalf("failed to create test project beta: %v", err)
 		}
 
-		reqBodyUpdate := `{"date":"2026-09-20","project_ref_id":` + itoa(testProjBeta.ID) + `,"activity":"Switching to Beta","status":"P","start_time":"08:30","end_time":"17:30"}`
+		reqBodyUpdate := fmt.Sprintf(`{"date":"%s","project_ref_id":%d,"activity":"Switching to Beta","status":"P","start_time":"08:30","end_time":"17:30"}`, today, testProjBeta.ID)
 		wUpdate := httptest.NewRecorder()
 		cUpdate, _ := gin.CreateTestContext(wUpdate)
 		cUpdate.Request = httptest.NewRequest("POST", "/api/v1/activities", strings.NewReader(reqBodyUpdate))
@@ -799,7 +800,8 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) { // NOSONAR
 	_ = tx.Create(&user)
 
 	t.Run("UpsertOvertime creates and updates entry", func(t *testing.T) {
-		body := `{"date":"2026-09-15","start_time":"18:00","end_time":"21:00","task_description":"Deploying hotfix"}`
+		today := time.Now().Format("2006-01-02")
+		body := fmt.Sprintf(`{"date":"%s","start_time":"18:00","end_time":"21:00","task_description":"Deploying hotfix"}`, today)
 		w := httptest.NewRecorder()
 		c, _ := gin.CreateTestContext(w)
 		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/overtimes", strings.NewReader(body))
@@ -816,7 +818,7 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) { // NOSONAR
 		otID := savedEntry.ID
 
 		// Update existing overtime
-		updateBody := fmt.Sprintf(`{"id":%d,"date":"2026-09-15","start_time":"19:00","end_time":"22:00","task_description":"Updated overtime task"}`, otID)
+		updateBody := fmt.Sprintf(`{"id":%d,"date":"%s","start_time":"19:00","end_time":"22:00","task_description":"Updated overtime task"}`, otID, today)
 		wUp := httptest.NewRecorder()
 		cUp, _ := gin.CreateTestContext(wUp)
 		cUp.Request = httptest.NewRequest(http.MethodPost, "/api/v1/overtimes", strings.NewReader(updateBody))
@@ -926,7 +928,8 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) { // NOSONAR
 		assertFatalCode(t, wBadJSON, http.StatusBadRequest)
 
 		// 2. User not found
-		validBody := `{"year":2026,"month":9}`
+		now := time.Now()
+		validBody := fmt.Sprintf(`{"year":%d,"month":%d}`, now.Year(), int(now.Month()))
 		wNotFound := httptest.NewRecorder()
 		cNotFound, _ := gin.CreateTestContext(wNotFound)
 		cNotFound.Request = httptest.NewRequest(http.MethodPost, "/api/v1/timesheet/generate", strings.NewReader(validBody))
@@ -957,8 +960,8 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) { // NOSONAR
 			t.Errorf("expected polite empty timesheet error, got: %s", wEmpty.Body.String())
 		}
 
-		// Seed an activity for user in September 2026
-		actDate := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
+		// Seed an activity for user in current month
+		actDate := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 		seedAct := models.DailyActivity{
 			UserID:    user.ID,
 			Date:      actDate,
@@ -1040,7 +1043,7 @@ func TestActivityHandlers_OvertimeAndHelpers(t *testing.T) { // NOSONAR
 		assertFatalCode(t, wInFlight, http.StatusConflict)
 
 		// 11. Autonomous Re-issue (Cache Hit): Complete the job and request again -> 200 OK with fresh token
-		now := time.Now()
+		now = time.Now()
 		future := now.Add(7 * 24 * time.Hour)
 		initialToken := "initial-token-12345"
 		srv.Storage = &testActivityMockStorage{}

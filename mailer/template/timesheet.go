@@ -37,11 +37,9 @@ func RenderTimesheetEmail(data TimesheetEmailData) (htmlBody string, textBody st
 
 	layout := BaseLayoutData{
 		AppName:      data.AppName,
-		Preheader:    fmt.Sprintf("Dokumen Timesheet %s telah siap diunduh.", headerCompany),
-		Subject:      fmt.Sprintf("Dokumen Timesheet %s Anda Telah Siap", headerCompany),
-		BadgeText:    "Laporan Timesheet",
-		BadgeColor:   "emerald",
-		HeaderTitle:  fmt.Sprintf("Dokumen Timesheet %s Telah Siap", headerCompany),
+		Preheader:    fmt.Sprintf("Your %s timesheet document is ready for download.", headerCompany),
+		Subject:      fmt.Sprintf("Your %s Timesheet Is Ready", headerCompany),
+		HeaderTitle:  fmt.Sprintf("Your %s Timesheet Is Ready", headerCompany),
 		SupportEmail: data.SupportEmail,
 		PortalURL:    data.PortalURL,
 	}
@@ -53,20 +51,20 @@ func RenderTimesheetEmail(data TimesheetEmailData) (htmlBody string, textBody st
 
 	downloadInfo := ""
 	if data.DownloadURL != "" {
-		downloadInfo = fmt.Sprintf("\nTautan Unduhan: %s\n(*Tautan unduhan ini privat, dapat digunakan maksimal 3 kali unduhan, dan aktif selama 7 hari.)\n", data.DownloadURL)
+		downloadInfo = fmt.Sprintf("\nDownload Link: %s\n(*This download link is private, allows a maximum of 3 downloads, and remains active for 7 days.)\n", data.DownloadURL)
 	}
 
-	textBody = fmt.Sprintf(`Halo %s,
+	textBody = fmt.Sprintf(`Hello %s,
 
-Dokumen timesheet bulanan Anda telah berhasil dibuat.
+Your monthly timesheet document has been generated.
 %s
-Detail Timesheet:
-- Perusahaan: %s
-- Periode: %s
-- Nama File: %s
+Timesheet Details:
+- Company / Client: %s
+- Timesheet Period: %s
+- Attachment Name: %s
 
-Langkah Selanjutnya:
-Silakan periksa kembali rincian jam kerja dan kegiatan sebelum menyerahkan dokumen ini kepada Team Leader / Department Head untuk persetujuan (approval).
+Next Steps:
+Please review your working hours, overtime, and task descriptions in the attached file before submitting the document to your Team Leader or Department Head for official approval.
 
 --
 %s
