@@ -43,16 +43,14 @@ func RenderResetEmail(data ResetEmailData) (htmlBody string, textBody string, er
 
 	greetingName := data.Username
 	if greetingName == "" {
-		greetingName = "Pengguna"
+		greetingName = "User"
 	}
 
 	layout := BaseLayoutData{
 		AppName:      data.AppName,
-		Preheader:    fmt.Sprintf("Instruksi pengaturan ulang kata sandi akun %s Anda.", data.AppName),
-		Subject:      fmt.Sprintf("Reset Kata Sandi Akun %s", data.AppName),
-		BadgeText:    "Keamanan Akun",
-		BadgeColor:   "amber",
-		HeaderTitle:  "Permintaan Reset Kata Sandi",
+		Preheader:    fmt.Sprintf("Password reset instructions for your %s account.", data.AppName),
+		Subject:      fmt.Sprintf("Reset Your %s Password", data.AppName),
+		HeaderTitle:  "Password Reset Request",
 		SupportEmail: data.SupportEmail,
 		PortalURL:    data.PortalURL,
 	}
@@ -64,25 +62,25 @@ func RenderResetEmail(data ResetEmailData) (htmlBody string, textBody string, er
 
 	ipLine := ""
 	if data.IPAddress != "" {
-		ipLine = fmt.Sprintf("- Alamat IP: %s\n", data.IPAddress)
+		ipLine = fmt.Sprintf("- IP Address: %s\n", data.IPAddress)
 	}
 	locLine := ""
 	if data.Location != "" {
-		locLine = fmt.Sprintf("- Lokasi: %s\n", data.Location)
+		locLine = fmt.Sprintf("- Approximate Location: %s\n", data.Location)
 	}
 
-	textBody = fmt.Sprintf(`Halo %s,
+	textBody = fmt.Sprintf(`Hello %s,
 
-Kami menerima permintaan untuk mengatur ulang kata sandi akun %s Anda.
-Gunakan tautan di bawah ini untuk membuat kata sandi baru:
+We received a request to reset the password for your %s account.
+Use the link below to set a new password:
 
 %s
 
-Detail Permintaan:
-- Waktu Permintaan: %s
+Request Details:
+- Requested At: %s
 %s%s
-PENTING: Tautan ini bersifat rahasia dan hanya berlaku hingga %s. Jangan bagikan tautan ini kepada siapapun.
-Jika Anda tidak meminta pengaturan ulang kata sandi ini, abaikan email ini; akun Anda tetap aman.
+IMPORTANT: This link is confidential and will expire at %s. Do not share this link with anyone.
+If you did not request a password reset, you can safely ignore this email; your account remains secure.
 
 --
 %s

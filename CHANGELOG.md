@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Document Verification Audit Trail & Stepper Timeline**: Enhanced the public document verification API and web view with an immutable, chronologically ordered audit log trail (`AuditTrail`). Tracks key lifecycle milestones including document submission, witness approvals/rejections, SHA-256 seal generation, revocations, and verification lookups. The standalone HTML verification page renders these events in a zero-CDN, CSP-compliant Tabler vertical stepper timeline with color-coded status badges, formatted timestamps, and actor details.
+- **Client IP Address Anonymization for Public Verification**: Integrated privacy-preserving IP masking (`MaskIP`) for audit trail verification entries, masking the last two octets of IPv4 addresses (`192.168.***.***`) and trailing segments of IPv6 addresses (`2001:db8:****::1`).
+- **English Month Formatting Utility**: Added `FormatMonthYearEnglish` in mailer templates and `MonthNameEnglish` in service spreadsheet builders for standardized English calendar formatting across reports and email notifications.
+
+### Changed
+- **Comprehensive Email Template English Localization**: Fully translated all 8 transactional email templates (`layout`, `setup`, `reset`, `password_changed`, `reminder`, `timesheet`, `witness_request`, `berita_acara_approved`, and `berita_acara_rejected`), plain-text fallbacks, and Gomail dispatch subjects into clear, idiomatic English. Configured email timestamps to dynamically respect the application timezone (`TZ`) with proper timezone abbreviations.
+- **WebPush Notification English Normalization**: Standardized all push notification titles and notification bodies (timesheet reminders, witness signature requests, and approval/rejection updates) to English.
+- **Timesheet Owner Signature Approver Blanking**: Updated the Excel signature embedding engine (`WriteSignatures`) to stamp only the timesheet owner's digital signature and submission date, leaving Team Leader and Department Head approver cells blank for physical review and sign-off.
+
+### Removed
+- **Email Category Badges**: Removed top-right header category badge elements from `layout.html`, badge struct fields and styling methods from `BaseLayoutData`, and redundant badge pill markup from individual email templates.
+
 ## [1.16.0] - 2026-10-31
 
 ### Added

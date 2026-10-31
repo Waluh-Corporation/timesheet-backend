@@ -216,7 +216,7 @@ func (s *Scheduler) sendDailyReminders() {
 	for _, userID := range targetUserIDs {
 		s.push.SendToUser(userID, push.Payload{
 			Title: "Timesheet Reminder",
-			Body:  "Waktunya isi timesheet hari ini!",
+			Body:  "Time to log your timesheet today!",
 			URL:   "/activity",
 		})
 	}

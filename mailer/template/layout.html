@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id" dir="ltr">
+<html lang="en" dir="ltr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -87,12 +87,6 @@
       .brand-header-td {
         display: block !important;
         width: 100% !important;
-      }
-      .badge-header-td {
-        display: block !important;
-        width: 100% !important;
-        text-align: left !important;
-        padding-top: 8px !important;
       }
     }
 
@@ -319,13 +313,6 @@
                       </tr>
                     </table>
                   </td>
-                  {{if .BadgeText}}
-                  <td class="badge-header-td" align="right" style="vertical-align: middle;">
-                    <span style="display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; border-radius: 9999px; white-space: nowrap; background-color: {{.BadgeBgColor}}; color: {{.BadgeTextColor}}; border: 1px solid {{.BadgeBorderColor}}; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-                      {{.BadgeText}}
-                    </span>
-                  </td>
-                  {{end}}
                 </tr>
               </table>
 
@@ -363,15 +350,15 @@
           <tr>
             <td style="padding: 24px 16px 0; text-align: center;">
               <p class="footer-text" style="margin: 0 0 6px 0; font-size: 12px; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.5;">
-                {{if .SystemNotice}}{{.SystemNotice}}{{else}}Email ini dikirimkan secara otomatis oleh <strong>{{.AppName}}</strong>. Mohon untuk tidak membalas email ini.{{end}}
+                {{if .SystemNotice}}{{.SystemNotice}}{{else}}This email was sent automatically by <strong>{{.AppName}}</strong>. Please do not reply to this email.{{end}}
               </p>
               {{if .SupportEmail}}
               <p class="footer-text" style="margin: 0 0 8px 0; font-size: 12px; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-                Bantuan &amp; pertanyaan teknis: <a href="mailto:{{.SupportEmail}}" style="color: #066fd1; text-decoration: underline;">{{.SupportEmail}}</a>
+                Technical inquiries &amp; support: <a href="mailto:{{.SupportEmail}}" style="color: #066fd1; text-decoration: underline;">{{.SupportEmail}}</a>
               </p>
               {{end}}
               <p class="footer-text" style="margin: 0 0 8px 0; font-size: 11px; color: #9ba6b5; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.4;">
-                Kami tidak pernah meminta kata sandi Anda melalui email atau pesan pribadi.
+                We will never ask for your password via email or direct message.
               </p>
               <p class="footer-text" style="margin: 0; font-size: 11px; color: #9ba6b5; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
                 &copy; {{.CurrentYear}} {{.AppName}}. All rights reserved.

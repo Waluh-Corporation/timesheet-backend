@@ -15,7 +15,7 @@ import (
 	"timesheet-backend/config"
 )
 
-const defaultTimeFormatWIB = "02 Jan 2006, 15:04 WIB"
+const defaultTimeFormatWIB = "02 Jan 2006, 15:04 MST"
 
 // Mailer sends transactional and delivery email over SMTP.
 type Mailer struct {
@@ -173,7 +173,7 @@ func (m *Mailer) sendSetupOrWelcomeEmail(to string, data SetupEmailData) error {
 		log.Printf("[mailer] failed to render setup/welcome email template: %v", err)
 		return err
 	}
-	return m.sendSimpleMessage(to, fmt.Sprintf("Selamat Datang di %s", data.AppName), htmlBody, textBody)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Welcome to %s", data.AppName), htmlBody, textBody)
 }
 
 // SendSetupEmail delivers initial credentials + a setup link to a new user.
@@ -247,7 +247,7 @@ func (m *Mailer) SendResetEmailWithDetails(to, username, resetLink, ipAddress, l
 		return err
 	}
 
-	return m.sendSimpleMessage(to, fmt.Sprintf("Reset Kata Sandi Akun %s", m.appName()), htmlBody, textBody)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Reset Your %s Password", m.appName()), htmlBody, textBody)
 }
 
 // SendTimesheetEmail attaches the generated timesheet file and sends it to the
@@ -260,9 +260,9 @@ func (m *Mailer) SendTimesheetEmail(to, company, filename string, data []byte) e
 // SendTimesheetEmailWithDetails delivers timesheet email with explicit details.
 func (m *Mailer) SendTimesheetEmailWithDetails(to, username, company, period, filename string, data []byte) error {
 	comp := strings.TrimSpace(company)
-	subject := "Dokumen Timesheet Anda Telah Siap"
+	subject := "Your Timesheet Is Ready"
 	if comp != "" {
-		subject = fmt.Sprintf("Dokumen Timesheet %s Anda Telah Siap", comp)
+		subject = fmt.Sprintf("Your %s Timesheet Is Ready", comp)
 	}
 
 	htmlBody, textBody, err := RenderTimesheetEmail(TimesheetEmailData{
@@ -300,9 +300,9 @@ func (m *Mailer) SendTimesheetEmailWithDetails(to, username, company, period, fi
 // SendTimesheetReadyEmail sends an email notification containing a secure presigned download link.
 func (m *Mailer) SendTimesheetReadyEmail(to, username, company, period, filename, downloadURL string, expiresAt time.Time) error {
 	comp := strings.TrimSpace(company)
-	subject := "Dokumen Timesheet Anda Telah Siap"
+	subject := "Your Timesheet Is Ready"
 	if comp != "" {
-		subject = fmt.Sprintf("Dokumen Timesheet %s Anda Telah Siap", comp)
+		subject = fmt.Sprintf("Your %s Timesheet Is Ready", comp)
 	}
 
 	expStr := ""
@@ -360,7 +360,7 @@ func (m *Mailer) SendReminderEmail(to, username, dateStr, activityURL string) er
 		return err
 	}
 
-	return m.sendSimpleMessage(to, fmt.Sprintf("Pengingat Harian: Isi Timesheet Hari Ini (%s)", dateStr), htmlBody, textBody)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Daily Reminder: Log Your Timesheet Today (%s)", dateStr), htmlBody, textBody)
 }
 
 // SendPasswordChangedEmail delivers a security notice confirming password was updated.
@@ -384,7 +384,7 @@ func (m *Mailer) SendPasswordChangedEmailWithDetails(to, username, ipAddress, lo
 		AppName:      m.appName(),
 		Username:     username,
 		Email:        to,
-		ChangedAt:    time.Now().Format(defaultTimeFormatWIB),
+		ChangedAt:    time.Now().In(m.timeLocation()).Format(defaultTimeFormatWIB),
 		LoginURL:     loginURL,
 		SupportEmail: m.supportEmail(),
 		PortalURL:    m.frontendURL(),
@@ -396,7 +396,7 @@ func (m *Mailer) SendPasswordChangedEmailWithDetails(to, username, ipAddress, lo
 		return err
 	}
 
-	return m.sendSimpleMessage(to, fmt.Sprintf("Keamanan Akun: Kata Sandi %s Anda Berhasil Diperbarui", m.appName()), htmlBody, textBody)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Security Alert: Your %s Password Has Been Updated", m.appName()), htmlBody, textBody)
 }
 
 // SendWitnessRequestEmail delivers a notification requesting a witness to review and sign a Berita Acara.
@@ -415,7 +415,7 @@ func (m *Mailer) SendWitnessRequestEmail(to, witnessName, employeeName, period, 
 		return err
 	}
 
-	return m.sendSimpleMessage(to, fmt.Sprintf("Permintaan Tanda Tangan Saksi Berita Acara - %s (%s)", employeeName, period), htmlBody, textBody)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Berita Acara Witness Signature Request - %s (%s)", employeeName, period), htmlBody, textBody)
 }
 
 // SendBeritaAcaraApprovedEmail notifies an employee that their Berita Acara has been signed by the witness.
@@ -434,7 +434,7 @@ func (m *Mailer) SendBeritaAcaraApprovedEmail(to, employeeName, witnessName, per
 		return err
 	}
 
-	return m.sendSimpleMessage(to, fmt.Sprintf("Berita Acara Disetujui oleh Saksi (%s)", period), htmlBody, textBody)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Berita Acara Approved by Witness (%s)", period), htmlBody, textBody)
 }
 
 // SendBeritaAcaraRejectedEmail notifies an employee that their Berita Acara was rejected by the witness.
@@ -459,5 +459,5 @@ func (m *Mailer) SendBeritaAcaraRejectedEmail(to, employeeName, witnessName, per
 		return err
 	}
 
-	return m.sendSimpleMessage(to, fmt.Sprintf("Berita Acara Perlu Revisi (%s)", period), htmlBody, textBody)
+	return m.sendSimpleMessage(to, fmt.Sprintf("Berita Acara Requires Revision (%s)", period), htmlBody, textBody)
 }

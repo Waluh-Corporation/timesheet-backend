@@ -26,6 +26,7 @@ var (
 	RenderWitnessRequestEmail      = template.RenderWitnessRequestEmail
 	RenderBeritaAcaraApprovedEmail = template.RenderBeritaAcaraApprovedEmail
 	RenderBeritaAcaraRejectedEmail = template.RenderBeritaAcaraRejectedEmail
+	FormatMonthYearEnglish         = template.FormatMonthYearEnglish
 	FormatMonthYearIndonesian      = template.FormatMonthYearIndonesian
 	ParsePeriodFromFilename        = template.ParsePeriodFromFilename
 )

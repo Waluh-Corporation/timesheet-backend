@@ -29,11 +29,9 @@ func RenderBeritaAcaraApprovedEmail(data BeritaAcaraApprovedEmailData) (htmlBody
 
 	layout := BaseLayoutData{
 		AppName:      data.AppName,
-		Preheader:    fmt.Sprintf("Berita Acara periode %s telah disetujui dan ditandatangani oleh %s.", data.Period, data.WitnessName),
-		Subject:      fmt.Sprintf("Berita Acara Disetujui oleh Saksi (%s)", data.Period),
-		BadgeText:    "Berita Acara Disetujui",
-		BadgeColor:   "emerald",
-		HeaderTitle:  "Berita Acara Anda Telah Disetujui",
+		Preheader:    fmt.Sprintf("Your Berita Acara for %s has been signed by witness %s.", data.Period, data.WitnessName),
+		Subject:      fmt.Sprintf("Berita Acara Approved by Witness (%s)", data.Period),
+		HeaderTitle:  "Your Berita Acara Has Been Approved",
 		SupportEmail: data.SupportEmail,
 		PortalURL:    data.PortalURL,
 	}
@@ -45,15 +43,15 @@ func RenderBeritaAcaraApprovedEmail(data BeritaAcaraApprovedEmailData) (htmlBody
 
 	downloadText := ""
 	if data.DownloadURL != "" {
-		downloadText = fmt.Sprintf("\nTautan Unduhan: %s\n", data.DownloadURL)
+		downloadText = fmt.Sprintf("\nDownload Link: %s\n", data.DownloadURL)
 	}
 
-	textBody = fmt.Sprintf(`Halo %s,
+	textBody = fmt.Sprintf(`Hello %s,
 
-Berita Acara Anda untuk periode %s telah disetujui dan ditandatangani oleh saksi %s.
+Your Berita Acara for the period of %s has been approved and signed by witness %s.
 
-Dokumen resmi dengan tanda tangan lengkap dan QR Code verifikasi kini siap diunduh.%s
-Dokumen resmi telah dilengkapi dengan gambar tanda tangan visual dari kedua pihak serta QR Code verifikasi dokumen digital.
+The official document with complete signatures and verification QR Code is now ready to download.%s
+The official document includes visual signatures from both parties as well as a digital verification QR Code.
 
 --
 %s

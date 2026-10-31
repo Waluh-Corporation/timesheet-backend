@@ -8,7 +8,7 @@
     line-height: 1.6;
   "
 >
-  Halo <strong>{{.WitnessName}}</strong>, rekan Anda <strong>{{.EmployeeName}}</strong> telah mengajukan Berita Acara untuk periode <strong>{{.Period}}</strong> dan memilih Anda sebagai saksi pendamping untuk menandatangani dokumen tersebut.
+  Hello <strong>{{.WitnessName}}</strong>, your colleague <strong>{{.EmployeeName}}</strong> has submitted a Berita Acara for the period of <strong>{{.Period}}</strong> and nominated you as a witness signer.
 </p>
 
 <!-- DETAILS BOX (Tabler Datagrid Style) -->
@@ -31,21 +31,21 @@
     <td style="padding: 18px 20px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Pemohon</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Employee</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.EmployeeName}}</td>
         </tr>
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Periode</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Period</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 700; color: #066fd1; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Period}}</td>
         </tr>
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Peran Anda</td>
-          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Saksi Penandatangan</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Your Role</td>
+          <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Witness Signer</td>
         </tr>
         <tr class="stack-row">
           <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Status</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #f59f00; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-            <span style="display: inline-block; padding: 2px 8px; background-color: #fef6e7; border: 1px solid #fcde9c; border-radius: 4px; color: #f59f00; font-weight: 600; font-size: 12px; letter-spacing: 0.2px;">Menunggu Persetujuan Saksi</span>
+            <span style="color: #f59f00; font-weight: 600;">Pending Witness Approval</span>
           </td>
         </tr>
       </table>
@@ -84,7 +84,7 @@
             font-weight: bold;
           "
         >
-          Tinjau Berita Acara &rarr;
+          Review Berita Acara &rarr;
         </center>
       </v:roundrect>
       <![endif]-->
@@ -109,7 +109,7 @@
           background-color: #066fd1;
         "
       >
-        Tinjau Berita Acara &rarr;
+        Review Berita Acara &rarr;
       </a>
       <!--<![endif]-->
     </td>
@@ -126,7 +126,7 @@
     line-height: 1.5;
   "
 >
-  Jika tombol di atas tidak dapat diklik, salin dan buka tautan berikut di peramban Anda:<br />
+  If you are having trouble clicking the button above, copy and paste the following link into your browser:<br />
   <a
     href="{{.ReviewURL}}"
     target="_blank"
@@ -158,7 +158,7 @@
   <tr>
     <td style="padding: 12px 16px;">
       <p style="margin: 0; font-size: 12px; color: #004085; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-        Anda dapat menyetujui pengajuan ini untuk membubuhkan tanda tangan digital Anda sebagai saksi atau menolaknya dengan memberikan catatan revisi jika terdapat ketidaksesuaian.
+        You can approve this request to affix your digital signature as a witness or reject it with revision notes if any discrepancies are found.
       </p>
     </td>
   </tr>

@@ -8,7 +8,7 @@
     line-height: 1.6;
   "
 >
-  Halo{{if .Username}} <strong>{{.Username}}</strong>{{end}}, kami menerima permintaan untuk mengatur ulang kata sandi akun <strong>{{.AppName}}</strong> yang terhubung dengan alamat email ini.
+  Hello{{if .Username}} <strong>{{.Username}}</strong>{{end}}, we received a request to reset the password for your <strong>{{.AppName}}</strong> account associated with this email address.
 </p>
 
 <!-- DETAILS BOX (Tabler Datagrid Style) -->
@@ -32,19 +32,19 @@
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
         {{if .Username}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Akun</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Account</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Username}}</td>
         </tr>
         {{end}}
         {{if .RequestedAt}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Waktu Permintaan</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Requested At</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 500; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.RequestedAt}}</td>
         </tr>
         {{end}}
         {{if .IPAddress}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Alamat IP</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">IP Address</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #182433;">
             <span style="font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">{{.IPAddress}}</span>
           </td>
@@ -52,7 +52,7 @@
         {{end}}
         {{if .Location}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Lokasi</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Approximate Location</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 13px; font-weight: 500; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Location}}</td>
         </tr>
         {{end}}
@@ -84,7 +84,7 @@
       >
         <w:anchorlock />
         <center style="color: #ffffff; font-family: Arial, sans-serif; font-size: 15px; font-weight: bold">
-          Reset Kata Sandi Saya
+          Reset My Password
         </center>
       </v:roundrect>
       <![endif]-->
@@ -107,7 +107,7 @@
           border-radius: 4px;
           background-color: #066fd1;
         "
-      >Reset Kata Sandi Saya</a>
+      >Reset My Password</a>
       <!--<![endif]-->
     </td>
   </tr>
@@ -125,7 +125,7 @@
       line-height: 1.6;
     "
   >
-    Jika tombol di atas tidak dapat diklik, salin dan tempel URL berikut ke browser Anda:
+    If you are having trouble clicking the button above, copy and paste the following URL into your browser:
   </p>
   <div
     class="url-fallback-box"
@@ -169,10 +169,10 @@
   <tr>
     <td style="padding: 12px 16px;">
       <p class="callout-warning-title" style="margin: 0 0 3px 0; font-size: 12px; font-weight: 600; color: #92400e; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-        Peringatan Keamanan
+        Security Warning
       </p>
       <p class="callout-warning-text" style="margin: 0; font-size: 12px; color: #78350f; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-        Tautan ini bersifat rahasia dan hanya berlaku hingga <strong>{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}{{.ExpireMinutes}} menit{{end}}</strong>. Jangan bagikan tautan ini kepada siapapun.
+        This link is confidential and expires in <strong>{{if .ExpiresAt}}{{.ExpiresAt}}{{else}}{{.ExpireMinutes}} minutes{{end}}</strong>. Do not share this link with anyone.
       </p>
     </td>
   </tr>
@@ -200,8 +200,8 @@
           line-height: 1.6;
         "
       >
-        <strong style="color: #182433" class="details-value">Tidak meminta reset kata sandi?</strong><br />
-        Anda dapat mengabaikan email ini dengan aman. Kata sandi Anda tetap aman dan tidak akan berubah.
+        <strong style="color: #182433" class="details-value">Didn't request a password reset?</strong><br />
+        You can safely ignore this email. Your password will remain unchanged and secure.
       </p>
     </td>
   </tr>

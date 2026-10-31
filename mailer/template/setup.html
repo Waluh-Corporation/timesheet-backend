@@ -8,8 +8,8 @@
     line-height: 1.6;
   "
 >
-  Halo <strong>{{.Username}}</strong>, Administrator telah membuat akun baru untuk Anda pada <strong>{{.AppName}}</strong>.
-  Akun Anda saat ini telah berstatus <strong>Aktif</strong> dan langsung dapat digunakan untuk masuk ke sistem. Silakan gunakan kredensial awal di bawah ini untuk masuk ke portal melalui tautan di bawah.
+  Hello <strong>{{.Username}}</strong>, an administrator has created a new account for you on <strong>{{.AppName}}</strong>.
+  Your account is currently <strong>Active</strong> and ready for use. Please use the initial credentials below to log in to the portal via the link below.
 </p>
 
 <!-- DETAILS BOX (Tabler Datagrid Style) -->
@@ -37,13 +37,13 @@
         </tr>
         {{if .Email}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Email Terdaftar</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Registered Email</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 500; color: #182433; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{{.Email}}</td>
         </tr>
         {{end}}
         {{if .InitialPassword}}
         <tr class="stack-row">
-          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Password Awal</td>
+          <td width="35%" class="details-label" style="padding: 6px 0; font-size: 13px; font-weight: 600; color: #6c7a91; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Temporary Password</td>
           <td width="65%" class="details-value" style="padding: 6px 0; font-size: 14px; font-weight: 600; color: #066fd1;">
             <span style="display: inline-block; padding: 3px 8px; background-color: #f6f8fb; border: 1px solid #dce1e7; border-radius: 4px; color: #066fd1; font-family: 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 13px; letter-spacing: 0.5px;">{{.InitialPassword}}</span>
           </td>
@@ -74,10 +74,10 @@
   <tr>
     <td style="padding: 12px 16px;">
       <p class="callout-warning-title" style="margin: 0 0 3px 0; font-size: 12px; font-weight: 600; color: #92400e; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-        Imbauan Keamanan Akun
+        Account Security Advisory
       </p>
       <p class="callout-warning-text" style="margin: 0; font-size: 12px; color: #78350f; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-        Demi menjaga keamanan akun dan privasi data Anda, harap segera ganti kata sandi awal ini melalui menu Akun / Profil setelah berhasil masuk untuk pertama kali.
+        For your account security and data privacy, please change this temporary password immediately via the Account / Profile menu after logging in for the first time.
       </p>
     </td>
   </tr>
@@ -106,7 +106,7 @@
       >
         <w:anchorlock />
         <center style="color: #ffffff; font-family: Arial, sans-serif; font-size: 15px; font-weight: bold">
-          Masuk ke Portal
+          Log In to Portal
         </center>
       </v:roundrect>
       <![endif]-->
@@ -129,7 +129,7 @@
           border-radius: 4px;
           background-color: #066fd1;
         "
-      >Masuk ke Portal</a>
+      >Log In to Portal</a>
       <!--<![endif]-->
     </td>
   </tr>
@@ -147,7 +147,7 @@
       line-height: 1.6;
     "
   >
-    Jika tombol di atas tidak dapat diklik, salin dan tempel URL berikut ke browser Anda:
+    If you are having trouble clicking the button above, copy and paste the following URL into your browser:
   </p>
   <div
     class="url-fallback-box"
@@ -191,10 +191,10 @@
   <tr>
     <td style="padding: 12px 16px;">
       <p class="callout-indigo-title" style="margin: 0 0 3px 0; font-size: 12px; font-weight: 600; color: #003768; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-        Dukungan Login Biometrik / Passkey
+        Biometric / Passkey Login Support
       </p>
       <p class="callout-indigo-text" style="margin: 0; font-size: 12px; color: #004085; line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-        Setelah mengatur kata sandi, Anda dapat mendaftarkan Passkey (Face ID, Touch ID, atau Windows Hello) pada menu Profil untuk proses masuk yang instan dan tanpa kata sandi.
+        After setting your password, you can register a Passkey (Face ID, Touch ID, or Windows Hello) in your Profile menu for instant passwordless sign-in.
       </p>
     </td>
   </tr>
@@ -222,7 +222,7 @@
           line-height: 1.6;
         "
       >
-        Jika Anda tidak merasa memiliki akun ini, Anda dapat mengabaikan email ini dengan aman.
+        If you did not expect this account, you can safely ignore this email.
       </p>
     </td>
   </tr>
