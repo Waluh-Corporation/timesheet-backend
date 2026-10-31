@@ -316,7 +316,8 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 	nowJakarta := time.Now().In(jakarta())
 	currMonth := int(nowJakarta.Month())
 	currYear := nowJakarta.Year()
-	prevDate := nowJakarta.AddDate(0, -1, 0)
+	firstOfCurrMonth := time.Date(currYear, time.Month(currMonth), 1, 0, 0, 0, 0, jakarta())
+	prevDate := firstOfCurrMonth.AddDate(0, -1, 0)
 	prevMonth := int(prevDate.Month())
 	prevYear := prevDate.Year()
 
@@ -566,7 +567,7 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		srv.TimesheetSvc = &mockTimesheetService{genOut: []byte("content"), genName: "Timesheet.xlsx"}
 
 		// 1. Regular user with older than 1 month -> 400
-		oldDate := nowJakarta.AddDate(0, -2, 0)
+		oldDate := firstOfCurrMonth.AddDate(0, -2, 0)
 		oldPayload, _ := json.Marshal(request.GenerateRequest{Month: int(oldDate.Month()), Year: oldDate.Year()})
 		wOld := httptest.NewRecorder()
 		cOld, _ := gin.CreateTestContext(wOld)
