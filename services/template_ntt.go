@@ -66,6 +66,8 @@ func renderNTTTemplate(in GenerationInput) ([]byte, error) {
 		TLDateCell:   "F56",
 		DHDateCell:   "J56",
 		DatePrefix:   "DATE: ",
+		UserBoxCell:  "B51",
+		QRCell:       "L51",
 	})
 	return WriteWorkbookToBuffer(f, "ntt")
 }
@@ -78,32 +80,31 @@ func renderNTTDailyRows(
 	st *BuilderStyles,
 ) map[string]int {
 	daysInMonth := GetDaysInMonth(in.Year, in.Month)
-	allCols := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
-	wrapCols := []string{"K", "L", "M", "N"}
 	statusCounts := make(map[string]int)
 
 	for day := 1; day <= 31; day++ {
 		row := 10 + day
 		rs := fmt.Sprintf("%d", row)
 
-		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
+		dsc, ok := SetupDayRowStylesAndHours(f, sheet, in, byDay, st, DailyRowSetupConfig{
+			Row:         row,
+			Day:         day,
+			DaysInMonth: daysInMonth,
+			DateCol:     "A",
+			AllCols:     StandardGrid14Cols,
+			WrapCols:    StandardGridWrapCols,
+			HoursCfg: WorkingHoursConfig{
+				StartCol:   "B",
+				EndCol:     "C",
+				TotalCol:   "D",
+				FormulaFmt: "IF(C{row}>B{row},(C{row}-B{row}),C{row}-B{row}+1)",
+			},
+		})
+		if !ok {
 			continue
 		}
 
-		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "A", rs, allCols, wrapCols, dsc)
-		_ = f.SetCellValue(sheet, "A"+rs, dsc.Date)
-
-		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
-			StartCol:   "B",
-			EndCol:     "C",
-			TotalCol:   "D",
-			RowStr:     rs,
-			FormulaFmt: "IF(C{row}>B{row},(C{row}-B{row}),C{row}-B{row}+1)",
-		}, dsc)
-
-		status := renderNTTDayActivity(f, sheet, rs, row, dsc)
+		status := renderNTTDayActivity(f, sheet, rs, row, *dsc)
 		WriteAttendanceMatrixStatus(f, sheet, rs, status)
 		if status != "" {
 			statusCounts[status]++
@@ -115,6 +116,9 @@ func renderNTTDailyRows(
 func renderNTTDayActivity(f *excelize.File, sheet, rs string, row int, dsc DayStyleContext) string {
 	if dsc.HasActivity {
 		status := strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+		if status == "" {
+			status = "P"
+		}
 		projName := dsc.Activity.GetProjectName()
 		if projName == "" {
 			projName = "BNI Direct"

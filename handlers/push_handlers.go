@@ -2,11 +2,16 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"timesheet-backend/config"
 	"timesheet-backend/dto/request"
-	_ "timesheet-backend/dto/response"
+	"timesheet-backend/dto/response"
+	"timesheet-backend/scheduler"
 )
 
 // GetVAPIDKey godoc
@@ -23,6 +28,82 @@ func (s *Server) GetVAPIDKey(c *gin.Context) {
 		return
 	}
 	RespondSuccess(c, http.StatusOK, gin.H{"public_key": svc.GetPublicKey()})
+}
+
+// GetPushSchedule godoc
+// @Summary Get push notification schedule
+// @Description Returns the dynamic push reminder schedule, including hour, minute, active timezone, next run time, and human-readable description.
+// @Tags Push Notification
+// @Produce json
+// @Success 200 {object} response.PushScheduleResponse
+// @Router /api/v1/push/schedule [get]
+func (s *Server) GetPushSchedule(c *gin.Context) {
+	tz, cronExpr := s.resolveScheduleConfig()
+	info := scheduler.GetScheduleInfo(tz, cronExpr)
+	hour, minute := parseScheduleHourMinute(info)
+
+	resp := response.PushScheduleResponse{
+		Hour:           hour,
+		Minute:         minute,
+		Timezone:       info.Timezone,
+		NextRun:        info.NextRun,
+		HumanReadable:  info.HumanReadable,
+		CronExpression: info.CronExpression,
+		IsEnabled:      info.IsEnabled,
+	}
+
+	RespondSuccess(c, http.StatusOK, resp)
+}
+
+func (s *Server) resolveScheduleConfig() (string, string) {
+	tz := ""
+	cronExpr := scheduler.DefaultReminderCron
+	if s != nil && s.Cfg != nil {
+		tz = strings.TrimSpace(s.Cfg.Timezone)
+		if trimmedCron := strings.TrimSpace(s.Cfg.ReminderCron); trimmedCron != "" {
+			cronExpr = trimmedCron
+		}
+	}
+	if tz == "" {
+		if loc := config.AppLocation(); loc != nil && loc.String() != "" {
+			tz = loc.String()
+		} else {
+			tz = "UTC"
+		}
+	}
+	return tz, cronExpr
+}
+
+func parseScheduleHourMinute(info scheduler.ScheduleInfo) (int, int) {
+	hour, minute := 17, 0
+	parts := strings.Fields(info.CronExpression)
+	if len(parts) >= 2 {
+		minute = parsePartOrFallback(parts[0], info.NextRun, true, 0)
+		hour = parsePartOrFallback(parts[1], info.NextRun, false, 17)
+	} else if info.NextRun != nil {
+		hour = info.NextRun.Hour()
+		minute = info.NextRun.Minute()
+	}
+	if hour < 0 || hour > 23 {
+		hour = 17
+	}
+	if minute < 0 || minute > 59 {
+		minute = 0
+	}
+	return hour, minute
+}
+
+func parsePartOrFallback(part string, nextRun *time.Time, isMinute bool, defVal int) int {
+	if val, err := strconv.Atoi(part); err == nil {
+		return val
+	}
+	if nextRun != nil {
+		if isMinute {
+			return nextRun.Minute()
+		}
+		return nextRun.Hour()
+	}
+	return defVal
 }
 
 // Subscribe godoc

@@ -230,16 +230,18 @@ func WriteHolidayRemarkRow(f *excelize.File, sheet, col, rs string, row int, hol
 }
 
 // WriteAttendanceMatrixStatus writes the standard 6-column matrix attendance status ("E" through "J").
+// When status is "X" (inactive), the cell is left empty (""), conforming to timesheet presentation rules.
 func WriteAttendanceMatrixStatus(f *excelize.File, sheet, rs, status string) {
+	normStatus := strings.ToUpper(strings.TrimSpace(status))
 	statusCol := map[string]string{"P": "E", "S": "F", "BT": "G", "PM": "H", "V": "I", "X": "J"}
-	statusMark := map[string]string{"P": "P", "S": "S", "BT": "BT", "PM": "PM", "V": "V", "X": "x"}
+	statusMark := map[string]string{"P": "P", "S": "S", "BT": "BT", "PM": "PM", "V": "V", "X": ""}
 	matrixCols := []string{"E", "F", "G", "H", "I", "J"}
 
 	for _, col := range matrixCols {
 		_ = f.SetCellValue(sheet, col+rs, "")
 	}
-	if col, ok := statusCol[status]; ok {
-		_ = f.SetCellValue(sheet, col+rs, statusMark[status])
+	if col, ok := statusCol[normStatus]; ok {
+		_ = f.SetCellValue(sheet, col+rs, statusMark[normStatus])
 	}
 }
 
@@ -277,7 +279,7 @@ func ResolveDayStyleContext(year, month, day int, holidays map[int]string, byDay
 		TimeStyle:          st.TimeStyle,
 		DecimalStyle:       st.DecimalStyle,
 	}
-	if isHolidayOrWeekend {
+	if isHolidayOrWeekend && !hasAct {
 		ctx.CenterStyle = st.GreyCenterStyle
 		ctx.CenterWrapStyle = st.GreyCenterWrapStyle
 		ctx.DateStyle = st.GreyDateStyle
@@ -507,6 +509,46 @@ func WriteColumnFormulas(f *excelize.File, sheet, targetRow string, formulas map
 	}
 }
 
+// StandardGrid14Cols represents standard columns A through N for 14-column timesheet templates (NTT, SDD).
+var StandardGrid14Cols = []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"}
+
+// StandardGridWrapCols represents standard text-wrapped columns K through N for timesheets.
+var StandardGridWrapCols = []string{"K", "L", "M", "N"}
+
+// DailyRowSetupConfig configures common timesheet row setup.
+type DailyRowSetupConfig struct {
+	Row         int
+	Day         int
+	DaysInMonth int
+	DateCol     string
+	AllCols     []string
+	WrapCols    []string
+	HoursCfg    WorkingHoursConfig
+}
+
+// SetupDayRowStylesAndHours applies blank padding if day > daysInMonth, or resolves styles, sets the date cell, and writes working hours.
+func SetupDayRowStylesAndHours(
+	f *excelize.File,
+	sheet string,
+	in GenerationInput,
+	byDay map[int]models.DailyActivity,
+	st *BuilderStyles,
+	cfg DailyRowSetupConfig,
+) (*DayStyleContext, bool) {
+	if cfg.Day > cfg.DaysInMonth {
+		ApplyBlankPaddingRow(f, sheet, cfg.Row, cfg.AllCols, cfg.WrapCols, st)
+		return nil, false
+	}
+	dsc := ResolveDayStyleContext(in.Year, in.Month, cfg.Day, in.Holidays, byDay, st)
+	rs := fmt.Sprintf("%d", cfg.Row)
+	ApplyDayRowStyles(f, sheet, cfg.DateCol, rs, cfg.AllCols, cfg.WrapCols, dsc)
+	_ = f.SetCellValue(sheet, cfg.DateCol+rs, dsc.Date)
+
+	cfg.HoursCfg.RowStr = rs
+	WriteWorkingHoursRow(f, sheet, cfg.HoursCfg, dsc)
+	return &dsc, true
+}
+
 // DailyRowsConfig encapsulates options for generating the 31-day timesheet grid.
 type DailyRowsConfig struct {
 	StartRow int
@@ -619,6 +661,27 @@ type SignatureCells struct {
 	TLDateCell   string
 	DHDateCell   string
 	DatePrefix   string
+	UserBoxCell  string
+	QRCell       string
+}
+
+// EmbedPicture inserts a PNG picture into a cell with specified scale.
+func EmbedPicture(f *excelize.File, sheet, cell string, picBytes []byte, scaleX, scaleY float64) error {
+	if f == nil || len(picBytes) == 0 || cell == "" {
+		return nil
+	}
+	bTrue := true
+	return f.AddPictureFromBytes(sheet, cell, &excelize.Picture{
+		Extension: ".png",
+		File:      picBytes,
+		Format: &excelize.GraphicOptions{
+			PrintObject:     &bTrue,
+			LockAspectRatio: true,
+			ScaleX:          scaleX,
+			ScaleY:          scaleY,
+			Positioning:     "oneCell",
+		},
+	})
 }
 
 // WriteSignatures writes the user, team leader, department head names, and date stamp into signature cells.
@@ -628,26 +691,39 @@ func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, cells S
 	if in.User != nil {
 		userName = in.User.Name
 	}
-	if userName != "" && cells.UserCell != "" {
-		_ = f.SetCellValue(sheet, cells.UserCell, userName)
+	setNonEmptyCell(f, sheet, cells.UserCell, userName)
+	setNonEmptyCell(f, sheet, cells.TLCell, tlName)
+	setNonEmptyCell(f, sheet, cells.DHCell, dhName)
+
+	writeSignatureDates(f, sheet, cells)
+	embedSignaturePictures(f, sheet, in, cells)
+}
+
+func setNonEmptyCell(f *excelize.File, sheet, cell, val string) {
+	if cell != "" && val != "" {
+		_ = f.SetCellValue(sheet, cell, val)
 	}
-	if tlName != "" && cells.TLCell != "" {
-		_ = f.SetCellValue(sheet, cells.TLCell, tlName)
+}
+
+func writeSignatureDates(f *excelize.File, sheet string, cells SignatureCells) {
+	if cells.DatePrefix == "" {
+		return
 	}
-	if dhName != "" && cells.DHCell != "" {
-		_ = f.SetCellValue(sheet, cells.DHCell, dhName)
+	dateStr := cells.DatePrefix + CurrentDateFormatted()
+	setNonEmptyCell(f, sheet, cells.UserDateCell, dateStr)
+	setNonEmptyCell(f, sheet, cells.TLDateCell, dateStr)
+	setNonEmptyCell(f, sheet, cells.DHDateCell, dateStr)
+}
+
+func embedSignaturePictures(f *excelize.File, sheet string, in GenerationInput, cells SignatureCells) {
+	if !in.IsSigned {
+		return
 	}
-	if cells.DatePrefix != "" {
-		dateStr := cells.DatePrefix + CurrentDateFormatted()
-		if cells.UserDateCell != "" {
-			_ = f.SetCellValue(sheet, cells.UserDateCell, dateStr)
-		}
-		if cells.TLDateCell != "" {
-			_ = f.SetCellValue(sheet, cells.TLDateCell, dateStr)
-		}
-		if cells.DHDateCell != "" {
-			_ = f.SetCellValue(sheet, cells.DHDateCell, dateStr)
-		}
+	if len(in.SignatureBytes) > 0 && cells.UserBoxCell != "" {
+		_ = EmbedPicture(f, sheet, cells.UserBoxCell, in.SignatureBytes, 0.4, 0.4)
+	}
+	if len(in.QRCodeBytes) > 0 && cells.QRCell != "" {
+		_ = EmbedPicture(f, sheet, cells.QRCell, in.QRCodeBytes, 0.6, 0.6)
 	}
 }
 

@@ -9,12 +9,16 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"timesheet-backend/config"
 	"timesheet-backend/dto/request"
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
 	"timesheet-backend/models"
+	"timesheet-backend/storage"
 )
 
 func setupTestDBForService(t *testing.T) *gorm.DB {
@@ -229,4 +233,113 @@ func testBeritaAcaraGeneration(t *testing.T, svc service.TimesheetService, tx *g
 	if len(doc) == 0 || fname == "" {
 		t.Fatalf("expected non-empty doc and filename, got len %d, filename %s", len(doc), fname)
 	}
+}
+
+func TestTimesheetService_SignedDocuments(t *testing.T) {
+	db := setupTestDBForService(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	userRepo := repository.NewUserRepository(tx)
+	actRepo := repository.NewActivityRepository(tx)
+	otRepo := repository.NewOvertimeRepository(tx)
+	masterRepo := repository.NewMasterRepository(tx)
+	subRepo := repository.NewSubmissionRepository(tx)
+	memStorage := newMockStorageSvc()
+
+	memStorage.files["signatures/u1.png"] = []byte("png-bytes-u1")
+	memStorage.files["signatures/w1.png"] = []byte("png-bytes-w1")
+
+	svc := service.NewTimesheetService(userRepo, actRepo, otRepo, masterRepo, nil)
+	if tsImpl, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+		tsImpl.SetNowFunc(func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		})
+	}
+	if depSetter, ok := svc.(interface {
+		SetSignatureDependencies(repository.SubmissionRepository, storage.StorageService, string)
+	}); ok {
+		depSetter.SetSignatureDependencies(subRepo, memStorage, "https://timesheet.local")
+	}
+
+	ctx := context.Background()
+
+	u := &models.User{
+		Username:         "ts_signed_user",
+		Email:            "ts_signed@example.com",
+		Role:             models.RoleUser,
+		Name:             "Signed User",
+		Company:          "sdd",
+		IsActive:         true,
+		EmployeeID:       "EMP-SIGNED-1",
+		SignatureFileKey: "signatures/u1.png",
+	}
+	require.NoError(t, tx.Create(u).Error)
+
+	w := &models.User{
+		Username:         "ts_signed_wit",
+		Email:            "ts_signed_wit@example.com",
+		Role:             models.RoleUser,
+		Name:             "Witness User",
+		Company:          "sdd",
+		IsActive:         true,
+		EmployeeID:       "EMP-SIGNED-WIT",
+		SignatureFileKey: "signatures/w1.png",
+	}
+	require.NoError(t, tx.Create(w).Error)
+
+	act := &models.DailyActivity{
+		UserID:           u.ID,
+		Date:             time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
+		StartTime:        "08:00",
+		EndTime:          "17:00",
+		Status:           "P",
+		Activity:         "Signed feature work",
+		IsActive:         true,
+		IsBeritaAcara:    true,
+		WitnessID:        &w.ID,
+		BeritaAcaraNotes: "BA incident resolved",
+	}
+	require.NoError(t, tx.Create(act).Error)
+
+	now := time.Now()
+	// Create signed timesheet submission
+	tsSub := &models.TimesheetSubmission{
+		ID:                "ts-sub-1",
+		UserID:            u.ID,
+		Month:             6,
+		Year:              2026,
+		Status:            models.SubmissionStatusSigned,
+		SignedAt:          &now,
+		VerificationToken: "verif-token-ts-1",
+		DocumentHash:      "hash-ts-1",
+	}
+	require.NoError(t, subRepo.UpsertTimesheetSubmission(ctx, tsSub))
+
+	// GenerateWorkbook should include signature and QR
+	wb, fname, err := svc.GenerateWorkbook(ctx, u.ID, 6, 2026)
+	require.NoError(t, err)
+	assert.NotEmpty(t, wb)
+	assert.NotEmpty(t, fname)
+
+	// Create signed Berita Acara submission
+	baSub := &models.BeritaAcaraSubmission{
+		ID:                "ba-sub-1",
+		UserID:            u.ID,
+		WitnessID:         w.ID,
+		Month:             6,
+		Year:              2026,
+		Status:            models.SubmissionStatusSigned,
+		EmployeeSignedAt:  &now,
+		WitnessSignedAt:   &now,
+		VerificationToken: "verif-token-ba-1",
+		DocumentHash:      "hash-ba-1",
+	}
+	require.NoError(t, subRepo.UpsertBeritaAcaraSubmission(ctx, baSub))
+
+	// GenerateBeritaAcara should include employee signature, witness signature and QR
+	doc, bname, err := svc.GenerateBeritaAcara(ctx, u.ID, 6, 2026)
+	require.NoError(t, err)
+	assert.NotEmpty(t, doc)
+	assert.NotEmpty(t, bname)
 }

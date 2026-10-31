@@ -3,10 +3,13 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
+	"math"
+	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -27,16 +30,6 @@ import (
 	"timesheet-backend/storage"
 )
 
-type webAuthnSessionEntry struct {
-	data      *webauthn.SessionData
-	createdAt time.Time
-}
-
-type clientCooldownRecord struct {
-	windowStart time.Time
-	count       int
-}
-
 // Server carries the shared dependencies used by all HTTP handlers.
 type Server struct {
 	Cfg               *config.Config
@@ -46,7 +39,9 @@ type Server struct {
 	WebAuthn          *webauthn.WebAuthn
 	Hasher            auth.PasswordHasher
 	UserRepo          repository.UserRepository
+	PasskeyRepo       repository.PasskeyRepository
 	UserSvc           service.UserService
+	AuthSvc           service.AuthService
 	TokenRepo         repository.TokenRepository
 	ActivityRepo      repository.ActivityRepository
 	ActivitySvc       service.ActivityService
@@ -62,19 +57,12 @@ type Server struct {
 	SetupRepo         repository.SetupRepository
 	SetupSvc          service.SetupService
 	AuditRepo         repository.AuditRepository
+	SubmissionRepo    repository.SubmissionRepository
+	SignatureSvc      service.SignatureService
 	QueueClient       queue.QueueClient
 	Storage           storage.StorageService
 	RedisClient       *redis.Client
 	GeoIP             *services.GeoIPService
-
-	// webAuthnSessions holds in-flight ceremony data keyed by an opaque id
-	// handed to the client for the duration of a single begin/finish exchange.
-	webAuthnSessions map[string]*webAuthnSessionEntry
-	sessionsMu       sync.Mutex
-
-	resetCooldowns map[string]time.Time
-	ipCooldowns    map[string]*clientCooldownRecord
-	cooldownMu     sync.Mutex
 
 	finishRegistrationFunc func(user models.User, session webauthn.SessionData, r *http.Request) (*webauthn.Credential, error)
 	sendResetEmailFunc     func(toEmail, username, resetLink string) error
@@ -102,6 +90,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 
 	var userRepo repository.UserRepository
 	var userSvc service.UserService
+	var authDomainSvc service.AuthService
 	var tokenRepo repository.TokenRepository
 	var activityRepo repository.ActivityRepository
 	var activitySvc service.ActivityService
@@ -117,16 +106,38 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	var setupRepo repository.SetupRepository
 	var setupSvc service.SetupService
 	var auditRepo repository.AuditRepository
+	var submissionRepo repository.SubmissionRepository
+	var signatureSvc service.SignatureService
+	var storageSvc storage.StorageService
+	if cfg != nil {
+		var sErr error
+		storageSvc, sErr = storage.NewS3StorageService(cfg)
+		if sErr != nil {
+			slog.Warn("failed to initialize storage service in server", "error", sErr)
+		}
+	}
 
 	if db != nil {
 		userRepo = repository.NewUserRepository(db)
 		tokenRepo = repository.NewTokenRepository(db)
 		masterRepo = repository.NewMasterRepository(db)
-		userSvc = service.NewUserService(userRepo, auth.DefaultHasher, m, masterRepo)
+		transactor := repository.NewGormTransactor(db)
+		userSvc = service.NewUserService(userRepo, userRepo, auth.DefaultHasher, m, masterRepo, transactor)
 		activityRepo = repository.NewActivityRepository(db)
-		activitySvc = service.NewActivityService(activityRepo)
+		submissionRepo = repository.NewSubmissionRepository(db)
+		activitySvc = service.NewActivityService(activityRepo, submissionRepo)
 		overtimeRepo = repository.NewOvertimeRepository(db)
 		timesheetSvc = service.NewTimesheetService(userRepo, activityRepo, overtimeRepo, masterRepo, m)
+		baseURL := ""
+		if cfg != nil {
+			baseURL = cfg.AppBaseURL
+		}
+		signatureSvc = service.NewSignatureService(userRepo, activityRepo, submissionRepo, storageSvc, m, p, baseURL)
+		if sigCfg, ok := timesheetSvc.(interface {
+			SetSignatureDependencies(repository.SubmissionRepository, storage.StorageService, string)
+		}); ok {
+			sigCfg.SetSignatureDependencies(submissionRepo, storageSvc, baseURL)
+		}
 		masterSvc = service.NewMasterDataService(masterRepo)
 		jobRepo = repository.NewJobRepository(db)
 		pushRepo = repository.NewPushRepository(db)
@@ -136,6 +147,11 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		setupRepo = repository.NewSetupRepository(db)
 		setupSvc = service.NewSetupService(setupRepo, authSvc)
 		auditRepo = repository.NewAuditRepository(db)
+		var refreshTTL time.Duration
+		if cfg != nil {
+			refreshTTL = cfg.RefreshTokenTTL
+		}
+		authDomainSvc = service.NewAuthService(userRepo, tokenRepo, authSvc, auditRepo, refreshTTL, auth.DefaultHasher)
 
 		_ = database.SyncAuthenticatorAAGUIDs(db)
 	}
@@ -149,6 +165,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		Hasher:            auth.DefaultHasher,
 		UserRepo:          userRepo,
 		UserSvc:           userSvc,
+		AuthSvc:           authDomainSvc,
 		TokenRepo:         tokenRepo,
 		ActivityRepo:      activityRepo,
 		ActivitySvc:       activitySvc,
@@ -164,85 +181,150 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 		SetupRepo:         setupRepo,
 		SetupSvc:          setupSvc,
 		AuditRepo:         auditRepo,
+		SubmissionRepo:    submissionRepo,
+		SignatureSvc:      signatureSvc,
+		Storage:           storageSvc,
 		GeoIP:             geoSvc,
-		webAuthnSessions:  make(map[string]*webAuthnSessionEntry),
-		resetCooldowns:    make(map[string]time.Time),
-		ipCooldowns:       make(map[string]*clientCooldownRecord),
 	}, nil
 }
 
-func (s *Server) checkAndRecordResetCooldown(email, ip string, cooldown time.Duration) bool {
-	if cooldown <= 0 {
-		return true
-	}
-	s.cooldownMu.Lock()
-	defer s.cooldownMu.Unlock()
-
-	if s.resetCooldowns == nil {
-		s.resetCooldowns = make(map[string]time.Time)
-	}
-	if s.ipCooldowns == nil {
-		s.ipCooldowns = make(map[string]*clientCooldownRecord)
-	}
-
-	now := time.Now()
-	s.cleanupExpiredCooldowns(now, cooldown)
-
-	normEmail := strings.ToLower(strings.TrimSpace(email))
+func cleanClientIP(ip string) string {
 	cleanIP := strings.TrimSpace(ip)
+	if commaIdx := strings.Index(cleanIP, ","); commaIdx != -1 {
+		cleanIP = strings.TrimSpace(cleanIP[:commaIdx])
+	}
+	if host, _, err := net.SplitHostPort(cleanIP); err == nil {
+		cleanIP = host
+	}
+	cleanIP = strings.Trim(cleanIP, "[]")
+	if zoneIdx := strings.Index(cleanIP, "%"); zoneIdx != -1 {
+		cleanIP = cleanIP[:zoneIdx]
+	}
+	if parsed := net.ParseIP(cleanIP); parsed != nil {
+		return parsed.String()
+	}
+	return cleanIP
+}
 
-	if s.isEmailInCooldown(normEmail, now, cooldown) || s.isIPRateLimited(cleanIP, now, cooldown) {
+func coerceToInt64(res interface{}) int64 {
+	switch n := res.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case int32:
+		return int64(n)
+	case uint64:
+		if n > math.MaxInt64 {
+			return math.MaxInt64
+		}
+		return int64(n)
+	case float64:
+		if n > float64(math.MaxInt64) {
+			return math.MaxInt64
+		}
+		return int64(n)
+	default:
+		return 0
+	}
+}
+
+func incrementIPRequestCount(ctx context.Context, rdb *redis.Client, ipKey string, effectiveCooldown time.Duration) (int64, error) {
+	const ipIncrScript = `
+		local count = redis.call('INCR', KEYS[1])
+		if count == 1 or redis.call('PTTL', KEYS[1]) < 0 then
+			redis.call('PEXPIRE', KEYS[1], ARGV[1])
+		end
+		return count
+	`
+	res, err := rdb.Eval(ctx, ipIncrScript, []string{ipKey}, effectiveCooldown.Milliseconds()).Result()
+	if err == nil {
+		return coerceToInt64(res), nil
+	}
+	newCount, err := rdb.Incr(ctx, ipKey).Result()
+	if err == nil && newCount == 1 {
+		_ = rdb.PExpire(ctx, ipKey, effectiveCooldown).Err()
+	}
+	return newCount, err
+}
+
+func isIPRateLimited(ctx context.Context, rdb *redis.Client, ipKey string, maxLimit int) bool {
+	if ipKey == "" {
 		return false
 	}
+	currCount, err := rdb.Get(ctx, ipKey).Int()
+	return err == nil && currCount >= maxLimit
+}
 
-	if normEmail != "" {
-		s.resetCooldowns[normEmail] = now
+func reserveEmailCooldown(ctx context.Context, rdb *redis.Client, emailKey, normEmail string, cooldown time.Duration) bool {
+	if emailKey == "" {
+		return true
 	}
-	s.recordIPCooldown(cleanIP, now, cooldown)
+	set, err := rdb.SetNX(ctx, emailKey, "1", cooldown).Result()
+	if err != nil {
+		slog.Warn("redis error during email reset cooldown check; bypassing fast-path", "error", err, "email", normEmail)
+		return true
+	}
+	return set
+}
 
+func recordAndEnforceIPLimit(ctx context.Context, rdb *redis.Client, ipKey, emailKey string, cooldown time.Duration, maxLimit int) bool {
+	if ipKey == "" {
+		return true
+	}
+	newCount, err := incrementIPRequestCount(ctx, rdb, ipKey, cooldown)
+	if err == nil && newCount > int64(maxLimit) {
+		if emailKey != "" {
+			_ = rdb.Del(ctx, emailKey).Err()
+		}
+		return false
+	}
 	return true
 }
 
-func (s *Server) cleanupExpiredCooldowns(now time.Time, cooldown time.Duration) {
-	cutoff := now.Add(-2 * cooldown)
-	for k, v := range s.resetCooldowns {
-		if v.Before(cutoff) {
-			delete(s.resetCooldowns, k)
-		}
+func (s *Server) checkAndRecordResetCooldownCtx(ctx context.Context, email, ip string, cooldown time.Duration) bool {
+	if cooldown <= 0 {
+		return true
 	}
-	for k, v := range s.ipCooldowns {
-		if v.windowStart.Before(cutoff) {
-			delete(s.ipCooldowns, k)
-		}
-	}
-}
 
-func (s *Server) isEmailInCooldown(email string, now time.Time, cooldown time.Duration) bool {
-	if email == "" {
-		return false
-	}
-	last, exists := s.resetCooldowns[email]
-	return exists && now.Sub(last) < cooldown
-}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 
-func (s *Server) isIPRateLimited(ip string, now time.Time, cooldown time.Duration) bool {
+	normEmail := strings.ToLower(strings.TrimSpace(email))
+	cleanIP := cleanClientIP(ip)
+
+	if normEmail == "" && cleanIP == "" {
+		return true
+	}
+
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		slog.Warn("redis client unavailable for reset cooldown check; bypassing fast-path")
+		return true
+	}
+
 	const maxIPRequestsPerWindow = 5
-	if ip == "" {
+	effectiveCooldown := max(cooldown, time.Millisecond)
+
+	var ipKey, emailKey string
+	if cleanIP != "" {
+		ipKey = fmt.Sprintf("cooldown:reset:ip:%s", cleanIP)
+	}
+	if normEmail != "" {
+		emailKey = fmt.Sprintf("cooldown:reset:email:%s", normEmail)
+	}
+
+	if isIPRateLimited(ctx, rdb, ipKey, maxIPRequestsPerWindow) {
 		return false
 	}
-	rec, exists := s.ipCooldowns[ip]
-	return exists && now.Sub(rec.windowStart) < cooldown && rec.count >= maxIPRequestsPerWindow
+	if !reserveEmailCooldown(ctx, rdb, emailKey, normEmail, effectiveCooldown) {
+		return false
+	}
+	return recordAndEnforceIPLimit(ctx, rdb, ipKey, emailKey, effectiveCooldown, maxIPRequestsPerWindow)
 }
 
-func (s *Server) recordIPCooldown(ip string, now time.Time, cooldown time.Duration) {
-	if ip == "" {
-		return
-	}
-	if rec, exists := s.ipCooldowns[ip]; exists && now.Sub(rec.windowStart) < cooldown {
-		rec.count++
-	} else {
-		s.ipCooldowns[ip] = &clientCooldownRecord{windowStart: now, count: 1}
-	}
+func (s *Server) checkAndRecordResetCooldown(email, ip string, cooldown time.Duration) bool {
+	return s.checkAndRecordResetCooldownCtx(context.Background(), email, ip, cooldown)
 }
 
 func (s *Server) dispatchResetEmail(toEmail, username, resetLink, clientIP, location string) {
@@ -263,43 +345,115 @@ func (s *Server) dispatchResetEmail(toEmail, username, resetLink, clientIP, loca
 	}
 }
 
-func (s *Server) putSession(id string, data *webauthn.SessionData) {
-	s.sessionsMu.Lock()
-	defer s.sessionsMu.Unlock()
+const webAuthnSessionTTL = 5 * time.Minute
 
-	if s.webAuthnSessions == nil {
-		s.webAuthnSessions = make(map[string]*webAuthnSessionEntry)
+func (s *Server) putSessionCtx(ctx context.Context, id string, data *webauthn.SessionData) {
+	cleanID := strings.TrimSpace(id)
+	if cleanID == "" || data == nil {
+		return
+	}
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		slog.Warn("cannot store webauthn session: redis client is unavailable", "session_id", cleanID)
+		return
 	}
 
-	// Proactively clean up expired sessions (> 5 minutes old)
-	cutoff := time.Now().Add(-5 * time.Minute)
-	for k, v := range s.webAuthnSessions {
-		if v.createdAt.Before(cutoff) {
-			delete(s.webAuthnSessions, k)
-		}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		slog.Error("failed to marshal webauthn session data", "error", err, "session_id", cleanID)
+		return
 	}
 
-	s.webAuthnSessions[id] = &webAuthnSessionEntry{
-		data:      data,
-		createdAt: time.Now(),
+	key := fmt.Sprintf("webauthn:session:%s", cleanID)
+	if err := rdb.Set(ctx, key, b, webAuthnSessionTTL).Err(); err != nil {
+		slog.Error("failed to store webauthn session in redis", "error", err, "session_id", cleanID)
 	}
 }
 
-func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
-	s.sessionsMu.Lock()
-	defer s.sessionsMu.Unlock()
-	if s.webAuthnSessions == nil {
+func (s *Server) putSession(id string, data *webauthn.SessionData) {
+	s.putSessionCtx(context.Background(), id, data)
+}
+
+func isUnsupportedGetDelError(err error) bool {
+	errLower := strings.ToLower(err.Error())
+	return strings.Contains(errLower, "unknown") ||
+		strings.Contains(errLower, "unsupported") ||
+		strings.Contains(errLower, "not supported")
+}
+
+func fallbackGetDel(ctx context.Context, rdb *redis.Client, key, cleanID string) (string, error) {
+	const getDelScript = `
+		local v = redis.call('GET', KEYS[1])
+		if not v or v == false then
+			return nil
+		end
+		redis.call('DEL', KEYS[1])
+		return v
+	`
+	res, scriptErr := rdb.Eval(ctx, getDelScript, []string{key}).Result()
+	if scriptErr != nil {
+		if errors.Is(scriptErr, redis.Nil) {
+			return "", nil
+		}
+		slog.Error("failed to execute fallback getdel script", "error", scriptErr, "session_id", cleanID)
+		return "", scriptErr
+	}
+	switch s := res.(type) {
+	case string:
+		return s, nil
+	case []byte:
+		return string(s), nil
+	default:
+		return "", nil
+	}
+}
+
+func (s *Server) takeSessionCtx(ctx context.Context, id string) (*webauthn.SessionData, bool) {
+	cleanID := strings.TrimSpace(id)
+	if cleanID == "" {
 		return nil, false
 	}
-	entry, ok := s.webAuthnSessions[id]
-	if ok {
-		delete(s.webAuthnSessions, id)
-		if time.Since(entry.createdAt) > 5*time.Minute {
+	rdb := s.getRedisClient()
+	if rdb == nil {
+		slog.Warn("cannot retrieve webauthn session: redis client is unavailable", "session_id", cleanID)
+		return nil, false
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	key := fmt.Sprintf("webauthn:session:%s", cleanID)
+	val, err := rdb.GetDel(ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
 			return nil, false
 		}
-		return entry.data, true
+		if isUnsupportedGetDelError(err) {
+			val, _ = fallbackGetDel(ctx, rdb, key, cleanID)
+		} else {
+			slog.Error("failed to retrieve webauthn session from redis", "error", err, "session_id", cleanID)
+			return nil, false
+		}
 	}
-	return nil, false
+
+	if strings.TrimSpace(val) == "" {
+		return nil, false
+	}
+
+	var data webauthn.SessionData
+	if err := json.Unmarshal([]byte(val), &data); err != nil {
+		slog.Error("failed to unmarshal webauthn session data", "error", err, "session_id", cleanID)
+		return nil, false
+	}
+
+	return &data, true
+}
+
+func (s *Server) takeSession(id string) (*webauthn.SessionData, bool) {
+	return s.takeSessionCtx(context.Background(), id)
 }
 
 // GetUserService retrieves the UserService.
@@ -324,10 +478,26 @@ func (s *Server) getStorage() storage.StorageService {
 }
 
 func (s *Server) getRedisClient() *redis.Client {
+	if s == nil {
+		return nil
+	}
 	return s.RedisClient
 }
 
-func (s *Server) getUserRepository() repository.UserRepository {
+func (s *Server) getUserAccountRepository() repository.UserAccountRepository {
+	if s == nil {
+		return nil
+	}
+	return s.UserRepo
+}
+
+func (s *Server) getPasskeyRepository() repository.PasskeyRepository {
+	if s == nil {
+		return nil
+	}
+	if s.PasskeyRepo != nil {
+		return s.PasskeyRepo
+	}
 	return s.UserRepo
 }
 
@@ -361,11 +531,90 @@ func (s *Server) getSetupService() service.SetupService {
 	return s.SetupSvc
 }
 
+type authServiceRepoChecker interface {
+	GetTokenRepo() repository.TokenRepository
+	GetUserRepo() repository.UserAccountRepository
+	GetAuditRepo() repository.AuditRepository
+	GetJWTService() *auth.Service
+	GetHasher() auth.PasswordHasher
+}
+
+func isAuthServiceMismatch(s *Server, checker authServiceRepoChecker) bool {
+	if s.TokenRepo != nil && s.TokenRepo != checker.GetTokenRepo() {
+		return true
+	}
+	if s.UserRepo != nil && s.UserRepo != checker.GetUserRepo() {
+		return true
+	}
+	if s.AuditRepo != nil && s.AuditRepo != checker.GetAuditRepo() {
+		return true
+	}
+	if s.Auth != nil && s.Auth != checker.GetJWTService() {
+		return true
+	}
+	return s.Hasher != nil && s.Hasher != checker.GetHasher()
+}
+
+func (s *Server) rebuildAuthService(checker authServiceRepoChecker) service.AuthService {
+	var userRepo repository.UserAccountRepository = s.UserRepo
+	if userRepo == nil {
+		userRepo = checker.GetUserRepo()
+	}
+	tokenRepo := s.TokenRepo
+	if tokenRepo == nil {
+		tokenRepo = checker.GetTokenRepo()
+	}
+	auditRepo := s.AuditRepo
+	if auditRepo == nil {
+		auditRepo = checker.GetAuditRepo()
+	}
+	jwtSvc := s.Auth
+	if jwtSvc == nil {
+		jwtSvc = checker.GetJWTService()
+	}
+	hasher := s.Hasher
+	if hasher == nil {
+		hasher = checker.GetHasher()
+	}
+	var refreshTTL time.Duration
+	if s.Cfg != nil {
+		refreshTTL = s.Cfg.RefreshTokenTTL
+	}
+	return service.NewAuthService(userRepo, tokenRepo, jwtSvc, auditRepo, refreshTTL, hasher)
+}
+
+func (s *Server) getAuthService() service.AuthService {
+	if s == nil {
+		return nil
+	}
+	if s.AuthSvc != nil {
+		if checker, ok := s.AuthSvc.(authServiceRepoChecker); ok && isAuthServiceMismatch(s, checker) {
+			return s.rebuildAuthService(checker)
+		}
+		return s.AuthSvc
+	}
+	if s.UserRepo != nil || s.TokenRepo != nil {
+		var refreshTTL time.Duration
+		if s.Cfg != nil {
+			refreshTTL = s.Cfg.RefreshTokenTTL
+		}
+		return service.NewAuthService(s.UserRepo, s.TokenRepo, s.Auth, s.AuditRepo, refreshTTL, s.Hasher)
+	}
+	return nil
+}
+
 func (s *Server) getAuditRepository() repository.AuditRepository {
 	if s == nil {
 		return nil
 	}
 	return s.AuditRepo
+}
+
+func (s *Server) getSubmissionRepository() repository.SubmissionRepository {
+	if s == nil {
+		return nil
+	}
+	return s.SubmissionRepo
 }
 
 // AuditLogParams encapsulates parameters for recording an administrative audit event.
@@ -389,9 +638,11 @@ func (s *Server) recordAuditLog(ctx context.Context, p AuditLogParams) {
 		actorID = nil
 	}
 	actorUsername := ""
-	if actorID != nil && s != nil && s.UserRepo != nil {
-		if u, err := s.UserRepo.FindByID(ctx, *actorID); err == nil && u != nil {
-			actorUsername = u.Username
+	if actorID != nil && s != nil {
+		if repo := s.getUserAccountRepository(); repo != nil {
+			if u, err := repo.FindByID(ctx, *actorID); err == nil && u != nil {
+				actorUsername = u.Username
+			}
 		}
 	}
 	var detailsBytes datatypes.JSON

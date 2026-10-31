@@ -146,4 +146,22 @@ func TestMailer_SendMethodsFailGracefullyWithoutServer(t *testing.T) {
 	if err == nil {
 		t.Error("expected error dialing unreachable port for SendTimesheetReadyEmail")
 	}
+
+	// SendWitnessRequestEmail
+	err = m.SendWitnessRequestEmail("witness@example.com", "Witness User", "Employee User", "Oktober 2026", "https://timesheet.example.com/review")
+	if err == nil {
+		t.Error("expected error dialing unreachable port for SendWitnessRequestEmail")
+	}
+
+	// SendBeritaAcaraApprovedEmail
+	err = m.SendBeritaAcaraApprovedEmail("employee@example.com", "Employee User", "Witness User", "Oktober 2026", "https://timesheet.example.com/dl")
+	if err == nil {
+		t.Error("expected error dialing unreachable port for SendBeritaAcaraApprovedEmail")
+	}
+
+	// SendBeritaAcaraRejectedEmail
+	err = m.SendBeritaAcaraRejectedEmail("employee@example.com", "Employee User", "Witness User", "Oktober 2026", "Mohon koreksi jam pulang tanggal 10")
+	if err == nil {
+		t.Error("expected error dialing unreachable port for SendBeritaAcaraRejectedEmail")
+	}
 }

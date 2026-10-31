@@ -1,21 +1,22 @@
-name: Release & Changelog
+name: Release
 
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*'
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: 'Tag version to release (e.g. v1.0.0)'
+      tag:
+        description: 'Tag to release (e.g. v2.5.0)'
         required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  create-release:
-    name: Create GitHub Release & Changelog
+  publish-release:
+    name: Publish GitHub Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -23,30 +24,55 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine Tag Name
-        id: release_tag
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Run unit tests
+        run: go test -v ./...
+
+      - name: Extract Release Notes from CHANGELOG
+        id: extract_notes
         env:
-          INPUT_TAG_NAME: ${{ inputs.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ -n "$INPUT_TAG_NAME" ]; then
-            echo "tag=$INPUT_TAG_NAME" >> $GITHUB_OUTPUT
-          else
-            echo "tag=$REF_NAME" >> $GITHUB_OUTPUT
+          TAG="$REF_NAME"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
           fi
+          VERSION="${TAG#v}"
+
+          python3 -c "
+          import sys, re
+          ver = sys.argv[1]
+          with open('CHANGELOG.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+          pattern = r'## \[' + re.escape(ver) + r'\].*?\n(?=## \[|\Z)'
+          match = re.search(pattern, content, re.DOTALL)
+          if match:
+              body = re.sub(r'^## \[[^\n]+\n+', '', match.group(0)).strip()
+              with open('RELEASE_NOTES.md', 'w', encoding='utf-8') as out:
+                  out.write(body + '\n')
+          else:
+              with open('RELEASE_NOTES.md', 'w', encoding='utf-8') as out:
+                  out.write('## What\'s Changed\n\nAutomated release for ' + ver + '\n')
+          " "$VERSION"
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
-        with:
-          tag_name: ${{ steps.release_tag.outputs.tag }}
-          name: Release ${{ steps.release_tag.outputs.tag }}
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-          body: |
-            ### 📦 Container Images
-            Production image has been published to GitHub Container Registry:
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ steps.release_tag.outputs.tag }}
-            docker pull ghcr.io/${{ github.repository }}:latest
-            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.extract_notes.outputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists, updating release notes..."
+            gh release edit "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file RELEASE_NOTES.md
+          else
+            echo "Creating release $RELEASE_TAG..."
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes-file RELEASE_NOTES.md --verify-tag
+          fi

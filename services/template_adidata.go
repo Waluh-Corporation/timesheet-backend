@@ -87,6 +87,8 @@ func renderAdidataTemplate(in GenerationInput) ([]byte, error) {
 		TLDateCell:   "E50",
 		DHDateCell:   "I50",
 		DatePrefix:   "DATE : ",
+		UserBoxCell:  "B45",
+		QRCell:       "L45",
 	})
 	_ = f.SetCellValue(sheetTS, "B49", "( "+pos+" )")
 
@@ -115,25 +117,26 @@ func renderAdidataDailyRows(
 		// Merge Activity/Remark columns (L:N) for this row to match header L8:N9
 		_ = f.MergeCell(sheet, "L"+rs, "N"+rs)
 
-		if day > daysInMonth {
-			ApplyBlankPaddingRow(f, sheet, row, allCols, wrapCols, st)
+		dsc, ok := SetupDayRowStylesAndHours(f, sheet, in, byDay, st, DailyRowSetupConfig{
+			Row:         row,
+			Day:         day,
+			DaysInMonth: daysInMonth,
+			DateCol:     "B",
+			AllCols:     allCols,
+			WrapCols:    wrapCols,
+			HoursCfg: WorkingHoursConfig{
+				StartCol:       "C",
+				EndCol:         "D",
+				TotalCol:       "E",
+				FormulaFmt:     "(D%s-C%s)*24",
+				IsDecimalTotal: true,
+			},
+		})
+		if !ok {
 			continue
 		}
 
-		dsc := ResolveDayStyleContext(in.Year, in.Month, day, in.Holidays, byDay, st)
-		ApplyDayRowStyles(f, sheet, "B", rs, allCols, wrapCols, dsc)
-		_ = f.SetCellValue(sheet, "B"+rs, dsc.Date)
-
-		WriteWorkingHoursRow(f, sheet, WorkingHoursConfig{
-			StartCol:       "C",
-			EndCol:         "D",
-			TotalCol:       "E",
-			RowStr:         rs,
-			FormulaFmt:     "(D%s-C%s)*24",
-			IsDecimalTotal: true,
-		}, dsc)
-
-		status := renderAdidataDayActivity(f, sheet, rs, row, dsc)
+		status := renderAdidataDayActivity(f, sheet, rs, row, *dsc)
 		writeAdidataAttendanceMatrixStatus(f, sheet, rs, status)
 		if status != "" {
 			statusCounts[status]++
@@ -145,6 +148,9 @@ func renderAdidataDailyRows(
 func renderAdidataDayActivity(f *excelize.File, sheet, rs string, row int, dsc DayStyleContext) string {
 	if dsc.HasActivity {
 		status := strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+		if status == "" {
+			status = "P"
+		}
 		_ = f.SetCellValue(sheet, "L"+rs, dsc.Activity.Activity)
 		projName := dsc.Activity.GetProjectName()
 		if projName == "" {
@@ -439,7 +445,9 @@ func writeAdidataMultiSPL(f *excelize.File, splSheet string, in GenerationInput,
 }
 
 // writeAdidataAttendanceMatrixStatus writes the 6-column matrix attendance status ("F" through "K") for Adidata.
+// When status is "X" (inactive), the cell is left empty (""), conforming to timesheet presentation rules.
 func writeAdidataAttendanceMatrixStatus(f *excelize.File, sheet, rs, status string) {
+	normStatus := strings.ToUpper(strings.TrimSpace(status))
 	statusCol := map[string]string{
 		"P":  "F",
 		"S":  "G",
@@ -454,14 +462,14 @@ func writeAdidataAttendanceMatrixStatus(f *excelize.File, sheet, rs, status stri
 		"BT": "BT",
 		"PM": "PM",
 		"V":  "V",
-		"X":  "x",
+		"X":  "",
 	}
 	matrixCols := []string{"F", "G", "H", "I", "J", "K"}
 
 	for _, col := range matrixCols {
 		_ = f.SetCellValue(sheet, col+rs, "")
 	}
-	if col, ok := statusCol[status]; ok {
-		_ = f.SetCellValue(sheet, col+rs, statusMark[status])
+	if col, ok := statusCol[normStatus]; ok {
+		_ = f.SetCellValue(sheet, col+rs, statusMark[normStatus])
 	}
 }

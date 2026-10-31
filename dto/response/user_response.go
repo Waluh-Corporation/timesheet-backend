@@ -33,6 +33,9 @@ type UserResponse struct {
 
 // ToUserResponse maps a models.User entity to a safe UserResponse DTO.
 func ToUserResponse(u *models.User) UserResponse {
+	if u == nil {
+		return UserResponse{}
+	}
 	return UserResponse{
 		ID:           u.ID,
 		CreatedAt:    u.CreatedAt,

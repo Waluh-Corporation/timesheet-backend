@@ -33,6 +33,7 @@ func TestForgotPassword_CooldownAndInvalidationLifecycle(t *testing.T) {
 	m := mailer.New(cfg)
 	srv, err := NewServer(tx, cfg, authSvc, m, nil)
 	require.NoError(t, err)
+	srv.RedisClient = newTestRedisClient(t)
 
 	// Configure a short cooldown for testing (800ms)
 	srv.Cfg.ResetPasswordCooldown = 800 * time.Millisecond
@@ -244,6 +245,7 @@ func TestForgotPassword_AntiEnumeration(t *testing.T) {
 	m := mailer.New(cfg)
 	srv, err := NewServer(tx, cfg, authSvc, m, nil)
 	require.NoError(t, err)
+	srv.RedisClient = newTestRedisClient(t)
 
 	var emailSent bool
 	srv.sendResetEmailFunc = func(toEmail, username, resetLink string) error {
@@ -280,6 +282,7 @@ func TestForgotPassword_ConcurrencyRaceFree(t *testing.T) {
 	m := mailer.New(cfg)
 	srv, err := NewServer(tx, cfg, authSvc, m, nil)
 	require.NoError(t, err)
+	srv.RedisClient = newTestRedisClient(t)
 
 	srv.Cfg.ResetPasswordCooldown = 2 * time.Second
 

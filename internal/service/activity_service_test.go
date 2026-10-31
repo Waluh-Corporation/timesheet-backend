@@ -686,16 +686,15 @@ func TestActivityService_GetPreviousDailyActivity(t *testing.T) { // NOSONAR
 	}
 
 	tests := []struct {
-		name          string
-		setupRepo     func(*mockActivityRepo)
-		targetDate    string
-		nowTime       time.Time
-		userID        uint
-		expectError   bool
-		errType       error
-		expectedDesc  string
-		expectedProj  string
-		expectedStart string
+		name         string
+		setupRepo    func(*mockActivityRepo)
+		targetDate   string
+		nowTime      time.Time
+		userID       uint
+		expectError  bool
+		errType      error
+		expectedDesc string
+		expectedProj string
 	}{
 		{
 			name: "success - finds previous Friday activity when target date is Monday",
@@ -714,12 +713,11 @@ func TestActivityService_GetPreviousDailyActivity(t *testing.T) { // NOSONAR
 					IsActive:     true,
 				}
 			},
-			targetDate:    "2026-10-12",
-			userID:        1,
-			expectError:   false,
-			expectedDesc:  "Finished sprint backlog item 42",
-			expectedProj:  "Previous Project",
-			expectedStart: "08:30",
+			targetDate:   "2026-10-12",
+			userID:       1,
+			expectError:  false,
+			expectedDesc: "Finished sprint backlog item 42",
+			expectedProj: "Previous Project",
 		},
 		{
 			name: "success - defaults to current day when targetDate is empty",
@@ -740,6 +738,32 @@ func TestActivityService_GetPreviousDailyActivity(t *testing.T) { // NOSONAR
 			userID:       1,
 			expectError:  false,
 			expectedDesc: "Routine Friday maintenance",
+		},
+		{
+			name: "success - excludes Berita Acara fields (is_berita_acara, witness, notes) when previous activity was a BA",
+			setupRepo: func(r *mockActivityRepo) {
+				witnessID := uint(2)
+				witnessUser := &models.User{ID: 2, Name: "Witness User"}
+				r.users[witnessID] = witnessUser
+				r.activities[1] = &models.DailyActivity{
+					ID:               1,
+					UserID:           1,
+					Date:             friDate,
+					StartTime:        "08:00",
+					EndTime:          "17:00",
+					Status:           "P",
+					Activity:         "Investigating critical production issue",
+					IsActive:         true,
+					IsBeritaAcara:    true,
+					WitnessID:        &witnessID,
+					Witness:          witnessUser,
+					BeritaAcaraNotes: "Lupa tap out karena evakuasi gedung",
+				}
+			},
+			targetDate:   "2026-10-12",
+			userID:       1,
+			expectError:  false,
+			expectedDesc: "Investigating critical production issue",
 		},
 		{
 			name: "error - not found when user has no prior activities",
@@ -815,8 +839,23 @@ func TestActivityService_GetPreviousDailyActivity(t *testing.T) { // NOSONAR
 				if tc.expectedProj != "" && res.ProjectName != tc.expectedProj {
 					t.Errorf("expected project name %q, got %q", tc.expectedProj, res.ProjectName)
 				}
-				if tc.expectedStart != "" && res.StartTime != tc.expectedStart {
-					t.Errorf("expected start time %q, got %q", tc.expectedStart, res.StartTime)
+				if res.StartTime != "" {
+					t.Errorf("expected start time to be empty when copying previous activity, got %q", res.StartTime)
+				}
+				if res.EndTime != "" {
+					t.Errorf("expected end time to be empty when copying previous activity, got %q", res.EndTime)
+				}
+				if res.IsBeritaAcara {
+					t.Errorf("expected is_berita_acara to be false when copying previous activity, got true")
+				}
+				if res.WitnessID != nil {
+					t.Errorf("expected witness_id to be nil when copying previous activity, got %v", *res.WitnessID)
+				}
+				if res.Witness != nil {
+					t.Errorf("expected witness to be nil when copying previous activity, got %+v", res.Witness)
+				}
+				if res.BeritaAcaraNotes != "" {
+					t.Errorf("expected berita_acara_notes to be empty when copying previous activity, got %q", res.BeritaAcaraNotes)
 				}
 			}
 		})

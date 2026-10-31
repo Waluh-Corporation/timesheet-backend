@@ -58,7 +58,7 @@ func RenderTimesheetEmail(data TimesheetEmailData) (htmlBody string, textBody st
 
 	textBody = fmt.Sprintf(`Halo %s,
 
-Dokumen timesheet bulanan Anda telah berhasil dibuat dalam format Microsoft Excel (.xlsx).
+Dokumen timesheet bulanan Anda telah berhasil dibuat.
 %s
 Detail Timesheet:
 - Perusahaan: %s

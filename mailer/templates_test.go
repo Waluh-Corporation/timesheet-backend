@@ -41,6 +41,27 @@ func TestReExportedRenderFunctions(t *testing.T) {
 		}
 	})
 
+	t.Run("RenderWitnessRequestEmail", func(t *testing.T) {
+		html, text, err := RenderWitnessRequestEmail(WitnessRequestEmailData{WitnessName: "Saksi", EmployeeName: "Karyawan"})
+		if err != nil || !strings.Contains(html, "Saksi") || !strings.Contains(text, "Karyawan") {
+			t.Fatalf("unexpected result: %v", err)
+		}
+	})
+
+	t.Run("RenderBeritaAcaraApprovedEmail", func(t *testing.T) {
+		html, text, err := RenderBeritaAcaraApprovedEmail(BeritaAcaraApprovedEmailData{WitnessName: "Saksi", EmployeeName: "Karyawan"})
+		if err != nil || !strings.Contains(html, "Saksi") || !strings.Contains(text, "Karyawan") {
+			t.Fatalf("unexpected result: %v", err)
+		}
+	})
+
+	t.Run("RenderBeritaAcaraRejectedEmail", func(t *testing.T) {
+		html, text, err := RenderBeritaAcaraRejectedEmail(BeritaAcaraRejectedEmailData{WitnessName: "Saksi", EmployeeName: "Karyawan", Notes: "Catatan revisi"})
+		if err != nil || !strings.Contains(html, "Catatan revisi") || !strings.Contains(text, "Catatan revisi") {
+			t.Fatalf("unexpected result: %v", err)
+		}
+	})
+
 	t.Run("FormatMonthYearIndonesian", func(t *testing.T) {
 		if got := FormatMonthYearIndonesian(9, 2026); got != "September 2026" {
 			t.Errorf("got %q, want 'September 2026'", got)

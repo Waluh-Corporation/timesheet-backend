@@ -247,6 +247,25 @@ func writeMasterSignatures(f *excelize.File, sheet string, req *models.Timesheet
 	}
 }
 
+// hasDailyEntryActivity returns true if entry represents an active overtime or work entry.
+func hasDailyEntryActivity(entry *models.DailyEntry) bool {
+	if entry == nil {
+		return false
+	}
+	status := strings.ToUpper(strings.TrimSpace(entry.Status))
+	if status != "" && status != "X" {
+		return true
+	}
+	if strings.TrimSpace(entry.StartTime) != "" || strings.TrimSpace(entry.EndTime) != "" {
+		return true
+	}
+	if status == "X" {
+		return false
+	}
+	act := strings.TrimSpace(entry.Activity)
+	return act != "" && !strings.EqualFold(act, "holiday") && !strings.EqualFold(act, "weekend")
+}
+
 func writeMasterNonWorkingDay(f *excelize.File, sheet string, r int, d time.Time, isHoliday bool, holidayDesc string, st *masterTemplateStyles) float64 {
 	_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", r), fmt.Sprintf("Q%d", r), st.grayStyle)
 	_ = f.SetCellValue(sheet, fmt.Sprintf("A%d", r), d)
@@ -259,16 +278,16 @@ func writeMasterNonWorkingDay(f *excelize.File, sheet string, r int, d time.Time
 		_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", col, r), "")
 	}
 
+	remark := "Weekend"
 	if isHoliday {
-		_ = f.SetCellValue(sheet, fmt.Sprintf("K%d", r), holidayDesc)
-		for _, col := range []string{"L", "M", "N", "O", "P", "Q"} {
-			_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", col, r), "")
-		}
-		return calculateRowHeight(holidayDesc, "", "", "", "", "")
+		remark = holidayDesc
 	}
-
-	for _, col := range []string{"K", "L", "M", "N", "O", "P", "Q"} {
+	_ = f.SetCellValue(sheet, fmt.Sprintf("K%d", r), remark)
+	for _, col := range []string{"L", "M", "N", "O", "P", "Q"} {
 		_ = f.SetCellValue(sheet, fmt.Sprintf("%s%d", col, r), "")
+	}
+	if isHoliday && holidayDesc != "" {
+		return calculateRowHeight(holidayDesc, "", "", "", "", "")
 	}
 	return 21.0
 }
@@ -366,11 +385,14 @@ func GenerateExcel(req *models.TimesheetRequest, holidayMap map[string]string) (
 		dateStr := fmt.Sprintf("%04d-%02d-%02d", req.Year, req.Month, day)
 		holidayDesc, isHoliday := holidayMap[dateStr]
 
+		entry := entryMap[day]
+		hasAct := hasDailyEntryActivity(entry)
+
 		var h float64
-		if isWeekend || isHoliday {
+		if (isWeekend || isHoliday) && !hasAct {
 			h = writeMasterNonWorkingDay(f, sheetName, r, d, isHoliday, holidayDesc, st)
 		} else {
-			h = writeMasterWorkingDay(f, sheetName, r, d, entryMap[day], st)
+			h = writeMasterWorkingDay(f, sheetName, r, d, entry, st)
 		}
 		_ = f.SetRowHeight(sheetName, r, h)
 	}

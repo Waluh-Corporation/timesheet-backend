@@ -46,12 +46,12 @@ func (s *Server) WebAuthnRelatedOrigins(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/passkey/register/begin [post]
 func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
+	passkeyRepo := s.getPasskeyRepository()
+	if passkeyRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
-	user, err := userRepo.FindByIDWithCredentials(c.Request.Context(), currentUserID(c))
+	user, err := passkeyRepo.FindByIDWithCredentials(c.Request.Context(), currentUserID(c))
 	if err != nil || user == nil {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
@@ -67,7 +67,7 @@ func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
 		return
 	}
 	sid := uuid.NewString()
-	s.putSession(sid, sessionData)
+	s.putSessionCtx(c.Request.Context(), sid, sessionData)
 	RespondSuccess(c, http.StatusOK, gin.H{"session_id": sid, "options": options})
 }
 
@@ -88,18 +88,18 @@ func (s *Server) BeginPasskeyRegistration(c *gin.Context) {
 // @Router /api/v1/passkey/register/finish [post]
 func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 	sid := c.Query("session_id")
-	sessionData, ok := s.takeSession(sid)
+	sessionData, ok := s.takeSessionCtx(c.Request.Context(), sid)
 	if !ok {
 		RespondError(c, http.StatusBadRequest, "unknown or expired session")
 		return
 	}
 
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
+	passkeyRepo := s.getPasskeyRepository()
+	if passkeyRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
-	user, err := userRepo.FindByIDWithCredentials(c.Request.Context(), currentUserID(c))
+	user, err := passkeyRepo.FindByIDWithCredentials(c.Request.Context(), currentUserID(c))
 	if err != nil || user == nil {
 		RespondError(c, http.StatusNotFound, errUserNotFound)
 		return
@@ -126,7 +126,7 @@ func (s *Server) FinishPasskeyRegistration(c *gin.Context) {
 
 	record := models.NewWebAuthnCredential(user.ID, credential, passkeyName)
 
-	if err := userRepo.CreatePasskeyCredential(c.Request.Context(), &record); err != nil {
+	if err := passkeyRepo.CreatePasskeyCredential(c.Request.Context(), &record); err != nil {
 		RespondError(c, http.StatusInternalServerError, "could not save credential")
 		return
 	}
@@ -221,12 +221,12 @@ func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 	if strings.TrimSpace(req.Identifier) == "" {
 		options, sessionData, err = s.WebAuthn.BeginDiscoverableLogin()
 	} else {
-		userRepo := s.getUserRepository()
-		if userRepo == nil {
+		passkeyRepo := s.getPasskeyRepository()
+		if passkeyRepo == nil {
 			RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 			return
 		}
-		user, e := userRepo.FindByUsernameOrEmailWithCredentials(c.Request.Context(), req.Identifier)
+		user, e := passkeyRepo.FindByUsernameOrEmailWithCredentials(c.Request.Context(), req.Identifier)
 		if e != nil || user == nil {
 			RespondError(c, http.StatusUnauthorized, "invalid credentials")
 			return
@@ -238,7 +238,7 @@ func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 		return
 	}
 	sid := uuid.NewString()
-	s.putSession(sid, sessionData)
+	s.putSessionCtx(c.Request.Context(), sid, sessionData)
 	RespondSuccess(c, http.StatusOK, gin.H{"session_id": sid, "options": options})
 }
 
@@ -257,14 +257,14 @@ func (s *Server) BeginPasskeyLogin(c *gin.Context) {
 // @Router /api/v1/auth/passkey/login/finish [post]
 func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 	sid := c.Query("session_id")
-	sessionData, ok := s.takeSession(sid)
+	sessionData, ok := s.takeSessionCtx(c.Request.Context(), sid)
 	if !ok {
 		RespondError(c, http.StatusBadRequest, "unknown or expired session")
 		return
 	}
 
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
+	passkeyRepo := s.getPasskeyRepository()
+	if passkeyRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
@@ -276,7 +276,7 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 	if len(sessionData.UserID) == 0 {
 		// Discoverable login: resolve the user from the assertion's user handle.
 		handler := func(_, userHandle []byte) (webauthn.User, error) {
-			u, e := userRepo.FindByIDWithCredentials(c.Request.Context(), decodeUserHandle(userHandle))
+			u, e := passkeyRepo.FindByIDWithCredentials(c.Request.Context(), decodeUserHandle(userHandle))
 			if e != nil || u == nil {
 				return nil, e
 			}
@@ -285,7 +285,7 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 		}
 		credential, err = s.WebAuthn.FinishDiscoverableLogin(handler, *sessionData, c.Request)
 	} else {
-		user, err = userRepo.FindByIDWithCredentials(c.Request.Context(), decodeUserHandle(sessionData.UserID))
+		user, err = passkeyRepo.FindByIDWithCredentials(c.Request.Context(), decodeUserHandle(sessionData.UserID))
 		if err != nil || user == nil {
 			RespondError(c, http.StatusUnauthorized, "invalid credentials")
 			return
@@ -302,7 +302,7 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 	}
 
 	// Persist the updated signature counter (clone detection) and backup state
-	_ = userRepo.UpdatePasskeySignCount(c.Request.Context(), credential.ID, credential.Authenticator.SignCount, credential.Flags.BackupState)
+	_ = passkeyRepo.UpdatePasskeySignCount(c.Request.Context(), credential.ID, credential.Authenticator.SignCount, credential.Flags.BackupState)
 
 	token, err := s.Auth.GenerateToken(user)
 	if err != nil {
@@ -347,12 +347,12 @@ func (s *Server) FinishPasskeyLogin(c *gin.Context) {
 // @Failure 500 {object} response.ErrorResponse "Internal server error"
 // @Router /api/v1/passkeys [get]
 func (s *Server) ListPasskeys(c *gin.Context) {
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
+	passkeyRepo := s.getPasskeyRepository()
+	if passkeyRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
-	creds, err := userRepo.ListPasskeysByUserID(c.Request.Context(), currentUserID(c))
+	creds, err := passkeyRepo.ListPasskeysByUserID(c.Request.Context(), currentUserID(c))
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -379,13 +379,13 @@ func (s *Server) DeletePasskey(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid passkey ID")
 		return
 	}
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
+	passkeyRepo := s.getPasskeyRepository()
+	if passkeyRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
 	uid := currentUserID(c)
-	deleted, err := userRepo.DeletePasskey(c.Request.Context(), uint(id64), &uid)
+	deleted, err := passkeyRepo.DeletePasskey(c.Request.Context(), uint(id64), &uid)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -430,13 +430,13 @@ func (s *Server) UpdatePasskey(c *gin.Context) {
 		return
 	}
 
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
+	passkeyRepo := s.getPasskeyRepository()
+	if passkeyRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
 	uid := currentUserID(c)
-	updated, err := userRepo.UpdatePasskeyName(c.Request.Context(), uint(id64), &uid, name)
+	updated, err := passkeyRepo.UpdatePasskeyName(c.Request.Context(), uint(id64), &uid, name)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -470,12 +470,12 @@ func (s *Server) AdminListPasskeys(c *gin.Context) {
 		RespondError(c, http.StatusBadRequest, "invalid user ID")
 		return
 	}
-	userRepo := s.getUserRepository()
-	if userRepo == nil {
+	passkeyRepo := s.getPasskeyRepository()
+	if passkeyRepo == nil {
 		RespondError(c, http.StatusInternalServerError, "database repository unavailable")
 		return
 	}
-	creds, err := userRepo.ListPasskeysByUserID(c.Request.Context(), uint(id64))
+	creds, err := passkeyRepo.ListPasskeysByUserID(c.Request.Context(), uint(id64))
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, err.Error())
 		return
