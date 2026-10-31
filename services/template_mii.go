@@ -86,6 +86,9 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		status := ""
 		if dsc.HasActivity {
 			status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+			if status == "" {
+				status = "P"
+			}
 			_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
 			_ = f.SetCellValue(sheet, "L"+rs, miiProjectName)
 			_ = f.SetCellValue(sheet, "M"+rs, miiProjectID)

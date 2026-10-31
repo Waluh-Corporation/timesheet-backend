@@ -135,7 +135,11 @@ func renderSDDDayActivity(
 	statusCounts map[string]int,
 ) {
 	if dsc.HasActivity {
-		col, mark := resolveSDDStatusMark(dsc.Activity.Status)
+		status := dsc.Activity.Status
+		if strings.TrimSpace(status) == "" {
+			status = "H"
+		}
+		col, mark := resolveSDDStatusMark(status)
 		if col != "" {
 			_ = f.SetCellValue(sheet, col+rs, mark)
 			statusCounts[col]++

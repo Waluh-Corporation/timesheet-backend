@@ -230,16 +230,18 @@ func WriteHolidayRemarkRow(f *excelize.File, sheet, col, rs string, row int, hol
 }
 
 // WriteAttendanceMatrixStatus writes the standard 6-column matrix attendance status ("E" through "J").
+// When status is "X" (inactive), the cell is left empty (""), conforming to timesheet presentation rules.
 func WriteAttendanceMatrixStatus(f *excelize.File, sheet, rs, status string) {
+	normStatus := strings.ToUpper(strings.TrimSpace(status))
 	statusCol := map[string]string{"P": "E", "S": "F", "BT": "G", "PM": "H", "V": "I", "X": "J"}
-	statusMark := map[string]string{"P": "P", "S": "S", "BT": "BT", "PM": "PM", "V": "V", "X": "x"}
+	statusMark := map[string]string{"P": "P", "S": "S", "BT": "BT", "PM": "PM", "V": "V", "X": ""}
 	matrixCols := []string{"E", "F", "G", "H", "I", "J"}
 
 	for _, col := range matrixCols {
 		_ = f.SetCellValue(sheet, col+rs, "")
 	}
-	if col, ok := statusCol[status]; ok {
-		_ = f.SetCellValue(sheet, col+rs, statusMark[status])
+	if col, ok := statusCol[normStatus]; ok {
+		_ = f.SetCellValue(sheet, col+rs, statusMark[normStatus])
 	}
 }
 
@@ -277,7 +279,7 @@ func ResolveDayStyleContext(year, month, day int, holidays map[int]string, byDay
 		TimeStyle:          st.TimeStyle,
 		DecimalStyle:       st.DecimalStyle,
 	}
-	if isHolidayOrWeekend {
+	if isHolidayOrWeekend && !hasAct {
 		ctx.CenterStyle = st.GreyCenterStyle
 		ctx.CenterWrapStyle = st.GreyCenterWrapStyle
 		ctx.DateStyle = st.GreyDateStyle

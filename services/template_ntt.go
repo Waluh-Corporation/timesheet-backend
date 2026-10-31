@@ -117,6 +117,9 @@ func renderNTTDailyRows(
 func renderNTTDayActivity(f *excelize.File, sheet, rs string, row int, dsc DayStyleContext) string {
 	if dsc.HasActivity {
 		status := strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+		if status == "" {
+			status = "P"
+		}
 		projName := dsc.Activity.GetProjectName()
 		if projName == "" {
 			projName = "BNI Direct"

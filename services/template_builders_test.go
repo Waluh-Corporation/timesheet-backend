@@ -1092,3 +1092,408 @@ func TestTimesheetTextWrapping(t *testing.T) {
 		})
 	}
 }
+
+// isCellGrey checks if the cell at the given coordinates has a grey background fill (#AEAAAA or #D3D3D3).
+func isCellGrey(f *excelize.File, sheet, cell string) (bool, error) {
+	styleID, err := f.GetCellStyle(sheet, cell)
+	if err != nil {
+		return false, fmt.Errorf("get cell style %s: %w", cell, err)
+	}
+	st, err := f.GetStyle(styleID)
+	if err != nil {
+		return false, fmt.Errorf("get style %d: %w", styleID, err)
+	}
+	if st == nil || len(st.Fill.Color) == 0 {
+		return false, nil
+	}
+	for _, col := range st.Fill.Color {
+		colClean := strings.ToUpper(strings.TrimPrefix(col, "#"))
+		if colClean == "AEAAAA" || colClean == "D3D3D3" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func TestTemplateBuilders_WeekendAndHolidayOvertimeDynamicStyling(t *testing.T) {
+	user := &models.User{
+		Name:       "Budi Santoso",
+		Division:   "Wholesale Digital Delivery",
+		Department: "Wholesale Channel and Service Delivery",
+		EmployeeID: "EMP-001",
+		Site:       "Jakarta RDTX",
+	}
+
+	// Month: September 2026 (30 days)
+	// Day 3 (Thu): Public Holiday ("Maulid Nabi") without activity
+	// Day 5 (Sat): Weekend without activity
+	// Day 6 (Sun): Weekend WITH overtime activity
+	// Day 10 (Thu): Public Holiday ("Mid-Autumn") WITH overtime activity
+	activities := []models.DailyActivity{
+		{
+			Date:       time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC),
+			StartTime:  "09:00",
+			EndTime:    "17:00",
+			Status:     "P",
+			Activity:   "Sunday System Deployment",
+			ProjectRef: &models.Project{Code: "P24015", Name: "BNI Direct", AppImpacted: "Cash"},
+		},
+		{
+			Date:       time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC),
+			StartTime:  "08:30",
+			EndTime:    "17:30",
+			Status:     "P",
+			Activity:   "Holiday Incident Response",
+			ProjectRef: &models.Project{Code: "P24015", Name: "BNI Direct", AppImpacted: "Cash"},
+		},
+	}
+
+	holidays := map[int]string{
+		3:  "Maulid Nabi",
+		10: "Mid-Autumn",
+	}
+
+	testCases := []struct {
+		company         string
+		sheetName       string
+		startRow        int
+		startCol        string
+		endCol          string
+		totalCol        string
+		actCol          string
+		projCol         string
+		isDecimal       bool
+		wantStatusCol   string
+		wantStatusVal   string
+		wantInactiveCol string
+	}{
+		{
+			company:         "mii",
+			sheetName:       "Sheet1",
+			startRow:        9,
+			startCol:        "B",
+			endCol:          "C",
+			totalCol:        "D",
+			actCol:          "K",
+			projCol:         "L",
+			isDecimal:       false,
+			wantStatusCol:   "E",
+			wantStatusVal:   "P",
+			wantInactiveCol: "J",
+		},
+		{
+			company:         "sdd",
+			sheetName:       "September",
+			startRow:        12,
+			startCol:        "C",
+			endCol:          "D",
+			totalCol:        "E",
+			actCol:          "N",
+			projCol:         "K",
+			isDecimal:       false,
+			wantStatusCol:   "F",
+			wantStatusVal:   "H", // SDD maps "P" to Hadir ("H") in col F
+			wantInactiveCol: "",
+		},
+		{
+			company:         "adidata",
+			sheetName:       "TIMESHEET",
+			startRow:        10,
+			startCol:        "C",
+			endCol:          "D",
+			totalCol:        "E",
+			actCol:          "L",
+			projCol:         "O",
+			isDecimal:       true,
+			wantStatusCol:   "F",
+			wantStatusVal:   "P",
+			wantInactiveCol: "K",
+		},
+		{
+			company:         "ntt",
+			sheetName:       "Timesheet",
+			startRow:        11,
+			startCol:        "B",
+			endCol:          "C",
+			totalCol:        "D",
+			actCol:          "K",
+			projCol:         "L",
+			isDecimal:       false,
+			wantStatusCol:   "E",
+			wantStatusVal:   "P",
+			wantInactiveCol: "J",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.company, func(t *testing.T) {
+			in := GenerationInput{
+				CompanyCode: tc.company,
+				User:        user,
+				Month:       9,
+				Year:        2026,
+				Activities:  activities,
+				Holidays:    holidays,
+			}
+
+			out, err := GenerateFromTemplate(in)
+			if err != nil {
+				t.Fatalf("[%s] GenerateFromTemplate failed: %v", tc.company, err)
+			}
+
+			wb, err := excelize.OpenReader(bytes.NewReader(out))
+			if err != nil {
+				t.Fatalf("[%s] OpenReader failed: %v", tc.company, err)
+			}
+			defer func() { _ = wb.Close() }()
+
+			// 1. Day 5: Weekend without activity
+			r5 := tc.startRow + 4
+			isGrey5, err := isCellGrey(wb, tc.sheetName, fmt.Sprintf("%s%d", tc.actCol, r5))
+			if err != nil || !isGrey5 {
+				t.Errorf("[%s] Day 5 (weekend no act) should be grey #AEAAAA, got isGrey=%v, err=%v", tc.company, isGrey5, err)
+			}
+			s5, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.startCol, r5))
+			e5, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.endCol, r5))
+			tot5, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.totalCol, r5))
+			act5, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.actCol, r5))
+			if s5 != "" || e5 != "" || tot5 != "" {
+				t.Errorf("[%s] Day 5 working hours should be empty, got start=%q, end=%q, tot=%q", tc.company, s5, e5, tot5)
+			}
+			if act5 != "Weekend" {
+				t.Errorf("[%s] Day 5 remark = %q, want 'Weekend'", tc.company, act5)
+			}
+
+			// 2. Day 3: Holiday without activity
+			r3 := tc.startRow + 2
+			isGrey3, err := isCellGrey(wb, tc.sheetName, fmt.Sprintf("%s%d", tc.actCol, r3))
+			if err != nil || !isGrey3 {
+				t.Errorf("[%s] Day 3 (holiday no act) should be grey #AEAAAA, got isGrey=%v, err=%v", tc.company, isGrey3, err)
+			}
+			s3, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.startCol, r3))
+			e3, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.endCol, r3))
+			tot3, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.totalCol, r3))
+			act3, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.actCol, r3))
+			if s3 != "" || e3 != "" || tot3 != "" {
+				t.Errorf("[%s] Day 3 working hours should be empty, got start=%q, end=%q, tot=%q", tc.company, s3, e3, tot3)
+			}
+			if act3 != "Maulid Nabi" {
+				t.Errorf("[%s] Day 3 remark = %q, want 'Maulid Nabi'", tc.company, act3)
+			}
+
+			// 3. Day 6: Weekend WITH overtime activity
+			r6 := tc.startRow + 5
+			isGrey6, err := isCellGrey(wb, tc.sheetName, fmt.Sprintf("%s%d", tc.actCol, r6))
+			if err != nil || isGrey6 {
+				t.Errorf("[%s] Day 6 (weekend with act) should NOT be grey, got isGrey=%v, err=%v", tc.company, isGrey6, err)
+			}
+			s6, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.startCol, r6))
+			e6, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.endCol, r6))
+			tot6, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.totalCol, r6))
+			act6, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.actCol, r6))
+			proj6, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.projCol, r6))
+			st6, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.wantStatusCol, r6))
+
+			if s6 != "09:00" || e6 != "17:00" {
+				t.Errorf("[%s] Day 6 start/end got %q/%q, want 09:00/17:00", tc.company, s6, e6)
+			}
+			wantTot6 := "08:00"
+			if tc.isDecimal {
+				wantTot6 = "8.00"
+			}
+			if tot6 != wantTot6 {
+				t.Errorf("[%s] Day 6 total hours got %q, want %q", tc.company, tot6, wantTot6)
+			}
+			if act6 != "Sunday System Deployment" {
+				t.Errorf("[%s] Day 6 activity got %q, want 'Sunday System Deployment'", tc.company, act6)
+			}
+			if !strings.Contains(proj6, "BNI Direct") {
+				t.Errorf("[%s] Day 6 project got %q, want to contain 'BNI Direct'", tc.company, proj6)
+			}
+			if st6 != tc.wantStatusVal {
+				t.Errorf("[%s] Day 6 status got %q, want %q", tc.company, st6, tc.wantStatusVal)
+			}
+			if tc.wantInactiveCol != "" {
+				valInactive6, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.wantInactiveCol, r6))
+				if valInactive6 == "x" || valInactive6 == "X" {
+					t.Errorf("[%s] Day 6 inactive cell %s%d contains %q, but inactive marker must be empty (\"\")", tc.company, tc.wantInactiveCol, r6, valInactive6)
+				}
+				if valInactive6 != "" {
+					t.Errorf("[%s] Day 6 inactive cell %s%d = %q, want empty", tc.company, tc.wantInactiveCol, r6, valInactive6)
+				}
+			}
+
+			// 4. Day 10: Holiday WITH overtime activity
+			r10 := tc.startRow + 9
+			isGrey10, err := isCellGrey(wb, tc.sheetName, fmt.Sprintf("%s%d", tc.actCol, r10))
+			if err != nil || isGrey10 {
+				t.Errorf("[%s] Day 10 (holiday with act) should NOT be grey, got isGrey=%v, err=%v", tc.company, isGrey10, err)
+			}
+			s10, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.startCol, r10))
+			e10, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.endCol, r10))
+			tot10, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.totalCol, r10))
+			act10, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.actCol, r10))
+			proj10, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.projCol, r10))
+			st10, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.wantStatusCol, r10))
+
+			if s10 != "08:30" || e10 != "17:30" {
+				t.Errorf("[%s] Day 10 start/end got %q/%q, want 08:30/17:30", tc.company, s10, e10)
+			}
+			wantTot10 := "09:00"
+			if tc.isDecimal {
+				wantTot10 = "9.00"
+			}
+			if tot10 != wantTot10 {
+				t.Errorf("[%s] Day 10 total hours got %q, want %q", tc.company, tot10, wantTot10)
+			}
+			if act10 != "Holiday Incident Response" {
+				t.Errorf("[%s] Day 10 activity got %q, want 'Holiday Incident Response'", tc.company, act10)
+			}
+			if !strings.Contains(proj10, "BNI Direct") {
+				t.Errorf("[%s] Day 10 project got %q, want to contain 'BNI Direct'", tc.company, proj10)
+			}
+			if st10 != tc.wantStatusVal {
+				t.Errorf("[%s] Day 10 status got %q, want %q", tc.company, st10, tc.wantStatusVal)
+			}
+			if tc.wantInactiveCol != "" {
+				valInactive10, _ := wb.GetCellValue(tc.sheetName, fmt.Sprintf("%s%d", tc.wantInactiveCol, r10))
+				if valInactive10 == "x" || valInactive10 == "X" {
+					t.Errorf("[%s] Day 10 inactive cell %s%d contains %q, but inactive marker must be empty (\"\")", tc.company, tc.wantInactiveCol, r10, valInactive10)
+				}
+				if valInactive10 != "" {
+					t.Errorf("[%s] Day 10 inactive cell %s%d = %q, want empty", tc.company, tc.wantInactiveCol, r10, valInactive10)
+				}
+			}
+		})
+	}
+}
+
+func TestWriteAdidataAttendanceMatrixStatus_InactiveMarkerAndAllStatuses(t *testing.T) {
+	f := excelize.NewFile()
+	defer func() { _ = f.Close() }()
+	sheet := "Sheet1"
+
+	tests := []struct {
+		name        string
+		statusInput string
+		expectedCol string
+		expectedVal string
+	}{
+		{name: "Present 'P'", statusInput: "P", expectedCol: "F", expectedVal: "P"},
+		{name: "Sick 'S'", statusInput: "S", expectedCol: "G", expectedVal: "S"},
+		{name: "Business Trip 'BT'", statusInput: "BT", expectedCol: "H", expectedVal: "BT"},
+		{name: "Permit 'PM'", statusInput: "PM", expectedCol: "I", expectedVal: "PM"},
+		{name: "Vacation 'V'", statusInput: "V", expectedCol: "J", expectedVal: "V"},
+		{name: "Inactive 'X' -> K must be EMPTY", statusInput: "X", expectedCol: "K", expectedVal: ""},
+		{name: "Inactive lowercase 'x' -> K must be EMPTY", statusInput: "x", expectedCol: "K", expectedVal: ""},
+		{name: "Inactive with spaces ' X ' -> K must be EMPTY", statusInput: " X ", expectedCol: "K", expectedVal: ""},
+		{name: "Empty status -> all empty", statusInput: "", expectedCol: "", expectedVal: ""},
+		{name: "Unknown status -> all empty", statusInput: "UNKNOWN", expectedCol: "", expectedVal: ""},
+	}
+
+	for i, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			rowStr := fmt.Sprintf("%d", 30+i)
+			writeAdidataAttendanceMatrixStatus(f, sheet, rowStr, tc.statusInput)
+
+			if tc.expectedCol != "" {
+				val, _ := f.GetCellValue(sheet, tc.expectedCol+rowStr)
+				if val != tc.expectedVal {
+					t.Errorf("Cell %s%s = %q, want %q", tc.expectedCol, rowStr, val, tc.expectedVal)
+				}
+			}
+
+			// Cell K must never contain "x" or "X" when status is inactive
+			valK, _ := f.GetCellValue(sheet, "K"+rowStr)
+			if valK == "x" || valK == "X" {
+				t.Errorf("Cell K%s contains %q, but inactive marker must be empty (\"\")", rowStr, valK)
+			}
+
+			// Verify other columns are empty when expectedVal is empty
+			if tc.expectedVal == "" {
+				for _, col := range []string{"F", "G", "H", "I", "J", "K"} {
+					v, _ := f.GetCellValue(sheet, col+rowStr)
+					if v != "" {
+						t.Errorf("Expected cell %s%s to be empty, got %q", col, rowStr, v)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestTemplateBuilders_InactiveStatusMarkerEmptyAcrossCompanies(t *testing.T) {
+	user := &models.User{
+		Name:       "Test User",
+		Division:   "Engineering",
+		EmployeeID: "EMP-001",
+	}
+
+	// Day 2 (weekday) with Inactive status "X"
+	act := models.DailyActivity{
+		Date:       time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC),
+		Status:     "X",
+		Activity:   "Off / Inactive day",
+		ProjectRef: &models.Project{Code: "P24015", Name: "BNI Direct"},
+	}
+
+	companies := []struct {
+		code        string
+		sheetName   string
+		inactiveCol string // column that holds inactive marker in template
+		dayRow      int    // Day 2 row
+		allCols     []string
+	}{
+		{code: "mii", sheetName: "Sheet1", inactiveCol: "J", dayRow: 10, allCols: []string{"E", "F", "G", "H", "I", "J"}},
+		{code: "sdd", sheetName: "September", inactiveCol: "", dayRow: 13, allCols: []string{"F", "G", "H", "I", "J"}},
+		{code: "adidata", sheetName: "TIMESHEET", inactiveCol: "K", dayRow: 11, allCols: []string{"F", "G", "H", "I", "J", "K"}},
+		{code: "ntt", sheetName: "Timesheet", inactiveCol: "J", dayRow: 12, allCols: []string{"E", "F", "G", "H", "I", "J"}},
+	}
+
+	for _, c := range companies {
+		t.Run(c.code, func(t *testing.T) {
+			in := GenerationInput{
+				CompanyCode: c.code,
+				User:        user,
+				Month:       9,
+				Year:        2026,
+				Activities:  []models.DailyActivity{act},
+				Holidays:    map[int]string{},
+			}
+
+			raw, err := GenerateFromTemplate(in)
+			if err != nil {
+				t.Fatalf("[%s] GenerateFromTemplate failed: %v", c.code, err)
+			}
+
+			wb, err := excelize.OpenReader(bytes.NewReader(raw))
+			if err != nil {
+				t.Fatalf("[%s] OpenReader failed: %v", c.code, err)
+			}
+			defer func() { _ = wb.Close() }()
+
+			if c.inactiveCol != "" {
+				cell := fmt.Sprintf("%s%d", c.inactiveCol, c.dayRow)
+				val, err := wb.GetCellValue(c.sheetName, cell)
+				if err != nil {
+					t.Fatalf("[%s] GetCellValue(%s) error: %v", c.code, cell, err)
+				}
+				if val == "x" || val == "X" {
+					t.Errorf("[%s] Inactive marker cell %s contains %q, want empty (\"\")", c.code, cell, val)
+				}
+				if val != "" {
+					t.Errorf("[%s] Inactive marker cell %s = %q, want empty (\"\")", c.code, cell, val)
+				}
+			}
+
+			// Ensure all matrix columns on that day are empty
+			for _, col := range c.allCols {
+				cell := fmt.Sprintf("%s%d", col, c.dayRow)
+				v, _ := wb.GetCellValue(c.sheetName, cell)
+				if v != "" {
+					t.Errorf("[%s] Matrix cell %s = %q, want empty (\"\")", c.code, cell, v)
+				}
+			}
+		})
+	}
+}

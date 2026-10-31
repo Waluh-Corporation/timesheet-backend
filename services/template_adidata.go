@@ -147,6 +147,9 @@ func renderAdidataDailyRows(
 func renderAdidataDayActivity(f *excelize.File, sheet, rs string, row int, dsc DayStyleContext) string {
 	if dsc.HasActivity {
 		status := strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+		if status == "" {
+			status = "P"
+		}
 		_ = f.SetCellValue(sheet, "L"+rs, dsc.Activity.Activity)
 		projName := dsc.Activity.GetProjectName()
 		if projName == "" {
@@ -441,7 +444,9 @@ func writeAdidataMultiSPL(f *excelize.File, splSheet string, in GenerationInput,
 }
 
 // writeAdidataAttendanceMatrixStatus writes the 6-column matrix attendance status ("F" through "K") for Adidata.
+// When status is "X" (inactive), the cell is left empty (""), conforming to timesheet presentation rules.
 func writeAdidataAttendanceMatrixStatus(f *excelize.File, sheet, rs, status string) {
+	normStatus := strings.ToUpper(strings.TrimSpace(status))
 	statusCol := map[string]string{
 		"P":  "F",
 		"S":  "G",
@@ -456,14 +461,14 @@ func writeAdidataAttendanceMatrixStatus(f *excelize.File, sheet, rs, status stri
 		"BT": "BT",
 		"PM": "PM",
 		"V":  "V",
-		"X":  "x",
+		"X":  "",
 	}
 	matrixCols := []string{"F", "G", "H", "I", "J", "K"}
 
 	for _, col := range matrixCols {
 		_ = f.SetCellValue(sheet, col+rs, "")
 	}
-	if col, ok := statusCol[status]; ok {
-		_ = f.SetCellValue(sheet, col+rs, statusMark[status])
+	if col, ok := statusCol[normStatus]; ok {
+		_ = f.SetCellValue(sheet, col+rs, statusMark[normStatus])
 	}
 }
