@@ -35,16 +35,14 @@ func RenderPasswordChangedEmail(data PasswordChangedEmailData) (htmlBody string,
 
 	greetingName := data.Username
 	if greetingName == "" {
-		greetingName = "Pengguna"
+		greetingName = "User"
 	}
 
 	layout := BaseLayoutData{
 		AppName:      data.AppName,
-		Preheader:    fmt.Sprintf("Kata sandi akun %s Anda telah berhasil diperbarui.", data.AppName),
-		Subject:      fmt.Sprintf("Keamanan Akun: Kata Sandi %s Telah Diperbarui", data.AppName),
-		BadgeText:    "Pembaruan Keamanan",
-		BadgeColor:   "emerald",
-		HeaderTitle:  "Kata Sandi Berhasil Diperbarui",
+		Preheader:    fmt.Sprintf("Your %s account password has been successfully updated.", data.AppName),
+		Subject:      fmt.Sprintf("Security Alert: Your %s Password Has Been Updated", data.AppName),
+		HeaderTitle:  "Password Updated Successfully",
 		SupportEmail: data.SupportEmail,
 		PortalURL:    data.PortalURL,
 	}
@@ -56,22 +54,22 @@ func RenderPasswordChangedEmail(data PasswordChangedEmailData) (htmlBody string,
 
 	ipLine := ""
 	if data.IPAddress != "" {
-		ipLine = fmt.Sprintf("\n- Alamat IP: %s", data.IPAddress)
+		ipLine = fmt.Sprintf("\n- IP Address: %s", data.IPAddress)
 	}
 	locLine := ""
 	if data.Location != "" {
-		locLine = fmt.Sprintf("\n- Lokasi: %s", data.Location)
+		locLine = fmt.Sprintf("\n- Approximate Location: %s", data.Location)
 	}
 
-	textBody = fmt.Sprintf(`Halo %s,
+	textBody = fmt.Sprintf(`Hello %s,
 
-Kata sandi akun %s Anda telah berhasil diperbarui pada %s.%s%s
+Your %s account password was successfully updated at %s.%s%s
 
-Jika Anda yang melakukan perubahan ini, Anda dapat masuk kembali dengan kata sandi baru Anda:
+If you made this change, you can log back in with your new password:
 %s
 
-PERINGATAN KEAMANAN:
-Jika Anda TIDAK pernah meminta atau melakukan perubahan ini, segera hubungi administrator sistem Anda untuk mengamankan akun Anda.
+SECURITY NOTICE:
+If you did NOT make this change, please contact your system administrator immediately to secure your account.
 
 --
 %s

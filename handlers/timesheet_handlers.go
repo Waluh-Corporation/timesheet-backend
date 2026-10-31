@@ -345,7 +345,7 @@ func (s *Server) dispatchReissueNotifications(user *models.User, downloadURL str
 		if user.CompanyRel != nil {
 			compName = user.CompanyRel.Name
 		}
-		period := mailer.FormatMonthYearIndonesian(month, year)
+		period := mailer.FormatMonthYearEnglish(month, year)
 		filename := fmt.Sprintf("Timesheet_%s_%02d_%04d.xlsx", user.Username, month, year)
 		toEmail := user.Email
 		toUsername := user.Username
@@ -358,8 +358,8 @@ func (s *Server) dispatchReissueNotifications(user *models.User, downloadURL str
 	}
 
 	if s.Push != nil {
-		pushTitle := "Timesheet Telah Siap"
-		pushBody := fmt.Sprintf("Timesheet periode %02d/%04d Anda telah siap diunduh.", month, year)
+		pushTitle := "Timesheet Is Ready"
+		pushBody := fmt.Sprintf("Your timesheet for period %02d/%04d is ready to download.", month, year)
 		s.Push.SendToUser(user.ID, push.Payload{
 			Title: pushTitle,
 			Body:  pushBody,

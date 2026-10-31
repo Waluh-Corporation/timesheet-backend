@@ -29,11 +29,9 @@ func RenderWitnessRequestEmail(data WitnessRequestEmailData) (htmlBody string, t
 
 	layout := BaseLayoutData{
 		AppName:      data.AppName,
-		Preheader:    fmt.Sprintf("Permintaan Tanda Tangan Saksi Berita Acara dari %s untuk periode %s.", data.EmployeeName, data.Period),
-		Subject:      fmt.Sprintf("Permintaan Tanda Tangan Saksi Berita Acara - %s (%s)", data.EmployeeName, data.Period),
-		BadgeText:    "Permintaan Saksi",
-		BadgeColor:   "amber",
-		HeaderTitle:  "Permintaan Tanda Tangan Saksi Berita Acara",
+		Preheader:    fmt.Sprintf("Berita Acara witness signature request from %s for %s.", data.EmployeeName, data.Period),
+		Subject:      fmt.Sprintf("Berita Acara Witness Signature Request - %s (%s)", data.EmployeeName, data.Period),
+		HeaderTitle:  "Berita Acara Witness Review Request",
 		SupportEmail: data.SupportEmail,
 		PortalURL:    data.PortalURL,
 	}
@@ -43,14 +41,14 @@ func RenderWitnessRequestEmail(data WitnessRequestEmailData) (htmlBody string, t
 		return "", "", fmt.Errorf("render witness request template: %w", err)
 	}
 
-	textBody = fmt.Sprintf(`Halo %s,
+	textBody = fmt.Sprintf(`Hello %s,
 
-Rekan Anda %s telah mengajukan Berita Acara untuk periode %s dan memilih Anda sebagai saksi pendamping untuk menandatangani dokumen tersebut.
+Your colleague %s has submitted a Berita Acara for the period of %s and nominated you as a witness signer.
 
-Silakan tinjau dan tanda tangani dokumen pada tautan berikut:
+Please review and sign the document using the following link:
 %s
 
-Anda dapat menyetujui pengajuan ini untuk membubuhkan tanda tangan digital Anda sebagai saksi atau menolaknya dengan memberikan catatan revisi jika terdapat ketidaksesuaian.
+You can approve this request to affix your digital signature as a witness or reject it with revision notes if any discrepancies are found.
 
 --
 %s

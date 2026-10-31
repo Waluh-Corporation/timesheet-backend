@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -734,5 +735,91 @@ func TestWriteAttendanceMatrixStatus_InactiveMarkerAndAllStatuses(t *testing.T) 
 				}
 			}
 		})
+	}
+}
+
+func TestMonthNameHelpers(t *testing.T) {
+	t.Run("MonthNameIndonesian", func(t *testing.T) {
+		if got := MonthNameIndonesian(1); got != "Januari" {
+			t.Errorf("got %q, want 'Januari'", got)
+		}
+		if got := MonthNameIndonesian(10); got != "Oktober" {
+			t.Errorf("got %q, want 'Oktober'", got)
+		}
+		if got := MonthNameIndonesian(12); got != "Desember" {
+			t.Errorf("got %q, want 'Desember'", got)
+		}
+		if got := MonthNameIndonesian(0); got != "Bulan 0" {
+			t.Errorf("got %q, want 'Bulan 0'", got)
+		}
+	})
+
+	t.Run("MonthNameEnglish", func(t *testing.T) {
+		if got := MonthNameEnglish(1); got != "January" {
+			t.Errorf("got %q, want 'January'", got)
+		}
+		if got := MonthNameEnglish(10); got != "October" {
+			t.Errorf("got %q, want 'October'", got)
+		}
+		if got := MonthNameEnglish(12); got != "December" {
+			t.Errorf("got %q, want 'December'", got)
+		}
+		if got := MonthNameEnglish(13); got != "Month 13" {
+			t.Errorf("got %q, want 'Month 13'", got)
+		}
+	})
+}
+
+func TestWriteSignatures_ApproversBlank(t *testing.T) {
+	f := excelize.NewFile()
+	sheet := "Sheet1"
+
+	in := GenerationInput{
+		User: &models.User{Name: "Alice Timesheet Owner"},
+		Approvers: []models.Approver{
+			{Name: "Approver TL", RoleType: models.ApproverRoleTeamLeader},
+			{Name: "Approver DH", RoleType: models.ApproverRoleDepartmentHead},
+		},
+	}
+	cells := SignatureCells{
+		UserCell:     "A10",
+		TLCell:       "B10",
+		DHCell:       "C10",
+		UserDateCell: "A11",
+		TLDateCell:   "B11",
+		DHDateCell:   "C11",
+		DatePrefix:   "Date: ",
+	}
+
+	WriteSignatures(f, sheet, in, cells)
+
+	userVal, _ := f.GetCellValue(sheet, "A10")
+	if userVal != "Alice Timesheet Owner" {
+		t.Errorf("expected user cell A10 to be %q, got %q", "Alice Timesheet Owner", userVal)
+	}
+
+	tlVal, _ := f.GetCellValue(sheet, "B10")
+	if tlVal != "" {
+		t.Errorf("expected TL cell B10 to be empty, got %q", tlVal)
+	}
+
+	dhVal, _ := f.GetCellValue(sheet, "C10")
+	if dhVal != "" {
+		t.Errorf("expected DH cell C10 to be empty, got %q", dhVal)
+	}
+
+	userDate, _ := f.GetCellValue(sheet, "A11")
+	if !strings.HasPrefix(userDate, "Date: ") {
+		t.Errorf("expected UserDateCell A11 to have prefix 'Date: ', got %q", userDate)
+	}
+
+	tlDate, _ := f.GetCellValue(sheet, "B11")
+	if tlDate != "" {
+		t.Errorf("expected TLDateCell B11 to be empty, got %q", tlDate)
+	}
+
+	dhDate, _ := f.GetCellValue(sheet, "C11")
+	if dhDate != "" {
+		t.Errorf("expected DHDateCell C11 to be empty, got %q", dhDate)
 	}
 }

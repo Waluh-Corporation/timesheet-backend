@@ -246,8 +246,8 @@ func (w *WorkerServer) resolveDownloadParams(ctx context.Context) (string, int, 
 func (w *WorkerServer) dispatchNotifications(ctx context.Context, userID uint, month, year int, downloadURL, finalFilename string, expiresAt time.Time) {
 	if w.pushSvc != nil {
 		w.pushSvc.SendToUser(userID, push.Payload{
-			Title: "Timesheet Telah Siap",
-			Body:  fmt.Sprintf("Timesheet periode %02d/%04d Anda telah selesai diproses dan siap diunduh.", month, year),
+			Title: "Timesheet Is Ready",
+			Body:  fmt.Sprintf("Your timesheet for period %02d/%04d has finished processing and is ready to download.", month, year),
 			URL:   downloadURL,
 		})
 	}
@@ -263,7 +263,7 @@ func (w *WorkerServer) dispatchNotifications(ctx context.Context, userID uint, m
 	if user.CompanyRel != nil {
 		compName = user.CompanyRel.Name
 	}
-	period := mailer.FormatMonthYearIndonesian(month, year)
+	period := mailer.FormatMonthYearEnglish(month, year)
 	if mErr := w.mailer.SendTimesheetReadyEmail(user.Email, user.Username, compName, period, finalFilename, downloadURL, expiresAt); mErr != nil {
 		log.Printf("[worker] failed to send timesheet ready email to %s: %v", user.Email, mErr)
 	}

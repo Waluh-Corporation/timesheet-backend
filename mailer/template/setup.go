@@ -38,11 +38,9 @@ func RenderSetupEmail(data SetupEmailData) (htmlBody string, textBody string, er
 
 	layout := BaseLayoutData{
 		AppName:      data.AppName,
-		Preheader:    fmt.Sprintf("Akun %s Anda telah aktif dan siap digunakan.", data.AppName),
-		Subject:      fmt.Sprintf("Selamat Datang di %s", data.AppName),
-		BadgeText:    "Akun Baru",
-		BadgeColor:   "indigo",
-		HeaderTitle:  "Selamat Datang di " + data.AppName,
+		Preheader:    fmt.Sprintf("Your %s account is active and ready to use.", data.AppName),
+		Subject:      fmt.Sprintf("Welcome to %s", data.AppName),
+		HeaderTitle:  "Welcome to " + data.AppName,
 		SupportEmail: data.SupportEmail,
 		PortalURL:    data.PortalURL,
 	}
@@ -54,30 +52,30 @@ func RenderSetupEmail(data SetupEmailData) (htmlBody string, textBody string, er
 
 	passLine := ""
 	if data.InitialPassword != "" {
-		passLine = fmt.Sprintf("- Password Awal: %s\n", data.InitialPassword)
+		passLine = fmt.Sprintf("- Temporary Password: %s\n", data.InitialPassword)
 	}
 	emailLine := ""
 	if data.Email != "" {
 		emailLine = fmt.Sprintf("- Email: %s\n", data.Email)
 	}
 
-	textBody = fmt.Sprintf(`Halo %s,
+	textBody = fmt.Sprintf(`Hello %s,
 
-Selamat datang di %s! Administrator telah membuat akun baru untuk Anda dan akun Anda saat ini telah berstatus aktif.
-Silakan gunakan kredensial berikut untuk masuk ke portal:
+Welcome to %s! An administrator has created a new account for you, and your account is now active.
+Please use the following credentials to log in to the portal:
 
-Detail Kredensial Akun:
+Account Credentials:
 - Username: %s
 %s%s
-Tautan Login:
+Login Link:
 %s
 
-PENTING - IMBAUAN KEAMANAN:
-Demi menjaga keamanan akun Anda, silakan segera ganti kata sandi awal ini melalui menu Profil/Akun setelah Anda berhasil masuk pertama kali.
+IMPORTANT - SECURITY ADVISORY:
+For your account security and data privacy, please change this temporary password immediately via the Profile/Account settings upon logging in for the first time.
 
-Setelah mengatur kata sandi, Anda juga dapat mendaftarkan Passkey (biometrik) pada menu Profil untuk proses masuk yang lebih cepat dan aman.
+After setting your password, you can also register a Passkey (biometric login) in your Profile menu for fast and secure passwordless sign-in.
 
-Jika Anda tidak merasa meminta akun ini, Anda dapat mengabaikan email ini.
+If you did not expect this account, you can safely ignore this email.
 
 --
 %s

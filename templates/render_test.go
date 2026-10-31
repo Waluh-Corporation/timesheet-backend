@@ -146,4 +146,71 @@ func TestRenderVerifyDocument(t *testing.T) {
 			t.Errorf("expected HTML to contain 'Env Custom System', got:\n%s", html)
 		}
 	})
+
+	t.Run("Document with Audit Trail Timeline", func(t *testing.T) {
+		stepTime := time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC)
+		docWithTrail := &response.PublicDocumentVerificationResponse{
+			DocumentType: "berita_acara",
+			Status:       "valid",
+			IsValid:      true,
+			Month:        10,
+			Year:         2026,
+			EmployeeName: "John Doe",
+			WitnessName:  "Jane Smith",
+			DocumentHash: "hash12345",
+			VerifiedAt:   now,
+			AuditTrail: []response.DocumentAuditTrailItem{
+				{
+					Step:        1,
+					Title:       "Document Submitted & Signed",
+					Description: "Signed and submitted by John Doe",
+					Actor:       "John Doe",
+					Role:        "Employee",
+					Timestamp:   &stepTime,
+					MaskedIP:    "192.168.***.***",
+					Status:      "completed",
+				},
+				{
+					Step:        2,
+					Title:       "Witness Signature Affixed",
+					Description: "Approved and signed by Jane Smith",
+					Actor:       "Jane Smith",
+					Role:        "Witness",
+					Timestamp:   &stepTime,
+					MaskedIP:    "10.0.***.***",
+					Status:      "completed",
+				},
+				{
+					Step:        3,
+					Title:       "Witness Review Revoked",
+					Description: "Submission was recalled by submitter prior to witness completion",
+					Actor:       "Jane Smith",
+					Role:        "Witness",
+					Timestamp:   nil,
+					Status:      "revoked",
+				},
+			},
+		}
+
+		html, err := RenderVerifyDocument(docWithTrail, "Timesheet Portal")
+		if err != nil {
+			t.Fatalf("RenderVerifyDocument with audit trail failed: %v", err)
+		}
+
+		expectedSnippets := []string{
+			"Signing Audit Trail",
+			"Document Submitted &amp; Signed",
+			"Signed and submitted by John Doe",
+			"Witness Signature Affixed",
+			"IP: 192.168.***.***",
+			"IP: 10.0.***.***",
+			"Witness Review Revoked",
+			"Revoked",
+		}
+		for _, snip := range expectedSnippets {
+			if !strings.Contains(html, snip) {
+				t.Errorf("expected HTML to contain %q, but got:\n%s", snip, html)
+			}
+		}
+	})
 }

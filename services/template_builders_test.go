@@ -550,10 +550,10 @@ func TestTemplateBuilders_MasterApproversSignaturesWithoutOvertime(t *testing.T)
 		wantTL    string
 		wantDH    string
 	}{
-		{company: "mii", sheetName: "Sheet1", tlCell: "D46", dhCell: "G46", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
+		{company: "mii", sheetName: "Sheet1", tlCell: "D46", dhCell: "G46", wantTL: "", wantDH: ""},
 		{company: "sdd", sheetName: "Juni", tlCell: "H52", dhCell: "L52", wantTL: "Nama : Budi TeamLeader", wantDH: "Nama : Dewi DeptHead"},
-		{company: "adidata", sheetName: "TIMESHEET", tlCell: "E44", dhCell: "I44", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
-		{company: "ntt", sheetName: "Timesheet", tlCell: "F55", dhCell: "J55", wantTL: "Budi TeamLeader", wantDH: "Dewi DeptHead"},
+		{company: "adidata", sheetName: "TIMESHEET", tlCell: "E44", dhCell: "I44", wantTL: "", wantDH: ""},
+		{company: "ntt", sheetName: "Timesheet", tlCell: "F55", dhCell: "J55", wantTL: "", wantDH: ""},
 	}
 
 	for _, tc := range testCases {

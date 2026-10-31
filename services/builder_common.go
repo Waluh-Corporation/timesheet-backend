@@ -652,6 +652,18 @@ func MonthNameIndonesian(month int) string {
 	return fmt.Sprintf("Bulan %d", month)
 }
 
+// MonthNameEnglish returns the full English month name for month 1-12.
+func MonthNameEnglish(month int) string {
+	names := []string{
+		"January", "February", "March", "April", "May", "June",
+		"July", "August", "September", "October", "November", "December",
+	}
+	if month >= 1 && month <= 12 {
+		return names[month-1]
+	}
+	return fmt.Sprintf("Month %d", month)
+}
+
 // SignatureCells specifies the target cell coordinates and formatting for timesheet sign-offs.
 type SignatureCells struct {
 	UserCell     string
@@ -684,16 +696,19 @@ func EmbedPicture(f *excelize.File, sheet, cell string, picBytes []byte, scaleX,
 	})
 }
 
-// WriteSignatures writes the user, team leader, department head names, and date stamp into signature cells.
+// WriteSignatures writes the user name and signature stamp into signature cells, leaving approver cells blank.
 func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, cells SignatureCells) {
-	tlName, dhName := ResolveApprovers(in)
 	userName := ""
 	if in.User != nil {
 		userName = in.User.Name
 	}
 	setNonEmptyCell(f, sheet, cells.UserCell, userName)
-	setNonEmptyCell(f, sheet, cells.TLCell, tlName)
-	setNonEmptyCell(f, sheet, cells.DHCell, dhName)
+	if cells.TLCell != "" {
+		_ = f.SetCellValue(sheet, cells.TLCell, "")
+	}
+	if cells.DHCell != "" {
+		_ = f.SetCellValue(sheet, cells.DHCell, "")
+	}
 
 	writeSignatureDates(f, sheet, cells)
 	embedSignaturePictures(f, sheet, in, cells)
@@ -711,8 +726,12 @@ func writeSignatureDates(f *excelize.File, sheet string, cells SignatureCells) {
 	}
 	dateStr := cells.DatePrefix + CurrentDateFormatted()
 	setNonEmptyCell(f, sheet, cells.UserDateCell, dateStr)
-	setNonEmptyCell(f, sheet, cells.TLDateCell, dateStr)
-	setNonEmptyCell(f, sheet, cells.DHDateCell, dateStr)
+	if cells.TLDateCell != "" {
+		_ = f.SetCellValue(sheet, cells.TLDateCell, "")
+	}
+	if cells.DHDateCell != "" {
+		_ = f.SetCellValue(sheet, cells.DHDateCell, "")
+	}
 }
 
 func embedSignaturePictures(f *excelize.File, sheet string, in GenerationInput, cells SignatureCells) {

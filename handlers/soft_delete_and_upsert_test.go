@@ -142,7 +142,8 @@ func TestSoftDelete_And_Upsert_Suite(t *testing.T) {
 	})
 
 	t.Run("Overtime upsert, soft delete, and re-entry lifecycle", func(t *testing.T) {
-		otDate := "2026-09-18"
+		now := time.Now()
+		otDate := now.Format("2006-01-02")
 
 		// 1. Initial Insert
 		otBody1 := fmt.Sprintf(`{"date": "%s", "start_time": "18:00", "end_time": "20:00", "task_description": "Initial overtime"}`, otDate)
@@ -207,7 +208,7 @@ func TestSoftDelete_And_Upsert_Suite(t *testing.T) {
 		w = httptest.NewRecorder()
 		c, _ = gin.CreateTestContext(w)
 		c.Set(ctxUserID, user.ID)
-		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/overtimes?year=2026&month=9", nil)
+		c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/overtimes?year=%d&month=%d", now.Year(), int(now.Month())), nil)
 		srv.ListMonthlyOvertimes(c)
 		assertResponseCode(t, w, http.StatusOK)
 
@@ -247,7 +248,7 @@ func TestSoftDelete_And_Upsert_Suite(t *testing.T) {
 	})
 
 	t.Run("DailyActivity soft delete and re-entry lifecycle", func(t *testing.T) {
-		actDate := "2026-09-19"
+		actDate := time.Now().Format("2006-01-02")
 		parsedDate, _ := time.Parse("2006-01-02", actDate)
 
 		// 1. Insert activity
@@ -270,7 +271,7 @@ func TestSoftDelete_And_Upsert_Suite(t *testing.T) {
 		w = httptest.NewRecorder()
 		c, _ = gin.CreateTestContext(w)
 		c.Set(ctxUserID, user.ID)
-		c.Request = httptest.NewRequest(http.MethodGet, "/api/v1/activities?start_date=2026-09-19&end_date=2026-09-19", nil)
+		c.Request = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/v1/activities?start_date=%s&end_date=%s", actDate, actDate), nil)
 		srv.ListActivities(c)
 		assertResponseCode(t, w, http.StatusOK)
 
