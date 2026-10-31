@@ -96,11 +96,11 @@ func parseMinuteOrDayInLocation(s string, loc *time.Location, isEnd bool) (*time
 		}
 	}
 	if t, err := time.ParseInLocation("2006-01-02", s, loc); err == nil {
-		hour, min, sec, nsec := 0, 0, 0, 0
+		hour, minute, sec, nsec := 0, 0, 0, 0
 		if isEnd {
-			hour, min, sec, nsec = 23, 59, 59, 999999999
+			hour, minute, sec, nsec = 23, 59, 59, 999999999
 		}
-		res := time.Date(t.Year(), t.Month(), t.Day(), hour, min, sec, nsec, loc)
+		res := time.Date(t.Year(), t.Month(), t.Day(), hour, minute, sec, nsec, loc)
 		return &res, true
 	}
 	return nil, false

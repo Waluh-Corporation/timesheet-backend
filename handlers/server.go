@@ -248,6 +248,40 @@ func incrementIPRequestCount(ctx context.Context, rdb *redis.Client, ipKey strin
 	return newCount, err
 }
 
+func isIPRateLimited(ctx context.Context, rdb *redis.Client, ipKey string, maxLimit int) bool {
+	if ipKey == "" {
+		return false
+	}
+	currCount, err := rdb.Get(ctx, ipKey).Int()
+	return err == nil && currCount >= maxLimit
+}
+
+func reserveEmailCooldown(ctx context.Context, rdb *redis.Client, emailKey, normEmail string, cooldown time.Duration) bool {
+	if emailKey == "" {
+		return true
+	}
+	set, err := rdb.SetNX(ctx, emailKey, "1", cooldown).Result()
+	if err != nil {
+		slog.Warn("redis error during email reset cooldown check; bypassing fast-path", "error", err, "email", normEmail)
+		return true
+	}
+	return set
+}
+
+func recordAndEnforceIPLimit(ctx context.Context, rdb *redis.Client, ipKey, emailKey string, cooldown time.Duration, maxLimit int) bool {
+	if ipKey == "" {
+		return true
+	}
+	newCount, err := incrementIPRequestCount(ctx, rdb, ipKey, cooldown)
+	if err == nil && newCount > int64(maxLimit) {
+		if emailKey != "" {
+			_ = rdb.Del(ctx, emailKey).Err()
+		}
+		return false
+	}
+	return true
+}
+
 func (s *Server) checkAndRecordResetCooldownCtx(ctx context.Context, email, ip string, cooldown time.Duration) bool {
 	if cooldown <= 0 {
 		return true
@@ -270,47 +304,23 @@ func (s *Server) checkAndRecordResetCooldownCtx(ctx context.Context, email, ip s
 	}
 
 	const maxIPRequestsPerWindow = 5
+	effectiveCooldown := max(cooldown, time.Millisecond)
 
-	effectiveCooldown := cooldown
-	if effectiveCooldown < time.Millisecond {
-		effectiveCooldown = time.Millisecond
-	}
-
-	// 1. Check IP rate limit window if client IP is present
-	var ipKey string
+	var ipKey, emailKey string
 	if cleanIP != "" {
 		ipKey = fmt.Sprintf("cooldown:reset:ip:%s", cleanIP)
-		if currCount, err := rdb.Get(ctx, ipKey).Int(); err == nil && currCount >= maxIPRequestsPerWindow {
-			return false
-		}
 	}
-
-	// 2. Atomic email cooldown using SET NX EX pattern
-	var emailKey string
 	if normEmail != "" {
 		emailKey = fmt.Sprintf("cooldown:reset:email:%s", normEmail)
-		set, err := rdb.SetNX(ctx, emailKey, "1", effectiveCooldown).Result()
-		if err != nil {
-			slog.Warn("redis error during email reset cooldown check; bypassing fast-path", "error", err, "email", normEmail)
-			return true
-		}
-		if !set {
-			return false
-		}
 	}
 
-	// 3. Atomically track and increment client IP request count with TTL preservation
-	if ipKey != "" {
-		newCount, err := incrementIPRequestCount(ctx, rdb, ipKey, effectiveCooldown)
-		if err == nil && newCount > maxIPRequestsPerWindow {
-			if emailKey != "" {
-				_ = rdb.Del(ctx, emailKey).Err()
-			}
-			return false
-		}
+	if isIPRateLimited(ctx, rdb, ipKey, maxIPRequestsPerWindow) {
+		return false
 	}
-
-	return true
+	if !reserveEmailCooldown(ctx, rdb, emailKey, normEmail, effectiveCooldown) {
+		return false
+	}
+	return recordAndEnforceIPLimit(ctx, rdb, ipKey, emailKey, effectiveCooldown, maxIPRequestsPerWindow)
 }
 
 func (s *Server) checkAndRecordResetCooldown(email, ip string, cooldown time.Duration) bool {
