@@ -21,6 +21,8 @@ import (
 
 const (
 	defaultRefreshTokenTTL = 7 * 24 * time.Hour
+	msgInvalidLogin        = "invalid credentials"
+	errInvalidRefreshToken = "invalid refresh token"
 )
 
 // LoginDTO encapsulates input parameters required to authenticate a user.
@@ -155,7 +157,7 @@ func (s *authService) Login(ctx context.Context, dto LoginDTO) (*LoginResult, er
 func (s *authService) validateAndFetchUser(ctx context.Context, identifier, password, clientIP string) (*models.User, error) {
 	if strings.TrimSpace(identifier) == "" || password == "" {
 		slog.Warn("login failed: empty identifier or password", "ip", clientIP)
-		return nil, domain.NewUserError(domain.ErrUnauthorized, "invalid credentials")
+		return nil, domain.NewUserError(domain.ErrUnauthorized, msgInvalidLogin)
 	}
 
 	user, err := s.userRepo.FindByUsernameOrEmail(ctx, identifier)
@@ -164,11 +166,11 @@ func (s *authService) validateAndFetchUser(ctx context.Context, identifier, pass
 			return nil, err
 		}
 		slog.Warn("login failed: user not found", "identifier", identifier, "ip", clientIP)
-		return nil, domain.NewUserError(domain.ErrUnauthorized, "invalid credentials")
+		return nil, domain.NewUserError(domain.ErrUnauthorized, msgInvalidLogin)
 	}
 	if user == nil {
 		slog.Warn("login failed: user not found", "identifier", identifier, "ip", clientIP)
-		return nil, domain.NewUserError(domain.ErrUnauthorized, "invalid credentials")
+		return nil, domain.NewUserError(domain.ErrUnauthorized, msgInvalidLogin)
 	}
 
 	if !user.IsActive {
@@ -183,7 +185,7 @@ func (s *authService) validateAndFetchUser(ctx context.Context, identifier, pass
 
 	if user.PasswordHash == "" || !hasher.Verify(user.PasswordHash, password) {
 		slog.Warn("login failed: invalid password", "user_id", user.ID, "username", user.Username, "ip", clientIP)
-		return nil, domain.NewUserError(domain.ErrUnauthorized, "invalid credentials")
+		return nil, domain.NewUserError(domain.ErrUnauthorized, msgInvalidLogin)
 	}
 
 	return user, nil
@@ -273,7 +275,7 @@ func (s *authService) RefreshToken(ctx context.Context, dto RefreshTokenDTO) (*R
 
 	cleanToken := strings.TrimSpace(dto.RefreshToken)
 	if cleanToken == "" {
-		return nil, domain.NewUserError(domain.ErrUnauthorized, "invalid refresh token")
+		return nil, domain.NewUserError(domain.ErrUnauthorized, errInvalidRefreshToken)
 	}
 
 	tokenRecord, err := s.lookupRefreshToken(ctx, cleanToken, dto.ClientIP)
@@ -335,18 +337,18 @@ func (s *authService) lookupRefreshToken(ctx context.Context, cleanToken, client
 			return nil, err
 		}
 		slog.Warn("refresh token lookup failed", "ip", clientIP)
-		return nil, domain.NewUserError(domain.ErrUnauthorized, "invalid refresh token")
+		return nil, domain.NewUserError(domain.ErrUnauthorized, errInvalidRefreshToken)
 	}
 	if tokenRecord == nil {
 		slog.Warn("refresh token lookup failed", "ip", clientIP)
-		return nil, domain.NewUserError(domain.ErrUnauthorized, "invalid refresh token")
+		return nil, domain.NewUserError(domain.ErrUnauthorized, errInvalidRefreshToken)
 	}
 	return tokenRecord, nil
 }
 
 func (s *authService) validateTokenRecord(ctx context.Context, tokenRecord *models.RefreshToken, clientIP string) error {
 	if tokenRecord == nil {
-		return domain.NewUserError(domain.ErrUnauthorized, "invalid refresh token")
+		return domain.NewUserError(domain.ErrUnauthorized, errInvalidRefreshToken)
 	}
 	if tokenRecord.RevokedAt != nil {
 		slog.Warn("SECURITY ALERT: refresh token reuse detected; revoking family",
@@ -444,17 +446,17 @@ func (s *authService) GetProfile(ctx context.Context, userID uint) (*models.User
 		return nil, domain.NewUserError(domain.ErrInternal, "database repository unavailable")
 	}
 	if userID == 0 {
-		return nil, domain.NewUserError(domain.ErrNotFound, "user not found")
+		return nil, domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	user, err := s.userRepo.FindByID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
 		}
-		return nil, domain.NewUserError(domain.ErrNotFound, "user not found")
+		return nil, domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	if user == nil {
-		return nil, domain.NewUserError(domain.ErrNotFound, "user not found")
+		return nil, domain.NewUserError(domain.ErrNotFound, errUserNotFound)
 	}
 	return user, nil
 }

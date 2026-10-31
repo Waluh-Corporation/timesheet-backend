@@ -39,6 +39,12 @@ type HolidayRepository = domain.HolidayRepository
 // MasterRepository is re-exported from domain.MasterRepository.
 type MasterRepository = domain.MasterRepository
 
+const (
+	queryIDEquals         = "id = ?"
+	queryLowerCodeEquals  = "LOWER(code) = LOWER(?)"
+	queryActiveCodeOrName = "(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true"
+)
+
 type masterRepository struct {
 	db *gorm.DB
 }
@@ -103,7 +109,7 @@ func (r *masterRepository) ListApprovers(ctx context.Context, roleType string, a
 
 func (r *masterRepository) FindApproverByID(ctx context.Context, id uint) (*models.Approver, error) {
 	var a models.Approver
-	err := r.getDB(ctx).Where("id = ?", id).First(&a).Error
+	err := r.getDB(ctx).Where(queryIDEquals, id).First(&a).Error
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +125,7 @@ func (r *masterRepository) UpdateApprover(ctx context.Context, a *models.Approve
 }
 
 func (r *masterRepository) SoftDeleteApprover(ctx context.Context, id uint) error {
-	return r.getDB(ctx).Model(&models.Approver{}).Where("id = ?", id).
+	return r.getDB(ctx).Model(&models.Approver{}).Where(queryIDEquals, id).
 		Updates(map[string]interface{}{"is_active": false, "updated_at": time.Now()}).Error
 }
 
@@ -136,7 +142,7 @@ func (r *masterRepository) ListCompanies(ctx context.Context, activeStatus *bool
 
 func (r *masterRepository) FindCompanyByID(ctx context.Context, id uint) (*models.Company, error) {
 	var c models.Company
-	err := r.getDB(ctx).Where("id = ?", id).First(&c).Error
+	err := r.getDB(ctx).Where(queryIDEquals, id).First(&c).Error
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +151,7 @@ func (r *masterRepository) FindCompanyByID(ctx context.Context, id uint) (*model
 
 func (r *masterRepository) FindCompanyByCode(ctx context.Context, code string) (*models.Company, error) {
 	var c models.Company
-	err := r.getDB(ctx).Where("LOWER(code) = LOWER(?)", code).First(&c).Error
+	err := r.getDB(ctx).Where(queryLowerCodeEquals, code).First(&c).Error
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +160,7 @@ func (r *masterRepository) FindCompanyByCode(ctx context.Context, code string) (
 
 func (r *masterRepository) FindActiveCompanyByCodeOrName(ctx context.Context, identifier string) (*models.Company, error) {
 	var c models.Company
-	err := r.getDB(ctx).Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", identifier, "%"+identifier+"%").First(&c).Error
+	err := r.getDB(ctx).Where(queryActiveCodeOrName, identifier, "%"+identifier+"%").First(&c).Error
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +176,7 @@ func (r *masterRepository) UpdateCompany(ctx context.Context, c *models.Company)
 }
 
 func (r *masterRepository) SoftDeleteCompany(ctx context.Context, id uint) error {
-	return r.getDB(ctx).Model(&models.Company{}).Where("id = ?", id).
+	return r.getDB(ctx).Model(&models.Company{}).Where(queryIDEquals, id).
 		Updates(map[string]interface{}{"is_active": false, "updated_at": time.Now()}).Error
 }
 
@@ -187,7 +193,7 @@ func (r *masterRepository) ListSites(ctx context.Context, activeStatus *bool) ([
 
 func (r *masterRepository) FindSiteByID(ctx context.Context, id uint) (*models.Site, error) {
 	var s models.Site
-	err := r.getDB(ctx).Where("id = ?", id).First(&s).Error
+	err := r.getDB(ctx).Where(queryIDEquals, id).First(&s).Error
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +202,7 @@ func (r *masterRepository) FindSiteByID(ctx context.Context, id uint) (*models.S
 
 func (r *masterRepository) FindSiteByCode(ctx context.Context, code string) (*models.Site, error) {
 	var s models.Site
-	err := r.getDB(ctx).Where("LOWER(code) = LOWER(?)", code).First(&s).Error
+	err := r.getDB(ctx).Where(queryLowerCodeEquals, code).First(&s).Error
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +211,7 @@ func (r *masterRepository) FindSiteByCode(ctx context.Context, code string) (*mo
 
 func (r *masterRepository) FindActiveSiteByCodeOrName(ctx context.Context, identifier string) (*models.Site, error) {
 	var s models.Site
-	err := r.getDB(ctx).Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", identifier, "%"+identifier+"%").First(&s).Error
+	err := r.getDB(ctx).Where(queryActiveCodeOrName, identifier, "%"+identifier+"%").First(&s).Error
 	if err != nil {
 		return nil, err
 	}
@@ -221,7 +227,7 @@ func (r *masterRepository) UpdateSite(ctx context.Context, s *models.Site) error
 }
 
 func (r *masterRepository) SoftDeleteSite(ctx context.Context, id uint) error {
-	return r.getDB(ctx).Model(&models.Site{}).Where("id = ?", id).
+	return r.getDB(ctx).Model(&models.Site{}).Where(queryIDEquals, id).
 		Updates(map[string]interface{}{"is_active": false, "updated_at": time.Now()}).Error
 }
 
@@ -238,7 +244,7 @@ func (r *masterRepository) ListDivisions(ctx context.Context, activeStatus *bool
 
 func (r *masterRepository) FindDivisionByID(ctx context.Context, id uint) (*models.Division, error) {
 	var d models.Division
-	err := r.getDB(ctx).Where("id = ?", id).First(&d).Error
+	err := r.getDB(ctx).Where(queryIDEquals, id).First(&d).Error
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +253,7 @@ func (r *masterRepository) FindDivisionByID(ctx context.Context, id uint) (*mode
 
 func (r *masterRepository) FindDivisionByCode(ctx context.Context, code string) (*models.Division, error) {
 	var d models.Division
-	err := r.getDB(ctx).Where("LOWER(code) = LOWER(?)", code).First(&d).Error
+	err := r.getDB(ctx).Where(queryLowerCodeEquals, code).First(&d).Error
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +262,7 @@ func (r *masterRepository) FindDivisionByCode(ctx context.Context, code string) 
 
 func (r *masterRepository) FindActiveDivisionByCodeOrName(ctx context.Context, identifier string) (*models.Division, error) {
 	var d models.Division
-	err := r.getDB(ctx).Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", identifier, "%"+identifier+"%").First(&d).Error
+	err := r.getDB(ctx).Where(queryActiveCodeOrName, identifier, "%"+identifier+"%").First(&d).Error
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +278,7 @@ func (r *masterRepository) UpdateDivision(ctx context.Context, d *models.Divisio
 }
 
 func (r *masterRepository) SoftDeleteDivision(ctx context.Context, id uint) error {
-	return r.getDB(ctx).Model(&models.Division{}).Where("id = ?", id).
+	return r.getDB(ctx).Model(&models.Division{}).Where(queryIDEquals, id).
 		Updates(map[string]interface{}{"is_active": false, "updated_at": time.Now()}).Error
 }
 
@@ -295,7 +301,7 @@ func (r *masterRepository) ListDepartments(ctx context.Context, divisionID *uint
 
 func (r *masterRepository) FindDepartmentByID(ctx context.Context, id uint) (*models.Department, error) {
 	var d models.Department
-	err := r.getDB(ctx).Preload("DivisionRel").Where("id = ?", id).First(&d).Error
+	err := r.getDB(ctx).Preload("DivisionRel").Where(queryIDEquals, id).First(&d).Error
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +319,7 @@ func (r *masterRepository) FindDepartmentByName(ctx context.Context, name string
 
 func (r *masterRepository) FindActiveDepartmentByCodeOrName(ctx context.Context, identifier string) (*models.Department, error) {
 	var d models.Department
-	err := r.getDB(ctx).Where("(LOWER(code) = LOWER(?) OR LOWER(name) LIKE LOWER(?)) AND is_active = true", identifier, "%"+identifier+"%").First(&d).Error
+	err := r.getDB(ctx).Where(queryActiveCodeOrName, identifier, "%"+identifier+"%").First(&d).Error
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +335,7 @@ func (r *masterRepository) UpdateDepartment(ctx context.Context, d *models.Depar
 }
 
 func (r *masterRepository) SoftDeleteDepartment(ctx context.Context, id uint) error {
-	return r.getDB(ctx).Model(&models.Department{}).Where("id = ?", id).
+	return r.getDB(ctx).Model(&models.Department{}).Where(queryIDEquals, id).
 		Updates(map[string]interface{}{"is_active": false, "updated_at": time.Now()}).Error
 }
 
@@ -346,7 +352,7 @@ func (r *masterRepository) ListProjects(ctx context.Context, activeOnly bool) ([
 
 func (r *masterRepository) FindProjectByID(ctx context.Context, id uint) (*models.Project, error) {
 	var p models.Project
-	if err := r.getDB(ctx).Scopes(models.ActiveOnly).Where("id = ?", id).First(&p).Error; err != nil {
+	if err := r.getDB(ctx).Scopes(models.ActiveOnly).Where(queryIDEquals, id).First(&p).Error; err != nil {
 		return nil, err
 	}
 	return &p, nil

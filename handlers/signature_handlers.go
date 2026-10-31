@@ -12,6 +12,11 @@ import (
 	"timesheet-backend/internal/service"
 )
 
+const (
+	errSignatureSvcNotInit = "Signature service not initialized"
+	errInvalidParamPrefix  = "Parameter tidak valid: "
+)
+
 func extractAuditMeta(c *gin.Context) service.AuditMeta {
 	return service.AuditMeta{
 		IP:        c.ClientIP(),
@@ -32,7 +37,7 @@ func extractAuditMeta(c *gin.Context) service.AuditMeta {
 // @Router /api/v1/user/signature [post]
 func (s *Server) UploadSignature(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
@@ -67,7 +72,7 @@ func (s *Server) UploadSignature(c *gin.Context) {
 // @Router /api/v1/user/signature [get]
 func (s *Server) GetSignature(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
@@ -96,7 +101,7 @@ func (s *Server) GetSignature(c *gin.Context) {
 // @Router /api/v1/user/signature [delete]
 func (s *Server) DeleteSignature(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
@@ -127,13 +132,13 @@ func (s *Server) DeleteSignature(c *gin.Context) {
 // @Router /api/v1/timesheets/sign [post]
 func (s *Server) SignTimesheet(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
 	var req request.SignTimesheetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "Parameter tidak valid: "+err.Error())
+		RespondError(c, http.StatusBadRequest, errInvalidParamPrefix+err.Error())
 		return
 	}
 
@@ -165,13 +170,13 @@ func (s *Server) SignTimesheet(c *gin.Context) {
 // @Router /api/v1/timesheets/revoke [post]
 func (s *Server) RevokeTimesheet(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
 	var req request.RevokeTimesheetRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "Parameter tidak valid: "+err.Error())
+		RespondError(c, http.StatusBadRequest, errInvalidParamPrefix+err.Error())
 		return
 	}
 
@@ -201,7 +206,7 @@ func (s *Server) RevokeTimesheet(c *gin.Context) {
 // @Router /api/v1/timesheets/status [get]
 func (s *Server) GetTimesheetSubmissionStatus(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
@@ -233,13 +238,13 @@ func (s *Server) GetTimesheetSubmissionStatus(c *gin.Context) {
 // @Router /api/v1/berita-acara/submit [post]
 func (s *Server) SubmitBeritaAcara(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
 	var req request.SubmitBeritaAcaraRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "Parameter tidak valid: "+err.Error())
+		RespondError(c, http.StatusBadRequest, errInvalidParamPrefix+err.Error())
 		return
 	}
 
@@ -271,7 +276,7 @@ func (s *Server) SubmitBeritaAcara(c *gin.Context) {
 // @Router /api/v1/berita-acara/{id}/witness-action [post]
 func (s *Server) WitnessAction(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
@@ -283,7 +288,7 @@ func (s *Server) WitnessAction(c *gin.Context) {
 
 	var req request.WitnessActionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		RespondError(c, http.StatusBadRequest, "Parameter tidak valid: "+err.Error())
+		RespondError(c, http.StatusBadRequest, errInvalidParamPrefix+err.Error())
 		return
 	}
 
@@ -312,7 +317,7 @@ func (s *Server) WitnessAction(c *gin.Context) {
 // @Router /api/v1/berita-acara/{id}/revoke [post]
 func (s *Server) RevokeBeritaAcara(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
@@ -348,7 +353,7 @@ func (s *Server) RevokeBeritaAcara(c *gin.Context) {
 // @Router /api/v1/berita-acara/status [get]
 func (s *Server) GetBeritaAcaraSubmissionStatus(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 
@@ -378,7 +383,7 @@ func (s *Server) GetBeritaAcaraSubmissionStatus(c *gin.Context) {
 // @Router /api/v1/berita-acara/witness-requests [get]
 func (s *Server) ListPendingWitnessRequests(c *gin.Context) {
 	if s.SignatureSvc == nil {
-		RespondError(c, http.StatusInternalServerError, "Signature service not initialized")
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
 		return
 	}
 

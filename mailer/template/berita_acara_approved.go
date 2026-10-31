@@ -1,7 +1,7 @@
 package template
 
 import (
-	_ "embed"
+	_ "embed" // Register embed package for go:embed directive
 	"fmt"
 )
 

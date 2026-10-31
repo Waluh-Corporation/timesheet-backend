@@ -83,25 +83,7 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 			FormulaFmt: "C%s-B%s",
 		}, dsc)
 
-		status := ""
-		if dsc.HasActivity {
-			status = strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
-			if status == "" {
-				status = "P"
-			}
-			_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
-			_ = f.SetCellValue(sheet, "L"+rs, miiProjectName)
-			_ = f.SetCellValue(sheet, "M"+rs, miiProjectID)
-			_ = f.SetCellValue(sheet, "N"+rs, NormalizeMIIAppImpacted(dsc.Activity.GetAppImpacted()))
-			_ = f.SetCellValue(sheet, "P"+rs, miiDivision)
-			_ = f.SetCellValue(sheet, "Q"+rs, miiDepartment)
-
-			h := calculateRowHeight(dsc.Activity.Activity, miiProjectName, miiProjectID, dsc.Activity.GetAppImpacted(), miiDivision, miiDepartment)
-			_ = f.SetRowHeight(sheet, row, h)
-		} else if dsc.IsHolidayOrWeekend {
-			WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
-		}
-
+		status := renderMIIDayActivity(f, sheet, rs, row, dsc)
 		WriteAttendanceMatrixStatus(f, sheet, rs, status)
 		if status != "" {
 			statusCounts[status]++
@@ -130,4 +112,27 @@ func renderMIITemplate(in GenerationInput) ([]byte, error) {
 		QRCell:       "L43",
 	})
 	return WriteWorkbookToBuffer(f, "mii")
+}
+
+func renderMIIDayActivity(f *excelize.File, sheet, rs string, row int, dsc DayStyleContext) string {
+	if dsc.HasActivity {
+		status := strings.ToUpper(strings.TrimSpace(dsc.Activity.Status))
+		if status == "" {
+			status = "P"
+		}
+		_ = f.SetCellValue(sheet, "K"+rs, dsc.Activity.Activity)
+		_ = f.SetCellValue(sheet, "L"+rs, miiProjectName)
+		_ = f.SetCellValue(sheet, "M"+rs, miiProjectID)
+		_ = f.SetCellValue(sheet, "N"+rs, NormalizeMIIAppImpacted(dsc.Activity.GetAppImpacted()))
+		_ = f.SetCellValue(sheet, "P"+rs, miiDivision)
+		_ = f.SetCellValue(sheet, "Q"+rs, miiDepartment)
+
+		h := calculateRowHeight(dsc.Activity.Activity, miiProjectName, miiProjectID, dsc.Activity.GetAppImpacted(), miiDivision, miiDepartment)
+		_ = f.SetRowHeight(sheet, row, h)
+		return status
+	}
+	if dsc.IsHolidayOrWeekend {
+		WriteHolidayRemarkRow(f, sheet, "K", rs, row, dsc.Holiday)
+	}
+	return ""
 }

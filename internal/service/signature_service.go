@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
-	_ "image/jpeg"
-	_ "image/png"
+	_ "image/jpeg" // Register JPEG image decoder for image.Decode
+	_ "image/png"  // Register PNG image decoder for image.Decode
 	"strings"
 	"time"
 
@@ -375,6 +375,40 @@ func (s *signatureService) notifyWitnessRequest(witness *models.User, employeeNa
 	}
 }
 
+func (s *signatureService) resolveSubmissionWitnessID(ctx context.Context, userID uint, month, year int) (uint, error) {
+	if mW, err := s.activityRepo.GetMonthlyWitness(ctx, userID, month, year); err == nil && mW != nil {
+		return mW.ID, nil
+	}
+	filter := repository.ActivityFilter{Month: &month, Year: &year, IsAll: true}
+	acts, _, err := s.activityRepo.ListActiveByUser(ctx, userID, filter)
+	if err == nil {
+		for _, a := range acts {
+			if a.IsBeritaAcara && a.WitnessID != nil && *a.WitnessID != 0 {
+				return *a.WitnessID, nil
+			}
+		}
+	}
+	return 0, domain.NewUserError(domain.ErrInvalidInput, "Belum ada saksi yang ditentukan untuk Berita Acara bulan ini. Silakan tentukan saksi terlebih dahulu.")
+}
+
+func (s *signatureService) validateSubmitterAndWitness(ctx context.Context, userID, witnessID uint) (*models.User, *models.User, error) {
+	if witnessID == userID {
+		return nil, nil, domain.NewUserError(domain.ErrInvalidInput, "Saksi tidak boleh sama dengan pembuat Berita Acara")
+	}
+	user, err := s.userRepo.FindByIDWithDetails(ctx, userID)
+	if err != nil || user == nil {
+		return nil, nil, domain.NewUserError(domain.ErrNotFound, errUserNotFoundMsg)
+	}
+	if user.SignatureFileKey == "" {
+		return nil, nil, domain.NewUserError(domain.ErrInvalidInput, "Silakan unggah tanda tangan profil Anda terlebih dahulu")
+	}
+	witness, err := s.userRepo.FindByIDWithDetails(ctx, witnessID)
+	if err != nil || witness == nil || !witness.IsActive {
+		return nil, nil, domain.NewUserError(domain.ErrNotFound, "Saksi yang dipilih tidak ditemukan atau tidak aktif")
+	}
+	return user, witness, nil
+}
+
 // SubmitBeritaAcara submits a Berita Acara for witness review.
 func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, req *request.SubmitBeritaAcaraRequest, meta AuditMeta) (*response.BeritaAcaraSubmissionResponse, error) {
 	if req == nil || req.Month < 1 || req.Month > 12 || req.Year < 2000 || req.Year > 2100 {
@@ -382,45 +416,16 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 	}
 
 	if req.WitnessID == 0 {
-		if mW, err := s.activityRepo.GetMonthlyWitness(ctx, userID, req.Month, req.Year); err == nil && mW != nil {
-			req.WitnessID = mW.ID
+		wid, err := s.resolveSubmissionWitnessID(ctx, userID, req.Month, req.Year)
+		if err != nil {
+			return nil, err
 		}
-		if req.WitnessID == 0 {
-			filter := repository.ActivityFilter{
-				Month: &req.Month,
-				Year:  &req.Year,
-				IsAll: true,
-			}
-			acts, _, aerr := s.activityRepo.ListActiveByUser(ctx, userID, filter)
-			if aerr == nil {
-				for _, a := range acts {
-					if a.IsBeritaAcara && a.WitnessID != nil && *a.WitnessID != 0 {
-						req.WitnessID = *a.WitnessID
-						break
-					}
-				}
-			}
-		}
-		if req.WitnessID == 0 {
-			return nil, domain.NewUserError(domain.ErrInvalidInput, "Belum ada saksi yang ditentukan untuk Berita Acara bulan ini. Silakan tentukan saksi terlebih dahulu.")
-		}
+		req.WitnessID = wid
 	}
 
-	if req.WitnessID == userID {
-		return nil, domain.NewUserError(domain.ErrInvalidInput, "Saksi tidak boleh sama dengan pembuat Berita Acara")
-	}
-
-	user, err := s.userRepo.FindByIDWithDetails(ctx, userID)
-	if err != nil || user == nil {
-		return nil, domain.NewUserError(domain.ErrNotFound, errUserNotFoundMsg)
-	}
-	if user.SignatureFileKey == "" {
-		return nil, domain.NewUserError(domain.ErrInvalidInput, "Silakan unggah tanda tangan profil Anda terlebih dahulu")
-	}
-
-	witness, err := s.userRepo.FindByIDWithDetails(ctx, req.WitnessID)
-	if err != nil || witness == nil || !witness.IsActive {
-		return nil, domain.NewUserError(domain.ErrNotFound, "Saksi yang dipilih tidak ditemukan atau tidak aktif")
+	user, witness, err := s.validateSubmitterAndWitness(ctx, userID, req.WitnessID)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.validateBeritaAcaraActivities(ctx, userID, req.Month, req.Year); err != nil {

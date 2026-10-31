@@ -159,6 +159,78 @@ func (s *timesheetService) GenerateWorkbook(ctx context.Context, userID uint, mo
 	return out, filename, nil
 }
 
+func filterBeritaAcaraActivities(activities []models.DailyActivity) []models.DailyActivity {
+	var ba []models.DailyActivity
+	for _, a := range activities {
+		if a.IsBeritaAcara {
+			ba = append(ba, a)
+		}
+	}
+	return ba
+}
+
+func (s *timesheetService) resolveBeritaAcaraSignatures(ctx context.Context, user *models.User, month, year int) (bool, string, []byte, []byte, []byte) {
+	if s.subRepo == nil {
+		return false, "", nil, nil, nil
+	}
+	sub, _ := s.subRepo.FindBeritaAcaraSubmission(ctx, user.ID, month, year)
+	if sub == nil {
+		return false, "", nil, nil, nil
+	}
+	witnessName := s.getSubmissionWitnessName(ctx, sub)
+	if sub.Status != models.SubmissionStatusSigned {
+		return false, witnessName, nil, nil, nil
+	}
+
+	empSig, _ := s.fetchUserSignature(ctx, user.SignatureFileKey)
+	witSig := s.resolveWitnessSignatureBytes(ctx, sub)
+	qrBytes := s.generateVerificationQR(sub.VerificationToken)
+	return true, witnessName, empSig, witSig, qrBytes
+}
+
+func (s *timesheetService) getSubmissionWitnessName(ctx context.Context, sub *models.BeritaAcaraSubmission) string {
+	if sub.Witness != nil && sub.Witness.Name != "" {
+		return sub.Witness.Name
+	}
+	if sub.WitnessID != 0 && s.userRepo != nil {
+		if wUser, err := s.userRepo.FindByID(ctx, sub.WitnessID); err == nil && wUser != nil {
+			return wUser.Name
+		}
+	}
+	return ""
+}
+
+func (s *timesheetService) fetchUserSignature(ctx context.Context, key string) ([]byte, error) {
+	if key == "" || s.storageSvc == nil {
+		return nil, nil
+	}
+	return s.fetchSignatureBytes(ctx, key)
+}
+
+func (s *timesheetService) resolveWitnessSignatureBytes(ctx context.Context, sub *models.BeritaAcaraSubmission) []byte {
+	if sub.Witness != nil && sub.Witness.SignatureFileKey != "" {
+		b, _ := s.fetchUserSignature(ctx, sub.Witness.SignatureFileKey)
+		return b
+	}
+	if sub.WitnessID != 0 && s.userRepo != nil {
+		if wUser, err := s.userRepo.FindByID(ctx, sub.WitnessID); err == nil && wUser != nil && wUser.SignatureFileKey != "" {
+			b, _ := s.fetchUserSignature(ctx, wUser.SignatureFileKey)
+			return b
+		}
+	}
+	return nil
+}
+
+func (s *timesheetService) generateVerificationQR(token string) []byte {
+	baseURL := strings.TrimRight(s.baseURL, "/")
+	if baseURL == "" {
+		baseURL = "https://timesheet.local"
+	}
+	qrURL := fmt.Sprintf("%s/verify/doc/%s", baseURL, token)
+	qrBytes, _ := services.GenerateQRCodePNG(qrURL, 120)
+	return qrBytes
+}
+
 func (s *timesheetService) GenerateBeritaAcara(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
 	loc, err := s.validateTimesheetPeriod(ctx, month, year)
 	if err != nil {
@@ -181,12 +253,7 @@ func (s *timesheetService) GenerateBeritaAcara(ctx context.Context, userID uint,
 		return nil, "", err
 	}
 
-	var baActivities []models.DailyActivity
-	for _, a := range activities {
-		if a.IsBeritaAcara {
-			baActivities = append(baActivities, a)
-		}
-	}
+	baActivities := filterBeritaAcaraActivities(activities)
 	if len(baActivities) == 0 {
 		return nil, "", nil
 	}
@@ -209,42 +276,7 @@ func (s *timesheetService) GenerateBeritaAcara(ctx context.Context, userID uint,
 		empName = user.Username
 	}
 
-	var empSigBytes, witSigBytes, qrBytes []byte
-	isSigned := false
-	var witnessName string
-	if s.subRepo != nil {
-		sub, _ := s.subRepo.FindBeritaAcaraSubmission(ctx, user.ID, month, year)
-		if sub != nil {
-			if sub.Witness != nil && sub.Witness.Name != "" {
-				witnessName = sub.Witness.Name
-			} else if sub.WitnessID != 0 && s.userRepo != nil {
-				if wUser, werr := s.userRepo.FindByID(ctx, sub.WitnessID); werr == nil && wUser != nil {
-					witnessName = wUser.Name
-				}
-			}
-
-			if sub.Status == models.SubmissionStatusSigned {
-				isSigned = true
-				if user.SignatureFileKey != "" && s.storageSvc != nil {
-					empSigBytes, _ = s.fetchSignatureBytes(ctx, user.SignatureFileKey)
-				}
-				if sub.Witness != nil && sub.Witness.SignatureFileKey != "" && s.storageSvc != nil {
-					witSigBytes, _ = s.fetchSignatureBytes(ctx, sub.Witness.SignatureFileKey)
-				} else if sub.WitnessID != 0 && s.userRepo != nil && s.storageSvc != nil {
-					if wUser, werr := s.userRepo.FindByID(ctx, sub.WitnessID); werr == nil && wUser != nil && wUser.SignatureFileKey != "" {
-						witSigBytes, _ = s.fetchSignatureBytes(ctx, wUser.SignatureFileKey)
-					}
-				}
-				baseURL := strings.TrimRight(s.baseURL, "/")
-				if baseURL == "" {
-					baseURL = "https://timesheet.local"
-				}
-				qrURL := fmt.Sprintf("%s/verify/doc/%s", baseURL, sub.VerificationToken)
-				qrBytes, _ = services.GenerateQRCodePNG(qrURL, 120)
-			}
-		}
-	}
-
+	isSigned, witnessName, empSigBytes, witSigBytes, qrBytes := s.resolveBeritaAcaraSignatures(ctx, user, month, year)
 	if witnessName == "" {
 		witnessName = s.resolveWitnessName(ctx, user.ID, month, year, baActivities)
 	}

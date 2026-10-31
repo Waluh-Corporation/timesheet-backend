@@ -32,83 +32,78 @@ func parseAuditDate(raw string, isEnd bool) (*time.Time, error) {
 	if s == "" {
 		return nil, nil
 	}
-
-	// Try RFC3339 / RFC3339Nano first (accepts both second and sub-second precision, e.g. JS toISOString)
-	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-		return &t, nil
+	if t, ok := parseRFC3339Variants(s); ok {
+		return t, nil
 	}
+	loc := config.AppLocation()
+	if t, ok := parseDateTimeInLocation(s, loc); ok {
+		return t, nil
+	}
+	if t, ok := parseMinuteOrDayInLocation(s, loc, isEnd); ok {
+		return t, nil
+	}
+	return nil, errors.New("invalid date format, expected YYYY-MM-DD or RFC3339")
+}
 
-	// Support ISO-8601 strings using space separator instead of 'T' (e.g. "2026-10-01 08:00:00Z" or "2026-10-01 08:00:00+07:00")
+func parseRFC3339Variants(s string) (*time.Time, bool) {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return &t, true
+	}
+	var candidates []string
 	if len(s) > 10 && s[10] == ' ' {
 		normalized := s[:10] + "T" + s[11:]
-		if t, err := time.Parse(time.RFC3339Nano, normalized); err == nil {
-			return &t, nil
+		candidates = append(candidates, normalized)
+		if idx := strings.LastIndex(normalized, " "); idx > 10 {
+			candidates = append(candidates, normalized[:idx]+"+"+normalized[idx+1:])
 		}
-		// Also handle space separator + unescaped URL timezone offset (e.g. "2026-10-01 15:04:05 07:00")
-		if idx := strings.LastIndex(normalized, " "); idx != -1 && idx > 10 {
-			candidate := normalized[:idx] + "+" + normalized[idx+1:]
-			if t, err := time.Parse(time.RFC3339Nano, candidate); err == nil {
-				return &t, nil
+	}
+	if idx := strings.LastIndex(s, " "); idx > 10 {
+		candidates = append(candidates, s[:idx]+"+"+s[idx+1:])
+	}
+	for _, c := range candidates {
+		if t, err := time.Parse(time.RFC3339Nano, c); err == nil {
+			return &t, true
+		}
+	}
+	return nil, false
+}
+
+func parseDateTimeInLocation(s string, loc *time.Location) (*time.Time, bool) {
+	formats := []string{
+		"2006-01-02T15:04:05.999999999",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05",
+	}
+	for _, f := range formats {
+		if t, err := time.ParseInLocation(f, s, loc); err == nil {
+			return &t, true
+		}
+	}
+	return nil, false
+}
+
+func parseMinuteOrDayInLocation(s string, loc *time.Location, isEnd bool) (*time.Time, bool) {
+	minuteFormats := []string{"2006-01-02T15:04", "2006-01-02 15:04"}
+	for _, f := range minuteFormats {
+		if t, err := time.ParseInLocation(f, s, loc); err == nil {
+			sec, nsec := 0, 0
+			if isEnd {
+				sec, nsec = 59, 999999999
 			}
+			res := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), sec, nsec, loc)
+			return &res, true
 		}
 	}
-
-	// In URL query strings, a literal '+' in timezone offsets (e.g. +07:00) is often decoded into a space.
-	// Restore '+' if the string matches an unescaped offset suffix (e.g. " 07:00" or " 0700").
-	if idx := strings.LastIndex(s, " "); idx != -1 && idx > 10 {
-		candidate := s[:idx] + "+" + s[idx+1:]
-		if t, err := time.Parse(time.RFC3339Nano, candidate); err == nil {
-			return &t, nil
-		}
-	}
-
-	loc := config.AppLocation()
-
-	// Try datetime formats with fractional seconds without timezone in application location
-	if t, err := time.ParseInLocation("2006-01-02T15:04:05.999999999", s, loc); err == nil {
-		return &t, nil
-	}
-	if t, err := time.ParseInLocation("2006-01-02 15:04:05.999999999", s, loc); err == nil {
-		return &t, nil
-	}
-
-	// Try datetime formats without timezone in application location
-	if t, err := time.ParseInLocation("2006-01-02T15:04:05", s, loc); err == nil {
-		return &t, nil
-	}
-	if t, err := time.ParseInLocation("2006-01-02 15:04:05", s, loc); err == nil {
-		return &t, nil
-	}
-
-	// Try HTML5 datetime-local formats without seconds (YYYY-MM-DDTHH:mm or YYYY-MM-DD HH:mm)
-	if t, err := time.ParseInLocation("2006-01-02T15:04", s, loc); err == nil {
-		if isEnd {
-			endOfMinute := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 59, 999999999, loc)
-			return &endOfMinute, nil
-		}
-		startOfMinute := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, loc)
-		return &startOfMinute, nil
-	}
-	if t, err := time.ParseInLocation("2006-01-02 15:04", s, loc); err == nil {
-		if isEnd {
-			endOfMinute := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 59, 999999999, loc)
-			return &endOfMinute, nil
-		}
-		startOfMinute := time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, loc)
-		return &startOfMinute, nil
-	}
-
-	// Try YYYY-MM-DD in application location
 	if t, err := time.ParseInLocation("2006-01-02", s, loc); err == nil {
+		hour, min, sec, nsec := 0, 0, 0, 0
 		if isEnd {
-			endOfDay := time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, loc)
-			return &endOfDay, nil
+			hour, min, sec, nsec = 23, 59, 59, 999999999
 		}
-		startOfDay := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
-		return &startOfDay, nil
+		res := time.Date(t.Year(), t.Month(), t.Day(), hour, min, sec, nsec, loc)
+		return &res, true
 	}
-
-	return nil, errors.New("invalid date format, expected YYYY-MM-DD or RFC3339")
+	return nil, false
 }
 
 // ListAuditLogs godoc

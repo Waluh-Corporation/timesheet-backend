@@ -188,15 +188,7 @@ func NewServer(db *gorm.DB, cfg *config.Config, authSvc *auth.Service, m *mailer
 	}, nil
 }
 
-func (s *Server) checkAndRecordResetCooldownCtx(ctx context.Context, email, ip string, cooldown time.Duration) bool {
-	if cooldown <= 0 {
-		return true
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-	defer cancel()
-
-	normEmail := strings.ToLower(strings.TrimSpace(email))
+func cleanClientIP(ip string) string {
 	cleanIP := strings.TrimSpace(ip)
 	if commaIdx := strings.Index(cleanIP, ","); commaIdx != -1 {
 		cleanIP = strings.TrimSpace(cleanIP[:commaIdx])
@@ -209,8 +201,63 @@ func (s *Server) checkAndRecordResetCooldownCtx(ctx context.Context, email, ip s
 		cleanIP = cleanIP[:zoneIdx]
 	}
 	if parsed := net.ParseIP(cleanIP); parsed != nil {
-		cleanIP = parsed.String()
+		return parsed.String()
 	}
+	return cleanIP
+}
+
+func coerceToInt64(res interface{}) int64 {
+	switch n := res.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case int32:
+		return int64(n)
+	case uint64:
+		if n > math.MaxInt64 {
+			return math.MaxInt64
+		}
+		return int64(n)
+	case float64:
+		if n > float64(math.MaxInt64) {
+			return math.MaxInt64
+		}
+		return int64(n)
+	default:
+		return 0
+	}
+}
+
+func incrementIPRequestCount(ctx context.Context, rdb *redis.Client, ipKey string, effectiveCooldown time.Duration) (int64, error) {
+	const ipIncrScript = `
+		local count = redis.call('INCR', KEYS[1])
+		if count == 1 or redis.call('PTTL', KEYS[1]) < 0 then
+			redis.call('PEXPIRE', KEYS[1], ARGV[1])
+		end
+		return count
+	`
+	res, err := rdb.Eval(ctx, ipIncrScript, []string{ipKey}, effectiveCooldown.Milliseconds()).Result()
+	if err == nil {
+		return coerceToInt64(res), nil
+	}
+	newCount, err := rdb.Incr(ctx, ipKey).Result()
+	if err == nil && newCount == 1 {
+		_ = rdb.PExpire(ctx, ipKey, effectiveCooldown).Err()
+	}
+	return newCount, err
+}
+
+func (s *Server) checkAndRecordResetCooldownCtx(ctx context.Context, email, ip string, cooldown time.Duration) bool {
+	if cooldown <= 0 {
+		return true
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	normEmail := strings.ToLower(strings.TrimSpace(email))
+	cleanIP := cleanClientIP(ip)
 
 	if normEmail == "" && cleanIP == "" {
 		return true
@@ -254,45 +301,8 @@ func (s *Server) checkAndRecordResetCooldownCtx(ctx context.Context, email, ip s
 
 	// 3. Atomically track and increment client IP request count with TTL preservation
 	if ipKey != "" {
-		const ipIncrScript = `
-			local count = redis.call('INCR', KEYS[1])
-			if count == 1 or redis.call('PTTL', KEYS[1]) < 0 then
-				redis.call('PEXPIRE', KEYS[1], ARGV[1])
-			end
-			return count
-		`
-		var newCount int64
-		res, err := rdb.Eval(ctx, ipIncrScript, []string{ipKey}, effectiveCooldown.Milliseconds()).Result()
-		if err == nil {
-			switch n := res.(type) {
-			case int64:
-				newCount = n
-			case int:
-				newCount = int64(n)
-			case int32:
-				newCount = int64(n)
-			case uint64:
-				if n > math.MaxInt64 {
-					newCount = math.MaxInt64
-				} else {
-					newCount = int64(n)
-				}
-			case float64:
-				if n > float64(math.MaxInt64) {
-					newCount = math.MaxInt64
-				} else {
-					newCount = int64(n)
-				}
-			}
-		} else {
-			newCount, err = rdb.Incr(ctx, ipKey).Result()
-			if err == nil && newCount == 1 {
-				_ = rdb.PExpire(ctx, ipKey, effectiveCooldown).Err()
-			}
-		}
-
+		newCount, err := incrementIPRequestCount(ctx, rdb, ipKey, effectiveCooldown)
 		if err == nil && newCount > maxIPRequestsPerWindow {
-			// Rollback email reservation if IP limit was exceeded concurrently
 			if emailKey != "" {
 				_ = rdb.Del(ctx, emailKey).Err()
 			}
@@ -357,6 +367,40 @@ func (s *Server) putSession(id string, data *webauthn.SessionData) {
 	s.putSessionCtx(context.Background(), id, data)
 }
 
+func isUnsupportedGetDelError(err error) bool {
+	errLower := strings.ToLower(err.Error())
+	return strings.Contains(errLower, "unknown") ||
+		strings.Contains(errLower, "unsupported") ||
+		strings.Contains(errLower, "not supported")
+}
+
+func fallbackGetDel(ctx context.Context, rdb *redis.Client, key, cleanID string) (string, error) {
+	const getDelScript = `
+		local v = redis.call('GET', KEYS[1])
+		if not v or v == false then
+			return nil
+		end
+		redis.call('DEL', KEYS[1])
+		return v
+	`
+	res, scriptErr := rdb.Eval(ctx, getDelScript, []string{key}).Result()
+	if scriptErr != nil {
+		if errors.Is(scriptErr, redis.Nil) {
+			return "", nil
+		}
+		slog.Error("failed to execute fallback getdel script", "error", scriptErr, "session_id", cleanID)
+		return "", scriptErr
+	}
+	switch s := res.(type) {
+	case string:
+		return s, nil
+	case []byte:
+		return string(s), nil
+	default:
+		return "", nil
+	}
+}
+
 func (s *Server) takeSessionCtx(ctx context.Context, id string) (*webauthn.SessionData, bool) {
 	cleanID := strings.TrimSpace(id)
 	if cleanID == "" {
@@ -377,36 +421,8 @@ func (s *Server) takeSessionCtx(ctx context.Context, id string) (*webauthn.Sessi
 		if errors.Is(err, redis.Nil) {
 			return nil, false
 		}
-		// Fallback for older Redis versions (< 6.2) or test doubles / proxies not supporting GETDEL
-		errLower := strings.ToLower(err.Error())
-		if strings.Contains(errLower, "unknown") || strings.Contains(errLower, "unsupported") || strings.Contains(errLower, "not supported") {
-			const getDelScript = `
-				local v = redis.call('GET', KEYS[1])
-				if not v or v == false then
-					return nil
-				end
-				redis.call('DEL', KEYS[1])
-				return v
-			`
-			res, scriptErr := rdb.Eval(ctx, getDelScript, []string{key}).Result()
-			if scriptErr != nil {
-				if errors.Is(scriptErr, redis.Nil) {
-					return nil, false
-				}
-				slog.Error("failed to execute fallback getdel script", "error", scriptErr, "session_id", cleanID)
-				return nil, false
-			}
-			var strVal string
-			switch s := res.(type) {
-			case string:
-				strVal = s
-			case []byte:
-				strVal = string(s)
-			}
-			if strVal == "" {
-				return nil, false
-			}
-			val = strVal
+		if isUnsupportedGetDelError(err) {
+			val, _ = fallbackGetDel(ctx, rdb, key, cleanID)
 		} else {
 			slog.Error("failed to retrieve webauthn session from redis", "error", err, "session_id", cleanID)
 			return nil, false
@@ -513,43 +529,57 @@ type authServiceRepoChecker interface {
 	GetHasher() auth.PasswordHasher
 }
 
+func isAuthServiceMismatch(s *Server, checker authServiceRepoChecker) bool {
+	if s.TokenRepo != nil && s.TokenRepo != checker.GetTokenRepo() {
+		return true
+	}
+	if s.UserRepo != nil && s.UserRepo != checker.GetUserRepo() {
+		return true
+	}
+	if s.AuditRepo != nil && s.AuditRepo != checker.GetAuditRepo() {
+		return true
+	}
+	if s.Auth != nil && s.Auth != checker.GetJWTService() {
+		return true
+	}
+	return s.Hasher != nil && s.Hasher != checker.GetHasher()
+}
+
+func (s *Server) rebuildAuthService(checker authServiceRepoChecker) service.AuthService {
+	var userRepo repository.UserAccountRepository = s.UserRepo
+	if userRepo == nil {
+		userRepo = checker.GetUserRepo()
+	}
+	tokenRepo := s.TokenRepo
+	if tokenRepo == nil {
+		tokenRepo = checker.GetTokenRepo()
+	}
+	auditRepo := s.AuditRepo
+	if auditRepo == nil {
+		auditRepo = checker.GetAuditRepo()
+	}
+	jwtSvc := s.Auth
+	if jwtSvc == nil {
+		jwtSvc = checker.GetJWTService()
+	}
+	hasher := s.Hasher
+	if hasher == nil {
+		hasher = checker.GetHasher()
+	}
+	var refreshTTL time.Duration
+	if s.Cfg != nil {
+		refreshTTL = s.Cfg.RefreshTokenTTL
+	}
+	return service.NewAuthService(userRepo, tokenRepo, jwtSvc, auditRepo, refreshTTL, hasher)
+}
+
 func (s *Server) getAuthService() service.AuthService {
 	if s == nil {
 		return nil
 	}
 	if s.AuthSvc != nil {
-		if checker, ok := s.AuthSvc.(authServiceRepoChecker); ok {
-			if (s.TokenRepo != nil && s.TokenRepo != checker.GetTokenRepo()) ||
-				(s.UserRepo != nil && s.UserRepo != checker.GetUserRepo()) ||
-				(s.AuditRepo != nil && s.AuditRepo != checker.GetAuditRepo()) ||
-				(s.Auth != nil && s.Auth != checker.GetJWTService()) ||
-				(s.Hasher != nil && s.Hasher != checker.GetHasher()) {
-				var refreshTTL time.Duration
-				if s.Cfg != nil {
-					refreshTTL = s.Cfg.RefreshTokenTTL
-				}
-				var userRepo repository.UserAccountRepository = s.UserRepo
-				if userRepo == nil {
-					userRepo = checker.GetUserRepo()
-				}
-				tokenRepo := s.TokenRepo
-				if tokenRepo == nil {
-					tokenRepo = checker.GetTokenRepo()
-				}
-				auditRepo := s.AuditRepo
-				if auditRepo == nil {
-					auditRepo = checker.GetAuditRepo()
-				}
-				jwtSvc := s.Auth
-				if jwtSvc == nil {
-					jwtSvc = checker.GetJWTService()
-				}
-				hasher := s.Hasher
-				if hasher == nil {
-					hasher = checker.GetHasher()
-				}
-				return service.NewAuthService(userRepo, tokenRepo, jwtSvc, auditRepo, refreshTTL, hasher)
-			}
+		if checker, ok := s.AuthSvc.(authServiceRepoChecker); ok && isAuthServiceMismatch(s, checker) {
+			return s.rebuildAuthService(checker)
 		}
 		return s.AuthSvc
 	}

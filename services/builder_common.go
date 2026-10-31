@@ -651,31 +651,38 @@ func WriteSignatures(f *excelize.File, sheet string, in GenerationInput, cells S
 	if in.User != nil {
 		userName = in.User.Name
 	}
-	if userName != "" && cells.UserCell != "" {
-		_ = f.SetCellValue(sheet, cells.UserCell, userName)
+	setNonEmptyCell(f, sheet, cells.UserCell, userName)
+	setNonEmptyCell(f, sheet, cells.TLCell, tlName)
+	setNonEmptyCell(f, sheet, cells.DHCell, dhName)
+
+	writeSignatureDates(f, sheet, cells)
+	embedSignaturePictures(f, sheet, in, cells)
+}
+
+func setNonEmptyCell(f *excelize.File, sheet, cell, val string) {
+	if cell != "" && val != "" {
+		_ = f.SetCellValue(sheet, cell, val)
 	}
-	if tlName != "" && cells.TLCell != "" {
-		_ = f.SetCellValue(sheet, cells.TLCell, tlName)
+}
+
+func writeSignatureDates(f *excelize.File, sheet string, cells SignatureCells) {
+	if cells.DatePrefix == "" {
+		return
 	}
-	if dhName != "" && cells.DHCell != "" {
-		_ = f.SetCellValue(sheet, cells.DHCell, dhName)
+	dateStr := cells.DatePrefix + CurrentDateFormatted()
+	setNonEmptyCell(f, sheet, cells.UserDateCell, dateStr)
+	setNonEmptyCell(f, sheet, cells.TLDateCell, dateStr)
+	setNonEmptyCell(f, sheet, cells.DHDateCell, dateStr)
+}
+
+func embedSignaturePictures(f *excelize.File, sheet string, in GenerationInput, cells SignatureCells) {
+	if !in.IsSigned {
+		return
 	}
-	if cells.DatePrefix != "" {
-		dateStr := cells.DatePrefix + CurrentDateFormatted()
-		if cells.UserDateCell != "" {
-			_ = f.SetCellValue(sheet, cells.UserDateCell, dateStr)
-		}
-		if cells.TLDateCell != "" {
-			_ = f.SetCellValue(sheet, cells.TLDateCell, dateStr)
-		}
-		if cells.DHDateCell != "" {
-			_ = f.SetCellValue(sheet, cells.DHDateCell, dateStr)
-		}
-	}
-	if in.IsSigned && len(in.SignatureBytes) > 0 && cells.UserBoxCell != "" {
+	if len(in.SignatureBytes) > 0 && cells.UserBoxCell != "" {
 		_ = EmbedPicture(f, sheet, cells.UserBoxCell, in.SignatureBytes, 0.4, 0.4)
 	}
-	if in.IsSigned && len(in.QRCodeBytes) > 0 && cells.QRCell != "" {
+	if len(in.QRCodeBytes) > 0 && cells.QRCell != "" {
 		_ = EmbedPicture(f, sheet, cells.QRCell, in.QRCodeBytes, 0.6, 0.6)
 	}
 }

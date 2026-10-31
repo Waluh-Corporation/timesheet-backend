@@ -134,17 +134,7 @@ func (s *Server) validateBeritaAcaraSignedBeforeGenerate(c *gin.Context, uid uin
 		return fmt.Errorf("failed to check activities: %w", err)
 	}
 
-	hasBA := false
-	var witnessName string
-	for _, a := range activities {
-		if a.IsBeritaAcara {
-			hasBA = true
-			if a.Witness != nil && a.Witness.Name != "" {
-				witnessName = a.Witness.Name
-			}
-			break
-		}
-	}
+	hasBA, initialWitness := findBeritaAcaraInfo(activities)
 	if !hasBA {
 		return nil
 	}
@@ -163,22 +153,42 @@ func (s *Server) validateBeritaAcaraSignedBeforeGenerate(c *gin.Context, uid uin
 		return errors.New("terdapat catatan Berita Acara pada periode ini yang belum diajukan ke saksi. Silakan ajukan Berita Acara terlebih dahulu agar saksi dapat menandatanganinya sebelum men-generate dokumen")
 	}
 
-	if sub.Witness != nil && sub.Witness.Name != "" {
-		witnessName = sub.Witness.Name
+	witnessName := s.resolveWitnessName(reqContext(c), sub, initialWitness)
+	return mapSubmissionStatusError(sub.Status, witnessName)
+}
+
+func findBeritaAcaraInfo(activities []models.DailyActivity) (bool, string) {
+	for _, a := range activities {
+		if a.IsBeritaAcara {
+			if a.Witness != nil && a.Witness.Name != "" {
+				return true, a.Witness.Name
+			}
+			return true, ""
+		}
 	}
-	if witnessName == "" && sub.WitnessID != 0 {
+	return false, ""
+}
+
+func (s *Server) resolveWitnessName(ctx context.Context, sub *models.BeritaAcaraSubmission, fallback string) string {
+	if sub.Witness != nil && sub.Witness.Name != "" {
+		return sub.Witness.Name
+	}
+	if fallback != "" {
+		return fallback
+	}
+	if sub.WitnessID != 0 {
 		userRepo := s.getUserAccountRepository()
 		if userRepo != nil {
-			if wUser, werr := userRepo.FindByID(reqContext(c), sub.WitnessID); werr == nil && wUser != nil {
-				witnessName = wUser.Name
+			if wUser, err := userRepo.FindByID(ctx, sub.WitnessID); err == nil && wUser != nil && wUser.Name != "" {
+				return wUser.Name
 			}
 		}
 	}
-	if witnessName == "" {
-		witnessName = "saksi"
-	}
+	return "saksi"
+}
 
-	switch sub.Status {
+func mapSubmissionStatusError(status, witnessName string) error {
+	switch status {
 	case models.SubmissionStatusSigned:
 		return nil
 	case models.SubmissionStatusPendingWitness:
