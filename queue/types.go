@@ -7,8 +7,9 @@ const (
 
 // GenerateTimesheetPayload carries the job parameters dispatched to Asynq workers.
 type GenerateTimesheetPayload struct {
-	JobID  string `json:"job_id"`
-	UserID uint   `json:"user_id"`
-	Month  int    `json:"month"`
-	Year   int    `json:"year"`
+	JobID      string `json:"job_id"`
+	UserID     uint   `json:"user_id"`
+	Month      int    `json:"month"`
+	Year       int    `json:"year"`
+	IncludePDF bool   `json:"include_pdf,omitempty"`
 }

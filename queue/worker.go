@@ -1,15 +1,12 @@
 package queue
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -145,16 +142,13 @@ func (w *WorkerServer) handleTimesheetGenerate(ctx context.Context, t *asynq.Tas
 	}
 	defer release()
 
-	// 3. Generate workbook
-	out, filename, err := w.tsSvc.GenerateWorkbook(ctx, p.UserID, p.Month, p.Year)
+	// 3. Package timesheet artifacts (Workbook, Berita Acara, and optional PDFs)
+	finalBytes, finalFilename, contentType, err := w.packageTimesheetOutput(ctx, p.UserID, p.Month, p.Year, p.IncludePDF)
 	if err != nil {
 		errMsg := fmt.Sprintf("generation error: %v", err)
 		_ = w.jobRepo.UpdateStatus(ctx, p.JobID, models.JobStatusFailed, "", "", errMsg, nil)
 		return err
 	}
-
-	// 3b. Package timesheet and optional Berita Acara
-	finalBytes, finalFilename, contentType := w.packageTimesheetOutput(ctx, p.UserID, p.Month, p.Year, out, filename)
 
 	// 4. Upload to S3
 	fileKey := fmt.Sprintf("timesheets/%d/%s_%s", p.UserID, p.JobID, finalFilename)
@@ -186,35 +180,8 @@ func (w *WorkerServer) acquireSlot(ctx context.Context, jobID string) (func(), e
 	}
 }
 
-func (w *WorkerServer) packageTimesheetOutput(ctx context.Context, userID uint, month, year int, out []byte, filename string) ([]byte, string, string) {
-	finalBytes := out
-	finalFilename := filename
-	contentType := "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-	baBytes, baFilename, baErr := w.tsSvc.GenerateBeritaAcara(ctx, userID, month, year)
-	if baErr != nil {
-		log.Printf("[worker] error checking/generating berita acara for user %d: %v", userID, baErr)
-	}
-
-	if len(baBytes) == 0 {
-		return finalBytes, finalFilename, contentType
-	}
-
-	var zipBuf bytes.Buffer
-	zw := zip.NewWriter(&zipBuf)
-	if fw1, err := zw.Create(filename); err == nil {
-		_, _ = fw1.Write(out)
-	}
-	if fw2, err := zw.Create(baFilename); err == nil {
-		_, _ = fw2.Write(baBytes)
-	}
-	if err := zw.Close(); err == nil {
-		finalBytes = zipBuf.Bytes()
-		baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
-		finalFilename = fmt.Sprintf("%s_and_Berita_Acara.zip", baseName)
-		contentType = "application/zip"
-	}
-	return finalBytes, finalFilename, contentType
+func (w *WorkerServer) packageTimesheetOutput(ctx context.Context, userID uint, month, year int, includePDF bool) ([]byte, string, string, error) {
+	return service.PackageTimesheetBundle(ctx, w.tsSvc, userID, month, year, includePDF)
 }
 
 func (w *WorkerServer) resolveDownloadParams(ctx context.Context) (string, int, time.Time, string) {

@@ -203,6 +203,9 @@ func (m *mockActivityRepo) FindWitnessByID(ctx context.Context, witnessID uint) 
 func TestActivityService_UpsertDailyActivity(t *testing.T) {
 	repo := newMockActivityRepo()
 	svc := NewActivityService(repo)
+	if actImpl, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+		actImpl.SetNowFunc(func() time.Time { return time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC) })
+	}
 	ctx := context.Background()
 
 	// 1. Invalid date format
@@ -430,6 +433,9 @@ func TestActivityService_ListActivities(t *testing.T) { // NOSONAR
 func TestActivityService_UpsertProjectResolution(t *testing.T) {
 	repo := newMockActivityRepo()
 	svc := NewActivityService(repo)
+	if actImpl, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+		actImpl.SetNowFunc(func() time.Time { return time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC) })
+	}
 	ctx := context.Background()
 
 	proj := &models.Project{
@@ -503,6 +509,9 @@ func TestActivityService_UpsertProjectResolution(t *testing.T) {
 func TestActivityService_WorkingHoursValidation(t *testing.T) { // NOSONAR
 	repo := newMockActivityRepo()
 	svc := NewActivityService(repo)
+	if actImpl, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+		actImpl.SetNowFunc(func() time.Time { return time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC) })
+	}
 	ctx := context.Background()
 
 	tests := []struct {

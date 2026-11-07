@@ -3,18 +3,29 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg" // Register JPEG image decoder for image.Decode
 	_ "image/png"  // Register PNG image decoder for image.Decode
+	"math/big"
 	"net"
 	"strings"
 	"time"
 
+	"github.com/go-webauthn/webauthn/protocol/webauthncose"
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 
@@ -95,6 +106,7 @@ type SignatureService interface {
 
 	// Berita Acara signing
 	SubmitBeritaAcara(ctx context.Context, userID uint, req *request.SubmitBeritaAcaraRequest, meta AuditMeta) (*response.BeritaAcaraSubmissionResponse, error)
+	GetBeritaAcaraReview(ctx context.Context, witnessID uint, submissionID string, meta AuditMeta) (*response.BeritaAcaraReviewResponse, error)
 	WitnessAction(ctx context.Context, witnessID uint, submissionID string, req *request.WitnessActionRequest, meta AuditMeta) (*response.BeritaAcaraSubmissionResponse, error)
 	RevokeBeritaAcara(ctx context.Context, userID uint, submissionID string, meta AuditMeta) error
 	GetBeritaAcaraSubmission(ctx context.Context, userID uint, month, year int) (*response.BeritaAcaraSubmissionResponse, error)
@@ -524,14 +536,246 @@ func (s *signatureService) SubmitBeritaAcara(ctx context.Context, userID uint, r
 	}, nil
 }
 
+func decodeBase64URL(s string) ([]byte, error) {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return nil, errors.New("empty base64 string")
+	}
+	if b, err := base64.RawURLEncoding.DecodeString(trimmed); err == nil {
+		return b, nil
+	}
+	if b, err := base64.URLEncoding.DecodeString(trimmed); err == nil {
+		return b, nil
+	}
+	if b, err := base64.RawStdEncoding.DecodeString(trimmed); err == nil {
+		return b, nil
+	}
+	return base64.StdEncoding.DecodeString(trimmed)
+}
+
+func verifyPasskeySignature(pubKeyBytes, signedData, sigBytes []byte) error {
+	if len(pubKeyBytes) == 0 || len(signedData) == 0 || len(sigBytes) == 0 {
+		return errors.New("missing cryptographic parameters for passkey verification")
+	}
+
+	// 1. Native WebAuthn COSE encoding
+	if parsedKey, err := webauthncose.ParsePublicKey(pubKeyBytes); err == nil {
+		if valid, err := webauthncose.VerifySignature(parsedKey, signedData, sigBytes); err == nil && valid {
+			return nil
+		}
+	}
+
+	// 2. Standard X.509 PKIX DER encoded public key
+	if pkixKey, err := x509.ParsePKIXPublicKey(pubKeyBytes); err == nil {
+		switch pub := pkixKey.(type) {
+		case *ecdsa.PublicKey:
+			digest := sha256.Sum256(signedData)
+			if ecdsa.VerifyASN1(pub, digest[:], sigBytes) {
+				return nil
+			}
+			if len(sigBytes) == 64 {
+				r := new(big.Int).SetBytes(sigBytes[:32])
+				s := new(big.Int).SetBytes(sigBytes[32:])
+				if ecdsa.Verify(pub, digest[:], r, s) {
+					return nil
+				}
+			}
+		case *rsa.PublicKey:
+			digest := sha256.Sum256(signedData)
+			if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, digest[:], sigBytes); err == nil {
+				return nil
+			}
+			if err := rsa.VerifyPSS(pub, crypto.SHA256, digest[:], sigBytes, nil); err == nil {
+				return nil
+			}
+		case ed25519.PublicKey:
+			if ed25519.Verify(pub, signedData, sigBytes) {
+				return nil
+			}
+		}
+	}
+
+	// 3. Raw uncompressed P-256 EC point (65 bytes 0x04||X||Y, or 64 bytes X||Y)
+	if len(pubKeyBytes) == 65 && pubKeyBytes[0] == 0x04 {
+		if pub, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), pubKeyBytes); err == nil {
+			digest := sha256.Sum256(signedData)
+			if ecdsa.VerifyASN1(pub, digest[:], sigBytes) {
+				return nil
+			}
+		}
+	} else if len(pubKeyBytes) == 64 {
+		uncompressed := append([]byte{0x04}, pubKeyBytes...)
+		if pub, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), uncompressed); err == nil {
+			digest := sha256.Sum256(signedData)
+			if ecdsa.VerifyASN1(pub, digest[:], sigBytes) {
+				return nil
+			}
+		}
+	}
+
+	// 4. Raw Ed25519 public key (32 bytes)
+	if len(pubKeyBytes) == ed25519.PublicKeySize {
+		if ed25519.Verify(pubKeyBytes, signedData, sigBytes) {
+			return nil
+		}
+	}
+
+	return errors.New("cryptographic signature verification failed")
+}
+
+func (s *signatureService) verifyWitnessAssertion(
+	ctx context.Context,
+	witnessID uint,
+	assertion *request.WebAuthnAssertionPayload,
+	metaMap map[string]interface{},
+) error {
+	if assertion == nil {
+		return domain.NewUserError(domain.ErrInvalidInput, "Payload assertion tidak boleh kosong")
+	}
+
+	trimmedCredID := strings.TrimSpace(assertion.CredentialID)
+	trimmedClientData := strings.TrimSpace(assertion.ClientDataJSON)
+	trimmedAuthData := strings.TrimSpace(assertion.AuthenticatorData)
+	trimmedSig := strings.TrimSpace(assertion.Signature)
+
+	if trimmedCredID == "" || trimmedClientData == "" || trimmedAuthData == "" || trimmedSig == "" {
+		return domain.NewUserError(domain.ErrInvalidInput, "Payload assertion tidak lengkap")
+	}
+
+	type passkeyManager interface {
+		ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error)
+		UpdatePasskeySignCount(ctx context.Context, credID []byte, signCount uint32, backupState bool) error
+	}
+	pkMgr, ok := s.userRepo.(passkeyManager)
+	if !ok {
+		return fmt.Errorf("passkey repository unavailable")
+	}
+
+	passkeys, err := pkMgr.ListPasskeysByUserID(ctx, witnessID)
+	if err != nil {
+		return fmt.Errorf("list passkeys for witness: %w", err)
+	}
+	if len(passkeys) == 0 {
+		return domain.NewUserError(domain.ErrNotFound, "Saksi belum memiliki kredensial passkey yang terdaftar")
+	}
+
+	rawCredID, _ := decodeBase64URL(trimmedCredID)
+	var matchedCred *models.WebAuthnCredential
+	for i := range passkeys {
+		pk := &passkeys[i]
+		if (len(rawCredID) > 0 && bytes.Equal(pk.CredentialID, rawCredID)) ||
+			base64.RawURLEncoding.EncodeToString(pk.CredentialID) == trimmedCredID ||
+			string(pk.CredentialID) == trimmedCredID {
+			matchedCred = pk
+			break
+		}
+	}
+	if matchedCred == nil {
+		return domain.NewUserError(domain.ErrNotFound, "Kredensial passkey tidak ditemukan atau bukan milik saksi")
+	}
+
+	// Parse ClientDataJSON
+	clientDataBytes, err := decodeBase64URL(trimmedClientData)
+	if err != nil || len(clientDataBytes) == 0 || clientDataBytes[0] != '{' {
+		if strings.HasPrefix(trimmedClientData, "{") {
+			clientDataBytes = []byte(trimmedClientData)
+		} else {
+			return domain.NewUserError(domain.ErrInvalidInput, "ClientDataJSON tidak valid")
+		}
+	}
+
+	var clientData struct {
+		Type      string `json:"type"`
+		Challenge string `json:"challenge"`
+		Origin    string `json:"origin"`
+	}
+	if err := json.Unmarshal(clientDataBytes, &clientData); err != nil {
+		return domain.NewUserError(domain.ErrInvalidInput, "Format ClientDataJSON tidak valid: "+err.Error())
+	}
+
+	expectedChallenge, _ := metaMap["signing_challenge"].(string)
+	if expectedChallenge == "" {
+		return domain.NewUserError(domain.ErrInvalidInput, "Signing challenge tidak ditemukan, silakan buka review terlebih dahulu")
+	}
+	if clientData.Challenge != expectedChallenge {
+		return domain.NewUserError(domain.ErrInvalidInput, "Signing challenge tidak valid atau telah dimanipulasi")
+	}
+
+	authDataBytes, err := decodeBase64URL(trimmedAuthData)
+	if err != nil || len(authDataBytes) < 37 {
+		return domain.NewUserError(domain.ErrInvalidInput, "AuthenticatorData tidak valid")
+	}
+
+	// Verify User Presence bit (byte 32, bit 0)
+	if authDataBytes[32]&0x01 == 0 {
+		return domain.NewUserError(domain.ErrInvalidInput, "User presence tidak terdeteksi pada authenticator")
+	}
+
+	sigBytes, err := decodeBase64URL(trimmedSig)
+	if err != nil || len(sigBytes) == 0 {
+		return domain.NewUserError(domain.ErrInvalidInput, "Signature assertion tidak valid")
+	}
+
+	clientDataHash := sha256.Sum256(clientDataBytes)
+	verificationData := make([]byte, 0, len(authDataBytes)+len(clientDataHash))
+	verificationData = append(verificationData, authDataBytes...)
+	verificationData = append(verificationData, clientDataHash[:]...)
+
+	if err := verifyPasskeySignature(matchedCred.PublicKey, verificationData, sigBytes); err != nil {
+		return domain.NewUserError(domain.ErrInvalidInput, "Verifikasi signature passkey gagal: "+err.Error())
+	}
+
+	// Update sign_count
+	counter := binary.BigEndian.Uint32(authDataBytes[33:37])
+	_ = pkMgr.UpdatePasskeySignCount(ctx, matchedCred.CredentialID, counter, matchedCred.BackupState)
+
+	metaMap["witness_non_repudiation"] = true
+	metaMap["witness_credential_id"] = base64.RawURLEncoding.EncodeToString(matchedCred.CredentialID)
+	authName := strings.TrimSpace(matchedCred.FriendlyName)
+	if authName == "" {
+		authName = models.AuthenticatorNameFromAAGUID(matchedCred.AAGUID)
+	}
+	if authName == "" {
+		authName = "Hardware Passkey"
+	}
+	metaMap["witness_authenticator_name"] = authName
+
+	aaguidStr := ""
+	if matchedCred.AuthenticatorAAGUID != nil && *matchedCred.AuthenticatorAAGUID != "" {
+		aaguidStr = *matchedCred.AuthenticatorAAGUID
+	} else if f, ok := models.FormatAAGUID(matchedCred.AAGUID); ok {
+		aaguidStr = f
+	}
+	metaMap["witness_authenticator_aaguid"] = aaguidStr
+
+	return nil
+}
+
 func (s *signatureService) approveWitness(
 	ctx context.Context,
 	sub *models.BeritaAcaraSubmission,
 	witness, employee *models.User,
+	req *request.WitnessActionRequest,
 	meta AuditMeta,
 ) error {
 	if witness.SignatureFileKey == "" {
 		return domain.NewUserError(domain.ErrInvalidInput, "Silakan unggah tanda tangan profil Anda terlebih dahulu untuk menyetujui sebagai saksi")
+	}
+
+	metaMap := make(map[string]interface{})
+	if len(sub.AuditMetadata) > 0 {
+		_ = json.Unmarshal(sub.AuditMetadata, &metaMap)
+	}
+	if metaMap == nil {
+		metaMap = make(map[string]interface{})
+	}
+
+	if req != nil && req.Assertion != nil {
+		if err := s.verifyWitnessAssertion(ctx, witness.ID, req.Assertion, metaMap); err != nil {
+			return err
+		}
+	} else {
+		metaMap["witness_non_repudiation"] = false
 	}
 
 	now := s.nowFunc()
@@ -545,12 +789,13 @@ func (s *signatureService) approveWitness(
 	sub.DocumentHash = docHash
 	sub.UpdatedAt = now
 
-	metaMap := make(map[string]interface{})
-	_ = json.Unmarshal(sub.AuditMetadata, &metaMap)
 	metaMap["witness_ip"] = meta.IP
 	metaMap["witness_user_agent"] = meta.UserAgent
 	metaMap["approved_at"] = now.Format(time.RFC3339)
-	metaBytes, _ := json.Marshal(metaMap)
+	metaBytes, err := json.Marshal(metaMap)
+	if err != nil {
+		return fmt.Errorf("marshal audit metadata: %w", err)
+	}
 	sub.AuditMetadata = datatypes.JSON(metaBytes)
 
 	if err := s.submissionRepo.UpsertBeritaAcaraSubmission(ctx, sub); err != nil {
@@ -616,6 +861,195 @@ func (s *signatureService) rejectWitness(
 	return nil
 }
 
+// GetBeritaAcaraReview provides full verification context for witness review, records idempotent first-view tracking,
+// and returns a cryptographically secure random signing challenge with witness allowed credentials.
+func (s *signatureService) GetBeritaAcaraReview(ctx context.Context, witnessID uint, submissionID string, meta AuditMeta) (*response.BeritaAcaraReviewResponse, error) {
+	sub, err := s.submissionRepo.FindBeritaAcaraByID(ctx, submissionID)
+	if err != nil {
+		return nil, fmt.Errorf("find berita acara by id: %w", err)
+	}
+	if sub == nil {
+		return nil, domain.NewUserError(domain.ErrNotFound, "Permintaan Berita Acara tidak ditemukan")
+	}
+
+	// Strict Role Isolation / Anti-IDOR: only designated witness allowed
+	if sub.WitnessID != witnessID {
+		return nil, domain.ErrForbidden
+	}
+
+	var metaMap map[string]interface{}
+	if len(sub.AuditMetadata) > 0 {
+		_ = json.Unmarshal(sub.AuditMetadata, &metaMap)
+	}
+	if metaMap == nil {
+		metaMap = make(map[string]interface{})
+	}
+
+	// Idempotent first-view tracking: record only on first call
+	viewedAtVal, exists := metaMap["witness_viewed_at"]
+	viewedAtStr, isStr := viewedAtVal.(string)
+	if !exists || !isStr || viewedAtStr == "" {
+		now := s.nowFunc()
+		metaMap["witness_viewed_at"] = now.UTC().Format(time.RFC3339)
+		metaMap["witness_view_ip"] = meta.IP
+		metaMap["witness_view_user_agent"] = meta.UserAgent
+	}
+
+	// 32-byte cryptographic random signing challenge
+	challengeBytes := make([]byte, 32)
+	if _, err := rand.Read(challengeBytes); err != nil {
+		return nil, fmt.Errorf("generate signing challenge: %w", err)
+	}
+	signingChallenge := base64.RawURLEncoding.EncodeToString(challengeBytes)
+	metaMap["signing_challenge"] = signingChallenge
+
+	updatedBytes, err := json.Marshal(metaMap)
+	if err != nil {
+		return nil, fmt.Errorf("marshal audit metadata: %w", err)
+	}
+	sub.AuditMetadata = datatypes.JSON(updatedBytes)
+	if err := s.submissionRepo.UpsertBeritaAcaraSubmission(ctx, sub); err != nil {
+		return nil, fmt.Errorf("update submission audit metadata: %w", err)
+	}
+
+	empUser, err := s.userRepo.FindByIDWithDetails(ctx, sub.UserID)
+	if err != nil || empUser == nil {
+		return nil, domain.NewUserError(domain.ErrNotFound, "Pemilik Berita Acara tidak ditemukan")
+	}
+
+	empSigURL := ""
+	if empUser.SignatureFileKey != "" {
+		if s.storageSvc != nil {
+			empSigURL, _ = s.storageSvc.GetPresignedDownloadURL(ctx, empUser.SignatureFileKey, 1*time.Hour)
+		}
+		if empSigURL == "" {
+			empSigURL = fmt.Sprintf("/api/v1/signatures/%d.png", empUser.ID)
+		}
+	}
+
+	npp := empUser.BniID
+	if npp == "" {
+		npp = empUser.EmployeeID
+	}
+	dept := empUser.Department
+	if dept == "" && empUser.DepartmentRel != nil {
+		dept = empUser.DepartmentRel.Name
+	}
+	empNonRepudiation, _ := metaMap["employee_non_repudiation"].(bool)
+
+	witUser, err := s.userRepo.FindByIDWithDetails(ctx, witnessID)
+	if err != nil || witUser == nil {
+		return nil, domain.NewUserError(domain.ErrNotFound, "Saksi tidak ditemukan")
+	}
+
+	witSigURL := ""
+	hasSig := false
+	if witUser.SignatureFileKey != "" {
+		hasSig = true
+		if s.storageSvc != nil {
+			witSigURL, _ = s.storageSvc.GetPresignedDownloadURL(ctx, witUser.SignatureFileKey, 1*time.Hour)
+		}
+		if witSigURL == "" {
+			witSigURL = fmt.Sprintf("/api/v1/signatures/%d.png", witUser.ID)
+		}
+	}
+
+	var passkeys []models.WebAuthnCredential
+	type passkeyLister interface {
+		ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error)
+	}
+	if pkRepo, ok := s.userRepo.(passkeyLister); ok {
+		passkeys, _ = pkRepo.ListPasskeysByUserID(ctx, witnessID)
+	}
+
+	allowedCreds := make([]response.WebAuthnAllowedCredentialResponse, 0, len(passkeys))
+	for _, pk := range passkeys {
+		var transports []string
+		if len(pk.Transports) > 0 {
+			_ = json.Unmarshal(pk.Transports, &transports)
+		}
+		if len(transports) == 0 {
+			transports = []string{"internal"}
+		}
+		allowedCreds = append(allowedCreds, response.WebAuthnAllowedCredentialResponse{
+			ID:         base64.RawURLEncoding.EncodeToString(pk.CredentialID),
+			Type:       "public-key",
+			Transports: transports,
+		})
+	}
+
+	reviewHistory := make([]string, 0)
+	if sub.WitnessRejectionNotes != "" {
+		reviewHistory = append(reviewHistory, sub.WitnessRejectionNotes)
+	}
+
+	activities, _, err := s.activityRepo.ListActiveByUser(ctx, sub.UserID, repository.ActivityFilter{
+		Month:     &sub.Month,
+		Year:      &sub.Year,
+		IsAll:     true,
+		SortOrder: "asc",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list activities for review: %w", err)
+	}
+
+	incidents := make([]response.BeritaAcaraIncidentItemResponse, 0)
+	for _, act := range activities {
+		if act.IsBeritaAcara {
+			notes := act.BeritaAcaraNotes
+			if notes == "" {
+				notes = act.Activity
+			}
+			incidents = append(incidents, response.BeritaAcaraIncidentItemResponse{
+				Date:      act.Date.Format("2006-01-02"),
+				Day:       act.Date.Weekday().String(),
+				StartTime: act.StartTime,
+				EndTime:   act.EndTime,
+				Notes:     notes,
+			})
+		}
+	}
+
+	previewPDFURL := fmt.Sprintf("/api/v1/berita-acara/%s/preview/pdf", sub.ID)
+
+	return &response.BeritaAcaraReviewResponse{
+		SubmissionID:      sub.ID,
+		ID:                sub.ID,
+		Month:             sub.Month,
+		Year:              sub.Year,
+		Status:            sub.Status,
+		VerificationToken: sub.VerificationToken,
+		Applicant: response.BeritaAcaraApplicantReview{
+			UserID:                 empUser.ID,
+			ID:                     empUser.ID,
+			Name:                   empUser.Name,
+			NPP:                    npp,
+			BNIID:                  npp,
+			Department:             dept,
+			Group:                  empUser.GroupName,
+			SignatureURL:           empSigURL,
+			EmployeeNonRepudiation: empNonRepudiation,
+		},
+		Witness: response.BeritaAcaraWitnessReview{
+			UserID:                witUser.ID,
+			ID:                    witUser.ID,
+			Name:                  witUser.Name,
+			SignatureURL:          witSigURL,
+			HasSignature:          hasSig,
+			HasPasskey:            len(passkeys) > 0,
+			ReviewHistory:         reviewHistory,
+			WitnessRejectionNotes: sub.WitnessRejectionNotes,
+			WitnessSignedAt:       sub.WitnessSignedAt,
+		},
+		Incidents:          incidents,
+		PreviewPDFURL:      previewPDFURL,
+		SigningChallenge:   signingChallenge,
+		AllowedCredentials: allowedCreds,
+		CreatedAt:          sub.CreatedAt,
+		UpdatedAt:          sub.UpdatedAt,
+	}, nil
+}
+
 // WitnessAction processes witness approval or rejection.
 func (s *signatureService) WitnessAction(ctx context.Context, witnessID uint, submissionID string, req *request.WitnessActionRequest, meta AuditMeta) (*response.BeritaAcaraSubmissionResponse, error) {
 	if req == nil {
@@ -649,7 +1083,7 @@ func (s *signatureService) WitnessAction(ctx context.Context, witnessID uint, su
 
 	switch req.Action {
 	case "approve":
-		if err := s.approveWitness(ctx, sub, witness, employee, meta); err != nil {
+		if err := s.approveWitness(ctx, sub, witness, employee, req, meta); err != nil {
 			return nil, err
 		}
 	case "reject":
@@ -910,7 +1344,7 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 
 	// Step 1: Submitter Signature
 	trail = append(trail, response.DocumentAuditTrailItem{
-		Step:        1,
+		Step:        len(trail) + 1,
 		Title:       "Document Submitted & Signed",
 		Description: fmt.Sprintf("Signed and submitted by %s", empName),
 		Actor:       empName,
@@ -920,13 +1354,45 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 		Status:      "completed",
 	})
 
-	// Step 2: Witness Review / Signature
+	// Milestone: Document Viewed by Witness
+	viewedAtStr, _ := metaMap["witness_viewed_at"].(string)
+	viewIP, _ := metaMap["witness_view_ip"].(string)
+	if viewedAtStr != "" {
+		var viewedTime *time.Time
+		if t, err := time.Parse(time.RFC3339, viewedAtStr); err == nil {
+			viewedTime = &t
+		}
+		trail = append(trail, response.DocumentAuditTrailItem{
+			Step:        len(trail) + 1,
+			Title:       "Document Viewed by Witness",
+			Description: fmt.Sprintf("Document reviewed by witness %s", witName),
+			Actor:       witName,
+			Role:        "Witness",
+			Timestamp:   viewedTime,
+			MaskedIP:    MaskIP(viewIP),
+			Status:      "completed",
+		})
+	}
+
+	// Step 2 / Witness Action: Witness Review / Signature
+	witnessNonRepudiation, _ := metaMap["witness_non_repudiation"].(bool)
+	witnessAuthName, _ := metaMap["witness_authenticator_name"].(string)
+	if witnessAuthName == "" {
+		witnessAuthName = "Hardware Authenticator"
+	}
+
 	switch ba.Status {
 	case models.SubmissionStatusSigned:
+		title := "Endorsed by Witness Signatory"
+		desc := fmt.Sprintf("Approved and signed by %s", witName)
+		if witnessNonRepudiation {
+			title = "Endorsed with Hardware Passkey (Non-Repudiation Verified)"
+			desc = fmt.Sprintf("Endorsed by witness %s using %s", witName, witnessAuthName)
+		}
 		trail = append(trail, response.DocumentAuditTrailItem{
-			Step:        2,
-			Title:       "Witness Signature Affixed",
-			Description: fmt.Sprintf("Approved and signed by %s", witName),
+			Step:        len(trail) + 1,
+			Title:       title,
+			Description: desc,
 			Actor:       witName,
 			Role:        "Witness",
 			Timestamp:   ba.WitnessSignedAt,
@@ -939,7 +1405,7 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 			desc = fmt.Sprintf("Revision requested by %s: %s", witName, ba.WitnessRejectionNotes)
 		}
 		trail = append(trail, response.DocumentAuditTrailItem{
-			Step:        2,
+			Step:        len(trail) + 1,
 			Title:       "Witness Requested Revision",
 			Description: desc,
 			Actor:       witName,
@@ -950,10 +1416,16 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 		})
 	case models.SubmissionStatusRevoked:
 		if ba.WitnessSignedAt != nil {
+			title := "Endorsed by Witness Signatory"
+			desc := fmt.Sprintf("Approved and signed by %s", witName)
+			if witnessNonRepudiation {
+				title = "Endorsed with Hardware Passkey (Non-Repudiation Verified)"
+				desc = fmt.Sprintf("Endorsed by witness %s using %s", witName, witnessAuthName)
+			}
 			trail = append(trail, response.DocumentAuditTrailItem{
-				Step:        2,
-				Title:       "Witness Signature Affixed",
-				Description: fmt.Sprintf("Approved and signed by %s", witName),
+				Step:        len(trail) + 1,
+				Title:       title,
+				Description: desc,
 				Actor:       witName,
 				Role:        "Witness",
 				Timestamp:   ba.WitnessSignedAt,
@@ -962,7 +1434,7 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 			})
 		} else {
 			trail = append(trail, response.DocumentAuditTrailItem{
-				Step:        2,
+				Step:        len(trail) + 1,
 				Title:       "Witness Review Revoked",
 				Description: "Submission was recalled by submitter prior to witness completion",
 				Actor:       witName,
@@ -973,7 +1445,7 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 		}
 	default: // pending_witness
 		trail = append(trail, response.DocumentAuditTrailItem{
-			Step:        2,
+			Step:        len(trail) + 1,
 			Title:       "Witness Review Pending",
 			Description: fmt.Sprintf("Awaiting review and signature by %s", witName),
 			Actor:       witName,
@@ -983,10 +1455,10 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 		})
 	}
 
-	// Step 3: Cryptographic SHA-256 Seal
+	// Cryptographic SHA-256 Seal
 	if ba.DocumentHash != "" {
 		trail = append(trail, response.DocumentAuditTrailItem{
-			Step:        3,
+			Step:        len(trail) + 1,
 			Title:       "Cryptographic SHA-256 Seal",
 			Description: fmt.Sprintf("Hash lock: %s", ba.DocumentHash),
 			Actor:       "System Engine",
@@ -996,7 +1468,7 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 		})
 	} else if ba.Status == models.SubmissionStatusRejected {
 		trail = append(trail, response.DocumentAuditTrailItem{
-			Step:        3,
+			Step:        len(trail) + 1,
 			Title:       "Cryptographic SHA-256 Seal",
 			Description: "Document hash seal withheld pending activity revision",
 			Actor:       "System Engine",
@@ -1006,7 +1478,7 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 		})
 	} else if ba.Status == models.SubmissionStatusRevoked {
 		trail = append(trail, response.DocumentAuditTrailItem{
-			Step:        3,
+			Step:        len(trail) + 1,
 			Title:       "Cryptographic SHA-256 Seal",
 			Description: "Document hash seal invalidated due to revocation",
 			Actor:       "System Engine",
@@ -1016,7 +1488,7 @@ func (s *signatureService) buildBeritaAcaraAuditTrail(
 		})
 	} else {
 		trail = append(trail, response.DocumentAuditTrailItem{
-			Step:        3,
+			Step:        len(trail) + 1,
 			Title:       "Cryptographic SHA-256 Seal",
 			Description: "Awaiting all signatures before generating digital integrity seal",
 			Actor:       "System Engine",

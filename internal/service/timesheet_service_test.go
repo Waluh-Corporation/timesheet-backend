@@ -1,8 +1,12 @@
 package service_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
+	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +18,7 @@ import (
 
 	"timesheet-backend/config"
 	"timesheet-backend/dto/request"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
@@ -342,4 +347,317 @@ func TestTimesheetService_SignedDocuments(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, doc)
 	assert.NotEmpty(t, bname)
+}
+
+type mockBundlingTimesheetService struct {
+	wbBytes  []byte
+	wbName   string
+	wbErr    error
+	baBytes  []byte
+	baName   string
+	baErr    error
+	pdfBytes []byte
+	pdfName  string
+	pdfErr   error
+	baPdf    []byte
+	baPdfNm  string
+	baPdfErr error
+}
+
+func (m *mockBundlingTimesheetService) GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	if m.wbErr != nil {
+		return nil, "", m.wbErr
+	}
+	name := m.wbName
+	if name == "" {
+		name = "Timesheet_mock_06_2026.xlsx"
+	}
+	return m.wbBytes, name, nil
+}
+
+func (m *mockBundlingTimesheetService) GenerateBeritaAcara(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	if m.baErr != nil {
+		return nil, "", m.baErr
+	}
+	return m.baBytes, m.baName, nil
+}
+
+func (m *mockBundlingTimesheetService) UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error {
+	return nil
+}
+
+func (m *mockBundlingTimesheetService) ListMonthlyOvertimes(ctx context.Context, userID uint, month int, year int) ([]response.OvertimeResponse, error) {
+	return nil, nil
+}
+
+func (m *mockBundlingTimesheetService) DeleteOvertime(ctx context.Context, id uint, userID uint) error {
+	return nil
+}
+
+type mockBundlingWithPDFService struct {
+	mockBundlingTimesheetService
+}
+
+func (m *mockBundlingWithPDFService) GenerateTimesheetPDF(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	if m.pdfErr != nil {
+		return nil, "", m.pdfErr
+	}
+	out := m.pdfBytes
+	if len(out) == 0 {
+		out = []byte("%PDF-1.4 mock timesheet pdf")
+	}
+	name := m.pdfName
+	if name == "" {
+		name = "Timesheet_mock_06_2026.pdf"
+	}
+	return out, name, nil
+}
+
+func (m *mockBundlingWithPDFService) GenerateBeritaAcaraPDF(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	if m.baPdfErr != nil {
+		return nil, "", m.baPdfErr
+	}
+	out := m.baPdf
+	if len(out) == 0 {
+		out = []byte("%PDF-1.4 mock ba pdf")
+	}
+	name := m.baPdfNm
+	if name == "" {
+		name = "Berita_Acara_mock_06_2026.pdf"
+	}
+	return out, name, nil
+}
+
+func TestTimesheetService_PackageTimesheetBundle_Fallback(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("Fallback without PDF and without BA", func(t *testing.T) {
+		svc := &mockBundlingTimesheetService{
+			wbBytes: []byte("mock-xlsx"),
+			wbName:  "Timesheet_test_06_2026.xlsx",
+		}
+		data, fname, ctype, err := service.PackageTimesheetBundle(ctx, svc, 1, 6, 2026, false)
+		require.NoError(t, err)
+		assert.Equal(t, "Timesheet_test_06_2026.xlsx", fname)
+		assert.Equal(t, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ctype)
+		assert.Equal(t, []byte("mock-xlsx"), data)
+	})
+
+	t.Run("Fallback without PDF and with BA", func(t *testing.T) {
+		svc := &mockBundlingTimesheetService{
+			wbBytes: []byte("mock-xlsx"),
+			wbName:  "Timesheet_test_06_2026.xlsx",
+			baBytes: []byte("mock-ba-docx"),
+			baName:  "Berita_Acara_test_06_2026.docx",
+		}
+		data, fname, ctype, err := service.PackageTimesheetBundle(ctx, svc, 1, 6, 2026, false)
+		require.NoError(t, err)
+		assert.Equal(t, "Timesheet_test_06_2026_and_Berita_Acara.zip", fname)
+		assert.Equal(t, "application/zip", ctype)
+
+		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		require.NoError(t, err)
+		assert.Len(t, zr.File, 2)
+	})
+
+	t.Run("Fallback with PDF when service does not implement PDFGenerator returns error", func(t *testing.T) {
+		svc := &mockBundlingTimesheetService{
+			wbBytes: []byte("mock-xlsx"),
+		}
+		_, _, _, err := service.PackageTimesheetBundle(ctx, svc, 1, 6, 2026, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "does not support PDF generation")
+	})
+
+	t.Run("Fallback with PDF and without BA", func(t *testing.T) {
+		svc := &mockBundlingWithPDFService{
+			mockBundlingTimesheetService: mockBundlingTimesheetService{
+				wbBytes: []byte("mock-xlsx"),
+				wbName:  "Timesheet_test_06_2026.xlsx",
+			},
+		}
+		data, fname, ctype, err := service.PackageTimesheetBundle(ctx, svc, 1, 6, 2026, true)
+		require.NoError(t, err)
+		assert.Equal(t, "Timesheet_test_06_2026_with_PDF.zip", fname)
+		assert.Equal(t, "application/zip", ctype)
+
+		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		require.NoError(t, err)
+		assert.Len(t, zr.File, 2)
+	})
+
+	t.Run("Fallback with PDF and with BA", func(t *testing.T) {
+		svc := &mockBundlingWithPDFService{
+			mockBundlingTimesheetService: mockBundlingTimesheetService{
+				wbBytes: []byte("mock-xlsx"),
+				wbName:  "Timesheet_test_06_2026.xlsx",
+				baBytes: []byte("mock-ba-docx"),
+				baName:  "Berita_Acara_test_06_2026.docx",
+			},
+		}
+		data, fname, ctype, err := service.PackageTimesheetBundle(ctx, svc, 1, 6, 2026, true)
+		require.NoError(t, err)
+		assert.Equal(t, "Timesheet_test_06_2026_with_PDF.zip", fname)
+		assert.Equal(t, "application/zip", ctype)
+
+		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		require.NoError(t, err)
+		assert.Len(t, zr.File, 4)
+	})
+}
+
+func TestTimesheetService_PackageTimesheetBundle_Integration(t *testing.T) {
+	db := setupTestDBForService(t)
+	tx := db.Begin()
+	defer tx.Rollback()
+
+	userRepo := repository.NewUserRepository(tx)
+	actRepo := repository.NewActivityRepository(tx)
+	otRepo := repository.NewOvertimeRepository(tx)
+	masterRepo := repository.NewMasterRepository(tx)
+
+	svc := service.NewTimesheetService(userRepo, actRepo, otRepo, masterRepo, nil)
+	if tsImpl, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+		tsImpl.SetNowFunc(func() time.Time {
+			return time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+		})
+	}
+	ctx := context.Background()
+
+	// Seed user with company
+	user := &models.User{
+		Username:   "bundle_user",
+		Email:      "bundle@example.com",
+		Role:       models.RoleUser,
+		Name:       "Bundle User",
+		Company:    "sdd",
+		IsActive:   true,
+		EmployeeID: "EMP-BND-1",
+	}
+	require.NoError(t, tx.Create(user).Error)
+
+	// Seed standard activity
+	act := &models.DailyActivity{
+		UserID:    user.ID,
+		Date:      time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC),
+		StartTime: "08:00",
+		EndTime:   "17:00",
+		Status:    "P",
+		Activity:  "Standard development activity",
+		IsActive:  true,
+	}
+	require.NoError(t, tx.Create(act).Error)
+
+	t.Run("Bundle without PDF and without BA", func(t *testing.T) {
+		data, fname, ctype, err := service.PackageTimesheetBundle(ctx, svc, user.ID, 6, 2026, false)
+		require.NoError(t, err)
+		assert.True(t, strings.HasSuffix(fname, ".xlsx"))
+		assert.Equal(t, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ctype)
+		assert.NotEmpty(t, data)
+	})
+
+	t.Run("Bundle with PDF and without BA", func(t *testing.T) {
+		data, fname, ctype, err := service.PackageTimesheetBundle(ctx, svc, user.ID, 6, 2026, true)
+		require.NoError(t, err)
+		assert.True(t, strings.HasSuffix(fname, "_with_PDF.zip"))
+		assert.Equal(t, "application/zip", ctype)
+
+		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		require.NoError(t, err)
+		require.Len(t, zr.File, 2)
+
+		var foundXlsx, foundPDF bool
+		for _, f := range zr.File {
+			if strings.HasSuffix(f.Name, ".xlsx") {
+				foundXlsx = true
+			}
+			if strings.HasSuffix(f.Name, ".pdf") {
+				foundPDF = true
+				rc, rerr := f.Open()
+				require.NoError(t, rerr)
+				buf, _ := io.ReadAll(rc)
+				_ = rc.Close()
+				assert.True(t, bytes.HasPrefix(buf, []byte("%PDF-")))
+			}
+		}
+		assert.True(t, foundXlsx)
+		assert.True(t, foundPDF)
+	})
+
+	// Seed witness and BA activity
+	witness := &models.User{
+		Username: "bundle_witness",
+		Email:    "witness_bundle@example.com",
+		Role:     models.RoleUser,
+		Name:     "Bundle Witness",
+		Company:  "sdd",
+		IsActive: true,
+	}
+	require.NoError(t, tx.Create(witness).Error)
+
+	baAct := &models.DailyActivity{
+		UserID:           user.ID,
+		Date:             time.Date(2026, 6, 16, 0, 0, 0, 0, time.UTC),
+		StartTime:        "08:00",
+		EndTime:          "17:00",
+		Status:           "P",
+		Activity:         "Critical hotfix deployment",
+		IsActive:         true,
+		IsBeritaAcara:    true,
+		WitnessID:        &witness.ID,
+		BeritaAcaraNotes: "Deployment went smoothly without downtime",
+	}
+	require.NoError(t, tx.Create(baAct).Error)
+
+	t.Run("Bundle without PDF and with BA", func(t *testing.T) {
+		data, fname, ctype, err := service.PackageTimesheetBundle(ctx, svc, user.ID, 6, 2026, false)
+		require.NoError(t, err)
+		assert.True(t, strings.HasSuffix(fname, "_and_Berita_Acara.zip"))
+		assert.Equal(t, "application/zip", ctype)
+
+		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		require.NoError(t, err)
+		assert.Len(t, zr.File, 2)
+	})
+
+	t.Run("Bundle with PDF and with BA", func(t *testing.T) {
+		data, fname, ctype, err := service.PackageTimesheetBundle(ctx, svc, user.ID, 6, 2026, true)
+		require.NoError(t, err)
+		assert.True(t, strings.HasSuffix(fname, "_with_PDF.zip"))
+		assert.Equal(t, "application/zip", ctype)
+
+		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+		require.NoError(t, err)
+		require.Len(t, zr.File, 4)
+
+		var foundXlsx, foundTimesheetPDF, foundDocx, foundBAPDF bool
+		for _, f := range zr.File {
+			if strings.HasSuffix(f.Name, ".xlsx") {
+				foundXlsx = true
+			}
+			if strings.HasPrefix(f.Name, "Timesheet_") && strings.HasSuffix(f.Name, ".pdf") {
+				foundTimesheetPDF = true
+				rc, rerr := f.Open()
+				require.NoError(t, rerr)
+				buf, _ := io.ReadAll(rc)
+				_ = rc.Close()
+				assert.True(t, bytes.HasPrefix(buf, []byte("%PDF-")))
+			}
+			if strings.HasSuffix(f.Name, ".docx") {
+				foundDocx = true
+			}
+			if strings.HasPrefix(f.Name, "Berita_Acara_") && strings.HasSuffix(f.Name, ".pdf") {
+				foundBAPDF = true
+				rc, rerr := f.Open()
+				require.NoError(t, rerr)
+				buf, _ := io.ReadAll(rc)
+				_ = rc.Close()
+				assert.True(t, bytes.HasPrefix(buf, []byte("%PDF-")))
+			}
+		}
+		assert.True(t, foundXlsx)
+		assert.True(t, foundTimesheetPDF)
+		assert.True(t, foundDocx)
+		assert.True(t, foundBAPDF)
+	})
 }

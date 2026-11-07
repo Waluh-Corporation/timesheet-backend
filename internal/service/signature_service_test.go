@@ -3,8 +3,15 @@ package service_test
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	_ "image/gif"
@@ -15,9 +22,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 
 	"timesheet-backend/config"
 	"timesheet-backend/dto/request"
+	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
@@ -247,12 +256,14 @@ func (m *mockStorageSvc) FileExists(ctx context.Context, key string) (bool, erro
 type mockUserRepo struct {
 	repository.UserAccountRepository
 	users        map[uint]*models.User
+	passkeys     map[uint][]models.WebAuthnCredential
 	updateSigErr error
 }
 
 func newMockUserRepo() *mockUserRepo {
 	return &mockUserRepo{
-		users: make(map[uint]*models.User),
+		users:    make(map[uint]*models.User),
+		passkeys: make(map[uint][]models.WebAuthnCredential),
 	}
 }
 
@@ -282,6 +293,24 @@ func (m *mockUserRepo) UpdateSignatureFileKey(ctx context.Context, id uint, file
 		return domain.ErrNotFound
 	}
 	u.SignatureFileKey = fileKey
+	return nil
+}
+
+func (m *mockUserRepo) ListPasskeysByUserID(ctx context.Context, userID uint) ([]models.WebAuthnCredential, error) {
+	return m.passkeys[userID], nil
+}
+
+func (m *mockUserRepo) UpdatePasskeySignCount(ctx context.Context, credID []byte, signCount uint32, backupState bool) error {
+	for userID, list := range m.passkeys {
+		for i := range list {
+			if bytes.Equal(list[i].CredentialID, credID) {
+				list[i].SignCount = signCount
+				list[i].BackupState = backupState
+				m.passkeys[userID] = list
+				return nil
+			}
+		}
+	}
 	return nil
 }
 
@@ -1225,7 +1254,7 @@ func TestSignatureService_AuditTrail_Comprehensive(t *testing.T) {
 
 		assert.Equal(t, "192.168.***.***", vApproved.AuditTrail[0].MaskedIP)
 		assert.Equal(t, "10.10.***.***", vApproved.AuditTrail[1].MaskedIP)
-		assert.Equal(t, "Witness Signature Affixed", vApproved.AuditTrail[1].Title)
+		assert.Equal(t, "Endorsed by Witness Signatory", vApproved.AuditTrail[1].Title)
 		assert.Equal(t, "Cryptographic SHA-256 Seal", vApproved.AuditTrail[2].Title)
 		assert.Equal(t, "Public Verification Gateway", vApproved.AuditTrail[3].Title)
 
@@ -1244,5 +1273,640 @@ func TestSignatureService_AuditTrail_Comprehensive(t *testing.T) {
 		assert.Equal(t, "Document Revoked", vRevoked.AuditTrail[3].Title)
 		assert.Equal(t, "172.16.***.***", vRevoked.AuditTrail[3].MaskedIP)
 		assert.Equal(t, "revoked", vRevoked.AuditTrail[3].Status)
+	})
+}
+
+func TestSignatureService_GetBeritaAcaraReview(t *testing.T) {
+	ctx := context.Background()
+	userRepo := newMockUserRepo()
+	actRepo := newMockActivityRepo()
+	subRepo := newMockSubmissionRepo()
+	storageSvc := newMockStorageSvc()
+
+	employee := &models.User{
+		ID:               10,
+		Username:         "emp_ba_review",
+		Name:             "Budi Santoso",
+		BniID:            "12345",
+		Department:       "Engineering",
+		GroupName:        "Core Systems",
+		SignatureFileKey: "signatures/10_sig.png",
+		IsActive:         true,
+	}
+	witness := &models.User{
+		ID:               20,
+		Username:         "wit_ba_review",
+		Name:             "Dewi Sartika",
+		SignatureFileKey: "signatures/20_sig.png",
+		IsActive:         true,
+	}
+	otherUser := &models.User{
+		ID:       30,
+		Username: "third_party_or_admin",
+		Name:     "Admin Or Other",
+		Role:     models.RoleAdmin,
+		IsActive: true,
+	}
+	_ = userRepo.Create(ctx, employee)
+	_ = userRepo.Create(ctx, witness)
+	_ = userRepo.Create(ctx, otherUser)
+
+	// Register passkey for witness
+	userRepo.passkeys[witness.ID] = []models.WebAuthnCredential{
+		{
+			ID:           1,
+			UserID:       witness.ID,
+			CredentialID: []byte("test_cred_id_32_bytes_long_1234"),
+			Transports:   datatypes.JSON([]byte(`["internal"]`)),
+			FriendlyName: "MacBook Touch ID",
+		},
+	}
+
+	storageSvc.files["signatures/10_sig.png"] = []byte("pngdata")
+	storageSvc.files["signatures/20_sig.png"] = []byte("pngdata")
+
+	// Seed BA incident activity
+	actRepo.activities = []models.DailyActivity{
+		{
+			ID:               101,
+			UserID:           employee.ID,
+			Date:             time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC),
+			StartTime:        "08:30",
+			EndTime:          "17:30",
+			Status:           "P",
+			Activity:         "Core engine migration",
+			BeritaAcaraNotes: "Forgot badge",
+			IsBeritaAcara:    true,
+			IsActive:         true,
+		},
+		{
+			ID:            102,
+			UserID:        employee.ID,
+			Date:          time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC),
+			StartTime:     "09:00",
+			EndTime:       "18:00",
+			Status:        "P",
+			Activity:      "Regular work without incident",
+			IsBeritaAcara: false,
+			IsActive:      true,
+		},
+	}
+
+	svc := service.NewSignatureService(userRepo, actRepo, subRepo, storageSvc, nil, nil, "https://timesheet.local")
+	initTime := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
+	if timeSetter, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+		timeSetter.SetNowFunc(func() time.Time { return initTime })
+	}
+
+	// Submit Berita Acara
+	subResp, err := svc.SubmitBeritaAcara(ctx, employee.ID, &request.SubmitBeritaAcaraRequest{
+		Month:     9,
+		Year:      2026,
+		WitnessID: witness.ID,
+	}, service.AuditMeta{IP: "192.168.1.10", UserAgent: "SubmitAgent/1.0"})
+	require.NoError(t, err)
+	submissionID := subResp.ID
+
+	// 1. Not Found ID -> returns ErrNotFound
+	_, err = svc.GetBeritaAcaraReview(ctx, witness.ID, "non-existent-sub-id", service.AuditMeta{})
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrNotFound))
+
+	// 2. Strict IDOR / Role Isolation: Applicant employee attempts to review -> ErrForbidden
+	_, err = svc.GetBeritaAcaraReview(ctx, employee.ID, submissionID, service.AuditMeta{})
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrForbidden))
+
+	// 3. Strict IDOR / Role Isolation: Third-party or Admin attempts to review -> ErrForbidden
+	_, err = svc.GetBeritaAcaraReview(ctx, otherUser.ID, submissionID, service.AuditMeta{})
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, domain.ErrForbidden))
+
+	// 4. Authorized Witness Reviews -> 200 OK
+	metaView1 := service.AuditMeta{IP: "192.168.1.50", UserAgent: "WitnessBrowser/1.0"}
+	reviewResp, err := svc.GetBeritaAcaraReview(ctx, witness.ID, submissionID, metaView1)
+	require.NoError(t, err)
+
+	// Validate review payload fields
+	assert.Equal(t, submissionID, reviewResp.SubmissionID)
+	assert.Equal(t, submissionID, reviewResp.ID)
+	assert.Equal(t, 9, reviewResp.Month)
+	assert.Equal(t, 2026, reviewResp.Year)
+	assert.Equal(t, models.SubmissionStatusPendingWitness, reviewResp.Status)
+	assert.NotEmpty(t, reviewResp.VerificationToken)
+
+	// Applicant data
+	assert.Equal(t, employee.ID, reviewResp.Applicant.UserID)
+	assert.Equal(t, "Budi Santoso", reviewResp.Applicant.Name)
+	assert.Equal(t, "12345", reviewResp.Applicant.NPP)
+	assert.Equal(t, "12345", reviewResp.Applicant.BNIID)
+	assert.Equal(t, "Engineering", reviewResp.Applicant.Department)
+	assert.Equal(t, "Core Systems", reviewResp.Applicant.Group)
+	assert.Contains(t, reviewResp.Applicant.SignatureURL, "10_sig.png")
+
+	// Witness data
+	assert.Equal(t, witness.ID, reviewResp.Witness.UserID)
+	assert.Equal(t, "Dewi Sartika", reviewResp.Witness.Name)
+	assert.True(t, reviewResp.Witness.HasSignature)
+	assert.True(t, reviewResp.Witness.HasPasskey)
+	assert.NotNil(t, reviewResp.Witness.ReviewHistory)
+
+	// Incident rows
+	require.Len(t, reviewResp.Incidents, 1)
+	assert.Equal(t, "2026-09-05", reviewResp.Incidents[0].Date)
+	assert.Equal(t, "Saturday", reviewResp.Incidents[0].Day)
+	assert.Equal(t, "08:30", reviewResp.Incidents[0].StartTime)
+	assert.Equal(t, "17:30", reviewResp.Incidents[0].EndTime)
+	assert.Equal(t, "Forgot badge", reviewResp.Incidents[0].Notes)
+
+	// Instant PDF preview URL
+	assert.Equal(t, "/api/v1/berita-acara/"+submissionID+"/preview/pdf", reviewResp.PreviewPDFURL)
+
+	// Signing challenge: 32 raw bytes URL-safe base64
+	assert.NotEmpty(t, reviewResp.SigningChallenge)
+	decodedChallenge, err := base64.RawURLEncoding.DecodeString(reviewResp.SigningChallenge)
+	assert.NoError(t, err)
+	assert.Len(t, decodedChallenge, 32)
+
+	// Allowed credentials
+	require.Len(t, reviewResp.AllowedCredentials, 1)
+	assert.Equal(t, "public-key", reviewResp.AllowedCredentials[0].Type)
+	assert.Equal(t, base64.RawURLEncoding.EncodeToString([]byte("test_cred_id_32_bytes_long_1234")), reviewResp.AllowedCredentials[0].ID)
+	assert.Equal(t, []string{"internal"}, reviewResp.AllowedCredentials[0].Transports)
+
+	// 5. Verify First-View Tracking Idempotency
+	subAfterView1, err := subRepo.FindBeritaAcaraByID(ctx, submissionID)
+	require.NoError(t, err)
+
+	var metaMap1 map[string]interface{}
+	err = json.Unmarshal(subAfterView1.AuditMetadata, &metaMap1)
+	require.NoError(t, err)
+
+	firstViewedAt := metaMap1["witness_viewed_at"]
+	assert.NotEmpty(t, firstViewedAt)
+	assert.Equal(t, "192.168.1.50", metaMap1["witness_view_ip"])
+	assert.Equal(t, "WitnessBrowser/1.0", metaMap1["witness_view_user_agent"])
+
+	// Advance clock by 1 hour and review again with different IP & UA
+	secondTime := initTime.Add(1 * time.Hour)
+	if timeSetter, ok := svc.(interface{ SetNowFunc(func() time.Time) }); ok {
+		timeSetter.SetNowFunc(func() time.Time { return secondTime })
+	}
+
+	metaView2 := service.AuditMeta{IP: "10.0.0.99", UserAgent: "DifferentDevice/2.0"}
+	reviewResp2, err := svc.GetBeritaAcaraReview(ctx, witness.ID, submissionID, metaView2)
+	require.NoError(t, err)
+	assert.NotEmpty(t, reviewResp2.SigningChallenge)
+
+	subAfterView2, err := subRepo.FindBeritaAcaraByID(ctx, submissionID)
+	require.NoError(t, err)
+
+	var metaMap2 map[string]interface{}
+	err = json.Unmarshal(subAfterView2.AuditMetadata, &metaMap2)
+	require.NoError(t, err)
+
+	// The first view values MUST remain 100% identical to the first call
+	assert.Equal(t, firstViewedAt, metaMap2["witness_viewed_at"])
+	assert.Equal(t, "192.168.1.50", metaMap2["witness_view_ip"])
+	assert.Equal(t, "WitnessBrowser/1.0", metaMap2["witness_view_user_agent"])
+
+	// 6. Edge cases and error branches
+	t.Run("FindBeritaAcaraByID error branch", func(t *testing.T) {
+		subRepo.findBaErr = errors.New("database disk error")
+		defer func() { subRepo.findBaErr = nil }()
+		_, err := svc.GetBeritaAcaraReview(ctx, witness.ID, submissionID, service.AuditMeta{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "find berita acara by id")
+	})
+
+	t.Run("UpsertBeritaAcaraSubmission error branch", func(t *testing.T) {
+		subRepo.upsertBaErr = errors.New("upsert failure")
+		defer func() { subRepo.upsertBaErr = nil }()
+		_, err := svc.GetBeritaAcaraReview(ctx, witness.ID, submissionID, service.AuditMeta{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "update submission audit metadata")
+	})
+
+	t.Run("Applicant user missing", func(t *testing.T) {
+		delete(userRepo.users, employee.ID)
+		defer func() { userRepo.users[employee.ID] = employee }()
+		_, err := svc.GetBeritaAcaraReview(ctx, witness.ID, submissionID, service.AuditMeta{})
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, domain.ErrNotFound))
+	})
+
+	t.Run("Witness user missing", func(t *testing.T) {
+		delete(userRepo.users, witness.ID)
+		defer func() { userRepo.users[witness.ID] = witness }()
+		_, err := svc.GetBeritaAcaraReview(ctx, witness.ID, submissionID, service.AuditMeta{})
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, domain.ErrNotFound))
+	})
+
+	t.Run("Activity repo list error", func(t *testing.T) {
+		actRepo.listErr = errors.New("activity table locked")
+		defer func() { actRepo.listErr = nil }()
+		_, err := svc.GetBeritaAcaraReview(ctx, witness.ID, submissionID, service.AuditMeta{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "list activities for review")
+	})
+
+	t.Run("Witness without passkeys", func(t *testing.T) {
+		delete(userRepo.passkeys, witness.ID)
+		defer func() {
+			userRepo.passkeys[witness.ID] = []models.WebAuthnCredential{{ID: 1, UserID: witness.ID, CredentialID: []byte("test_cred")}}
+		}()
+		noPkResp, err := svc.GetBeritaAcaraReview(ctx, witness.ID, submissionID, service.AuditMeta{})
+		require.NoError(t, err)
+		assert.False(t, noPkResp.Witness.HasPasskey)
+		assert.Empty(t, noPkResp.AllowedCredentials)
+	})
+
+	t.Run("Activity fallback notes and prior rejection history", func(t *testing.T) {
+		savedActs := actRepo.activities
+		actRepo.activities = []models.DailyActivity{{
+			ID:            103,
+			UserID:        employee.ID,
+			Date:          time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC),
+			StartTime:     "08:00",
+			EndTime:       "17:00",
+			Activity:      "Fallback Activity Description",
+			IsBeritaAcara: true,
+			IsActive:      true,
+		}}
+		defer func() { actRepo.activities = savedActs }()
+
+		subRecord, err := subRepo.FindBeritaAcaraByID(ctx, submissionID)
+		require.NoError(t, err)
+		subRecord.WitnessRejectionNotes = "Please fix day 5"
+		_ = subRepo.UpsertBeritaAcaraSubmission(ctx, subRecord)
+
+		fallbackResp, err := svc.GetBeritaAcaraReview(ctx, witness.ID, submissionID, service.AuditMeta{})
+		require.NoError(t, err)
+		require.Len(t, fallbackResp.Incidents, 1)
+		assert.Equal(t, "Fallback Activity Description", fallbackResp.Incidents[0].Notes)
+		assert.Equal(t, []string{"Please fix day 5"}, fallbackResp.Witness.ReviewHistory)
+		assert.Equal(t, "Please fix day 5", fallbackResp.Witness.WitnessRejectionNotes)
+	})
+}
+
+func TestSignatureService_AuditTrail_WitnessViewed(t *testing.T) {
+	ctx := context.Background()
+	userRepo := newMockUserRepo()
+	actRepo := newMockActivityRepo()
+	subRepo := newMockSubmissionRepo()
+	storageSvc := newMockStorageSvc()
+
+	employee := &models.User{
+		ID:               11,
+		Username:         "emp11",
+		Name:             "Charlie Emp",
+		SignatureFileKey: "signatures/11_sig.png",
+		IsActive:         true,
+	}
+	witness := &models.User{
+		ID:               21,
+		Username:         "wit21",
+		Name:             "Dana Wit",
+		SignatureFileKey: "signatures/21_sig.png",
+		IsActive:         true,
+	}
+	_ = userRepo.Create(ctx, employee)
+	_ = userRepo.Create(ctx, witness)
+
+	actRepo.activities = []models.DailyActivity{{
+		ID:            201,
+		UserID:        employee.ID,
+		Date:          time.Date(2026, 10, 10, 0, 0, 0, 0, time.UTC),
+		Activity:      "Deployment issue",
+		IsBeritaAcara: true,
+		WitnessID:     &witness.ID,
+		IsActive:      true,
+	}}
+
+	svc := service.NewSignatureService(userRepo, actRepo, subRepo, storageSvc, nil, nil, "https://timesheet.local")
+	sub, err := svc.SubmitBeritaAcara(ctx, employee.ID, &request.SubmitBeritaAcaraRequest{
+		Month:     10,
+		Year:      2026,
+		WitnessID: witness.ID,
+	}, service.AuditMeta{IP: "192.168.10.11"})
+	require.NoError(t, err)
+
+	// Case 1: Before witness review, AuditTrail has 3 steps (no witness viewed step)
+	vBefore, err := svc.VerifyDocument(ctx, sub.VerificationToken)
+	require.NoError(t, err)
+	assert.Len(t, vBefore.AuditTrail, 3)
+	assert.Equal(t, 1, vBefore.AuditTrail[0].Step)
+	assert.Equal(t, "Document Submitted & Signed", vBefore.AuditTrail[0].Title)
+	assert.Equal(t, 2, vBefore.AuditTrail[1].Step)
+	assert.Equal(t, "Witness Review Pending", vBefore.AuditTrail[1].Title)
+
+	// Case 2: Witness reviews the document
+	_, err = svc.GetBeritaAcaraReview(ctx, witness.ID, sub.ID, service.AuditMeta{
+		IP:        "192.168.20.22",
+		UserAgent: "DanaBrowser/1.0",
+	})
+	require.NoError(t, err)
+
+	// Now VerifyDocument should show 4 steps, including "Document Viewed by Witness"
+	vAfter, err := svc.VerifyDocument(ctx, sub.VerificationToken)
+	require.NoError(t, err)
+	require.Len(t, vAfter.AuditTrail, 4)
+
+	// Step 1: Employee submit
+	assert.Equal(t, 1, vAfter.AuditTrail[0].Step)
+	assert.Equal(t, "Document Submitted & Signed", vAfter.AuditTrail[0].Title)
+
+	// Step 2: Document Viewed by Witness
+	assert.Equal(t, 2, vAfter.AuditTrail[1].Step)
+	assert.Equal(t, "Document Viewed by Witness", vAfter.AuditTrail[1].Title)
+	assert.Equal(t, "Dana Wit", vAfter.AuditTrail[1].Actor)
+	assert.Equal(t, "Witness", vAfter.AuditTrail[1].Role)
+	assert.Equal(t, "192.168.***.***", vAfter.AuditTrail[1].MaskedIP)
+	assert.Equal(t, "completed", vAfter.AuditTrail[1].Status)
+
+	// Step 3: Witness Review Pending
+	assert.Equal(t, 3, vAfter.AuditTrail[2].Step)
+	assert.Equal(t, "Witness Review Pending", vAfter.AuditTrail[2].Title)
+
+	// Step 4: Cryptographic SHA-256 Seal
+	assert.Equal(t, 4, vAfter.AuditTrail[3].Step)
+	assert.Equal(t, "Cryptographic SHA-256 Seal", vAfter.AuditTrail[3].Title)
+
+	// Case 3: IPv6 witness view masking
+	sub2, err := svc.SubmitBeritaAcara(ctx, employee.ID, &request.SubmitBeritaAcaraRequest{
+		Month:     11,
+		Year:      2026,
+		WitnessID: witness.ID,
+	}, service.AuditMeta{IP: "10.0.0.1"})
+	require.NoError(t, err)
+
+	_, err = svc.GetBeritaAcaraReview(ctx, witness.ID, sub2.ID, service.AuditMeta{
+		IP:        "2001:db8:85a3::8a2e:370:7334",
+		UserAgent: "IPv6Browser/1.0",
+	})
+	require.NoError(t, err)
+
+	vIPv6, err := svc.VerifyDocument(ctx, sub2.VerificationToken)
+	require.NoError(t, err)
+	require.Len(t, vIPv6.AuditTrail, 4)
+	assert.Equal(t, "Document Viewed by Witness", vIPv6.AuditTrail[1].Title)
+	assert.Contains(t, vIPv6.AuditTrail[1].MaskedIP, "****")
+}
+
+func createTestPasskey(t *testing.T, userID uint, credIDStr, friendlyName string) (*ecdsa.PrivateKey, models.WebAuthnCredential) {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	pubBytes, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	require.NoError(t, err)
+
+	credID := []byte(credIDStr)
+	aaguid := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+	aaguidStr := "01020304-0506-0708-090a-0b0c0d0e0f10"
+
+	cred := models.WebAuthnCredential{
+		ID:                  10,
+		UserID:              userID,
+		CredentialID:        credID,
+		PublicKey:           pubBytes,
+		AttestationType:     "none",
+		AAGUID:              aaguid,
+		AuthenticatorAAGUID: &aaguidStr,
+		SignCount:           1,
+		FriendlyName:        friendlyName,
+	}
+	return priv, cred
+}
+
+func signWebAuthnAssertion(
+	t *testing.T,
+	priv *ecdsa.PrivateKey,
+	credID []byte,
+	challenge string,
+	origin string,
+	counter uint32,
+	userPresent bool,
+) *request.WebAuthnAssertionPayload {
+	t.Helper()
+	clientData := fmt.Sprintf(`{"type":"webauthn.get","challenge":"%s","origin":"%s"}`, challenge, origin)
+	clientDataHash := sha256.Sum256([]byte(clientData))
+
+	authData := make([]byte, 37)
+	rpHash := sha256.Sum256([]byte("localhost"))
+	copy(authData[0:32], rpHash[:])
+	if userPresent {
+		authData[32] = 0x01 // UP bit
+	} else {
+		authData[32] = 0x00
+	}
+	authData[33] = byte(counter >> 24)
+	authData[34] = byte(counter >> 16)
+	authData[35] = byte(counter >> 8)
+	authData[36] = byte(counter)
+
+	verificationData := append(authData, clientDataHash[:]...)
+	digest := sha256.Sum256(verificationData)
+	sig, err := ecdsa.SignASN1(rand.Reader, priv, digest[:])
+	require.NoError(t, err)
+
+	return &request.WebAuthnAssertionPayload{
+		CredentialID:      base64.RawURLEncoding.EncodeToString(credID),
+		AuthenticatorData: base64.RawURLEncoding.EncodeToString(authData),
+		ClientDataJSON:    base64.RawURLEncoding.EncodeToString([]byte(clientData)),
+		Signature:         base64.RawURLEncoding.EncodeToString(sig),
+	}
+}
+
+func TestSignatureService_WitnessAction_WebAuthn(t *testing.T) {
+	ctx := context.Background()
+	userRepo := newMockUserRepo()
+	actRepo := newMockActivityRepo()
+	subRepo := newMockSubmissionRepo()
+	storageSvc := newMockStorageSvc()
+	meta := service.AuditMeta{IP: "192.168.1.100", UserAgent: "TestClient/1.0"}
+
+	employee := &models.User{
+		ID:               201,
+		Username:         "emp201",
+		Name:             "Alice Applicant",
+		Email:            "alice@example.com",
+		SignatureFileKey: "signatures/alice.png",
+		IsActive:         true,
+	}
+	witness := &models.User{
+		ID:               202,
+		Username:         "wit202",
+		Name:             "Bob Witness",
+		Email:            "bob@example.com",
+		SignatureFileKey: "signatures/bob.png",
+		IsActive:         true,
+	}
+	require.NoError(t, userRepo.Create(ctx, employee))
+	require.NoError(t, userRepo.Create(ctx, witness))
+
+	// Register a hardware passkey for witness
+	privKey, cred := createTestPasskey(t, witness.ID, "yubikey-cred-202", "YubiKey 5 NFC")
+	userRepo.passkeys[witness.ID] = []models.WebAuthnCredential{cred}
+
+	svc := service.NewSignatureService(userRepo, actRepo, subRepo, storageSvc, nil, nil, "https://timesheet.local")
+
+	// Seed Berita Acara activity
+	actRepo.activities = []models.DailyActivity{{
+		ID:            201,
+		UserID:        employee.ID,
+		Date:          time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC),
+		Activity:      "System maintenance anomaly",
+		IsBeritaAcara: true,
+		IsActive:      true,
+	}}
+
+	// Helper to submit and review a fresh Berita Acara
+	setupSubmissionAndReview := func(month, year int) (*response.BeritaAcaraSubmissionResponse, *response.BeritaAcaraReviewResponse) {
+		subResp, err := svc.SubmitBeritaAcara(ctx, employee.ID, &request.SubmitBeritaAcaraRequest{
+			Month:     month,
+			Year:      year,
+			WitnessID: witness.ID,
+		}, meta)
+		require.NoError(t, err)
+
+		reviewResp, err := svc.GetBeritaAcaraReview(ctx, witness.ID, subResp.ID, meta)
+		require.NoError(t, err)
+		require.NotEmpty(t, reviewResp.SigningChallenge)
+		return subResp, reviewResp
+	}
+
+	t.Run("tampered challenge rejection", func(t *testing.T) {
+		subResp, _ := setupSubmissionAndReview(1, 2026)
+		tamperedAssertion := signWebAuthnAssertion(t, privKey, cred.CredentialID, "invalid_or_tampered_challenge", "https://timesheet.local", 2, true)
+
+		_, err := svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{
+			Action:    "approve",
+			Assertion: tamperedAssertion,
+		}, meta)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Signing challenge")
+
+		// Ensure submission remains pending
+		checkSub, err := subRepo.FindBeritaAcaraByID(ctx, subResp.ID)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusPendingWitness, checkSub.Status)
+		assert.Nil(t, checkSub.WitnessSignedAt)
+	})
+
+	t.Run("unknown credential rejection", func(t *testing.T) {
+		subResp, reviewResp := setupSubmissionAndReview(2, 2026)
+		unknownAssertion := signWebAuthnAssertion(t, privKey, []byte("unknown-credential-id"), reviewResp.SigningChallenge, "https://timesheet.local", 2, true)
+
+		_, err := svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{
+			Action:    "approve",
+			Assertion: unknownAssertion,
+		}, meta)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Kredensial passkey tidak ditemukan")
+
+		checkSub, err := subRepo.FindBeritaAcaraByID(ctx, subResp.ID)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusPendingWitness, checkSub.Status)
+	})
+
+	t.Run("missing user presence rejection", func(t *testing.T) {
+		subResp, reviewResp := setupSubmissionAndReview(3, 2026)
+		noPresenceAssertion := signWebAuthnAssertion(t, privKey, cred.CredentialID, reviewResp.SigningChallenge, "https://timesheet.local", 2, false)
+
+		_, err := svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{
+			Action:    "approve",
+			Assertion: noPresenceAssertion,
+		}, meta)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "User presence")
+
+		checkSub, err := subRepo.FindBeritaAcaraByID(ctx, subResp.ID)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusPendingWitness, checkSub.Status)
+	})
+
+	t.Run("valid passkey assertion approval", func(t *testing.T) {
+		subResp, reviewResp := setupSubmissionAndReview(4, 2026)
+		validAssertion := signWebAuthnAssertion(t, privKey, cred.CredentialID, reviewResp.SigningChallenge, "https://timesheet.local", 15, true)
+
+		actionResp, err := svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{
+			Action:    "approve",
+			Notes:     "Approved with hardware security key",
+			Assertion: validAssertion,
+		}, meta)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusSigned, actionResp.Status)
+		assert.NotNil(t, actionResp.WitnessSignedAt)
+		assert.NotEmpty(t, actionResp.DocumentHash)
+
+		// Verify SignCount update
+		require.Len(t, userRepo.passkeys[witness.ID], 1)
+		assert.Equal(t, uint32(15), userRepo.passkeys[witness.ID][0].SignCount)
+
+		// Verify Document Verification and Audit Trail Milestone
+		vDoc, err := svc.VerifyDocument(ctx, actionResp.VerificationToken)
+		require.NoError(t, err)
+		assert.True(t, vDoc.IsValid)
+		assert.Equal(t, "valid", vDoc.Status)
+
+		// Find the endorsement step
+		var witnessStep *response.DocumentAuditTrailItem
+		for i := range vDoc.AuditTrail {
+			item := &vDoc.AuditTrail[i]
+			if item.Role == "Witness" && item.Title != "Document Viewed by Witness" {
+				witnessStep = item
+				break
+			}
+		}
+		require.NotNil(t, witnessStep, "expected witness endorsement step in audit trail")
+		assert.Equal(t, "Endorsed with Hardware Passkey (Non-Repudiation Verified)", witnessStep.Title)
+		assert.Contains(t, witnessStep.Description, "YubiKey 5 NFC")
+		assert.Equal(t, witness.Name, witnessStep.Actor)
+	})
+
+	t.Run("graceful fallback for nil assertion", func(t *testing.T) {
+		subResp, _ := setupSubmissionAndReview(5, 2026)
+
+		actionResp, err := svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{
+			Action: "approve",
+			Notes:  "Standard approval without hardware key",
+		}, meta)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusSigned, actionResp.Status)
+
+		// Verify Document Audit Trail shows standard milestone
+		vDoc, err := svc.VerifyDocument(ctx, actionResp.VerificationToken)
+		require.NoError(t, err)
+		assert.True(t, vDoc.IsValid)
+
+		var witnessStep *response.DocumentAuditTrailItem
+		for i := range vDoc.AuditTrail {
+			item := &vDoc.AuditTrail[i]
+			if item.Role == "Witness" && item.Title != "Document Viewed by Witness" {
+				witnessStep = item
+				break
+			}
+		}
+		require.NotNil(t, witnessStep)
+		assert.Equal(t, "Endorsed by Witness Signatory", witnessStep.Title)
+		assert.Equal(t, fmt.Sprintf("Approved and signed by %s", witness.Name), witnessStep.Description)
+	})
+
+	t.Run("rejection flow", func(t *testing.T) {
+		subResp, _ := setupSubmissionAndReview(6, 2026)
+
+		rejectResp, err := svc.WitnessAction(ctx, witness.ID, subResp.ID, &request.WitnessActionRequest{
+			Action: "reject",
+			Notes:  "Please revise incident hours for day 10",
+		}, meta)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusRejected, rejectResp.Status)
+		assert.Equal(t, "Please revise incident hours for day 10", rejectResp.WitnessRejectionNotes)
+
+		checkSub, err := subRepo.FindBeritaAcaraByID(ctx, subResp.ID)
+		require.NoError(t, err)
+		assert.Equal(t, models.SubmissionStatusRejected, checkSub.Status)
+		assert.Equal(t, "Please revise incident hours for day 10", checkSub.WitnessRejectionNotes)
 	})
 }

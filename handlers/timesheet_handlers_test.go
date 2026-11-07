@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -49,28 +50,90 @@ func (m *mockStorageService) FileExists(ctx context.Context, key string) (bool, 
 }
 
 type mockQueueClient struct {
-	enqueueErr error
+	enqueueErr     error
+	lastIncludePDF bool
+	enqueuedCount  int
 }
 
 func (m *mockQueueClient) EnqueueTimesheetJob(ctx context.Context, jobID string, userID uint, month, year int) error {
+	m.enqueuedCount++
+	m.lastIncludePDF = false
 	return m.enqueueErr
 }
+
+func (m *mockQueueClient) EnqueueTimesheetJobWithPDF(ctx context.Context, jobID string, userID uint, month, year int, includePDF bool) error {
+	m.enqueuedCount++
+	m.lastIncludePDF = includePDF
+	return m.enqueueErr
+}
+
 func (m *mockQueueClient) Close() error {
 	return nil
 }
 
 type mockTimesheetService struct {
-	genOut  []byte
-	genName string
-	genErr  error
+	genOut      []byte
+	genName     string
+	genErr      error
+	baBytes     []byte
+	baFilename  string
+	baErr       error
+	pdfBytes    []byte
+	pdfFilename string
+	pdfErr      error
+	baPdfBytes  []byte
+	baPdfName   string
+	baPdfErr    error
 }
 
 func (m *mockTimesheetService) GenerateWorkbook(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
-	return m.genOut, m.genName, m.genErr
+	if m.genErr != nil {
+		return nil, "", m.genErr
+	}
+	name := m.genName
+	if name == "" {
+		name = "Timesheet.xlsx"
+	}
+	return m.genOut, name, nil
 }
+
 func (m *mockTimesheetService) GenerateBeritaAcara(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
-	return nil, "", nil
+	if m.baErr != nil {
+		return nil, "", m.baErr
+	}
+	return m.baBytes, m.baFilename, nil
 }
+
+func (m *mockTimesheetService) GenerateTimesheetPDF(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	if m.pdfErr != nil {
+		return nil, "", m.pdfErr
+	}
+	out := m.pdfBytes
+	if len(out) == 0 {
+		out = []byte("%PDF-1.4 mock timesheet pdf")
+	}
+	name := m.pdfFilename
+	if name == "" {
+		name = "Timesheet.pdf"
+	}
+	return out, name, nil
+}
+
+func (m *mockTimesheetService) GenerateBeritaAcaraPDF(ctx context.Context, userID uint, month int, year int) ([]byte, string, error) {
+	if m.baPdfErr != nil {
+		return nil, "", m.baPdfErr
+	}
+	out := m.baPdfBytes
+	if len(out) == 0 {
+		out = []byte("%PDF-1.4 mock ba pdf")
+	}
+	name := m.baPdfName
+	if name == "" {
+		name = "Berita_Acara.pdf"
+	}
+	return out, name, nil
+}
+
 func (m *mockTimesheetService) UpsertOvertime(ctx context.Context, userID uint, req *request.OvertimeRequest) error {
 	return nil
 }
@@ -470,7 +533,7 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		srv.GenerateTimesheet(c4)
 		assertResponseCode(t, w4, http.StatusInternalServerError)
 
-		// 5. TimesheetSvc returns success -> 200 attachment
+		// 5. TimesheetSvc returns success without PDF and without BA -> 200 attachment
 		srv.TimesheetSvc = &mockTimesheetService{genOut: []byte("excel-content"), genName: "Timesheet.xlsx"}
 		w5 := httptest.NewRecorder()
 		c5, _ := gin.CreateTestContext(w5)
@@ -481,6 +544,89 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		assertResponseCode(t, w5, http.StatusOK)
 		if !strings.Contains(w5.Header().Get("Content-Disposition"), "Timesheet.xlsx") {
 			t.Errorf("expected Content-Disposition with Timesheet.xlsx, got %s", w5.Header().Get("Content-Disposition"))
+		}
+		if w5.Header().Get("Content-Type") != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+			t.Errorf("expected xlsx content type, got %s", w5.Header().Get("Content-Type"))
+		}
+
+		// 6. TimesheetSvc returns success with BA and without PDF -> 200 ZIP attachment
+		srv.TimesheetSvc = &mockTimesheetService{
+			genOut:     []byte("excel-content"),
+			genName:    "Timesheet_user_06_2026.xlsx",
+			baBytes:    []byte("ba-content"),
+			baFilename: "Berita_Acara_user_06_2026.docx",
+		}
+		w6 := httptest.NewRecorder()
+		c6, _ := gin.CreateTestContext(w6)
+		c6.Set("userID", userWithCompany.ID)
+		c6.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payload))
+		c6.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(c6)
+		assertResponseCode(t, w6, http.StatusOK)
+		if !strings.Contains(w6.Header().Get("Content-Disposition"), "Timesheet_user_06_2026_and_Berita_Acara.zip") {
+			t.Errorf("expected Content-Disposition with zip, got %s", w6.Header().Get("Content-Disposition"))
+		}
+		if w6.Header().Get("Content-Type") != "application/zip" {
+			t.Errorf("expected application/zip, got %s", w6.Header().Get("Content-Type"))
+		}
+		zr6, err := zip.NewReader(bytes.NewReader(w6.Body.Bytes()), int64(w6.Body.Len()))
+		if err != nil {
+			t.Fatalf("failed to read zip response: %v", err)
+		}
+		if len(zr6.File) != 2 {
+			t.Errorf("expected 2 files in zip, got %d", len(zr6.File))
+		}
+
+		// 7. TimesheetSvc returns success with PDF and without BA -> 200 ZIP attachment
+		pdfPayload, _ := json.Marshal(request.GenerateRequest{Month: currMonth, Year: currYear, PDF: true})
+		srv.TimesheetSvc = &mockTimesheetService{
+			genOut:   []byte("excel-content"),
+			genName:  "Timesheet_user_06_2026.xlsx",
+			pdfBytes: []byte("%PDF-1.4 timesheet"),
+		}
+		w7 := httptest.NewRecorder()
+		c7, _ := gin.CreateTestContext(w7)
+		c7.Set("userID", userWithCompany.ID)
+		c7.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(pdfPayload))
+		c7.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(c7)
+		assertResponseCode(t, w7, http.StatusOK)
+		if !strings.Contains(w7.Header().Get("Content-Disposition"), "Timesheet_user_06_2026_with_PDF.zip") {
+			t.Errorf("expected Content-Disposition with _with_PDF.zip, got %s", w7.Header().Get("Content-Disposition"))
+		}
+		zr7, err := zip.NewReader(bytes.NewReader(w7.Body.Bytes()), int64(w7.Body.Len()))
+		if err != nil {
+			t.Fatalf("failed to read zip response: %v", err)
+		}
+		if len(zr7.File) != 2 {
+			t.Errorf("expected 2 files in zip, got %d", len(zr7.File))
+		}
+
+		// 8. TimesheetSvc returns success with PDF and with BA -> 200 ZIP attachment containing 4 files
+		srv.TimesheetSvc = &mockTimesheetService{
+			genOut:     []byte("excel-content"),
+			genName:    "Timesheet_user_06_2026.xlsx",
+			pdfBytes:   []byte("%PDF-1.4 timesheet"),
+			baBytes:    []byte("ba-content"),
+			baFilename: "Berita_Acara_user_06_2026.docx",
+			baPdfBytes: []byte("%PDF-1.4 ba"),
+		}
+		w8 := httptest.NewRecorder()
+		c8, _ := gin.CreateTestContext(w8)
+		c8.Set("userID", userWithCompany.ID)
+		c8.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(pdfPayload))
+		c8.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(c8)
+		assertResponseCode(t, w8, http.StatusOK)
+		if !strings.Contains(w8.Header().Get("Content-Disposition"), "Timesheet_user_06_2026_with_PDF.zip") {
+			t.Errorf("expected Content-Disposition with _with_PDF.zip, got %s", w8.Header().Get("Content-Disposition"))
+		}
+		zr8, err := zip.NewReader(bytes.NewReader(w8.Body.Bytes()), int64(w8.Body.Len()))
+		if err != nil {
+			t.Fatalf("failed to read zip response: %v", err)
+		}
+		if len(zr8.File) != 4 {
+			t.Errorf("expected 4 files in zip, got %d", len(zr8.File))
 		}
 	})
 
@@ -560,6 +706,34 @@ func TestTimesheetHandlers_GenerateTimesheet(t *testing.T) {
 		c4.Request.Header.Set("Content-Type", "application/json")
 		srv.GenerateTimesheet(c4)
 		assertResponseCode(t, w4, http.StatusAccepted)
+
+		// 5. Asynchronous enqueue with PDF: true -> 202 Accepted, verify mockQ.lastIncludePDF == true (Month 5)
+		payload5, _ := json.Marshal(request.GenerateRequest{Month: 5, Year: 2026, PDF: true})
+		w5 := httptest.NewRecorder()
+		c5, _ := gin.CreateTestContext(w5)
+		c5.Set("userID", userWithCompany.ID)
+		c5.Set("userRole", string(models.RoleAdmin))
+		c5.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payload5))
+		c5.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(c5)
+		assertResponseCode(t, w5, http.StatusAccepted)
+		if !mockQ.lastIncludePDF {
+			t.Errorf("expected lastIncludePDF to be true")
+		}
+
+		// 6. Asynchronous enqueue with PDF: false -> 202 Accepted, verify mockQ.lastIncludePDF == false (Month 6)
+		payload6, _ := json.Marshal(request.GenerateRequest{Month: 6, Year: 2026, PDF: false})
+		w6 := httptest.NewRecorder()
+		c6, _ := gin.CreateTestContext(w6)
+		c6.Set("userID", userWithCompany.ID)
+		c6.Set("userRole", string(models.RoleAdmin))
+		c6.Request = httptest.NewRequest("POST", "/api/v1/timesheet/generate", bytes.NewReader(payload6))
+		c6.Request.Header.Set("Content-Type", "application/json")
+		srv.GenerateTimesheet(c6)
+		assertResponseCode(t, w6, http.StatusAccepted)
+		if mockQ.lastIncludePDF {
+			t.Errorf("expected lastIncludePDF to be false")
+		}
 	})
 
 	t.Run("Period limit enforcement for regular user vs admin", func(t *testing.T) {
@@ -773,5 +947,24 @@ func TestIsJobCacheValid_EdgeCases(t *testing.T) {
 	storageSvc.existsResult = true
 	if !isJobCacheValid(ctx, job, user, nil, storageSvc, 6, 2026) {
 		t.Errorf("expected true when cache is valid and storage file exists")
+	}
+
+	// 4. Request asks for PDF but cache has xlsx -> invalid
+	if isJobCacheValid(ctx, job, user, nil, storageSvc, 6, 2026, true) {
+		t.Errorf("expected false when req asks for PDF but cached job is non-PDF")
+	}
+
+	// 5. Request asks for PDF and cache has _with_PDF.zip -> valid
+	jobPDF := &models.TimesheetJob{
+		CreatedAt: jobTime,
+		FileKey:   "timesheets/test_with_PDF.zip",
+	}
+	if !isJobCacheValid(ctx, jobPDF, user, nil, storageSvc, 6, 2026, true) {
+		t.Errorf("expected true when req asks for PDF and cached job has PDF")
+	}
+
+	// 6. Request does NOT ask for PDF but cache has _with_PDF.zip -> invalid
+	if isJobCacheValid(ctx, jobPDF, user, nil, storageSvc, 6, 2026, false) {
+		t.Errorf("expected false when req asks for non-PDF but cached job has PDF")
 	}
 }

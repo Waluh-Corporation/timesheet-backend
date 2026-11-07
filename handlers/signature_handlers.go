@@ -2,14 +2,19 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"timesheet-backend/dto/request"
 	"timesheet-backend/internal/domain"
+	"timesheet-backend/internal/repository"
 	"timesheet-backend/internal/service"
+	"timesheet-backend/models"
+	"timesheet-backend/services"
 )
 
 const (
@@ -264,6 +269,54 @@ func (s *Server) SubmitBeritaAcara(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, resp)
 }
 
+// ReviewBeritaAcara godoc
+// @Summary Review Berita Acara submission context for designated witness
+// @Description Provides full verification context for witness review, records idempotent first-view tracking, and returns cryptographic signing challenge.
+// @Tags Signatures
+// @Produce json
+// @Param id path string true "Submission ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/berita-acara/{id}/review [get]
+func (s *Server) ReviewBeritaAcara(c *gin.Context) {
+	if s.SignatureSvc == nil {
+		RespondError(c, http.StatusInternalServerError, errSignatureSvcNotInit)
+		return
+	}
+
+	submissionID := c.Param("id")
+	if submissionID == "" {
+		RespondError(c, http.StatusBadRequest, "Submission ID wajib diisi")
+		return
+	}
+
+	witnessID := currentUserID(c)
+	meta := extractAuditMeta(c)
+	resp, err := s.SignatureSvc.GetBeritaAcaraReview(c.Request.Context(), witnessID, submissionID, meta)
+	if err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			RespondError(c, http.StatusForbidden, "unauthorized access to witness review")
+			return
+		}
+		var userErr *domain.UserError
+		if errors.As(err, &userErr) {
+			RespondError(c, domain.MapErrorToHTTPStatus(userErr.Err), userErr.Msg)
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, err.Error())
+			return
+		}
+		RespondError(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	RespondSuccess(c, http.StatusOK, resp)
+}
+
 // WitnessAction godoc
 // @Summary Approve or reject Berita Acara as witness
 // @Description Allows the designated witness to sign/approve or reject with revision notes.
@@ -296,9 +349,21 @@ func (s *Server) WitnessAction(c *gin.Context) {
 	meta := extractAuditMeta(c)
 	resp, err := s.SignatureSvc.WitnessAction(c.Request.Context(), witnessID, submissionID, &req, meta)
 	if err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			RespondError(c, http.StatusForbidden, "unauthorized witness action")
+			return
+		}
 		var userErr *domain.UserError
 		if errors.As(err, &userErr) {
 			RespondError(c, domain.MapErrorToHTTPStatus(userErr.Err), userErr.Msg)
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			RespondError(c, http.StatusNotFound, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidInput) {
+			RespondError(c, http.StatusBadRequest, err.Error())
 			return
 		}
 		RespondError(c, http.StatusInternalServerError, err.Error())
@@ -395,4 +460,155 @@ func (s *Server) ListPendingWitnessRequests(c *gin.Context) {
 	}
 
 	RespondSuccess(c, http.StatusOK, list)
+}
+
+// PreviewBeritaAcaraPDF godoc
+// @Summary Stream instant PDF preview of Berita Acara
+// @Description Renders and streams on-the-fly Berita Acara PDF for witness/applicant review modal.
+// @Tags Signatures
+// @Produce application/pdf
+// @Param id path string true "Berita Acara Submission ID"
+// @Success 200 {file} binary "PDF document stream"
+// @Failure 400 {object} map[string]interface{}
+// @Failure 401 {object} map[string]interface{}
+// @Failure 403 {object} map[string]interface{}
+// @Failure 404 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /api/v1/berita-acara/{id}/preview/pdf [get]
+func (s *Server) PreviewBeritaAcaraPDF(c *gin.Context) {
+	submissionID := c.Param("id")
+	if submissionID == "" {
+		RespondError(c, http.StatusBadRequest, "Submission ID wajib diisi")
+		return
+	}
+
+	if s.SubmissionRepo == nil {
+		RespondError(c, http.StatusInternalServerError, "Submission repository not initialized")
+		return
+	}
+
+	sub, err := s.SubmissionRepo.FindBeritaAcaraByID(c.Request.Context(), submissionID)
+	if err != nil || sub == nil {
+		RespondError(c, http.StatusNotFound, "Pengajuan Berita Acara tidak ditemukan")
+		return
+	}
+
+	callerID := currentUserID(c)
+	callerRole := currentUserRole(c)
+	isWitness := sub.WitnessID == callerID
+	isApplicant := sub.UserID == callerID
+	isAdmin := callerRole == models.RoleAdmin
+
+	if !isWitness && !isApplicant && !isAdmin {
+		RespondError(c, http.StatusForbidden, "Akses ditolak: Anda tidak memiliki wewenang untuk menelaah dokumen ini")
+		return
+	}
+
+	empName := ""
+	empID := ""
+	deptName := ""
+	groupName := ""
+
+	user := sub.User
+	if user == nil && s.UserRepo != nil {
+		user, _ = s.UserRepo.FindByIDWithDetails(c.Request.Context(), sub.UserID)
+	}
+	if user != nil {
+		empName = user.Name
+		if empName == "" {
+			empName = user.Username
+		}
+		empID = user.BniID
+		deptName = user.Department
+		if user.DepartmentRel != nil && user.DepartmentRel.Name != "" {
+			deptName = user.DepartmentRel.Name
+		}
+		groupName = user.GroupName
+	}
+
+	witName := ""
+	if sub.Witness != nil && sub.Witness.Name != "" {
+		witName = sub.Witness.Name
+	} else if sub.WitnessID != 0 && s.UserRepo != nil {
+		if wUser, wErr := s.UserRepo.FindByID(c.Request.Context(), sub.WitnessID); wErr == nil && wUser != nil {
+			witName = wUser.Name
+			if witName == "" {
+				witName = wUser.Username
+			}
+		}
+	}
+
+	var items []services.BeritaAcaraItem
+	if s.ActivityRepo != nil {
+		filter := repository.ActivityFilter{
+			Month:     &sub.Month,
+			Year:      &sub.Year,
+			SortOrder: "asc",
+			IsAll:     true,
+		}
+		activities, _, aErr := s.ActivityRepo.ListActiveByUser(c.Request.Context(), sub.UserID, filter)
+		if aErr == nil {
+			for _, a := range activities {
+				if a.IsBeritaAcara {
+					items = append(items, services.BeritaAcaraItem{
+						Date:      a.Date,
+						Day:       services.IndonesianDayName(a.Date.Weekday()),
+						StartTime: a.StartTime,
+						EndTime:   a.EndTime,
+						Notes:     a.BeritaAcaraNotes,
+					})
+				}
+			}
+		}
+	}
+
+	var empSigBytes, witSigBytes []byte
+	if s.Storage != nil {
+		if user != nil && user.SignatureFileKey != "" {
+			empSigBytes, _ = s.Storage.Download(c.Request.Context(), user.SignatureFileKey)
+		}
+		if sub.Witness != nil && sub.Witness.SignatureFileKey != "" {
+			witSigBytes, _ = s.Storage.Download(c.Request.Context(), sub.Witness.SignatureFileKey)
+		} else if sub.WitnessID != 0 && s.UserRepo != nil {
+			if wUser, wErr := s.UserRepo.FindByID(c.Request.Context(), sub.WitnessID); wErr == nil && wUser != nil && wUser.SignatureFileKey != "" {
+				witSigBytes, _ = s.Storage.Download(c.Request.Context(), wUser.SignatureFileKey)
+			}
+		}
+	}
+
+	var qrBytes []byte
+	if sub.VerificationToken != "" {
+		baseURL := "https://timesheet.local"
+		if s.Cfg != nil && s.Cfg.AppBaseURL != "" {
+			baseURL = strings.TrimRight(s.Cfg.AppBaseURL, "/")
+		}
+		qrURL := fmt.Sprintf("%s/verify/doc/%s", baseURL, sub.VerificationToken)
+		qrBytes, _ = services.GenerateQRCodePNG(qrURL, 120)
+	}
+
+	payload := services.BeritaAcaraPayload{
+		EmployeeName:           empName,
+		NPP:                    empID,
+		Department:             deptName,
+		GroupName:              groupName,
+		WitnessName:            witName,
+		TeamLeadName:           "",
+		Items:                  items,
+		EmployeeSignatureBytes: empSigBytes,
+		WitnessSignatureBytes:  witSigBytes,
+		QRCodeBytes:            qrBytes,
+		IsSigned:               sub.Status == models.SubmissionStatusSigned,
+	}
+
+	pdfBytes, err := services.BuildBeritaAcaraPDF(c.Request.Context(), &payload)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "Gagal membuat dokumen PDF: "+err.Error())
+		return
+	}
+
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", `inline; filename="Berita_Acara_Preview.pdf"`)
+	c.Header("Content-Length", strconv.Itoa(len(pdfBytes)))
+	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+	c.Data(http.StatusOK, "application/pdf", pdfBytes)
 }

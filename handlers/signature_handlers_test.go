@@ -3,6 +3,11 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -20,6 +25,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
 	"timesheet-backend/auth"
@@ -379,6 +385,264 @@ func TestSignatureHandlers_BeritaAcaraWorkflow(t *testing.T) {
 	assert.Equal(t, http.StatusOK, wRev.Code)
 }
 
+func TestSignatureHandlers_ReviewBeritaAcara_RoleIsolation(t *testing.T) {
+	srv, tx, u1, u2 := setupSignatureHandlerTest(t)
+	defer tx.Rollback()
+
+	// Create admin user
+	uAdmin := models.User{
+		Username: "sig_handler_admin_" + uuid.New().String()[:8],
+		Email:    "sig_admin_" + uuid.New().String()[:8] + "@example.com",
+		Name:     "Signature Admin",
+		Role:     models.RoleAdmin,
+		IsActive: true,
+	}
+	if err := tx.Create(&uAdmin).Error; err != nil {
+		t.Fatalf("failed to create admin: %v", err)
+	}
+
+	// Upload signatures for both u1 and u2
+	b64 := generateTestBase64PNG(80, 40)
+	_, _ = srv.SignatureSvc.UploadSignature(context.Background(), u1.ID, b64)
+	_, _ = srv.SignatureSvc.UploadSignature(context.Background(), u2.ID, b64)
+
+	// Seed BA activity
+	act := models.DailyActivity{
+		UserID:           u1.ID,
+		Date:             time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC),
+		StartTime:        "08:30",
+		EndTime:          "17:30",
+		Status:           "P",
+		Activity:         "Incident work",
+		BeritaAcaraNotes: "Forgot badge",
+		IsBeritaAcara:    true,
+		IsActive:         true,
+	}
+	if err := tx.Create(&act).Error; err != nil {
+		t.Fatalf("failed to seed BA activity: %v", err)
+	}
+
+	// Submit BA with u1 as applicant and u2 as witness
+	submitBody := fmt.Sprintf(`{"month":9,"year":2026,"witness_id":%d}`, u2.ID)
+	wSub := httptest.NewRecorder()
+	cSub, _ := gin.CreateTestContext(wSub)
+	cSub.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/submit", strings.NewReader(submitBody))
+	cSub.Request.Header.Set("Content-Type", "application/json")
+	cSub.Set("userID", u1.ID)
+	cSub.Set("role", models.RoleUser)
+
+	srv.SubmitBeritaAcara(cSub)
+	assert.Equal(t, http.StatusOK, wSub.Code)
+
+	var subResp struct {
+		Data response.BeritaAcaraSubmissionResponse `json:"data"`
+	}
+	_ = json.Unmarshal(wSub.Body.Bytes(), &subResp)
+	submissionID := subResp.Data.ID
+	assert.NotEmpty(t, submissionID)
+
+	// 1. Applicant (u1) calls review -> MUST be rejected with HTTP 403 Forbidden
+	wApp := httptest.NewRecorder()
+	cApp, _ := gin.CreateTestContext(wApp)
+	cApp.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/"+submissionID+"/review", nil)
+	cApp.Params = gin.Params{{Key: "id", Value: submissionID}}
+	cApp.Set("userID", u1.ID)
+	cApp.Set("role", models.RoleUser)
+
+	srv.ReviewBeritaAcara(cApp)
+	assert.Equal(t, http.StatusForbidden, wApp.Code)
+	assert.Contains(t, wApp.Body.String(), "unauthorized access to witness review")
+
+	// 2. Admin (uAdmin) calls review -> MUST be rejected with HTTP 403 Forbidden
+	wAdm := httptest.NewRecorder()
+	cAdm, _ := gin.CreateTestContext(wAdm)
+	cAdm.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/"+submissionID+"/review", nil)
+	cAdm.Params = gin.Params{{Key: "id", Value: submissionID}}
+	cAdm.Set("userID", uAdmin.ID)
+	cAdm.Set("role", models.RoleAdmin)
+
+	srv.ReviewBeritaAcara(cAdm)
+	assert.Equal(t, http.StatusForbidden, wAdm.Code)
+	assert.Contains(t, wAdm.Body.String(), "unauthorized access to witness review")
+
+	// 3. Designated Witness (u2) calls review -> MUST succeed with HTTP 200 OK
+	wWit := httptest.NewRecorder()
+	cWit, _ := gin.CreateTestContext(wWit)
+	cWit.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/"+submissionID+"/review", nil)
+	cWit.Params = gin.Params{{Key: "id", Value: submissionID}}
+	cWit.Set("userID", u2.ID)
+	cWit.Set("role", models.RoleUser)
+
+	srv.ReviewBeritaAcara(cWit)
+	assert.Equal(t, http.StatusOK, wWit.Code)
+
+	var reviewResp struct {
+		Code int                                `json:"code"`
+		Data response.BeritaAcaraReviewResponse `json:"data"`
+	}
+	err := json.Unmarshal(wWit.Body.Bytes(), &reviewResp)
+	assert.NoError(t, err)
+	assert.Equal(t, submissionID, reviewResp.Data.SubmissionID)
+	assert.Equal(t, 9, reviewResp.Data.Month)
+	assert.Equal(t, 2026, reviewResp.Data.Year)
+	assert.Equal(t, models.SubmissionStatusPendingWitness, reviewResp.Data.Status)
+	assert.Equal(t, u1.Name, reviewResp.Data.Applicant.Name)
+	assert.Equal(t, u2.Name, reviewResp.Data.Witness.Name)
+	assert.NotEmpty(t, reviewResp.Data.SigningChallenge)
+	assert.Equal(t, "/api/v1/berita-acara/"+submissionID+"/preview/pdf", reviewResp.Data.PreviewPDFURL)
+	assert.Len(t, reviewResp.Data.Incidents, 1)
+	assert.Equal(t, "Forgot badge", reviewResp.Data.Incidents[0].Notes)
+
+	// 4. Unauthenticated or non-matching caller (userID = 0) -> MUST be rejected with HTTP 403 Forbidden
+	wAnon := httptest.NewRecorder()
+	cAnon, _ := gin.CreateTestContext(wAnon)
+	cAnon.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/"+submissionID+"/review", nil)
+	cAnon.Params = gin.Params{{Key: "id", Value: submissionID}}
+	cAnon.Set("userID", uint(0))
+	cAnon.Set("role", models.RoleUser)
+
+	srv.ReviewBeritaAcara(cAnon)
+	assert.Equal(t, http.StatusForbidden, wAnon.Code)
+	assert.Contains(t, wAnon.Body.String(), "unauthorized access to witness review")
+}
+
+func TestSignatureHandlers_ReviewBeritaAcara_IdempotentViewTracking(t *testing.T) {
+	srv, tx, u1, u2 := setupSignatureHandlerTest(t)
+	defer tx.Rollback()
+
+	// Upload signatures for both u1 and u2
+	b64 := generateTestBase64PNG(80, 40)
+	_, _ = srv.SignatureSvc.UploadSignature(context.Background(), u1.ID, b64)
+	_, _ = srv.SignatureSvc.UploadSignature(context.Background(), u2.ID, b64)
+
+	// Seed BA activity
+	act := models.DailyActivity{
+		UserID:           u1.ID,
+		Date:             time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC),
+		StartTime:        "08:30",
+		EndTime:          "17:30",
+		Status:           "P",
+		Activity:         "Server outage",
+		BeritaAcaraNotes: "Network crash",
+		IsBeritaAcara:    true,
+		IsActive:         true,
+	}
+	if err := tx.Create(&act).Error; err != nil {
+		t.Fatalf("failed to seed BA activity: %v", err)
+	}
+
+	submitBody := fmt.Sprintf(`{"month":9,"year":2026,"witness_id":%d}`, u2.ID)
+	wSub := httptest.NewRecorder()
+	cSub, _ := gin.CreateTestContext(wSub)
+	cSub.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/submit", strings.NewReader(submitBody))
+	cSub.Request.Header.Set("Content-Type", "application/json")
+	cSub.Set("userID", u1.ID)
+	cSub.Set("role", models.RoleUser)
+
+	srv.SubmitBeritaAcara(cSub)
+	assert.Equal(t, http.StatusOK, wSub.Code)
+
+	var subResp struct {
+		Data response.BeritaAcaraSubmissionResponse `json:"data"`
+	}
+	_ = json.Unmarshal(wSub.Body.Bytes(), &subResp)
+	submissionID := subResp.Data.ID
+
+	// Call 1: Witness views for first time with IP 192.168.1.50
+	wView1 := httptest.NewRecorder()
+	cView1, _ := gin.CreateTestContext(wView1)
+	cView1.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/"+submissionID+"/review", nil)
+	cView1.Request.Header.Set("X-Forwarded-For", "192.168.1.50")
+	cView1.Request.Header.Set("User-Agent", "WitnessAgent/1.0")
+	cView1.Params = gin.Params{{Key: "id", Value: submissionID}}
+	cView1.Set("userID", u2.ID)
+	cView1.Set("role", models.RoleUser)
+
+	srv.ReviewBeritaAcara(cView1)
+	assert.Equal(t, http.StatusOK, wView1.Code)
+
+	// Check AuditMetadata in DB
+	var subInDB models.BeritaAcaraSubmission
+	err := tx.Where("id = ?", submissionID).First(&subInDB).Error
+	assert.NoError(t, err)
+
+	var metaMap1 map[string]interface{}
+	err = json.Unmarshal(subInDB.AuditMetadata, &metaMap1)
+	assert.NoError(t, err)
+	viewedAt1, ok := metaMap1["witness_viewed_at"].(string)
+	assert.True(t, ok)
+	assert.NotEmpty(t, viewedAt1)
+	assert.Equal(t, "192.168.1.50", metaMap1["witness_view_ip"])
+	assert.Equal(t, "WitnessAgent/1.0", metaMap1["witness_view_user_agent"])
+
+	time.Sleep(20 * time.Millisecond)
+
+	// Call 2: Witness views a second time with different IP (10.0.0.99) and different UA
+	wView2 := httptest.NewRecorder()
+	cView2, _ := gin.CreateTestContext(wView2)
+	cView2.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/"+submissionID+"/review", nil)
+	cView2.Request.Header.Set("X-Forwarded-For", "10.0.0.99")
+	cView2.Request.Header.Set("User-Agent", "DifferentAgent/2.0")
+	cView2.Params = gin.Params{{Key: "id", Value: submissionID}}
+	cView2.Set("userID", u2.ID)
+	cView2.Set("role", models.RoleUser)
+
+	srv.ReviewBeritaAcara(cView2)
+	assert.Equal(t, http.StatusOK, wView2.Code)
+
+	// Check AuditMetadata in DB after second call - MUST be strictly identical
+	var subInDB2 models.BeritaAcaraSubmission
+	err = tx.Where("id = ?", submissionID).First(&subInDB2).Error
+	assert.NoError(t, err)
+
+	var metaMap2 map[string]interface{}
+	err = json.Unmarshal(subInDB2.AuditMetadata, &metaMap2)
+	assert.NoError(t, err)
+	assert.Equal(t, viewedAt1, metaMap2["witness_viewed_at"])
+	assert.Equal(t, "192.168.1.50", metaMap2["witness_view_ip"])
+	assert.Equal(t, "WitnessAgent/1.0", metaMap2["witness_view_user_agent"])
+}
+
+func TestSignatureHandlers_ReviewBeritaAcara_ValidationAndErrors(t *testing.T) {
+	srv, tx, _, u2 := setupSignatureHandlerTest(t)
+	defer tx.Rollback()
+
+	// Missing ID -> 400 Bad Request
+	wEmpty := httptest.NewRecorder()
+	cEmpty, _ := gin.CreateTestContext(wEmpty)
+	cEmpty.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara//review", nil)
+	cEmpty.Params = gin.Params{{Key: "id", Value: ""}}
+	cEmpty.Set("userID", u2.ID)
+	cEmpty.Set("role", models.RoleUser)
+
+	srv.ReviewBeritaAcara(cEmpty)
+	assert.Equal(t, http.StatusBadRequest, wEmpty.Code)
+
+	// Non-existent ID -> 404 Not Found
+	wNotFound := httptest.NewRecorder()
+	cNotFound, _ := gin.CreateTestContext(wNotFound)
+	cNotFound.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/non-existent-ba-id/review", nil)
+	cNotFound.Params = gin.Params{{Key: "id", Value: "non-existent-ba-id"}}
+	cNotFound.Set("userID", u2.ID)
+	cNotFound.Set("role", models.RoleUser)
+
+	srv.ReviewBeritaAcara(cNotFound)
+	assert.Equal(t, http.StatusNotFound, wNotFound.Code)
+
+	// Mock returning ErrForbidden -> 403 Forbidden
+	forbidSrv := &Server{
+		SignatureSvc: &mockErrSigService{errToReturn: domain.ErrForbidden},
+	}
+	wForbid := httptest.NewRecorder()
+	cForbid, _ := gin.CreateTestContext(wForbid)
+	cForbid.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/ba-1/review", nil)
+	cForbid.Params = gin.Params{{Key: "id", Value: "ba-1"}}
+	cForbid.Set("userID", u2.ID)
+	forbidSrv.ReviewBeritaAcara(cForbid)
+	assert.Equal(t, http.StatusForbidden, wForbid.Code)
+	assert.Contains(t, wForbid.Body.String(), "unauthorized access to witness review")
+}
+
 func TestSignatureHandlers_NilServiceHandling(t *testing.T) {
 	srv := &Server{SignatureSvc: nil}
 
@@ -397,6 +661,7 @@ func TestSignatureHandlers_NilServiceHandling(t *testing.T) {
 	runNilTest(http.MethodPost, "/api/v1/timesheets/revoke", srv.RevokeTimesheet)
 	runNilTest(http.MethodGet, "/api/v1/timesheets/status", srv.GetTimesheetSubmissionStatus)
 	runNilTest(http.MethodPost, "/api/v1/berita-acara/submit", srv.SubmitBeritaAcara)
+	runNilTest(http.MethodGet, "/api/v1/berita-acara/1/review", srv.ReviewBeritaAcara)
 	runNilTest(http.MethodPost, "/api/v1/berita-acara/1/witness-action", srv.WitnessAction)
 	runNilTest(http.MethodPost, "/api/v1/berita-acara/1/revoke", srv.RevokeBeritaAcara)
 	runNilTest(http.MethodGet, "/api/v1/berita-acara/status", srv.GetBeritaAcaraSubmissionStatus)
@@ -595,6 +860,10 @@ func (m *mockErrSigService) SubmitBeritaAcara(ctx context.Context, userID uint, 
 	return nil, m.errToReturn
 }
 
+func (m *mockErrSigService) GetBeritaAcaraReview(ctx context.Context, witnessID uint, submissionID string, meta service.AuditMeta) (*response.BeritaAcaraReviewResponse, error) {
+	return nil, m.errToReturn
+}
+
 func (m *mockErrSigService) WitnessAction(ctx context.Context, witnessID uint, submissionID string, req *request.WitnessActionRequest, meta service.AuditMeta) (*response.BeritaAcaraSubmissionResponse, error) {
 	return nil, m.errToReturn
 }
@@ -706,6 +975,14 @@ func TestSignatureHandlers_ServiceErrorBranches(t *testing.T) {
 			hasUserErr: true,
 		},
 		{
+			name:       "ReviewBeritaAcara",
+			method:     http.MethodGet,
+			path:       "/api/v1/berita-acara/ba-1/review",
+			params:     gin.Params{{Key: "id", Value: "ba-1"}},
+			handler:    func(s *Server, c *gin.Context) { s.ReviewBeritaAcara(c) },
+			hasUserErr: true,
+		},
+		{
 			name:       "WitnessAction",
 			method:     http.MethodPost,
 			path:       "/api/v1/berita-acara/ba-1/witness-action",
@@ -757,4 +1034,220 @@ func TestSignatureHandlers_ServiceErrorBranches(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestSignatureHandlers_WitnessAction_PasskeyAssertion(t *testing.T) {
+	srv, tx, u1, u2 := setupSignatureHandlerTest(t)
+	defer tx.Rollback()
+
+	// Upload signatures
+	b64 := generateTestBase64PNG(80, 40)
+	_, _ = srv.SignatureSvc.UploadSignature(context.Background(), u1.ID, b64)
+	_, _ = srv.SignatureSvc.UploadSignature(context.Background(), u2.ID, b64)
+
+	// Create and register passkey for witness u2
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	pubBytes, err := x509.MarshalPKIXPublicKey(&privKey.PublicKey)
+	require.NoError(t, err)
+
+	credID := []byte("hardware-cred-u2")
+	aaguid := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+	credRecord := models.WebAuthnCredential{
+		UserID:              u2.ID,
+		CredentialID:        credID,
+		PublicKey:           pubBytes,
+		AttestationType:     "none",
+		AAGUID:              aaguid,
+		AuthenticatorAAGUID: nil,
+		SignCount:           1,
+		FriendlyName:        "YubiKey 5 NFC",
+	}
+	require.NoError(t, tx.Create(&credRecord).Error)
+
+	buildTestAssertion := func(challenge string, credIDBytes []byte) *request.WebAuthnAssertionPayload {
+		clientData := fmt.Sprintf(`{"type":"webauthn.get","challenge":"%s","origin":"https://timesheet.local"}`, challenge)
+		clientDataHash := sha256.Sum256([]byte(clientData))
+
+		authData := make([]byte, 37)
+		rpHash := sha256.Sum256([]byte("localhost"))
+		copy(authData[0:32], rpHash[:])
+		authData[32] = 0x01 // UP bit
+		authData[36] = 5    // counter = 5
+
+		verificationData := append(authData, clientDataHash[:]...)
+		digest := sha256.Sum256(verificationData)
+		sig, sErr := ecdsa.SignASN1(rand.Reader, privKey, digest[:])
+		require.NoError(t, sErr)
+
+		return &request.WebAuthnAssertionPayload{
+			CredentialID:      base64.RawURLEncoding.EncodeToString(credIDBytes),
+			AuthenticatorData: base64.RawURLEncoding.EncodeToString(authData),
+			ClientDataJSON:    base64.RawURLEncoding.EncodeToString([]byte(clientData)),
+			Signature:         base64.RawURLEncoding.EncodeToString(sig),
+		}
+	}
+
+	submitAndReview := func(month, year int) (string, string) {
+		// Seed BA activity for the requested month/year
+		act := models.DailyActivity{
+			UserID:        u1.ID,
+			Date:          time.Date(year, time.Month(month), 15, 0, 0, 0, 0, time.UTC),
+			StartTime:     "08:00",
+			EndTime:       "17:00",
+			Status:        "P",
+			Activity:      fmt.Sprintf("Security patch verification %d/%d", month, year),
+			IsBeritaAcara: true,
+			IsActive:      true,
+		}
+		require.NoError(t, tx.Create(&act).Error)
+
+		// Submit
+		submitBody := fmt.Sprintf(`{"month":%d,"year":%d,"witness_id":%d}`, month, year, u2.ID)
+		wSub := httptest.NewRecorder()
+		cSub, _ := gin.CreateTestContext(wSub)
+		cSub.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/submit", strings.NewReader(submitBody))
+		cSub.Request.Header.Set("Content-Type", "application/json")
+		cSub.Set("userID", u1.ID)
+		cSub.Set("role", models.RoleUser)
+		srv.SubmitBeritaAcara(cSub)
+		require.Equal(t, http.StatusOK, wSub.Code)
+
+		var subResp struct {
+			Data response.BeritaAcaraSubmissionResponse `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(wSub.Body.Bytes(), &subResp))
+		subID := subResp.Data.ID
+
+		// Review
+		wRev := httptest.NewRecorder()
+		cRev, _ := gin.CreateTestContext(wRev)
+		cRev.Request = httptest.NewRequest(http.MethodGet, "/api/v1/berita-acara/"+subID+"/review", nil)
+		cRev.Params = gin.Params{{Key: "id", Value: subID}}
+		cRev.Set("userID", u2.ID)
+		cRev.Set("role", models.RoleUser)
+		srv.ReviewBeritaAcara(cRev)
+		require.Equal(t, http.StatusOK, wRev.Code)
+
+		var revResp struct {
+			Data response.BeritaAcaraReviewResponse `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(wRev.Body.Bytes(), &revResp))
+		return subID, revResp.Data.SigningChallenge
+	}
+
+	t.Run("tampered challenge rejection returns HTTP 400", func(t *testing.T) {
+		subID, _ := submitAndReview(1, 2026)
+		assertion := buildTestAssertion("tampered-challenge-999", credID)
+
+		reqBody, _ := json.Marshal(request.WitnessActionRequest{
+			Action:    "approve",
+			Assertion: assertion,
+		})
+		wAct := httptest.NewRecorder()
+		cAct, _ := gin.CreateTestContext(wAct)
+		cAct.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/"+subID+"/witness-action", bytes.NewReader(reqBody))
+		cAct.Request.Header.Set("Content-Type", "application/json")
+		cAct.Params = gin.Params{{Key: "id", Value: subID}}
+		cAct.Set("userID", u2.ID)
+		cAct.Set("role", models.RoleUser)
+
+		srv.WitnessAction(cAct)
+		assert.Equal(t, http.StatusBadRequest, wAct.Code)
+		assert.Contains(t, wAct.Body.String(), "Signing challenge")
+	})
+
+	t.Run("unknown credential rejection returns HTTP 404", func(t *testing.T) {
+		subID, challenge := submitAndReview(2, 2026)
+		assertion := buildTestAssertion(challenge, []byte("unregistered-cred-id"))
+
+		reqBody, _ := json.Marshal(request.WitnessActionRequest{
+			Action:    "approve",
+			Assertion: assertion,
+		})
+		wAct := httptest.NewRecorder()
+		cAct, _ := gin.CreateTestContext(wAct)
+		cAct.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/"+subID+"/witness-action", bytes.NewReader(reqBody))
+		cAct.Request.Header.Set("Content-Type", "application/json")
+		cAct.Params = gin.Params{{Key: "id", Value: subID}}
+		cAct.Set("userID", u2.ID)
+		cAct.Set("role", models.RoleUser)
+
+		srv.WitnessAction(cAct)
+		assert.Equal(t, http.StatusNotFound, wAct.Code)
+		assert.Contains(t, wAct.Body.String(), "Kredensial passkey tidak ditemukan")
+	})
+
+	t.Run("valid passkey assertion approval returns HTTP 200 and signed status", func(t *testing.T) {
+		subID, challenge := submitAndReview(3, 2026)
+		assertion := buildTestAssertion(challenge, credID)
+
+		reqBody, _ := json.Marshal(request.WitnessActionRequest{
+			Action:    "approve",
+			Notes:     "Approved with biometric passkey",
+			Assertion: assertion,
+		})
+		wAct := httptest.NewRecorder()
+		cAct, _ := gin.CreateTestContext(wAct)
+		cAct.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/"+subID+"/witness-action", bytes.NewReader(reqBody))
+		cAct.Request.Header.Set("Content-Type", "application/json")
+		cAct.Params = gin.Params{{Key: "id", Value: subID}}
+		cAct.Set("userID", u2.ID)
+		cAct.Set("role", models.RoleUser)
+
+		srv.WitnessAction(cAct)
+		assert.Equal(t, http.StatusOK, wAct.Code)
+
+		var actResp struct {
+			Data response.BeritaAcaraSubmissionResponse `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(wAct.Body.Bytes(), &actResp))
+		assert.Equal(t, models.SubmissionStatusSigned, actResp.Data.Status)
+		assert.NotNil(t, actResp.Data.WitnessSignedAt)
+	})
+
+	t.Run("graceful fallback with nil assertion returns HTTP 200", func(t *testing.T) {
+		subID, _ := submitAndReview(4, 2026)
+
+		reqBody := `{"action":"approve","notes":"Standard approval"}`
+		wAct := httptest.NewRecorder()
+		cAct, _ := gin.CreateTestContext(wAct)
+		cAct.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/"+subID+"/witness-action", strings.NewReader(reqBody))
+		cAct.Request.Header.Set("Content-Type", "application/json")
+		cAct.Params = gin.Params{{Key: "id", Value: subID}}
+		cAct.Set("userID", u2.ID)
+		cAct.Set("role", models.RoleUser)
+
+		srv.WitnessAction(cAct)
+		assert.Equal(t, http.StatusOK, wAct.Code)
+
+		var actResp struct {
+			Data response.BeritaAcaraSubmissionResponse `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(wAct.Body.Bytes(), &actResp))
+		assert.Equal(t, models.SubmissionStatusSigned, actResp.Data.Status)
+	})
+
+	t.Run("witness rejection returns HTTP 200 and rejected status", func(t *testing.T) {
+		subID, _ := submitAndReview(5, 2026)
+
+		reqBody := `{"action":"reject","notes":"Incident notes require elaboration"}`
+		wAct := httptest.NewRecorder()
+		cAct, _ := gin.CreateTestContext(wAct)
+		cAct.Request = httptest.NewRequest(http.MethodPost, "/api/v1/berita-acara/"+subID+"/witness-action", strings.NewReader(reqBody))
+		cAct.Request.Header.Set("Content-Type", "application/json")
+		cAct.Params = gin.Params{{Key: "id", Value: subID}}
+		cAct.Set("userID", u2.ID)
+		cAct.Set("role", models.RoleUser)
+
+		srv.WitnessAction(cAct)
+		assert.Equal(t, http.StatusOK, wAct.Code)
+
+		var actResp struct {
+			Data response.BeritaAcaraSubmissionResponse `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(wAct.Body.Bytes(), &actResp))
+		assert.Equal(t, models.SubmissionStatusRejected, actResp.Data.Status)
+		assert.Equal(t, "Incident notes require elaboration", actResp.Data.WitnessRejectionNotes)
+	})
 }

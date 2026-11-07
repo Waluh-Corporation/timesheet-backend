@@ -17,6 +17,7 @@ import (
 	"timesheet-backend/dto/response"
 	"timesheet-backend/internal/domain"
 	"timesheet-backend/internal/repository"
+	"timesheet-backend/internal/service"
 	"timesheet-backend/mailer"
 	"timesheet-backend/models"
 	"timesheet-backend/push"
@@ -26,13 +27,13 @@ import (
 
 // GenerateTimesheet godoc
 // @Summary Generate timesheet
-// @Description Generates monthly timesheet Excel file. If background worker and queue are configured, enqueues an asynchronous generation job and sends download link to email upon completion. Otherwise, generates synchronously and streams the file.
+// @Description Generates monthly timesheet Excel file or bundled archive with PDF. If background worker and queue are configured, enqueues an asynchronous generation job and sends download link to email upon completion. Otherwise, generates synchronously and streams the file.
 // @Tags Timesheet
 // @Security BearerAuth
 // @Accept json
-// @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json
+// @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip,application/json
 // @Param request body request.GenerateRequest true "Generation parameters"
-// @Success 200 {file} file "Excel timesheet (.xlsx) (synchronous mode)"
+// @Success 200 {file} file "Excel timesheet (.xlsx) or ZIP archive containing documents (synchronous mode)"
 // @Success 202 {object} response.TimesheetJobResponse "Job enqueued asynchronously"
 // @Failure 400 {object} response.ErrorResponse "Template or company mapping missing"
 // @Failure 401 {object} response.ErrorResponse "Unauthorized"
@@ -240,11 +241,11 @@ func (s *Server) handleAsyncGeneration(c *gin.Context, user *models.User, req *r
 		return true
 	}
 
-	if s.tryHandleCachedJob(c, jobRepo, user, req.Month, req.Year) {
+	if s.tryHandleCachedJob(c, jobRepo, user, req.Month, req.Year, req.PDF) {
 		return true
 	}
 
-	return s.enqueueNewGenerationJob(c, jobRepo, queueClient, user.ID, req.Month, req.Year)
+	return s.enqueueNewGenerationJob(c, jobRepo, queueClient, user.ID, req.Month, req.Year, req.PDF)
 }
 
 func (s *Server) acquireGenerationLock(c *gin.Context, uid uint, year, month int) bool {
@@ -261,20 +262,26 @@ func (s *Server) acquireGenerationLock(c *gin.Context, uid uint, year, month int
 	return true
 }
 
-func (s *Server) tryHandleCachedJob(c *gin.Context, jobRepo repository.JobRepository, user *models.User, month, year int) bool {
+func (s *Server) tryHandleCachedJob(c *gin.Context, jobRepo repository.JobRepository, user *models.User, month, year int, reqPDF bool) bool {
 	activeJob, err := jobRepo.FindActiveCompletedJob(reqContext(c), user.ID, month, year)
 	if err != nil || activeJob == nil || activeJob.FileKey == "" {
 		return false
 	}
 
-	if !isJobCacheValid(reqContext(c), activeJob, user, s.getActivityRepository(), s.getStorage(), month, year) {
+	if !isJobCacheValid(reqContext(c), activeJob, user, s.getActivityRepository(), s.getStorage(), month, year, reqPDF) {
 		return false
 	}
 
 	return s.reissueCachedJob(c, jobRepo, activeJob, user, month, year)
 }
 
-func isJobCacheValid(ctx context.Context, job *models.TimesheetJob, user *models.User, actRepo repository.ActivityRepository, storageSvc storage.StorageService, month, year int) bool {
+func isJobCacheValid(ctx context.Context, job *models.TimesheetJob, user *models.User, actRepo repository.ActivityRepository, storageSvc storage.StorageService, month, year int, reqPDF ...bool) bool {
+	if len(reqPDF) > 0 {
+		hasPDF := strings.HasSuffix(job.FileKey, "_with_PDF.zip")
+		if reqPDF[0] != hasPDF {
+			return false
+		}
+	}
 	if actRepo != nil {
 		latestActUpdate, aerr := actRepo.GetLatestActivityUpdateTime(ctx, user.ID, month, year)
 		if aerr == nil && !latestActUpdate.IsZero() && latestActUpdate.After(job.CreatedAt) {
@@ -368,7 +375,7 @@ func (s *Server) dispatchReissueNotifications(user *models.User, downloadURL str
 	}
 }
 
-func (s *Server) enqueueNewGenerationJob(c *gin.Context, jobRepo repository.JobRepository, queueClient queue.QueueClient, uid uint, month, year int) bool {
+func (s *Server) enqueueNewGenerationJob(c *gin.Context, jobRepo repository.JobRepository, queueClient queue.QueueClient, uid uint, month, year int, includePDF bool) bool {
 	jobID := uuid.New().String()
 	job := &models.TimesheetJob{
 		ID:        jobID,
@@ -385,7 +392,7 @@ func (s *Server) enqueueNewGenerationJob(c *gin.Context, jobRepo repository.JobR
 		return true
 	}
 
-	if err := queueClient.EnqueueTimesheetJob(reqContext(c), jobID, uid, month, year); err != nil {
+	if err := queue.EnqueueJob(reqContext(c), queueClient, jobID, uid, month, year, includePDF); err != nil {
 		_ = jobRepo.UpdateStatus(reqContext(c), jobID, models.JobStatusFailed, "", "", "failed to enqueue task: "+err.Error(), nil)
 		RespondError(c, http.StatusInternalServerError, "failed to enqueue generation task: "+err.Error())
 		return true
@@ -412,7 +419,7 @@ func (s *Server) handleSyncGenerationFallback(c *gin.Context, uid uint, req *req
 		return
 	}
 
-	out, filename, err := tsSvc.GenerateWorkbook(reqContext(c), uid, req.Month, req.Year)
+	out, filename, contentType, err := service.PackageTimesheetBundle(reqContext(c), tsSvc, uid, req.Month, req.Year, req.PDF)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			RespondError(c, http.StatusNotFound, "user not found")
@@ -427,7 +434,7 @@ func (s *Server) handleSyncGenerationFallback(c *gin.Context, uid uint, req *req
 	}
 
 	c.Header("Content-Disposition", "attachment; filename="+filename)
-	c.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", out)
+	c.Data(http.StatusOK, contentType, out)
 }
 
 // GetTimesheetJob godoc

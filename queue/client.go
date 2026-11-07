@@ -18,6 +18,12 @@ type QueueClient interface {
 	Close() error
 }
 
+// PDFQueueClient extends QueueClient with support for specifying whether to render and include PDFs.
+type PDFQueueClient interface {
+	QueueClient
+	EnqueueTimesheetJobWithPDF(ctx context.Context, jobID string, userID uint, month, year int, includePDF bool) error
+}
+
 type asynqClient struct {
 	client *asynq.Client
 }
@@ -42,13 +48,19 @@ func NewQueueClient(cfg *config.Config) (QueueClient, error) {
 	return &asynqClient{client: client}, nil
 }
 
-// EnqueueTimesheetJob dispatches a generation job into the Redis task queue.
+// EnqueueTimesheetJob dispatches a generation job into the Redis task queue with default PDF settings.
 func (c *asynqClient) EnqueueTimesheetJob(ctx context.Context, jobID string, userID uint, month, year int) error {
+	return c.EnqueueTimesheetJobWithPDF(ctx, jobID, userID, month, year, false)
+}
+
+// EnqueueTimesheetJobWithPDF dispatches a generation job with the specified PDF inclusion option into the Redis task queue.
+func (c *asynqClient) EnqueueTimesheetJobWithPDF(ctx context.Context, jobID string, userID uint, month, year int, includePDF bool) error {
 	payload, err := json.Marshal(GenerateTimesheetPayload{
-		JobID:  jobID,
-		UserID: userID,
-		Month:  month,
-		Year:   year,
+		JobID:      jobID,
+		UserID:     userID,
+		Month:      month,
+		Year:       year,
+		IncludePDF: includePDF,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to marshal task payload: %w", err)
@@ -64,6 +76,14 @@ func (c *asynqClient) EnqueueTimesheetJob(ctx context.Context, jobID string, use
 		return fmt.Errorf("failed to enqueue task: %w", err)
 	}
 	return nil
+}
+
+// EnqueueJob dispatches a timesheet generation job using either PDFQueueClient or standard QueueClient.
+func EnqueueJob(ctx context.Context, qc QueueClient, jobID string, userID uint, month, year int, includePDF bool) error {
+	if pqc, ok := qc.(PDFQueueClient); ok {
+		return pqc.EnqueueTimesheetJobWithPDF(ctx, jobID, userID, month, year, includePDF)
+	}
+	return qc.EnqueueTimesheetJob(ctx, jobID, userID, month, year)
 }
 
 // Close closes the underlying Redis client connection.

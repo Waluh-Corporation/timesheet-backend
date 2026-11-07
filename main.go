@@ -341,6 +341,8 @@ func registerRoutes(r *gin.Engine, s *handlers.Server) {
 		authed.POST("/berita-acara/submit", s.SubmitBeritaAcara)
 		authed.GET("/berita-acara/status", s.GetBeritaAcaraSubmissionStatus)
 		authed.GET("/berita-acara/witness-requests", s.ListPendingWitnessRequests)
+		authed.GET("/berita-acara/:id/review", s.ReviewBeritaAcara)
+		authed.GET("/berita-acara/:id/preview/pdf", s.PreviewBeritaAcaraPDF)
 		authed.POST("/berita-acara/:id/witness-action", s.WitnessAction)
 		authed.POST("/berita-acara/:id/revoke", s.RevokeBeritaAcara)
 

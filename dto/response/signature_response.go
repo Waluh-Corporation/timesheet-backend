@@ -69,3 +69,63 @@ type PublicDocumentVerificationResponse struct {
 	VerifiedAt       time.Time                `json:"verified_at"`
 	AuditTrail       []DocumentAuditTrailItem `json:"audit_trail,omitempty"`
 }
+
+// BeritaAcaraApplicantReview details applicant identity and signature status for witness review.
+type BeritaAcaraApplicantReview struct {
+	UserID                 uint   `json:"user_id" example:"101"`
+	ID                     uint   `json:"id,omitempty" example:"101"`
+	Name                   string `json:"name" example:"Budi Santoso"`
+	NPP                    string `json:"npp,omitempty" example:"12345"`
+	BNIID                  string `json:"bni_id,omitempty" example:"12345"`
+	Department             string `json:"department,omitempty" example:"Engineering"`
+	Group                  string `json:"group,omitempty" example:"Core Systems"`
+	SignatureURL           string `json:"signature_url,omitempty" example:"/api/v1/signatures/101.png"`
+	EmployeeNonRepudiation bool   `json:"employee_non_repudiation" example:"false"`
+}
+
+// BeritaAcaraWitnessReview details witness signature and passkey readiness for witness review.
+type BeritaAcaraWitnessReview struct {
+	UserID                uint       `json:"user_id" example:"102"`
+	ID                    uint       `json:"id,omitempty" example:"102"`
+	Name                  string     `json:"name" example:"Dewi Sartika"`
+	SignatureURL          string     `json:"signature_url,omitempty" example:"/api/v1/signatures/102.png"`
+	HasSignature          bool       `json:"has_signature" example:"true"`
+	HasPasskey            bool       `json:"has_passkey" example:"true"`
+	ReviewHistory         []string   `json:"review_history"`
+	WitnessRejectionNotes string     `json:"witness_rejection_notes,omitempty"`
+	WitnessSignedAt       *time.Time `json:"witness_signed_at,omitempty"`
+}
+
+// BeritaAcaraIncidentItemResponse details a single attendance incident row.
+type BeritaAcaraIncidentItemResponse struct {
+	Date      string `json:"date" example:"2026-09-05"`
+	Day       string `json:"day" example:"Friday"`
+	StartTime string `json:"start_time" example:"08:30"`
+	EndTime   string `json:"end_time" example:"17:30"`
+	Notes     string `json:"notes" example:"Forgot badge"`
+}
+
+// WebAuthnAllowedCredentialResponse represents a public key credential descriptor for WebAuthn assertion options.
+type WebAuthnAllowedCredentialResponse struct {
+	ID         string   `json:"id" example:"kY1...=="`
+	Type       string   `json:"type" example:"public-key"`
+	Transports []string `json:"transports,omitempty" example:"[\"internal\"]"`
+}
+
+// BeritaAcaraReviewResponse contains complete verification context for the witness review modal.
+type BeritaAcaraReviewResponse struct {
+	SubmissionID       string                              `json:"submission_id" example:"ba-2026-09-001"`
+	ID                 string                              `json:"id,omitempty" example:"ba-2026-09-001"`
+	Month              int                                 `json:"month" example:"9"`
+	Year               int                                 `json:"year" example:"2026"`
+	Status             string                              `json:"status" example:"pending_witness"`
+	VerificationToken  string                              `json:"verification_token,omitempty" example:"ba-token-456"`
+	Applicant          BeritaAcaraApplicantReview          `json:"applicant"`
+	Witness            BeritaAcaraWitnessReview            `json:"witness"`
+	Incidents          []BeritaAcaraIncidentItemResponse   `json:"incidents"`
+	PreviewPDFURL      string                              `json:"preview_pdf_url" example:"/api/v1/berita-acara/ba-2026-09-001/preview/pdf"`
+	SigningChallenge   string                              `json:"signing_challenge" example:"4fA...=="`
+	AllowedCredentials []WebAuthnAllowedCredentialResponse `json:"allowed_credentials"`
+	CreatedAt          time.Time                           `json:"created_at,omitempty"`
+	UpdatedAt          time.Time                           `json:"updated_at,omitempty"`
+}
